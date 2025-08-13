@@ -7,7 +7,9 @@
       "Bash(mkdir:*)",
       "WebFetch(domain:docs.rs)",
       "Bash(./target/debug/elif migrate create:*)",
-      "Bash(./target/debug/elif migrate:*)"
+      "Bash(./target/debug/elif migrate:*)",
+      "Bash(./target/debug/elif:*)",
+      "Bash(../../elif/target/debug/elif:*)"
     ],
     "deny": []
   }
