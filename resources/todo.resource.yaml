@@ -1,0 +1,32 @@
+kind: Resource
+name: Todo
+route: /todos
+storage:
+  table: todos
+  soft_delete: false
+  timestamps: true
+  fields:
+    - { name: id, type: uuid, pk: true, default: gen_random_uuid() }
+    - { name: title, type: text, required: true, validate: { min: 1, max: 120 } }
+    - { name: done, type: bool, default: false, index: true }
+indexes:
+  - { name: idx_todos_done, fields: [done] }
+uniques: []
+relations: []
+api:
+  operations:
+    - { op: create, method: POST, path: "/" }
+    - { op: list, method: GET, path: "/", paging: cursor, filter: [done], search_by: [title], order_by: [created_at] }
+    - { op: get, method: GET, path: "/:id" }
+    - { op: update, method: PATCH, path: "/:id" }
+    - { op: delete, method: DELETE, path: "/:id" }
+policy:
+  auth: public
+  rate_limit: "100/m"
+validate:
+  constraints:
+    - { rule: "title != ''", code: EMPTY_TITLE, hint: "Provide non-empty title" }
+examples:
+  create: { title: "Buy milk" }
+events:
+  emit: [created, updated, deleted]

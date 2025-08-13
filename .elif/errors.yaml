@@ -1,0 +1,14 @@
+- code: EMPTY_TITLE
+  http: 400
+  message: "title cannot be empty"
+  hint: "Provide non-empty title"
+
+- code: NOT_FOUND
+  http: 404
+  message: "resource not found"
+  hint: "Check the resource ID and try again"
+
+- code: VALIDATION_ERROR
+  http: 422
+  message: "validation failed"
+  hint: "Fix the validation errors and try again"

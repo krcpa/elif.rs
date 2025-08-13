@@ -1,0 +1,18 @@
+[package]
+name = "elif-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "elif"
+path = "src/main.rs"
+
+[dependencies]
+elif-core = { path = "../core" }
+elif-codegen = { path = "../codegen" }
+elif-introspect = { path = "../introspect" }
+clap = { workspace = true }
+serde_yaml = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }

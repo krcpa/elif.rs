@@ -1,0 +1,8 @@
+name: elif-example
+version: "0.1.0"
+database:
+  url_env: DATABASE_URL
+  migrations_dir: migrations
+output:
+  openapi_file: target/_openapi.json
+  map_file: target/_map.json

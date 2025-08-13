@@ -1,0 +1,13 @@
+[package]
+name = "elif-codegen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+elif-core = { path = "../core" }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+tinytemplate = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+regex = "1.0"

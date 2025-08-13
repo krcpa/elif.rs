@@ -1,0 +1,7 @@
+policies:
+  public:
+    description: "Public access - no authentication required"
+  user:
+    description: "User authentication required"
+  service:
+    description: "Service-to-service authentication required"

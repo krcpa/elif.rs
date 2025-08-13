@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit",
+      "Bash(cargo:*)",
+      "Bash(elif:*)",
+      "Bash(git:*)"
+    ],
+    "deny": [
+      "Bash(curl:*)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)"
+    ],
+    "additionalDirectories": []
+  },
+  "model": "claude-sonnet-4-20250514",
+  "env": {
+    "SQLX_OFFLINE": "true"
+  }
+}
+

@@ -1,0 +1,10 @@
+[package]
+name = "elif-introspect"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+elif-core = { path = "../core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
