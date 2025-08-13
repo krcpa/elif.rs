@@ -67,6 +67,12 @@ enum Commands {
         #[command(subcommand)]
         openapi_command: OpenApiCommands,
     },
+    
+    /// Database migration management
+    Migrate {
+        #[command(subcommand)]
+        migrate_command: MigrateCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -122,6 +128,24 @@ enum OpenApiCommands {
     Export,
 }
 
+#[derive(Subcommand)]
+enum MigrateCommands {
+    /// Create a new migration
+    Create {
+        /// Migration name
+        name: String,
+    },
+    
+    /// Run pending migrations
+    Run,
+    
+    /// Rollback the last migration
+    Rollback,
+    
+    /// Show migration status
+    Status,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), ElifError> {
     let cli = Cli::parse();
@@ -170,6 +194,22 @@ async fn main() -> Result<(), ElifError> {
             match openapi_command {
                 OpenApiCommands::Export => {
                     openapi::export().await?;
+                }
+            }
+        }
+        Commands::Migrate { migrate_command } => {
+            match migrate_command {
+                MigrateCommands::Create { name } => {
+                    migrate::create(&name).await?;
+                }
+                MigrateCommands::Run => {
+                    migrate::run().await?;
+                }
+                MigrateCommands::Rollback => {
+                    migrate::rollback().await?;
+                }
+                MigrateCommands::Status => {
+                    migrate::status().await?;
                 }
             }
         }

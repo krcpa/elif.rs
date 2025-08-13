@@ -5,7 +5,9 @@
       "Bash(ls:*)",
       "Bash(find:*)",
       "Bash(mkdir:*)",
-      "WebFetch(domain:docs.rs)"
+      "WebFetch(domain:docs.rs)",
+      "Bash(./target/debug/elif migrate create:*)",
+      "Bash(./target/debug/elif migrate:*)"
     ],
     "deny": []
   }

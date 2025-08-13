@@ -481,6 +481,7 @@ name = "elif-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "elif-codegen",
  "elif-core",
