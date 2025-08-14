@@ -406,14 +406,27 @@ pub enum ApplicationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::container::{AppConfig, DatabaseConnection, Environment};
+    use crate::app_config::{AppConfig, Environment};
+    use crate::container::DatabaseConnection;
     use std::sync::Arc;
     
-    // Test implementations
-    struct TestConfig;
-    impl AppConfig for TestConfig {
-        fn get(&self, _key: &str) -> Option<String> { None }
-        fn environment(&self) -> Environment { Environment::Testing }
+    // Test implementations - use the shared function from container tests
+    fn create_test_config() -> AppConfig {
+        AppConfig {
+            name: "test-app".to_string(),
+            environment: Environment::Testing,
+            database_url: "sqlite::memory:".to_string(),
+            jwt_secret: Some("test-secret".to_string()),
+            server: crate::app_config::ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 8080,
+                workers: 4,
+            },
+            logging: crate::app_config::LoggingConfig {
+                level: "info".to_string(),
+                format: "compact".to_string(),
+            },
+        }
     }
     
     struct TestDatabase;
@@ -502,7 +515,7 @@ mod tests {
             fn name(&self) -> &'static str { "test" }
             
             fn register(&self, builder: crate::container::ContainerBuilder) -> Result<crate::container::ContainerBuilder, crate::provider::ProviderError> {
-                let config = Arc::new(TestConfig) as Arc<dyn AppConfig>;
+                let config = Arc::new(create_test_config());
                 let database = Arc::new(TestDatabase) as Arc<dyn DatabaseConnection>;
                 Ok(builder.config(config).database(database))
             }
@@ -517,7 +530,7 @@ mod tests {
         
         // Verify container is properly configured
         let config = app.container().config();
-        assert_eq!(config.environment() as u8, Environment::Testing as u8);
+        assert_eq!(config.environment, Environment::Testing);
         
         // Start the application
         app.start().await.unwrap();
@@ -627,7 +640,7 @@ mod tests {
             fn name(&self) -> &'static str { "test" }
             
             fn register(&self, builder: crate::container::ContainerBuilder) -> Result<crate::container::ContainerBuilder, crate::provider::ProviderError> {
-                let config = Arc::new(TestConfig) as Arc<dyn AppConfig>;
+                let config = Arc::new(create_test_config());
                 let database = Arc::new(TestDatabase) as Arc<dyn DatabaseConnection>;
                 Ok(builder.config(config).database(database))
             }
@@ -642,7 +655,7 @@ mod tests {
         
         // Verify container is properly configured
         let config = app.container().config();
-        assert_eq!(config.environment() as u8, Environment::Testing as u8);
+        assert_eq!(config.environment, Environment::Testing);
         
         // Check routes are collected
         let routes = app.routes();

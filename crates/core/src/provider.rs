@@ -232,25 +232,26 @@ pub enum ProviderError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::container::{AppConfig, DatabaseConnection, Environment};
+    use crate::app_config::{AppConfig, Environment};
+    use crate::container::DatabaseConnection;
     use std::sync::{Arc, Mutex};
     
     // Test implementations
-    struct TestConfig {
-        name: String,
-    }
-    
-    impl AppConfig for TestConfig {
-        fn get(&self, key: &str) -> Option<String> {
-            if key == "name" {
-                Some(self.name.clone())
-            } else {
-                None
-            }
-        }
-        
-        fn environment(&self) -> Environment {
-            Environment::Testing
+    fn create_test_config() -> AppConfig {
+        AppConfig {
+            name: "test-app".to_string(),
+            environment: Environment::Testing,
+            database_url: "sqlite::memory:".to_string(),
+            jwt_secret: Some("test-secret".to_string()),
+            server: crate::app_config::ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 8080,
+                workers: 4,
+            },
+            logging: crate::app_config::LoggingConfig {
+                level: "info".to_string(),
+                format: "compact".to_string(),
+            },
         }
     }
     
@@ -277,9 +278,7 @@ mod tests {
         }
         
         fn register(&self, builder: ContainerBuilder) -> Result<ContainerBuilder, ProviderError> {
-            let config = Arc::new(TestConfig {
-                name: "test-app".to_string(),
-            }) as Arc<dyn AppConfig>;
+            let config = Arc::new(create_test_config());
             
             Ok(builder.config(config))
         }
@@ -334,7 +333,7 @@ mod tests {
         
         fn register(&self, builder: ContainerBuilder) -> Result<ContainerBuilder, ProviderError> {
             if self.provide_services {
-                let config = Arc::new(TestConfig { name: "boot-test".to_string() }) as Arc<dyn AppConfig>;
+                let config = Arc::new(create_test_config());
                 let database = Arc::new(TestDatabase { connected: true }) as Arc<dyn DatabaseConnection>;
                 Ok(builder.config(config).database(database))
             } else {
@@ -368,7 +367,7 @@ mod tests {
         
         // Verify services are available
         let config = container.config();
-        assert_eq!(config.get("name"), Some("test-app".to_string()));
+        assert_eq!(config.name, "test-app");
         
         let database = container.database();
         assert!(database.is_connected());

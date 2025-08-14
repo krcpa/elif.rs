@@ -6,16 +6,10 @@ use thiserror::Error;
 #[builder]
 pub struct Container {
     #[builder(getter, setter)]
-    pub config: Arc<dyn AppConfig>,
+    pub config: Arc<crate::app_config::AppConfig>,
     
     #[builder(getter, setter)]
     pub database: Arc<dyn DatabaseConnection>,
-}
-
-/// Configuration service trait
-pub trait AppConfig: Send + Sync {
-    fn get(&self, key: &str) -> Option<String>;
-    fn environment(&self) -> Environment;
 }
 
 /// Database connection trait  
@@ -35,13 +29,6 @@ pub trait Logger: Send + Sync {
     fn info(&self, message: &str);
     fn error(&self, message: &str);
     fn debug(&self, message: &str);
-}
-
-#[derive(Debug, Clone)]
-pub enum Environment {
-    Development,
-    Testing,
-    Production,
 }
 
 #[derive(Error, Debug)]
@@ -107,7 +94,7 @@ impl Container {
     }
     
     /// Get configuration service
-    pub fn config(&self) -> Arc<dyn AppConfig> {
+    pub fn config(&self) -> Arc<crate::app_config::AppConfig> {
         self.config.clone()
     }
     
@@ -121,29 +108,22 @@ impl Container {
 #[cfg(test)]
 mod test_implementations {
     use super::*;
-    use std::collections::HashMap;
     
-    pub struct TestConfig {
-        values: HashMap<String, String>,
-    }
-    
-    impl TestConfig {
-        pub fn new() -> Self {
-            let mut values = HashMap::new();
-            values.insert("app_name".to_string(), "test-app".to_string());
-            values.insert("database_url".to_string(), "sqlite::memory:".to_string());
-            
-            Self { values }
-        }
-    }
-    
-    impl AppConfig for TestConfig {
-        fn get(&self, key: &str) -> Option<String> {
-            self.values.get(key).cloned()
-        }
-        
-        fn environment(&self) -> Environment {
-            Environment::Testing
+    pub fn create_test_config() -> crate::app_config::AppConfig {
+        crate::app_config::AppConfig {
+            name: "test-app".to_string(),
+            environment: crate::app_config::Environment::Testing,
+            database_url: "sqlite::memory:".to_string(),
+            jwt_secret: Some("test-secret".to_string()),
+            server: crate::app_config::ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 8080,
+                workers: 4,
+            },
+            logging: crate::app_config::LoggingConfig {
+                level: "info".to_string(),
+                format: "compact".to_string(),
+            },
         }
     }
     
@@ -198,7 +178,7 @@ mod tests {
     
     #[test]
     fn test_container_builder() {
-        let config = Arc::new(TestConfig::new()) as Arc<dyn AppConfig>;
+        let config = Arc::new(test_implementations::create_test_config());
         let database = Arc::new(TestDatabase::new()) as Arc<dyn DatabaseConnection>;
         let logger = Arc::new(TestLogger) as Arc<dyn Logger>;
         
@@ -211,7 +191,8 @@ mod tests {
         assert!(container.validate().is_ok());
         
         let config = container.config();
-        assert_eq!(config.get("app_name"), Some("test-app".to_string()));
+        assert_eq!(config.name, "test-app");
+        assert_eq!(config.environment, crate::app_config::Environment::Testing);
         
         let database = container.database();
         assert!(database.is_connected());
@@ -233,7 +214,7 @@ mod tests {
     
     #[test]
     fn test_service_resolution() {
-        let config = Arc::new(TestConfig::new()) as Arc<dyn AppConfig>;
+        let config = Arc::new(test_implementations::create_test_config());
         let database = Arc::new(TestDatabase::new()) as Arc<dyn DatabaseConnection>;
         
         let container = Container::builder()
@@ -244,7 +225,8 @@ mod tests {
             
         // Test successful resolution
         let resolved_config = container.config();
-        assert_eq!(resolved_config.get("app_name"), Some("test-app".to_string()));
+        assert_eq!(resolved_config.name, "test-app");
+        assert_eq!(resolved_config.environment, crate::app_config::Environment::Testing);
         
         let resolved_database = container.database();
         assert!(resolved_database.is_connected());
