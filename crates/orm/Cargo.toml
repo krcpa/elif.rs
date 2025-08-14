@@ -12,7 +12,7 @@ keywords = ["orm", "database", "web", "framework", "sql"]
 categories = ["web-programming", "database"]
 
 [dependencies]
-elif-core = { path = "../core" }
+elif-core = { version = "0.1.0", path = "../core" }
 sqlx = { workspace = true }
 serde = { workspace = true }
 uuid = { workspace = true }
