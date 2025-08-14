@@ -17,6 +17,7 @@ pub mod simple_stateful_server;
 pub mod config;
 pub mod error;
 pub mod tests;
+pub mod routing;
 
 // pub use server::{HttpServer, HttpServerBuilder};
 // pub use simple_server::SimpleHttpServer;
@@ -25,6 +26,14 @@ pub use minimal_server::MinimalHttpServer;
 pub use simple_stateful_server::SimpleStatefulHttpServer;
 pub use config::HttpConfig;
 pub use error::{HttpError, HttpResult};
+
+// Re-export routing types
+pub use routing::{
+    HttpMethod, RouteInfo, RouteRegistry,
+    ElifRouter, Route, RouteBuilder,
+    PathParams, RouteParam, ParamError, ParamType,
+    RouteGroup, GroupBuilder,
+};
 
 // Re-export commonly used types
 pub use axum::{

@@ -220,14 +220,24 @@ impl SimpleEventBus {
 #[async_trait]
 impl EventBus for SimpleEventBus {
     async fn publish(&self, event: Event) -> Result<(), EventError> {
-        let handlers = self.handlers.read().unwrap();
-        let mut metrics = self.metrics.lock().unwrap();
-        metrics.events_published += 1;
+        // Clone handlers to avoid holding lock across await
+        let handlers: Vec<Arc<dyn EventHandler>> = {
+            let handlers_guard = self.handlers.read().unwrap();
+            handlers_guard.values().cloned().collect()
+        };
+        
+        // Update metrics
+        {
+            let mut metrics = self.metrics.lock().unwrap();
+            metrics.events_published += 1;
+        }
 
         // Find handlers that can process this event type
-        for handler in handlers.values() {
+        for handler in handlers {
             if handler.event_types().contains(&event.event_type) {
-                match handler.handle(&event).await {
+                let result = handler.handle(&event).await;
+                let mut metrics = self.metrics.lock().unwrap();
+                match result {
                     Ok(_) => metrics.events_processed += 1,
                     Err(_) => metrics.processing_errors += 1,
                 }
@@ -334,7 +344,7 @@ impl EventHandler for UserActivityHandler {
         
         // Update user activity cache
         let cache_key = format!("user_activity:{}", event.source);
-        let _ = self.cache.set(cache_key, event.timestamp.to_rfc3339(), Duration::from_secs(3600)).await;
+        let _ = self.cache.set(&cache_key, event.timestamp.to_rfc3339(), Duration::from_secs(3600)).await;
         
         // Record metrics
         self.metrics.increment_counter("user_activity_events", None);
@@ -423,7 +433,7 @@ impl EnhancedDatabase {
         let result = format!("Result for: {}", query);
         
         // Cache the result
-        let _ = self.cache.set(cache_key, result.clone(), Duration::from_secs(300)).await;
+        let _ = self.cache.set(&cache_key, result.clone(), Duration::from_secs(300)).await;
         
         // Publish performance event
         let event = Event {

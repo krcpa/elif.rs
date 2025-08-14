@@ -556,6 +556,7 @@ dependencies = [
 name = "elif-core"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "lazy_static",
  "num_cpus",
@@ -623,6 +624,7 @@ dependencies = [
  "elif-introspect",
  "serde_json",
  "serde_yaml",
+ "tempfile",
  "tokio",
 ]
 
