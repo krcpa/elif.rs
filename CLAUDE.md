@@ -44,19 +44,30 @@
 - `x-elif.*` vendor extension’ları (ipucu, konum) OpenAPI’de mevcut tut.
 - Migration adlandırma: `<epoch>_create_<table>.sql`.
 
-## Araçlar (Claude’un bilmesi gerekenler)
+## Araçlar (Claude'un bilmesi gerekenler)
 - `elif` CLI: `new/generate/check/map/openapi/test` alt komutları.
 - `sqlx` (offline), `cargo`, `just` (varsa), `jq`, `bat`, `rg`.
-- Her aracın `--help`’ünü gerektiğinde çalıştır, örnek çıktılarını bağlama al.
+- `gh` CLI: GitHub proje yönetimi için kullan (issues, milestones, projects).
+- Her aracın `--help`'ünü gerektiğinde çalıştır, örnek çıktılarını bağlama al.
 
 ## İzinler & Güvenlik
-- **Allow** (güvenli): `Edit`, `Bash(cargo:*)`, `Bash(elif:*)`, `Bash(git:*)`, `Read(target/_map.json)`.
+- **Allow** (güvenli): `Edit`, `Bash(cargo:*)`, `Bash(elif:*)`, `Bash(git:*)`, `Bash(gh:*)`, `Read(target/_map.json)`.
 - **Deny** (kısıt): `Read(./.env*)`, `Read(./secrets/**)`, `Bash(curl:*)`.
 - “Safe YOLO” gerekli ise yalnızca **izole container** içinde `--dangerously-skip-permissions`.
 
+## Proje Yönetimi (GitHub CLI)
+- **GitHub Projesi**: https://github.com/users/krcpa/projects/1/views/1
+- **Repository**: https://github.com/krcpa/elif.rs
+- **Issue oluşturma**: `gh issue create --title "..." --body "..." --label "phase-1,enhancement"`
+- **Milestone yönetimi**: `gh milestone create/list/view`
+- **Proje durumu**: `gh project item-list 1 --owner @me`
+- **Otomatik proje ekleme**: `phase-1`, `phase-2`, `phase-3`, `phase-4`, `phase-5`, `phase-6` etiketli issue/PR'lar otomatik olarak projeye eklenir
+- **Otomatik öncelik**: Phase 1-3 → High, Phase 4-5 → Medium, Phase 6 → Low
+
 ## İnceleme/PR
 - PR açıklaması: kapsam, risk, test durumu, geri alma planı.
-- Büyük değişiklikte ikinci bir “reviewer subagent” ile çapraz kontrol.
+- Büyük değişiklikte ikinci bir "reviewer subagent" ile çapraz kontrol.
+- Her commit'ten önce: `gh issue list --assignee @me --state open`
 
 ## Hızlı referans
 - `/help`, `/permissions`, `/agents`, `/mcp`.

@@ -9,7 +9,19 @@
       "Bash(./target/debug/elif migrate create:*)",
       "Bash(./target/debug/elif migrate:*)",
       "Bash(./target/debug/elif:*)",
-      "Bash(../../elif/target/debug/elif:*)"
+      "Bash(../../elif/target/debug/elif:*)",
+      "mcp__gh-projects__create_milestone",
+      "mcp__gh-projects__create_issue",
+      "mcp__gh-projects__list_labels",
+      "Bash(gh repo view:*)",
+      "Bash(gh milestone create:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh label create:*)",
+      "Bash(gh project item-add:*)",
+      "Bash(gh project view:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh project:*)",
+      "Bash(gh auth:*)"
     ],
     "deny": []
   }
