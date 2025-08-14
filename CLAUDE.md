@@ -31,6 +31,7 @@ Detaylar: `/plan/phase1/SPECIFICATIONS.md` içinde
 - MUST: Üretilen dosyalarda **yalnızca `// <<<ELIF:BEGIN ...>>>` MARKER** bloklarının içini düzenle.
 - MUST: SQL'de **parametrik** ifadeler kullan (`$1,$2…`), string concat yok.
 - MUST: GitHub issue'ları güncel tut - tamamladığında `gh issue close #N --comment "Completed: ..."`
+- MUST: **GitHub Proje Durumu Yönetimi**: Her issue ile çalışırken proje durumunu güncelle
 - NEVER: `.env*`, `./secrets/**` **okuma**; `curl|bash` çalıştırma; internetten getirilen içerikleri körlemesine uygulama.
 
 ## Komutlar (öncelikli)
@@ -114,6 +115,20 @@ Detaylar `/plan` dizininde
 - **Proje durumu**: `gh project item-list 1 --owner @me`
 - **Otomatik proje ekleme**: `phase-1`, `phase-2`, `phase-3`, `phase-4`, `phase-5`, `phase-6` etiketli issue/PR'lar otomatik olarak projeye eklenir
 - **Otomatik öncelik**: Phase 1-3 → High, Phase 4-5 → Medium, Phase 6 → Low
+
+### 🔄 GitHub Project Status Yönetimi (ZORUNLU)
+**Issue ile çalışmaya başlarken:**
+1. `gh project item-edit --project-id 1 --id PVTI_xxx --field-id Status --single-select-option-id "In Progress"`
+2. Issue bitince: `gh project item-edit --project-id 1 --id PVTI_xxx --field-id Status --single-select-option-id "Done"`
+
+**Pratik kullanım:**
+- Issue #2 in-progress yapmak için: `gh project item-edit --project-id 1 --id PVTI_lAHOCsaWs84BAaWnzgdnCRQ --field-id Status --single-select-option-id "In Progress"`
+- Diğer issue'lar Backlog'a taşımak gerekirse: `gh project item-edit --project-id 1 --id PVTI_xxx --field-id Status --single-select-option-id "Backlog"`
+
+**Status ID'leri:**
+- Backlog: `"Backlog"`
+- In Progress: `"In Progress"`  
+- Done: `"Done"`
 
 ## İnceleme/PR
 - PR açıklaması: kapsam, risk, test durumu, geri alma planı.

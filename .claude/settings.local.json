@@ -24,7 +24,8 @@
       "Bash(gh auth:*)",
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
-      "Bash(gh issue view:*)"
+      "Bash(gh issue view:*)",
+      "Bash(gh issue close:*)"
     ],
     "deny": []
   }

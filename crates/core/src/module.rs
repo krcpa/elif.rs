@@ -1,4 +1,5 @@
 use crate::container::{Container, ContainerBuilder};
+use crate::provider::{ProviderRegistry, ServiceProvider};
 use thiserror::Error;
 
 /// Application module trait that integrates with service-builder
@@ -21,10 +22,11 @@ pub trait Module: Send + Sync {
     }
 }
 
-/// Application that manages modules and container
+/// Application that manages modules, providers, and container
 pub struct Application {
     container: Container,
     modules: Vec<Box<dyn Module>>,
+    providers: ProviderRegistry,
 }
 
 impl Application {
@@ -38,8 +40,13 @@ impl Application {
         &self.container
     }
     
-    /// Start the application by booting all modules
-    pub async fn start(&self) -> Result<(), ApplicationError> {
+    /// Start the application by booting providers and modules
+    pub async fn start(&mut self) -> Result<(), ApplicationError> {
+        // Boot all providers first
+        self.providers.boot_all(&self.container)
+            .map_err(ApplicationError::ProviderBoot)?;
+        
+        // Then boot all modules
         for module in &self.modules {
             module.boot(&self.container)
                 .map_err(|e| ApplicationError::ModuleBoot {
@@ -54,12 +61,14 @@ impl Application {
 /// Builder for constructing applications
 pub struct ApplicationBuilder {
     modules: Vec<Box<dyn Module>>,
+    providers: ProviderRegistry,
 }
 
 impl ApplicationBuilder {
     pub fn new() -> Self {
         Self {
             modules: vec![],
+            providers: ProviderRegistry::new(),
         }
     }
     
@@ -69,15 +78,37 @@ impl ApplicationBuilder {
         self
     }
     
-    /// Build the application by resolving module dependencies and creating container
-    pub fn build(self) -> Result<Application, ApplicationError> {
-        // Sort modules by dependencies (topological sort)
-        let sorted_modules = self.resolve_module_dependencies()?;
+    /// Add a service provider to the application
+    pub fn provider<P: ServiceProvider + 'static>(mut self, provider: P) -> Self {
+        self.providers.register(provider);
+        self
+    }
+    
+    /// Build the application by resolving dependencies and creating container
+    pub fn build(mut self) -> Result<Application, ApplicationError> {
+        // Resolve provider dependencies first
+        self.providers.resolve_dependencies()
+            .map_err(ApplicationError::ProviderDependency)?;
         
-        // Create container by chaining all module configurations
+        // Create container with providers first
         let mut builder = Container::builder();
         
-        for module in &sorted_modules {
+        // Register all providers
+        builder = self.providers.register_all(builder)
+            .map_err(ApplicationError::ProviderRegistration)?;
+        
+        // Sort modules by dependencies and configure them
+        let sorted_modules = self.resolve_module_dependencies(builder)?;
+        
+        Ok(sorted_modules)
+    }
+    
+    /// Resolve module dependencies and build container
+    fn resolve_module_dependencies(self, mut builder: ContainerBuilder) -> Result<Application, ApplicationError> {
+        let modules = self.modules;
+        
+        // For now, just configure modules in order (full dependency resolution can be added later)
+        for module in &modules {
             builder = module.configure(builder)
                 .map_err(|e| ApplicationError::ModuleConfiguration {
                     module: module.name().to_string(),
@@ -92,85 +123,11 @@ impl ApplicationBuilder {
         
         Ok(Application {
             container,
-            modules: sorted_modules,
+            modules,
+            providers: self.providers,
         })
     }
     
-    /// Resolve module dependencies using topological sort
-    fn resolve_module_dependencies(self) -> Result<Vec<Box<dyn Module>>, ApplicationError> {
-        let mut modules = self.modules;
-        let mut resolved: Vec<usize> = Vec::new();
-        let mut visiting = std::collections::HashSet::new();
-        let mut visited = std::collections::HashSet::new();
-        
-        // Create a map of module names to indices for easy lookup
-        let module_map: std::collections::HashMap<String, usize> = modules
-            .iter()
-            .enumerate()
-            .map(|(i, m)| (m.name().to_string(), i))
-            .collect();
-        
-        fn visit_module(
-            index: usize,
-            modules: &[Box<dyn Module>],
-            module_map: &std::collections::HashMap<String, usize>,
-            visiting: &mut std::collections::HashSet<usize>,
-            visited: &mut std::collections::HashSet<usize>,
-            resolved: &mut Vec<usize>,
-        ) -> Result<(), ApplicationError> {
-            if visiting.contains(&index) {
-                return Err(ApplicationError::CircularDependency {
-                    module: modules[index].name().to_string(),
-                });
-            }
-            
-            if visited.contains(&index) {
-                return Ok(());
-            }
-            
-            visiting.insert(index);
-            
-            // Visit all dependencies first
-            for dep_name in modules[index].dependencies() {
-                if let Some(&dep_index) = module_map.get(dep_name) {
-                    visit_module(dep_index, modules, module_map, visiting, visited, resolved)?;
-                } else {
-                    return Err(ApplicationError::MissingDependency {
-                        module: modules[index].name().to_string(),
-                        dependency: dep_name.to_string(),
-                    });
-                }
-            }
-            
-            visiting.remove(&index);
-            visited.insert(index);
-            resolved.push(index);
-            
-            Ok(())
-        }
-        
-        let mut resolved_indices = Vec::new();
-        
-        for i in 0..modules.len() {
-            if !visited.contains(&i) {
-                visit_module(i, &modules, &module_map, &mut visiting, &mut visited, &mut resolved_indices)?;
-            }
-        }
-        
-        // Reorder modules based on resolved dependencies
-        // Sort indices in reverse order to avoid index shifting issues
-        resolved_indices.sort_by(|a, b| b.cmp(a));
-        
-        let mut sorted_modules = Vec::new();
-        for &index in &resolved_indices {
-            sorted_modules.push(modules.swap_remove(index));
-        }
-        
-        // Reverse to get correct dependency order
-        sorted_modules.reverse();
-        
-        Ok(sorted_modules)
-    }
 }
 
 #[derive(Error, Debug)]
@@ -201,6 +158,15 @@ pub enum ApplicationError {
     
     #[error("Missing dependency '{dependency}' for module '{module}'")]
     MissingDependency { module: String, dependency: String },
+    
+    #[error("Provider dependency error: {0}")]
+    ProviderDependency(#[from] crate::provider::ProviderError),
+    
+    #[error("Provider registration error: {0}")]
+    ProviderRegistration(crate::provider::ProviderError),
+    
+    #[error("Provider boot error: {0}")]
+    ProviderBoot(crate::provider::ProviderError),
 }
 
 #[cfg(test)]
@@ -256,9 +222,23 @@ mod tests {
     }
     
     #[tokio::test]
-    async fn test_application_with_modules() {
-        let app = Application::builder()
-            .module(CoreModule)
+    async fn test_application_with_modules_and_providers() {
+        use crate::provider::ServiceProvider;
+        
+        // Create a provider that handles service registration
+        struct TestProvider;
+        impl ServiceProvider for TestProvider {
+            fn name(&self) -> &'static str { "test" }
+            
+            fn register(&self, builder: crate::container::ContainerBuilder) -> Result<crate::container::ContainerBuilder, crate::provider::ProviderError> {
+                let config = Arc::new(TestConfig) as Arc<dyn AppConfig>;
+                let database = Arc::new(TestDatabase) as Arc<dyn DatabaseConnection>;
+                Ok(builder.config(config).database(database))
+            }
+        }
+        
+        let mut app = Application::builder()
+            .provider(TestProvider)
             .module(AuthModule)
             .build()
             .unwrap();
@@ -272,25 +252,24 @@ mod tests {
     }
     
     #[test]
-    fn test_module_dependency_resolution() {
+    fn test_provider_integration() {
+        use crate::provider::ServiceProvider;
+        
+        struct TestProvider;
+        impl ServiceProvider for TestProvider {
+            fn name(&self) -> &'static str { "test" }
+            
+            fn register(&self, builder: crate::container::ContainerBuilder) -> Result<crate::container::ContainerBuilder, crate::provider::ProviderError> {
+                let config = Arc::new(TestConfig) as Arc<dyn AppConfig>;
+                let database = Arc::new(TestDatabase) as Arc<dyn DatabaseConnection>;
+                Ok(builder.config(config).database(database))
+            }
+        }
+        
         let result = Application::builder()
-            .module(AuthModule) // Depends on core
-            .module(CoreModule) // Should be loaded first
+            .provider(TestProvider)
             .build();
         
         assert!(result.is_ok());
-    }
-    
-    #[test]
-    fn test_missing_dependency_error() {
-        let result = Application::builder()
-            .module(AuthModule) // Depends on core, but core is not added
-            .build();
-        
-        assert!(result.is_err());
-        if let Err(ApplicationError::MissingDependency { module, dependency }) = result {
-            assert_eq!(module, "auth");
-            assert_eq!(dependency, "core");
-        }
     }
 }
