@@ -1,6 +1,5 @@
 use elif_core::ElifError;
 use std::fs;
-use std::path::Path;
 
 pub async fn add_model(name: &str, fields_str: &str) -> Result<(), ElifError> {
     println!("📦 Adding model: {} with fields: {}", name, fields_str);

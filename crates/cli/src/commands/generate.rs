@@ -1,6 +1,5 @@
 use elif_core::ElifError;
 use elif_codegen::CodeGenerator;
-use std::path::PathBuf;
 
 pub async fn run() -> Result<(), ElifError> {
     let project_root = std::env::current_dir()

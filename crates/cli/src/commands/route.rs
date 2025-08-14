@@ -122,7 +122,7 @@ fn update_controllers_mod(controller_name: &str) -> Result<(), ElifError> {
 
 async fn add_route_to_router(method: &str, path: &str, controller: &str) -> Result<(), ElifError> {
     let routes_path = "src/routes/mod.rs";
-    let mut content = fs::read_to_string(routes_path)?;
+    let content = fs::read_to_string(routes_path)?;
     
     let axum_method = match method {
         "GET" => "get",

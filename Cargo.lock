@@ -512,21 +512,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "elif-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "elif-codegen",
- "elif-core",
- "elif-introspect",
- "serde_json",
- "serde_yaml",
- "tokio",
-]
-
-[[package]]
 name = "elif-codegen"
 version = "0.1.0"
 dependencies = [
@@ -576,6 +561,21 @@ dependencies = [
  "serde",
  "sqlx",
  "uuid",
+]
+
+[[package]]
+name = "elifrs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "elif-codegen",
+ "elif-core",
+ "elif-introspect",
+ "serde_json",
+ "serde_yaml",
+ "tokio",
 ]
 
 [[package]]

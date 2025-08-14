@@ -2,6 +2,14 @@
 name = "elif-introspect"
 version = "0.1.0"
 edition = "2021"
+description = "Project introspection and analysis tools for the elif.rs web framework"
+license = "MIT"
+authors = ["krcpa <krcpa@users.noreply.github.com>"]
+repository = "https://github.com/krcpa/elif.rs"
+homepage = "https://github.com/krcpa/elif.rs"
+documentation = "https://docs.rs/elif-introspect"
+keywords = ["introspection", "analysis", "web", "framework", "ai"]
+categories = ["web-programming", "development-tools"]
 
 [dependencies]
 elif-core = { path = "../core" }
