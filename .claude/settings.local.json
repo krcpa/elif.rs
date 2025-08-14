@@ -21,7 +21,9 @@
       "Bash(gh project view:*)",
       "Bash(gh issue list:*)",
       "Bash(gh project:*)",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)"
     ],
     "deny": []
   }
