@@ -1,6 +1,6 @@
 [package]
 name = "elifrs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "LLM-friendly Rust web framework CLI - AI agent-optimized development tools"
 license = "MIT"
@@ -13,7 +13,7 @@ keywords = ["web", "framework", "cli", "ai", "llm"]
 categories = ["command-line-utilities", "web-programming", "development-tools"]
 
 [[bin]]
-name = "elif"
+name = "elifrs"
 path = "src/main.rs"
 
 [dependencies]
