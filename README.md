@@ -1,6 +1,6 @@
 # elif.rs
 
-> Production-ready Rust web framework designed for AI agent-driven development
+> Early preview of an LLM-friendly Rust web framework designed for AI agent-driven development
 
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -8,7 +8,7 @@
 [![Crates.io](https://img.shields.io/crates/v/elifrs.svg)](https://crates.io/crates/elifrs)
 [![Downloads](https://img.shields.io/crates/d/elifrs.svg)](https://crates.io/crates/elifrs)
 
-**elif.rs** is a production-ready, LLM-friendly Rust web framework that enables both human developers and AI agents to build robust web applications through structured, safe code generation.
+**elif.rs** is an LLM-friendly Rust web framework under active development that enables both human developers and AI agents to build web applications through structured, safe code generation. Try the early preview now!
 
 ## 🚀 **Get Started Now**
 
@@ -30,7 +30,7 @@ cargo run
 - ✅ **Dependency injection** container ready for services
 - ✅ **Configuration management** with environment support  
 - ✅ **Application lifecycle** with graceful startup/shutdown
-- ✅ **Production-ready ORM** with advanced query builder
+- ✅ **Early preview ORM** with advanced query builder
 - ✅ **Module system** for organizing features
 
 ## 🎯 **Why elif.rs?**
@@ -38,47 +38,47 @@ cargo run
 ### **For Human Developers**
 - **🏗️ Architecture-First**: Robust dependency injection and clean separation
 - **⚡ High Performance**: 3μs query building, minimal memory overhead
-- **🧪 Well-Tested**: 69+ tests ensuring reliability
+- **🧪 Well-Tested**: 69+ tests ensuring reliability in early preview
 - **📝 Clear APIs**: Intuitive, well-documented interfaces
 
 ### **For AI Agents**  
-- **🤖 LLM-Optimized**: Designed specifically for AI code generation
+- **🤖 LLM-Optimized**: Early preview designed specifically for AI code generation
 - **📋 Spec-Driven**: Configuration over convention approach
-- **🔍 Introspective**: Built-in project understanding capabilities
+- **🔍 Introspective**: Built-in project understanding capabilities (in development)
 - **🛡️ Safe Editing**: MARKER zones prevent AI from breaking core logic
 
 ## 📦 **Available Packages**
 
-### CLI Tool
+### CLI Tool (Early Preview)
 ```bash
 cargo install elifrs  # Global CLI for project management
 ```
 
-### Framework Crates
+### Framework Crates (Early Preview)
 ```toml
 [dependencies]
-elif-core = "0.1.0"     # Architecture foundation
-elif-orm = "0.2.0"      # Database layer with advanced ORM
+elif-core = "0.1.0"     # Architecture foundation  
+elif-orm = "0.2.0"      # Database layer with advanced ORM (early preview)
 ```
 
-## 🏃‍♂️ **Current Status: Production-Ready Foundation**
+## 🏃‍♂️ **Current Status: Active Development with Solid Foundation**
 
-elif.rs has **two complete foundational layers** ready for production use:
+elif.rs is under **active development** with **two complete foundational layers** available for early preview:
 
 ### ✅ **Phase 1 Complete**: Architecture Foundation
-- **🔧 Dependency Injection**: Production-ready DI container with service resolution
+- **🔧 Dependency Injection**: Robust DI container with service resolution
 - **⚙️ Configuration Management**: Environment-based config with validation  
 - **🔄 Application Lifecycle**: Graceful startup/shutdown with signal handling
 - **📦 Module System**: Organize features with dependency resolution
-- **✅ Status**: 33/33 tests passing, production-ready
+- **✅ Status**: 33/33 tests passing, stable foundation
 
 ### ✅ **Phase 2.1 Complete**: Database & ORM Foundation  
 - **📊 Advanced ORM**: Complete Model trait with CRUD operations
 - **🔍 Query Builder**: Type-safe fluent API with 940+ lines of functionality
-- **⚡ High Performance**: 3μs query building (333x better than targets)
+- **⚡ High Performance**: 3μs query building (excellent early performance)
 - **🧪 Comprehensive Testing**: 36 unit tests + 6 performance benchmarks
 - **🎯 Advanced Features**: Subqueries, aggregations, pagination, soft deletes
-- **✅ Status**: All tests passing, published to crates.io as v0.2.0
+- **✅ Status**: All tests passing, available as early preview v0.2.0
 
 ### 🚧 **In Active Development**: 
 - **Phase 2.2**: Connection pooling and transaction management
@@ -91,9 +91,9 @@ elif.rs has **two complete foundational layers** ready for production use:
 - **Phase 5**: Production features (monitoring, clustering)
 - **Phase 6**: Advanced features (real-time, job queues, caching)
 
-## 💡 **What Can You Build Right Now?**
+## 💡 **What Can You Try in the Early Preview?**
 
-With the current foundation, you can build:
+With the current foundation, you can experiment with:
 
 ### 🌐 **Web Applications**
 ```bash
@@ -137,21 +137,21 @@ let app = Application::builder()
     .module(WebModule)
     .build()?;
 
-app.start().await?;  // Production-ready lifecycle management
+app.start().await?;  // Early preview lifecycle management
 ```
 
 ## 📚 **Quick Start Guide**
 
-### Option 1: Use the CLI (Recommended)
+### Option 1: Try the Early Preview CLI (Recommended)
 ```bash
-# Install globally
+# Install the early preview globally
 cargo install elifrs
 
 # Create new project  
 elifrs new my-project
 cd my-project
 
-# Everything is ready to go
+# Everything is ready to experiment with
 cargo run
 ```
 
@@ -159,7 +159,7 @@ cargo run
 ```toml
 [dependencies]
 elif-core = "0.1.0"    # Architecture foundation
-elif-orm = "0.2.0"     # Production-ready ORM
+elif-orm = "0.2.0"     # Early preview ORM
 ```
 
 ### Option 3: Explore the Source
@@ -301,15 +301,15 @@ println!("Server running on port {}", config.server.port);
 - [x] Module system with dependency resolution
 - [x] Configuration management with validation
 - [x] Application lifecycle and bootstrapping
-- **Status**: All 33 core tests passing, production-ready architecture
+- **Status**: All 33 core tests passing, solid foundation
 
 ### Phase 2.1: ORM Foundation ✅ (Complete)
 - [x] Model trait with CRUD operations, timestamps, soft deletes
 - [x] Type-safe query builder with fluent API (940+ lines)
 - [x] Advanced query features: subqueries, aggregations, cursor pagination
 - [x] Comprehensive testing: 36 unit tests, 6 performance benchmarks
-- [x] Outstanding performance: 3μs query building, 208 bytes memory overhead
-- **Status**: Production-ready ORM foundation exceeding all performance targets
+- [x] Excellent performance: 3μs query building, 208 bytes memory overhead
+- **Status**: Early preview ORM foundation with solid test coverage
 
 ### Phase 2.2-2.4: Database Layer 🚧 (Next)
 - [ ] Connection pooling and transaction management  
@@ -355,13 +355,13 @@ cargo test --workspace  # Ensure all tests pass
 
 ## 📊 Project Stats
 
-- **Architecture**: ✅ Production-ready foundation (Phase 1)
-- **ORM Foundation**: ✅ Complete with advanced features (Phase 2.1)
+- **Architecture**: ✅ Solid foundation (Phase 1)
+- **ORM Foundation**: ✅ Early preview with advanced features (Phase 2.1)
 - **Tests**: ✅ 69+ tests, all passing (36 ORM + 33 core)
-- **Performance**: ✅ Exceeds all targets (3μs query building)
+- **Performance**: ✅ Excellent early results (3μs query building)
 - **Build**: ✅ Clean compilation, minimal warnings
 - **Documentation**: ✅ Comprehensive inline docs
-- **AI Compatibility**: ✅ LLM-optimized code structure
+- **AI Compatibility**: ✅ LLM-optimized code structure (early preview)
 
 ## 📄 License
 
@@ -378,9 +378,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Built for the future of AI-driven development** 🤖
 
+> *Early Preview Available - Try it now with `cargo install elifrs`*  
 > *Phase 1 ✅ Complete: Architecture Foundation*  
 > *Phase 2.1 ✅ Complete: ORM Foundation with 36 tests*  
-> *Next: Phase 2.2 Connection Pooling & Transaction Management*
+> *Under Active Development: Phase 2.2 Connection Pooling & Transaction Management*
 
 ---
 
