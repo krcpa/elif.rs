@@ -13,42 +13,55 @@
   - Module system with dependency resolution
   - Configuration management with environment variables
   - Application lifecycle with graceful shutdown
+- ✅ **Phase 2.1 ORM Foundation** - COMPLETED (36/36 tests passing)
+  - Model trait with CRUD operations, timestamps, soft deletes
+  - Advanced Query builder with fluent API (940+ lines)
+  - Subqueries, aggregations, cursor pagination, performance optimization
+  - Comprehensive error system with proper error propagation
+  - Primary key support (UUID, integer, composite)
 - ✅ **Release & Publication**: All crates published to crates.io
   - elif-core v0.1.0
   - elif-introspect v0.1.0
   - elif-codegen v0.1.0
-  - elif-orm v0.1.0 (Phase 2 placeholder)
+  - elif-orm v0.1.0 → v0.2.0 (Phase 2.1 ORM complete)
   - elifrs v0.1.1 (CLI - global installation available)
-- GitHub Projesi: https://github.com/users/krcpa/projects/1/views/1
+- ✅ **Plan Restructured**: Iterative development approach implemented
+  - 9-phase structure for working framework at each phase
+  - Middleware before authentication (as requested)
+  - Database seeding moved to Phase 9 (deferred as requested)
+- ✅ **Task Management**: Big phases broken down into manageable tasks
+  - Phase 2: 6 tasks (3-6 days each)
+  - Phase 3: 6 tasks (2-6 days each)
+  - All tasks added to GitHub project board
+- GitHub Project: https://github.com/users/krcpa/projects/1/views/1
 - Repository: https://github.com/krcpa/elif.rs
-- 17 issue oluşturuldu (Phase 1 tamamlandı)
-- 6 fazlık geliştirme planı `/plan` dizininde
+- 17 manageable issues created (old big phases closed)
 
 **🎯 ŞU ANDAKİ GÖREV:**
-**Issue #6: Phase 2.1 - Build full ORM with relationships and query builder**
-- ✅ Base Model System (Week 1-2) - COMPLETED
-- 🚧 Query Builder Enhancement (Week 3-4) - IN PROGRESS  
-- 📋 Relationships System (Week 5-6) - NEXT
+**Issue #23: Phase 2.1: HTTP Server Core Implementation**
+**Priority**: High - Immediate next task (3-5 days)
+**Status**: Ready to implement - all dependencies completed
 
 ## Keşif (her oturumda ilk komutlar) - ZORUNLU
-- `cat plan/README.md` → geliştirme planına genel bakış.
-- `cat plan/phase2/README.md` → mevcut faz detayları.
-- `gh issue list --repo krcpa/elif.rs --state open --limit 5` → aktif issue'lar.
-- `gh issue view 6 --repo krcpa/elif.rs` → mevcut issue detayı.
-- `gh project item-list 1 --owner @me --limit 10` → proje durumu.
-- `cargo build` → mevcut kod durumu kontrol.
+- `gh issue view 23 --repo krcpa/elif.rs` → mevcut görev detayı (Issue #23).
+- `gh issue list --repo krcpa/elif.rs --state open --limit 10` → aktif task'lar.
+- `gh project item-list 1 --owner @me --limit 15` → proje durumu (17 task var).
+- `cargo build && cargo test` → mevcut kod durumu kontrol.
+- `cat plan/README.md` → genel plan (9 iterative phase).
+- `cat plan/PHASE_OVERVIEW.md` → phase breakdown rationale.
 - `ls crates/` → framework yapısını anla.
 
 ## Çalışma Prensipleri (MUST/NEVER) - ZORUNLU
 - MUST: **Plan → Uygulama → Test → Gözden Geçirme** sırala; plana göre commit et.
 - MUST: Üretilen dosyalarda **yalnızca `// <<<ELIF:BEGIN ...>>>` MARKER** bloklarının içini düzenle.
 - MUST: SQL'de **parametrik** ifadeler kullan (`$1,$2…`), string concat yok.
-- MUST: **HER OTURUMDA Issue Management (ZORUNLU):**
-  - İlk: Hangi issue üzerinde çalışıyorsun? → `gh issue view <N> --repo krcpa/elif.rs`
-  - Progress: `gh issue comment <N> --repo krcpa/elif.rs --body "Progress update..."`
-  - Tamamlama: `gh issue close <N> --comment "Completed: implementation details"`
-- MUST: **GitHub Proje Durumu Yönetimi**: Her issue ile çalışırken proje durumunu güncelle
-- NEVER: Issue'sız çalışma - her development work bir issue'ya bağlı olmalı
+- MUST: **HER OTURUMDA Task Management (ZORUNLU):**
+  - İlk: Hangi task üzerinde çalışıyorsun? → `gh issue view 23 --repo krcpa/elif.rs` (current task)
+  - Progress: `gh issue comment 23 --repo krcpa/elif.rs --body "Progress update..."`
+  - Tamamlama: `gh issue close 23 --comment "Completed: implementation details"`
+  - Sonraki: Next task olan #24'e geç (HTTP Routing System)
+- MUST: **Task Breakdown**: Eğer büyük bir phase/task varsa, küçük task'lara böl (3-6 gün max)
+- NEVER: Task'sız çalışma - her development work bir GitHub issue'ya bağlı olmalı
 - NEVER: `.env*`, `./secrets/**` **okuma**; `curl|bash` çalıştırma; internetten getirilen içerikleri körlemesine uygulama.
 
 ## Komutlar (öncelikli)
@@ -70,7 +83,7 @@
   - `cargo run` → HTTP servis (localhost:3000).
   - `elifrs test --focus <resource>` → ilgili testleri çalıştır.
 
-## Geliştirme Süreci (6 Faz)
+## Geliştirme Süreci (9 Iterative Phases)
 
 ### **Phase 1: Architecture Foundation** ✅ (COMPLETED - Issue #1-5)
 - ✅ Dependency injection container (service-builder based)
@@ -80,55 +93,95 @@
 - ✅ Application lifecycle and bootstrapping (graceful shutdown)
 **Sonuç**: 33/33 test geçiyor, production-ready temel
 
-### **Phase 2: Database Layer** 🚧 (NEXT - Issue #6-7, #11-12)
-- Full ORM with relationships and query builder
-- Connection pooling and transaction management
-- Model events and observers
-- Database seeding and factory system
-**Hedef**: Production-ready database layer
+### **Phase 2: Web Foundation** 🚧 (CURRENT - Issue #23-28)
+**Tasks Ready**: 6 manageable tasks (3-6 days each)
+- #23: HTTP Server Core Implementation (3-5 days) **← ŞU AN**
+- #24: HTTP Routing System (4-6 days)
+- #25: Request/Response Abstractions (3-4 days)  
+- #26: Basic Middleware Pipeline (3-4 days)
+- #27: Controller System & Database Integration (4-5 days)
+- #28: Error Handling & JSON API Response Format (2-3 days)
+**Hedef**: Working HTTP server with database integration
 
-### **Phase 3: Security Core** (Issue #8-9, #13-14)
-- Authentication system (JWT, session)
-- Authorization with roles and permissions
-- Input validation and sanitization
-- Security middleware (CORS, CSRF, rate limiting)
-**Hedef**: Enterprise-grade security
+### **Phase 3: Essential Middleware & Validation** 📋 (NEXT - Issue #29-34)
+**Tasks Ready**: 6 manageable tasks (2-6 days each)
+- #29: CORS Middleware Implementation (2-3 days)
+- #30: CSRF Protection Middleware (3-4 days)
+- #31: Rate Limiting Middleware (4-5 days)
+- #32: Input Validation System (4-6 days)
+- #33: Request Sanitization & Security Headers (2-3 days)
+- #34: Enhanced Logging & Request Tracing (3-4 days)
+**Hedef**: Secure, validated web server
 
-### **Phase 4-6: Developer Experience, Production Features, Advanced Features**
-Detaylar `/plan` dizininde
+### **Phase 4-9: Database Operations, Auth, Advanced ORM, Developer Experience, Production, Advanced Features**
+**Status**: Big phase issues exist (#18-22) but **need task breakdown when reached**
+**Rule**: Break down into 2-6 day tasks before starting implementation
 
-## Tipik Akış (Phase 2 - GÜNCEL ÖRNEK)
-1) **Issue kontrol**: `gh issue view 6` → #6: Phase 2.1: Build full ORM with relationships and query builder
-2) **Spesifikasyonu oku**: `cat plan/phase2/README.md` → Week 3-4: Query Builder Foundation
-3) **Progress update**: `gh issue comment 6 --body "🚧 Starting Query Builder enhancements..."`
-4) **Implementation**: MARKER bloklarını düzenle (`crates/elif-orm/src/query.rs`)
-5) **Test yaz**: Unit testler ve entegrasyon testleri
+## Tipik Akış (Manageable Task - GÜNCEL ÖRNEK)
+1) **Task kontrol**: `gh issue view 23` → #23: Phase 2.1: HTTP Server Core Implementation
+2) **Task breakdown kontrolü**: 3-5 days, clear scope, ready to implement
+3) **Progress update**: `gh issue comment 23 --body "🚧 Starting HTTP Server Core Implementation..."`
+4) **Implementation**: 
+   - Create `crates/elif-http` crate structure
+   - Implement basic HTTP server using Tokio/Axum
+   - Add server configuration integration with existing config system
+   - Integrate server with DI container for service injection
+5) **Test yaz**: Unit testler ve entegrasyon testleri (health check endpoint test)
 6) **Doğrula**: `cargo test && cargo build`
-7) **Commit**: `git commit -m "feat: enhance query builder with advanced features (Issue #6)"`
-8) **Progress update**: `gh issue comment 6 --body "✅ Query Builder enhancements completed"`
-9) **Sonraki milestone**: Week 5-6 Relationships → devam et
+7) **Commit**: `git commit -m "feat: implement HTTP server core with DI integration (Issue #23)"`
+8) **Task completion**: `gh issue close 23 --comment "Completed: HTTP server core implemented"`
+9) **Sonraki task**: #24: HTTP Routing System → otomatik geç
 
-## Phase 2 Systematic Approach - ZORUNLU
-**📍 Current: Issue #6 (Phase 2.1) - Week 3-4: Query Builder Enhancement**
+## Task Management Systematic Approach - ZORUNLU
+**📍 Current: Issue #23 (Phase 2.1) - HTTP Server Core Implementation**
 
-**✅ COMPLETED (Week 1-2):**
-- Base Model trait with CRUD operations
-- QueryBuilder with fluent type-safe API
-- Comprehensive error handling
-- Primary key support and timestamps
+**✅ COMPLETED (Phase 1 + ORM Foundation):**
+- Phase 1: Architecture Foundation (33/33 tests passing)
+- Phase 2.1 ORM: Base Model trait, QueryBuilder, advanced features (36/36 tests)
 
-**🚧 IN PROGRESS (Week 3-4):**
-- Advanced query builder features (subqueries, unions)
-- Performance optimization and query caching  
-- Enhanced WHERE conditions and complex queries
-- Integration with Model trait improvements
+**🚧 IN PROGRESS (Phase 2: Web Foundation):**
+- #23: HTTP Server Core Implementation (3-5 days) **← ŞU AN**
 
-**📋 NEXT (Week 5-6):**
-- Relationship system (HasOne, HasMany, BelongsTo, BelongsToMany)
-- Eager loading and lazy loading mechanisms
-- Relationship constraints and validation
+**📋 READY TO IMPLEMENT (Phase 2 remaining tasks):**
+- #24: HTTP Routing System (4-6 days)
+- #25: Request/Response Abstractions (3-4 days)
+- #26: Basic Middleware Pipeline (3-4 days)
+- #27: Controller System & Database Integration (4-5 days)
+- #28: Error Handling & JSON API Response Format (2-3 days)
 
-**Çalışma Kuralı**: Her hafta sonunda progress commit + issue comment + sonraki hafta plan
+**📋 NEED TASK BREAKDOWN (When Phase 2 complete):**
+- Big Phase issues #18-22 need to be broken down into 2-6 day tasks
+- Rule: Never start implementation without manageable task breakdown
+
+**Çalışma Kuralı**: Her task sonunda close + comment + sonraki task'e geç
+
+## Task Breakdown Guidelines - ZORUNLU
+**When to Break Down Big Issues:**
+- Any issue > 1 week (6+ days) must be broken down
+- Issues without clear daily milestones need breakdown
+- Big phase issues (#18-22) are placeholders - break down before implementation
+
+**How to Break Down:**
+1. Create 2-6 day sub-tasks with clear scope
+2. Each sub-task should have:
+   - Specific files to create/modify
+   - Clear success criteria
+   - Time estimate (2-6 days)
+   - Dependencies clearly listed
+3. Add sub-tasks to GitHub project board
+4. Close big phase issue when breakdown complete
+
+**Example Task Breakdown Pattern:**
+```
+Big Issue: "Phase 4: Database Operations" (too big)
+→ Break into:
+  - Task 4.1: Connection Pooling Implementation (3-4 days)
+  - Task 4.2: Transaction Management System (4-5 days)  
+  - Task 4.3: Advanced Query Features (4-6 days)
+  - Task 4.4: Migration System (3-4 days)
+```
+
+**Next Breakdown Needed:** Phase 4-9 issues (#18-22) when Phase 3 complete
 
 ## Kod Stili ve Hatalar
 - Rust idioms: async/await, Result<T, E>, ? operator
