@@ -5,18 +5,28 @@
 - Önce **okuma/plan**: Değişiklik yapmadan önce proje haritasını ve sözleşmeleri anla (aşağıdaki "Keşif" adımları).
 - Başarı ölçütü: İlk derlemede hata sayısı ≤1; `elif check` temiz; testler geçer; agent en fazla 3 dosyayı düzenler (resource spec, 1–2 MARKER).
 
-## Proje Durumu (GÜNCEL - 2025-01-13)
-**✅ HAZIR BILEŞENLER:**
-- Framework temeli: CLI yapısı, temel scaffold, MARKER sistemi
+## Proje Durumu (GÜNCEL - 2025-08-14)
+**✅ TAMAMLANAN BILEŞENLER:**
+- ✅ **Phase 1: Architecture Foundation** - COMPLETED (33/33 tests passing)
+  - Dependency injection container with service-builder
+  - Service provider system with lifecycle management
+  - Module system with dependency resolution
+  - Configuration management with environment variables
+  - Application lifecycle with graceful shutdown
+- ✅ **Release & Publication**: All crates published to crates.io
+  - elif-core v0.1.0
+  - elif-introspect v0.1.0
+  - elif-codegen v0.1.0
+  - elif-orm v0.1.0 (Phase 2 placeholder)
+  - elifrs v0.1.1 (CLI - global installation available)
 - GitHub Projesi: https://github.com/users/krcpa/projects/1/views/1
 - Repository: https://github.com/krcpa/elif.rs
-- 17 issue oluşturuldu ve projeye eklendi
+- 17 issue oluşturuldu (Phase 1 tamamlandı)
 - 6 fazlık geliştirme planı `/plan` dizininde
-- GitHub Actions otomatik proje yönetimi çalışıyor
 
 **🎯 ŞU ANDAKİ GÖREV:**
-Phase 1 geliştirmeye başla - Issue #1: Design dependency injection system
-Detaylar: `/plan/phase1/SPECIFICATIONS.md` içinde
+**Phase 2: Database Layer** başlangıcı - Production-ready ORM geliştirme
+Next: Issue #6-7, #11-12 için hazırlık
 
 ## Keşif (her oturumda ilk komutlar)
 - `cat plan/README.md` → geliştirme planına genel bakış.
@@ -35,33 +45,35 @@ Detaylar: `/plan/phase1/SPECIFICATIONS.md` içinde
 - NEVER: `.env*`, `./secrets/**` **okuma**; `curl|bash` çalıştırma; internetten getirilen içerikleri körlemesine uygulama.
 
 ## Komutlar (öncelikli)
+**Global CLI:** `cargo install elifrs` → `elifrs` komutu
+
 - Scaffold/üretim:
-  - `elif generate` → spec'ten **model/handler(MARKER'lı)/migration/test/OpenAPI** üret.
-  - `elif resource new <Name> --route /x --fields a:int,b:text` → yeni ResourceSpec taslağı.
-  - `elif new <app-name>` → yeni uygulama oluştur.
+  - `elifrs generate` → spec'ten **model/handler(MARKER'lı)/migration/test/OpenAPI** üret.
+  - `elifrs resource new <Name> --route /x --fields a:int,b:text` → yeni ResourceSpec taslağı.
+  - `elifrs new <app-name>` → yeni uygulama oluştur.
 - Migration:
-  - `elif migrate create <name>` → yeni migration oluştur.
-  - `elif migrate run` → bekleyen migration'ları çalıştır.
-  - `elif migrate status` → migration durumu.
+  - `elifrs migrate create <name>` → yeni migration oluştur.
+  - `elifrs migrate run` → bekleyen migration'ları çalıştır.
+  - `elifrs migrate status` → migration durumu.
 - Doğrulama/harita:
-  - `elif check` → fmt+clippy+spec doğrulama.
-  - `elif map --json` → route haritası.
-  - `elif openapi export` → OpenAPI spec.
+  - `elifrs check` → fmt+clippy+spec doğrulama.
+  - `elifrs map --json` → route haritası.
+  - `elifrs openapi export` → OpenAPI spec.
 - Çalıştırma/test:
   - `cargo run` → HTTP servis (localhost:3000).
-  - `elif test --focus <resource>` → ilgili testleri çalıştır.
+  - `elifrs test --focus <resource>` → ilgili testleri çalıştır.
 
 ## Geliştirme Süreci (6 Faz)
 
-### **Phase 1: Architecture Foundation** (CURRENT - Issue #1-5)
-- Dependency injection container
-- Service provider system
-- Module system for feature organization
-- Configuration management
-- Application lifecycle and bootstrapping
-**Hedef**: Sağlam mimari temel
+### **Phase 1: Architecture Foundation** ✅ (COMPLETED - Issue #1-5)
+- ✅ Dependency injection container (service-builder based)
+- ✅ Service provider system (lifecycle management)
+- ✅ Module system for feature organization (dependency resolution)
+- ✅ Configuration management (environment variables)
+- ✅ Application lifecycle and bootstrapping (graceful shutdown)
+**Sonuç**: 33/33 test geçiyor, production-ready temel
 
-### **Phase 2: Database Layer** (Issue #6-7, #11-12)
+### **Phase 2: Database Layer** 🚧 (NEXT - Issue #6-7, #11-12)
 - Full ORM with relationships and query builder
 - Connection pooling and transaction management
 - Model events and observers
@@ -161,13 +173,86 @@ crates/
 4. **Code build**: `cargo build`
 5. **Geliştirme başla**: İlk açık issue ile başla
 
+## 🚀 Release Process (crates.io Yayınlama)
+
+### Version Strategy
+- **Major phases**: Major version bump (0.1.x → 0.2.0 for Phase 2)
+- **Hot fixes**: Patch version bump (0.1.0 → 0.1.1)
+- **Breaking changes**: Major version bump (0.x.y → 1.0.0 for production)
+
+### Publication Order (ZORUNLU)
+```bash
+# 1. Core dependencies first
+cargo publish -p elif-core
+cargo publish -p elif-introspect  
+cargo publish -p elif-codegen
+
+# 2. Domain crates (depend on core)
+cargo publish -p elif-orm
+
+# 3. CLI last (depends on all)
+cargo publish -p elifrs
+```
+
+### Pre-Release Checklist
+- [ ] All tests passing: `cargo test --workspace`
+- [ ] No clippy warnings: `cargo clippy --workspace`
+- [ ] Version bumps in Cargo.toml files
+- [ ] Git commit with release message
+- [ ] LICENSE file exists (MIT)
+- [ ] README files updated with current features
+
+### Metadata Requirements (crates.io)
+Each Cargo.toml needs:
+```toml
+[package]
+description = "..."
+license = "MIT"
+authors = ["krcpa <krcpa@users.noreply.github.com>"]
+repository = "https://github.com/krcpa/elif.rs"
+homepage = "https://github.com/krcpa/elif.rs"
+documentation = "https://docs.rs/crate-name"
+keywords = ["web", "framework", "..."]
+categories = ["web-programming", "..."]
+```
+
+### CLI Naming Convention
+- **Package name**: `elifrs` (avoids shell conflicts)
+- **Binary name**: `elifrs` (NOT `elif` - shell reserved word)
+- **Installation**: `cargo install elifrs`
+- **Usage**: `elifrs new myapp`
+
+### Version Dependencies
+Path dependencies must specify versions for crates.io:
+```toml
+elif-core = { version = "0.1.0", path = "../core" }
+```
+
+### Post-Release Actions
+1. Test global installation: `cargo install elifrs --force`
+2. Update CLAUDE.md with new version status
+3. Git tag: `git tag v0.1.1 && git push origin v0.1.1`
+4. GitHub release (optional): `gh release create v0.1.1`
+
+## Session Continuity (Yeni Oturum)
+**Yeni oturumda "continue" dediğinde yapılacaklar:**
+1. `cat CLAUDE.md` → proje durumunu anla
+2. `git log --oneline -3` → son commit'leri kontrol et
+3. `cargo build && cargo test` → mevcut durumu doğrula
+4. `gh issue list --repo krcpa/elif.rs --state open --limit 5` → açık işleri gör
+5. Phase durumuna göre next action: 
+   - Phase 1 complete → Phase 2 başlat
+   - Release tamamlandı → sonraki feature development
+   - Issue açık → devam et
+
 ## Hızlı referans
 - `/help`, `/permissions`, `/agents`, `/mcp`.
 - Headless mod (CI): `claude -p "…talimat…" --output-format stream-json --max-turns 3`.
 
 ---
 
-**Son güncelleme**: 2025-01-13  
-**Mevcut faz**: Phase 1 - Architecture Foundation  
-**İlk görev**: Issue #1 - Design dependency injection system  
+**Son güncelleme**: 2025-08-14  
+**Mevcut durum**: Phase 1 ✅ COMPLETE, Released to crates.io  
+**Şu anki görev**: Phase 2 Database Layer başlangıçı  
+**Global CLI**: `cargo install elifrs` → `elifrs` komutu  
 **Hedef**: Production-ready LLM-friendly Rust web framework
