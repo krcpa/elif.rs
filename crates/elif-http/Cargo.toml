@@ -1,0 +1,38 @@
+[package]
+name = "elif-http"
+version = "0.1.0"
+edition = "2021"
+description = "HTTP server core for the elif.rs LLM-friendly web framework"
+license = "MIT"
+authors = ["krcpa <krcpa@users.noreply.github.com>"]
+repository = "https://github.com/krcpa/elif.rs"
+homepage = "https://github.com/krcpa/elif.rs"
+documentation = "https://docs.rs/elif-http"
+keywords = ["web", "framework", "http", "server", "ai"]
+categories = ["web-programming", "network-programming"]
+
+[dependencies]
+# Framework dependencies
+elif-core = { version = "0.1.0", path = "../core" }
+
+# HTTP server
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+hyper = { workspace = true }
+
+# Async runtime
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal", "time", "sync", "net"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Utilities
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"

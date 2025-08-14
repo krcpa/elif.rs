@@ -1,0 +1,224 @@
+//! HTTP server error types
+//! 
+//! Comprehensive error handling for HTTP operations, integrating with
+//! the elif framework error system.
+
+use thiserror::Error;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use axum::Json;
+use serde_json::json;
+
+/// Result type for HTTP operations
+pub type HttpResult<T> = Result<T, HttpError>;
+
+/// HTTP server errors
+#[derive(Error, Debug)]
+pub enum HttpError {
+    #[error("Server startup failed: {message}")]
+    StartupFailed { message: String },
+    
+    #[error("Server shutdown failed: {message}")]
+    ShutdownFailed { message: String },
+    
+    #[error("Configuration error: {message}")]
+    ConfigError { message: String },
+    
+    #[error("Service resolution failed: {service}")]
+    ServiceResolutionFailed { service: String },
+    
+    #[error("Request timeout")]
+    RequestTimeout,
+    
+    #[error("Request too large: {size} bytes exceeds limit of {limit} bytes")]
+    RequestTooLarge { size: usize, limit: usize },
+    
+    #[error("Invalid request: {message}")]
+    BadRequest { message: String },
+    
+    #[error("Internal server error: {message}")]
+    InternalError { message: String },
+    
+    #[error("Health check failed: {reason}")]
+    HealthCheckFailed { reason: String },
+}
+
+impl HttpError {
+    /// Create a startup error
+    pub fn startup<T: Into<String>>(message: T) -> Self {
+        HttpError::StartupFailed { 
+            message: message.into() 
+        }
+    }
+    
+    /// Create a shutdown error
+    pub fn shutdown<T: Into<String>>(message: T) -> Self {
+        HttpError::ShutdownFailed { 
+            message: message.into() 
+        }
+    }
+    
+    /// Create a configuration error
+    pub fn config<T: Into<String>>(message: T) -> Self {
+        HttpError::ConfigError { 
+            message: message.into() 
+        }
+    }
+    
+    /// Create a service resolution error
+    pub fn service_resolution<T: Into<String>>(service: T) -> Self {
+        HttpError::ServiceResolutionFailed { 
+            service: service.into() 
+        }
+    }
+    
+    /// Create a bad request error
+    pub fn bad_request<T: Into<String>>(message: T) -> Self {
+        HttpError::BadRequest { 
+            message: message.into() 
+        }
+    }
+    
+    /// Create an internal error
+    pub fn internal<T: Into<String>>(message: T) -> Self {
+        HttpError::InternalError { 
+            message: message.into() 
+        }
+    }
+    
+    /// Create a health check error
+    pub fn health_check<T: Into<String>>(reason: T) -> Self {
+        HttpError::HealthCheckFailed { 
+            reason: reason.into() 
+        }
+    }
+
+    /// Get the appropriate HTTP status code for this error
+    pub fn status_code(&self) -> StatusCode {
+        match self {
+            HttpError::StartupFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::ShutdownFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::ConfigError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::ServiceResolutionFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::RequestTimeout => StatusCode::REQUEST_TIMEOUT,
+            HttpError::RequestTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
+            HttpError::BadRequest { .. } => StatusCode::BAD_REQUEST,
+            HttpError::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::HealthCheckFailed { .. } => StatusCode::SERVICE_UNAVAILABLE,
+        }
+    }
+
+    /// Get error code for consistent API responses
+    pub fn error_code(&self) -> &'static str {
+        match self {
+            HttpError::StartupFailed { .. } => "SERVER_STARTUP_FAILED",
+            HttpError::ShutdownFailed { .. } => "SERVER_SHUTDOWN_FAILED",
+            HttpError::ConfigError { .. } => "CONFIGURATION_ERROR",
+            HttpError::ServiceResolutionFailed { .. } => "SERVICE_RESOLUTION_FAILED",
+            HttpError::RequestTimeout => "REQUEST_TIMEOUT",
+            HttpError::RequestTooLarge { .. } => "REQUEST_TOO_LARGE",
+            HttpError::BadRequest { .. } => "BAD_REQUEST",
+            HttpError::InternalError { .. } => "INTERNAL_ERROR",
+            HttpError::HealthCheckFailed { .. } => "HEALTH_CHECK_FAILED",
+        }
+    }
+}
+
+// Implement IntoResponse for automatic HTTP error responses
+impl IntoResponse for HttpError {
+    fn into_response(self) -> Response {
+        let status = self.status_code();
+        let body = json!({
+            "error": {
+                "code": self.error_code(),
+                "message": self.to_string(),
+                "hint": match &self {
+                    HttpError::RequestTooLarge { .. } => Some("Reduce request payload size"),
+                    HttpError::RequestTimeout => Some("Retry the request"),
+                    HttpError::BadRequest { .. } => Some("Check request format and parameters"),
+                    HttpError::HealthCheckFailed { .. } => Some("Server may be starting up or experiencing issues"),
+                    _ => None,
+                }
+            }
+        });
+
+        (status, Json(body)).into_response()
+    }
+}
+
+// Convert from elif-core ConfigError
+impl From<elif_core::app_config::ConfigError> for HttpError {
+    fn from(err: elif_core::app_config::ConfigError) -> Self {
+        HttpError::ConfigError { 
+            message: err.to_string() 
+        }
+    }
+}
+
+// Convert from std::io::Error
+impl From<std::io::Error> for HttpError {
+    fn from(err: std::io::Error) -> Self {
+        HttpError::InternalError { 
+            message: format!("IO error: {}", err) 
+        }
+    }
+}
+
+// Convert from hyper errors
+impl From<hyper::Error> for HttpError {
+    fn from(err: hyper::Error) -> Self {
+        HttpError::InternalError { 
+            message: format!("Hyper error: {}", err) 
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_creation() {
+        let error = HttpError::startup("Failed to bind to port");
+        assert!(matches!(error, HttpError::StartupFailed { .. }));
+        assert_eq!(error.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(error.error_code(), "SERVER_STARTUP_FAILED");
+    }
+
+    #[test]
+    fn test_error_status_codes() {
+        assert_eq!(HttpError::bad_request("test").status_code(), StatusCode::BAD_REQUEST);
+        assert_eq!(HttpError::RequestTimeout.status_code(), StatusCode::REQUEST_TIMEOUT);
+        assert_eq!(
+            HttpError::RequestTooLarge { size: 100, limit: 50 }.status_code(), 
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+        assert_eq!(
+            HttpError::health_check("Database unavailable").status_code(), 
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+    }
+
+    #[test]
+    fn test_error_codes() {
+        assert_eq!(HttpError::bad_request("test").error_code(), "BAD_REQUEST");
+        assert_eq!(HttpError::RequestTimeout.error_code(), "REQUEST_TIMEOUT");
+        assert_eq!(HttpError::internal("test").error_code(), "INTERNAL_ERROR");
+    }
+
+    #[test]
+    fn test_config_error_conversion() {
+        let config_error = elif_core::app_config::ConfigError::MissingEnvVar {
+            var: "TEST_VAR".to_string(),
+        };
+        let http_error = HttpError::from(config_error);
+        assert!(matches!(http_error, HttpError::ConfigError { .. }));
+    }
+
+    #[test]
+    fn test_io_error_conversion() {
+        let io_error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Access denied");
+        let http_error = HttpError::from(io_error);
+        assert!(matches!(http_error, HttpError::InternalError { .. }));
+    }
+}

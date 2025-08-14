@@ -105,8 +105,7 @@ impl Container {
 }
 
 // Default implementations for testing
-#[cfg(test)]
-mod test_implementations {
+pub mod test_implementations {
     use super::*;
     
     pub fn create_test_config() -> crate::app_config::AppConfig {
