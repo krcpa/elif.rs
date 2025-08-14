@@ -355,6 +355,10 @@ pub enum ConfigError {
 mod tests {
     use super::*;
     use std::env;
+    use std::sync::Mutex;
+    
+    // Global test lock to prevent concurrent environment modifications
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
     
     // Helper function to set test environment variables
     fn set_test_env() {
@@ -383,6 +387,7 @@ mod tests {
     
     #[test]
     fn test_app_config_from_env() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         set_test_env();
         
         let config = AppConfig::from_env().unwrap();
@@ -402,6 +407,7 @@ mod tests {
     
     #[test]
     fn test_app_config_defaults() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         clean_test_env();
         env::set_var("DATABASE_URL", "sqlite::memory:");
         
@@ -419,6 +425,7 @@ mod tests {
     
     #[test]
     fn test_missing_required_env_var() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         clean_test_env();
         // Don't set DATABASE_URL
         
@@ -434,6 +441,7 @@ mod tests {
     
     #[test]
     fn test_config_validation() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         set_test_env();
         
         let config = AppConfig::from_env().unwrap();
@@ -444,6 +452,7 @@ mod tests {
     
     #[test]
     fn test_production_jwt_secret_validation() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         set_test_env();
         env::set_var("APP_ENV", "production");
         env::remove_var("JWT_SECRET");
@@ -463,6 +472,7 @@ mod tests {
     
     #[test]
     fn test_invalid_port() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         set_test_env();
         env::set_var("SERVER_PORT", "invalid");
         
@@ -480,6 +490,7 @@ mod tests {
     
     #[test]
     fn test_invalid_log_level() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         set_test_env();
         env::set_var("LOG_LEVEL", "invalid");
         
@@ -510,6 +521,7 @@ mod tests {
     
     #[test]
     fn test_config_sources() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         set_test_env();
         
         let config = AppConfig::from_env().unwrap();
@@ -523,6 +535,7 @@ mod tests {
     
     #[test]
     fn test_config_watcher() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         set_test_env();
         
         let config = AppConfig::from_env().unwrap();

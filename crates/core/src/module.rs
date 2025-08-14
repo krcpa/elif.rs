@@ -1,7 +1,12 @@
 use crate::container::{Container, ContainerBuilder};
 use crate::provider::{ProviderRegistry, ServiceProvider};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use thiserror::Error;
+use tokio::signal;
+use tokio::sync::mpsc;
 
 /// HTTP method enumeration for route definitions
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -247,11 +252,82 @@ impl ModuleRegistry {
     }
 }
 
-/// Application that manages modules, providers, and container
+/// Application state enumeration
+#[derive(Debug, Clone, PartialEq)]
+pub enum ApplicationState {
+    Created,
+    Starting,
+    Running,
+    Stopping,
+    Stopped,
+    Failed(String),
+}
+
+/// Lifecycle hook trait for custom startup/shutdown behavior
+/// Uses boxed futures to maintain trait object compatibility
+pub trait LifecycleHook: Send + Sync {
+    /// Hook name for identification
+    fn name(&self) -> &'static str;
+    
+    /// Called before application startup
+    fn before_start<'life0, 'async_trait>(
+        &'life0 self,
+        container: &'life0 Container,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'async_trait>>
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        Box::pin(async move { Ok(()) })
+    }
+    
+    /// Called after successful startup
+    fn after_start<'life0, 'async_trait>(
+        &'life0 self,
+        container: &'life0 Container,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'async_trait>>
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        Box::pin(async move { Ok(()) })
+    }
+    
+    /// Called before application shutdown
+    fn before_stop<'life0, 'async_trait>(
+        &'life0 self,
+        container: &'life0 Container,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'async_trait>>
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        Box::pin(async move { Ok(()) })
+    }
+    
+    /// Called after application shutdown
+    fn after_stop<'life0, 'async_trait>(
+        &'life0 self,
+        container: &'life0 Container,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'async_trait>>
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        Box::pin(async move { Ok(()) })
+    }
+}
+
+/// Application that manages modules, providers, and container with lifecycle management
 pub struct Application {
     container: Container,
     modules: ModuleRegistry,
     providers: ProviderRegistry,
+    state: ApplicationState,
+    shutdown_signal: Arc<AtomicBool>,
+    lifecycle_hooks: Vec<Box<dyn LifecycleHook>>,
+    startup_time: Option<Instant>,
+    shutdown_timeout: Duration,
 }
 
 impl Application {
@@ -263,6 +339,11 @@ impl Application {
     /// Get the service container
     pub fn container(&self) -> &Container {
         &self.container
+    }
+    
+    /// Get application state
+    pub fn state(&self) -> &ApplicationState {
+        &self.state
     }
     
     /// Get module registry
@@ -280,17 +361,183 @@ impl Application {
         self.modules.collect_middleware()
     }
     
-    /// Start the application by booting providers and modules
+    /// Get startup time if application has started
+    pub fn uptime(&self) -> Option<Duration> {
+        self.startup_time.map(|start| start.elapsed())
+    }
+    
+    /// Check if application is running
+    pub fn is_running(&self) -> bool {
+        self.state == ApplicationState::Running
+    }
+    
+    /// Start the application with full lifecycle management
     pub async fn start(&mut self) -> Result<(), ApplicationError> {
-        // Boot all providers first
-        self.providers.boot_all(&self.container)
-            .map_err(ApplicationError::ProviderBoot)?;
+        if self.state != ApplicationState::Created {
+            return Err(ApplicationError::InvalidState {
+                current: format!("{:?}", self.state),
+                expected: "Created".to_string(),
+            });
+        }
         
-        // Then boot all modules
-        self.modules.boot_all(&self.container)
-            .map_err(ApplicationError::ModuleBoot)?;
+        self.state = ApplicationState::Starting;
+        let start_time = Instant::now();
+        
+        // Execute before_start hooks
+        for hook in &self.lifecycle_hooks {
+            if let Err(e) = hook.before_start(&self.container).await {
+                self.state = ApplicationState::Failed(e.to_string());
+                return Err(ApplicationError::LifecycleHookFailed {
+                    hook: hook.name().to_string(),
+                    phase: "before_start".to_string(),
+                    error: e.to_string(),
+                });
+            }
+        }
+        
+        // Boot all providers first
+        if let Err(e) = self.providers.boot_all(&self.container) {
+            self.state = ApplicationState::Failed(e.to_string());
+            return Err(ApplicationError::ProviderBoot(e));
+        }
+        
+        // Boot all modules
+        if let Err(e) = self.modules.boot_all(&self.container) {
+            self.state = ApplicationState::Failed(e.to_string());
+            return Err(ApplicationError::ModuleBoot(e));
+        }
+        
+        self.state = ApplicationState::Running;
+        self.startup_time = Some(start_time);
+        
+        // Execute after_start hooks
+        for hook in &self.lifecycle_hooks {
+            if let Err(e) = hook.after_start(&self.container).await {
+                tracing::warn!("After start hook '{}' failed: {}", hook.name(), e);
+                // Don't fail startup for after_start hook failures
+            }
+        }
+        
+        let startup_duration = start_time.elapsed();
+        tracing::info!("Application started successfully in {:?}", startup_duration);
         
         Ok(())
+    }
+    
+    /// Run the application with signal handling
+    pub async fn run(&mut self) -> Result<(), ApplicationError> {
+        self.start().await?;
+        
+        // Setup signal handling for graceful shutdown
+        let shutdown_signal = self.shutdown_signal.clone();
+        let (tx, mut rx) = mpsc::channel::<()>(1);
+        
+        // Spawn signal handler
+        tokio::spawn(async move {
+            let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
+                .expect("Failed to install SIGTERM handler");
+            let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt())
+                .expect("Failed to install SIGINT handler");
+            
+            tokio::select! {
+                _ = sigterm.recv() => {
+                    tracing::info!("Received SIGTERM, initiating graceful shutdown");
+                }
+                _ = sigint.recv() => {
+                    tracing::info!("Received SIGINT, initiating graceful shutdown");
+                }
+            }
+            
+            shutdown_signal.store(true, Ordering::SeqCst);
+            let _ = tx.send(()).await;
+        });
+        
+        // Wait for shutdown signal
+        rx.recv().await;
+        
+        // Perform graceful shutdown
+        self.shutdown().await?;
+        
+        Ok(())
+    }
+    
+    /// Gracefully shutdown the application
+    pub async fn shutdown(&mut self) -> Result<(), ApplicationError> {
+        if self.state != ApplicationState::Running {
+            return Err(ApplicationError::InvalidState {
+                current: format!("{:?}", self.state),
+                expected: "Running".to_string(),
+            });
+        }
+        
+        self.state = ApplicationState::Stopping;
+        let shutdown_start = Instant::now();
+        
+        tracing::info!("Beginning graceful shutdown...");
+        
+        // Execute before_stop hooks
+        for hook in &self.lifecycle_hooks {
+            if let Err(e) = hook.before_stop(&self.container).await {
+                tracing::warn!("Before stop hook '{}' failed: {}", hook.name(), e);
+                // Continue with shutdown even if hooks fail
+            }
+        }
+        
+        // Perform graceful shutdown with timeout
+        let shutdown_result = tokio::time::timeout(
+            self.shutdown_timeout,
+            self.perform_shutdown()
+        ).await;
+        
+        match shutdown_result {
+            Ok(Ok(())) => {
+                // Execute after_stop hooks
+                for hook in &self.lifecycle_hooks {
+                    if let Err(e) = hook.after_stop(&self.container).await {
+                        tracing::warn!("After stop hook '{}' failed: {}", hook.name(), e);
+                    }
+                }
+                
+                self.state = ApplicationState::Stopped;
+                let shutdown_duration = shutdown_start.elapsed();
+                tracing::info!("Application stopped gracefully in {:?}", shutdown_duration);
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                self.state = ApplicationState::Failed(e.to_string());
+                Err(e)
+            }
+            Err(_) => {
+                self.state = ApplicationState::Failed("Shutdown timeout".to_string());
+                Err(ApplicationError::ShutdownTimeout {
+                    timeout: self.shutdown_timeout,
+                })
+            }
+        }
+    }
+    
+    /// Internal shutdown procedure
+    async fn perform_shutdown(&self) -> Result<(), ApplicationError> {
+        // In a real implementation, this would:
+        // 1. Stop accepting new connections
+        // 2. Drain existing connections
+        // 3. Stop background tasks
+        // 4. Cleanup resources
+        
+        // Simulate graceful shutdown work
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        
+        Ok(())
+    }
+    
+    /// Request shutdown (can be called from signal handlers)
+    pub fn request_shutdown(&self) {
+        self.shutdown_signal.store(true, Ordering::SeqCst);
+    }
+    
+    /// Check if shutdown has been requested
+    pub fn shutdown_requested(&self) -> bool {
+        self.shutdown_signal.load(Ordering::SeqCst)
     }
 }
 
@@ -298,6 +545,8 @@ impl Application {
 pub struct ApplicationBuilder {
     modules: ModuleRegistry,
     providers: ProviderRegistry,
+    lifecycle_hooks: Vec<Box<dyn LifecycleHook>>,
+    shutdown_timeout: Duration,
 }
 
 impl ApplicationBuilder {
@@ -305,6 +554,8 @@ impl ApplicationBuilder {
         Self {
             modules: ModuleRegistry::new(),
             providers: ProviderRegistry::new(),
+            lifecycle_hooks: Vec::new(),
+            shutdown_timeout: Duration::from_secs(30), // Default 30 second timeout
         }
     }
     
@@ -317,6 +568,18 @@ impl ApplicationBuilder {
     /// Add a service provider to the application
     pub fn provider<P: ServiceProvider + 'static>(mut self, provider: P) -> Self {
         self.providers.register(provider);
+        self
+    }
+    
+    /// Add a lifecycle hook to the application
+    pub fn lifecycle_hook<H: LifecycleHook + 'static>(mut self, hook: H) -> Self {
+        self.lifecycle_hooks.push(Box::new(hook));
+        self
+    }
+    
+    /// Set shutdown timeout (default: 30 seconds)
+    pub fn shutdown_timeout(mut self, timeout: Duration) -> Self {
+        self.shutdown_timeout = timeout;
         self
     }
     
@@ -350,6 +613,11 @@ impl ApplicationBuilder {
             container,
             modules: self.modules,
             providers: self.providers,
+            state: ApplicationState::Created,
+            shutdown_signal: Arc::new(AtomicBool::new(false)),
+            lifecycle_hooks: self.lifecycle_hooks,
+            startup_time: None,
+            shutdown_timeout: self.shutdown_timeout,
         })
     }
     
@@ -401,6 +669,15 @@ pub enum ApplicationError {
     
     #[error("Provider boot error: {0}")]
     ProviderBoot(crate::provider::ProviderError),
+    
+    #[error("Invalid application state: expected {expected}, found {current}")]
+    InvalidState { current: String, expected: String },
+    
+    #[error("Lifecycle hook '{hook}' failed during {phase}: {error}")]
+    LifecycleHookFailed { hook: String, phase: String, error: String },
+    
+    #[error("Application shutdown timeout after {timeout:?}")]
+    ShutdownTimeout { timeout: Duration },
 }
 
 #[cfg(test)]
@@ -630,6 +907,226 @@ mod tests {
         assert!(matches!(result, Err(ModuleError::CircularDependency { .. })));
     }
     
+    // Test lifecycle hooks
+    struct TestLifecycleHook {
+        name: &'static str,
+        executed_phases: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+    
+    impl TestLifecycleHook {
+        fn new(name: &'static str) -> (Self, Arc<std::sync::Mutex<Vec<String>>>) {
+            let executed_phases = Arc::new(std::sync::Mutex::new(Vec::new()));
+            let hook = Self {
+                name,
+                executed_phases: executed_phases.clone(),
+            };
+            (hook, executed_phases)
+        }
+    }
+    
+    impl LifecycleHook for TestLifecycleHook {
+        fn name(&self) -> &'static str {
+            self.name
+        }
+        
+        fn before_start<'life0, 'async_trait>(
+            &'life0 self,
+            _container: &'life0 Container,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'async_trait>>
+        where
+            'life0: 'async_trait,
+            Self: 'async_trait,
+        {
+            let phases = self.executed_phases.clone();
+            Box::pin(async move {
+                phases.lock().unwrap().push("before_start".to_string());
+                Ok(())
+            })
+        }
+        
+        fn after_start<'life0, 'async_trait>(
+            &'life0 self,
+            _container: &'life0 Container,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'async_trait>>
+        where
+            'life0: 'async_trait,
+            Self: 'async_trait,
+        {
+            let phases = self.executed_phases.clone();
+            Box::pin(async move {
+                phases.lock().unwrap().push("after_start".to_string());
+                Ok(())
+            })
+        }
+        
+        fn before_stop<'life0, 'async_trait>(
+            &'life0 self,
+            _container: &'life0 Container,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'async_trait>>
+        where
+            'life0: 'async_trait,
+            Self: 'async_trait,
+        {
+            let phases = self.executed_phases.clone();
+            Box::pin(async move {
+                phases.lock().unwrap().push("before_stop".to_string());
+                Ok(())
+            })
+        }
+        
+        fn after_stop<'life0, 'async_trait>(
+            &'life0 self,
+            _container: &'life0 Container,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'async_trait>>
+        where
+            'life0: 'async_trait,
+            Self: 'async_trait,
+        {
+            let phases = self.executed_phases.clone();
+            Box::pin(async move {
+                phases.lock().unwrap().push("after_stop".to_string());
+                Ok(())
+            })
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_application_lifecycle() {
+        use crate::provider::ServiceProvider;
+        
+        struct TestProvider;
+        impl ServiceProvider for TestProvider {
+            fn name(&self) -> &'static str { "test" }
+            
+            fn register(&self, builder: crate::container::ContainerBuilder) -> Result<crate::container::ContainerBuilder, crate::provider::ProviderError> {
+                let config = Arc::new(create_test_config());
+                let database = Arc::new(TestDatabase) as Arc<dyn DatabaseConnection>;
+                Ok(builder.config(config).database(database))
+            }
+        }
+        
+        let (hook, phases) = TestLifecycleHook::new("test_hook");
+        
+        let mut app = Application::builder()
+            .provider(TestProvider)
+            .module(CoreModule)
+            .lifecycle_hook(hook)
+            .shutdown_timeout(Duration::from_secs(1)) // Shorter timeout for tests
+            .build()
+            .unwrap();
+        
+        // Test initial state
+        assert_eq!(app.state(), &ApplicationState::Created);
+        assert!(!app.is_running());
+        assert!(app.uptime().is_none());
+        
+        // Start the application
+        app.start().await.unwrap();
+        
+        // Test running state
+        assert_eq!(app.state(), &ApplicationState::Running);
+        assert!(app.is_running());
+        assert!(app.uptime().is_some());
+        
+        // Verify startup lifecycle hooks were executed
+        {
+            let executed = phases.lock().unwrap();
+            assert!(executed.contains(&"before_start".to_string()));
+            assert!(executed.contains(&"after_start".to_string()));
+        } // Drop the lock before shutdown
+        
+        // Shutdown the application
+        app.shutdown().await.unwrap();
+        
+        // Test stopped state
+        assert_eq!(app.state(), &ApplicationState::Stopped);
+        assert!(!app.is_running());
+        
+        // Verify all lifecycle hooks were executed
+        let executed = phases.lock().unwrap();
+        assert!(executed.contains(&"before_start".to_string()));
+        assert!(executed.contains(&"after_start".to_string()));
+        assert!(executed.contains(&"before_stop".to_string()));
+        assert!(executed.contains(&"after_stop".to_string()));
+    }
+    
+    #[tokio::test]
+    async fn test_application_state_validation() {
+        use crate::provider::ServiceProvider;
+        
+        struct TestProvider;
+        impl ServiceProvider for TestProvider {
+            fn name(&self) -> &'static str { "test" }
+            fn register(&self, builder: crate::container::ContainerBuilder) -> Result<crate::container::ContainerBuilder, crate::provider::ProviderError> {
+                let config = Arc::new(create_test_config());
+                let database = Arc::new(TestDatabase) as Arc<dyn DatabaseConnection>;
+                Ok(builder.config(config).database(database))
+            }
+        }
+        
+        let mut app = Application::builder()
+            .provider(TestProvider)
+            .build()
+            .unwrap();
+        
+        // Cannot shutdown before starting
+        let result = app.shutdown().await;
+        assert!(result.is_err());
+        assert!(matches!(result, Err(ApplicationError::InvalidState { .. })));
+        
+        // Start the application
+        app.start().await.unwrap();
+        
+        // Cannot start twice
+        let result = app.start().await;
+        assert!(result.is_err());
+        assert!(matches!(result, Err(ApplicationError::InvalidState { .. })));
+    }
+    
+    #[tokio::test] 
+    async fn test_failed_lifecycle_hook() {
+        use crate::provider::ServiceProvider;
+        
+        struct FailingHook;
+        impl LifecycleHook for FailingHook {
+            fn name(&self) -> &'static str { "failing_hook" }
+            
+            fn before_start<'life0, 'async_trait>(
+                &'life0 self,
+                _container: &'life0 Container,
+            ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'async_trait>>
+            where
+                'life0: 'async_trait,
+                Self: 'async_trait,
+            {
+                Box::pin(async move {
+                    Err("Hook failed".into())
+                })
+            }
+        }
+        
+        struct TestProvider;
+        impl ServiceProvider for TestProvider {
+            fn name(&self) -> &'static str { "test" }
+            fn register(&self, builder: crate::container::ContainerBuilder) -> Result<crate::container::ContainerBuilder, crate::provider::ProviderError> {
+                let config = Arc::new(create_test_config());
+                let database = Arc::new(TestDatabase) as Arc<dyn DatabaseConnection>;
+                Ok(builder.config(config).database(database))
+            }
+        }
+        
+        let mut app = Application::builder()
+            .provider(TestProvider)
+            .lifecycle_hook(FailingHook)
+            .build()
+            .unwrap();
+        
+        let result = app.start().await;
+        assert!(result.is_err());
+        assert!(matches!(result, Err(ApplicationError::LifecycleHookFailed { .. })));
+        assert!(matches!(app.state(), ApplicationState::Failed(_)));
+    }
+    
     #[tokio::test]
     async fn test_full_application_with_modules() {
         use crate::provider::ServiceProvider;
@@ -668,5 +1165,16 @@ mod tests {
         
         // Start the application
         app.start().await.unwrap();
+        
+        // Verify it's running
+        assert!(app.is_running());
+        assert!(app.uptime().is_some());
+        
+        // Shutdown the application
+        app.shutdown().await.unwrap();
+        
+        // Verify it's stopped
+        assert!(!app.is_running());
+        assert_eq!(app.state(), &ApplicationState::Stopped);
     }
 }

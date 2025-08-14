@@ -345,6 +345,10 @@ impl AppConfigTrait for DatabaseConfig {
 mod tests {
     use super::*;
     use std::env;
+    use std::sync::Mutex;
+    
+    // Global test lock to prevent concurrent environment modifications
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
     
     #[test]
     fn test_config_field_builder() {
@@ -381,6 +385,7 @@ mod tests {
     
     #[test]
     fn test_database_config_from_env() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         // Set test environment
         env::set_var("DB_HOST", "test-host");
         env::set_var("DB_PORT", "3306");
@@ -409,6 +414,7 @@ mod tests {
     
     #[test]
     fn test_database_config_defaults() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         // Clean environment
         env::remove_var("DB_HOST");
         env::remove_var("DB_PORT");
@@ -434,6 +440,7 @@ mod tests {
     
     #[test]
     fn test_database_config_validation() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         env::set_var("DB_HOST", "valid-host");
         env::set_var("DB_NAME", "valid_db");
         env::set_var("DB_USERNAME", "valid_user");
@@ -451,6 +458,7 @@ mod tests {
     
     #[test]
     fn test_invalid_pool_size() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         env::set_var("DB_NAME", "test_db");
         env::set_var("DB_USERNAME", "test_user");
         env::set_var("DB_POOL_SIZE", "invalid");
