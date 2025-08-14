@@ -14,7 +14,6 @@ jobs:
       contents: read
       issues: write
       pull-requests: write
-      projects: write
     if: >
       contains(github.event.issue.labels.*.name, 'phase-1') ||
       contains(github.event.issue.labels.*.name, 'phase-2') ||
@@ -35,63 +34,3 @@ jobs:
           project-url: https://github.com/users/krcpa/projects/1
           github-token: ${{ secrets.PROJECT_TOKEN }}
 
-  set-priority:
-    name: Set priority based on phase
-    runs-on: ubuntu-latest
-    needs: add-to-project
-    if: >
-      contains(github.event.issue.labels.*.name, 'phase-1') ||
-      contains(github.event.issue.labels.*.name, 'phase-2') ||
-      contains(github.event.issue.labels.*.name, 'phase-3') ||
-      contains(github.event.issue.labels.*.name, 'phase-4') ||
-      contains(github.event.issue.labels.*.name, 'phase-5') ||
-      contains(github.event.issue.labels.*.name, 'phase-6')
-    steps:
-      - name: Set High Priority for Phase 1-3
-        if: >
-          contains(github.event.issue.labels.*.name, 'phase-1') ||
-          contains(github.event.issue.labels.*.name, 'phase-2') ||
-          contains(github.event.issue.labels.*.name, 'phase-3')
-        uses: titoportas/update-project-fields@v0.1.0
-        with:
-          project-url: https://github.com/users/krcpa/projects/1
-          github-token: ${{ secrets.PROJECT_TOKEN }}
-          item-id: ${{ github.event.issue.node_id }}
-          field-keys: Priority
-          field-values: High
-
-      - name: Set Medium Priority for Phase 4-5
-        if: >
-          contains(github.event.issue.labels.*.name, 'phase-4') ||
-          contains(github.event.issue.labels.*.name, 'phase-5')
-        uses: titoportas/update-project-fields@v0.1.0
-        with:
-          project-url: https://github.com/users/krcpa/projects/1
-          github-token: ${{ secrets.PROJECT_TOKEN }}
-          item-id: ${{ github.event.issue.node_id }}
-          field-keys: Priority
-          field-values: Medium
-
-      - name: Set Low Priority for Phase 6
-        if: contains(github.event.issue.labels.*.name, 'phase-6')
-        uses: titoportas/update-project-fields@v0.1.0
-        with:
-          project-url: https://github.com/users/krcpa/projects/1
-          github-token: ${{ secrets.PROJECT_TOKEN }}
-          item-id: ${{ github.event.issue.node_id }}
-          field-keys: Priority
-          field-values: Low
-
-  set-status:
-    name: Set initial status
-    runs-on: ubuntu-latest
-    needs: add-to-project
-    steps:
-      - name: Set status to Todo
-        uses: titoportas/update-project-fields@v0.1.0
-        with:
-          project-url: https://github.com/users/krcpa/projects/1
-          github-token: ${{ secrets.PROJECT_TOKEN }}
-          item-id: ${{ github.event.issue.node_id || github.event.pull_request.node_id }}
-          field-keys: Status
-          field-values: Todo
