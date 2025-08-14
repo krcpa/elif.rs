@@ -31,7 +31,8 @@
       "Bash(gh issue comment:*)",
       "Bash(./target/release/elif:*)",
       "Bash(target/release/elif:*)",
-      "Bash(~/.cargo/bin/elif:*)"
+      "Bash(~/.cargo/bin/elif:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }
