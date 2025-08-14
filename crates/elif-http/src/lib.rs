@@ -18,6 +18,9 @@ pub mod config;
 pub mod error;
 pub mod tests;
 pub mod routing;
+pub mod request;
+pub mod response;
+pub mod json;
 
 // pub use server::{HttpServer, HttpServerBuilder};
 // pub use simple_server::SimpleHttpServer;
@@ -34,6 +37,11 @@ pub use routing::{
     PathParams, RouteParam, ParamError, ParamType,
     RouteGroup, GroupBuilder,
 };
+
+// Re-export request/response types
+pub use request::{ElifRequest, RequestExtractor};
+pub use response::{ElifResponse, ResponseBody, IntoElifResponse};
+pub use json::{ElifJson, JsonError, JsonResponse, ValidationErrors, ApiResponse};
 
 // Re-export commonly used types
 pub use axum::{

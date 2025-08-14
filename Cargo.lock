@@ -580,6 +580,7 @@ dependencies = [
  "hyper",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "thiserror 1.0.69",
  "tokio",
  "tokio-test",
