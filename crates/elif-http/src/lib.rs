@@ -12,6 +12,8 @@
 // pub mod server;
 // pub mod simple_server;
 pub mod minimal_server;
+// pub mod stateful_server;
+pub mod simple_stateful_server;
 pub mod config;
 pub mod error;
 pub mod tests;
@@ -19,6 +21,8 @@ pub mod tests;
 // pub use server::{HttpServer, HttpServerBuilder};
 // pub use simple_server::SimpleHttpServer;
 pub use minimal_server::MinimalHttpServer;
+// pub use stateful_server::{StatefulHttpServer, StatefulHttpServerBuilder, AppState};
+pub use simple_stateful_server::SimpleStatefulHttpServer;
 pub use config::HttpConfig;
 pub use error::{HttpError, HttpResult};
 
