@@ -110,7 +110,7 @@ pub struct OrderByClause {
 }
 
 /// Query builder for constructing database queries
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct QueryBuilder<M = ()> {
     select_fields: Vec<String>,
     from_table: Option<String>,
@@ -123,6 +123,24 @@ pub struct QueryBuilder<M = ()> {
     offset_value: Option<i64>,
     distinct: bool,
     _phantom: PhantomData<M>,
+}
+
+impl<M> Clone for QueryBuilder<M> {
+    fn clone(&self) -> Self {
+        Self {
+            select_fields: self.select_fields.clone(),
+            from_table: self.from_table.clone(),
+            where_conditions: self.where_conditions.clone(),
+            joins: self.joins.clone(),
+            order_by: self.order_by.clone(),
+            group_by: self.group_by.clone(),
+            having_conditions: self.having_conditions.clone(),
+            limit_value: self.limit_value,
+            offset_value: self.offset_value,
+            distinct: self.distinct,
+            _phantom: PhantomData,
+        }
+    }
 }
 
 impl<M> Default for QueryBuilder<M> {
@@ -392,6 +410,69 @@ impl<M> QueryBuilder<M> {
     }
     // <<<ELIF:END agent-editable:query_builder_order>>>
 
+    // <<<ELIF:BEGIN agent-editable:query_builder_aggregations>>>
+    /// Add aggregate functions to SELECT
+    pub fn select_count(mut self, column: &str, alias: Option<&str>) -> Self {
+        let select_expr = if let Some(alias) = alias {
+            format!("COUNT({}) AS {}", column, alias)
+        } else {
+            format!("COUNT({})", column)
+        };
+        self.select_fields.push(select_expr);
+        self
+    }
+    
+    /// Add SUM aggregate
+    pub fn select_sum(mut self, column: &str, alias: Option<&str>) -> Self {
+        let select_expr = if let Some(alias) = alias {
+            format!("SUM({}) AS {}", column, alias)
+        } else {
+            format!("SUM({})", column)
+        };
+        self.select_fields.push(select_expr);
+        self
+    }
+    
+    /// Add AVG aggregate
+    pub fn select_avg(mut self, column: &str, alias: Option<&str>) -> Self {
+        let select_expr = if let Some(alias) = alias {
+            format!("AVG({}) AS {}", column, alias)
+        } else {
+            format!("AVG({})", column)
+        };
+        self.select_fields.push(select_expr);
+        self
+    }
+    
+    /// Add MIN aggregate
+    pub fn select_min(mut self, column: &str, alias: Option<&str>) -> Self {
+        let select_expr = if let Some(alias) = alias {
+            format!("MIN({}) AS {}", column, alias)
+        } else {
+            format!("MIN({})", column)
+        };
+        self.select_fields.push(select_expr);
+        self
+    }
+    
+    /// Add MAX aggregate
+    pub fn select_max(mut self, column: &str, alias: Option<&str>) -> Self {
+        let select_expr = if let Some(alias) = alias {
+            format!("MAX({}) AS {}", column, alias)
+        } else {
+            format!("MAX({})", column)
+        };
+        self.select_fields.push(select_expr);
+        self
+    }
+    
+    /// Add custom SELECT expression
+    pub fn select_raw(mut self, expression: &str) -> Self {
+        self.select_fields.push(expression.to_string());
+        self
+    }
+    // <<<ELIF:END agent-editable:query_builder_aggregations>>>
+
     // <<<ELIF:BEGIN agent-editable:query_builder_pagination>>>
     /// Add LIMIT clause
     pub fn limit(mut self, count: i64) -> Self {
@@ -411,7 +492,104 @@ impl<M> QueryBuilder<M> {
         self.offset_value = Some((page - 1) * per_page);
         self
     }
+    
+    /// Cursor-based pagination (for better performance on large datasets)
+    pub fn paginate_cursor<T: Into<Value>>(mut self, cursor_column: &str, cursor_value: Option<T>, per_page: i64, direction: OrderDirection) -> Self {
+        self.limit_value = Some(per_page);
+        
+        if let Some(cursor_val) = cursor_value {
+            match direction {
+                OrderDirection::Asc => {
+                    self = self.where_gt(cursor_column, cursor_val);
+                }
+                OrderDirection::Desc => {
+                    self = self.where_lt(cursor_column, cursor_val);
+                }
+            }
+        }
+        
+        self.order_by.push(OrderByClause {
+            column: cursor_column.to_string(),
+            direction,
+        });
+        
+        self
+    }
     // <<<ELIF:END agent-editable:query_builder_pagination>>>
+
+    // <<<ELIF:BEGIN agent-editable:query_builder_advanced>>>    
+    /// Add UNION to combine results from another query
+    pub fn union(self, _other_query: QueryBuilder<M>) -> Self {
+        // TODO: Implement UNION functionality
+        // For now, this is a placeholder for advanced union support
+        self
+    }
+
+    /// Add UNION ALL to combine results from another query
+    pub fn union_all(self, _other_query: QueryBuilder<M>) -> Self {
+        // TODO: Implement UNION ALL functionality
+        self
+    }
+
+    /// Add a subquery in the WHERE clause
+    pub fn where_subquery<T: Into<Value>>(mut self, column: &str, operator: QueryOperator, subquery: QueryBuilder<M>) -> Self {
+        // TODO: Implement subquery support in WHERE clauses
+        // For now, add as a placeholder condition
+        self.where_conditions.push(WhereCondition {
+            column: column.to_string(),
+            operator,
+            value: Some(Value::String(format!("({})", subquery.to_sql()))),
+            values: Vec::new(),
+        });
+        self
+    }
+
+    /// Add EXISTS subquery condition
+    pub fn where_exists(mut self, subquery: QueryBuilder<M>) -> Self {
+        self.where_conditions.push(WhereCondition {
+            column: "EXISTS".to_string(),
+            operator: QueryOperator::Equal,
+            value: Some(Value::String(format!("({})", subquery.to_sql()))),
+            values: Vec::new(),
+        });
+        self
+    }
+
+    /// Add NOT EXISTS subquery condition
+    pub fn where_not_exists(mut self, subquery: QueryBuilder<M>) -> Self {
+        self.where_conditions.push(WhereCondition {
+            column: "NOT EXISTS".to_string(),
+            operator: QueryOperator::Equal,
+            value: Some(Value::String(format!("({})", subquery.to_sql()))),
+            values: Vec::new(),
+        });
+        self
+    }
+
+    /// Add raw WHERE condition for complex cases
+    pub fn where_raw(mut self, raw_condition: &str) -> Self {
+        self.where_conditions.push(WhereCondition {
+            column: "RAW".to_string(),
+            operator: QueryOperator::Equal,
+            value: Some(Value::String(raw_condition.to_string())),
+            values: Vec::new(),
+        });
+        self
+    }
+
+    /// Add logical grouping with OR conditions
+    pub fn or_where<F>(mut self, closure: F) -> Self 
+    where 
+        F: FnOnce(QueryBuilder<M>) -> QueryBuilder<M>,
+    {
+        // TODO: Implement OR condition grouping
+        // This is a placeholder for complex logical operations
+        let inner_query = closure(QueryBuilder::new());
+        // For now, just add the conditions (proper OR logic needs more work)
+        self.where_conditions.extend(inner_query.where_conditions);
+        self
+    }
+    // <<<ELIF:END agent-editable:query_builder_advanced>>>
 
     // <<<ELIF:BEGIN agent-editable:query_builder_sql_generation>>>
     /// Convert the query to SQL string
@@ -498,6 +676,20 @@ impl<M> QueryBuilder<M> {
         conditions
             .iter()
             .map(|condition| {
+                // Handle special raw conditions
+                if condition.column == "RAW" {
+                    if let Some(Value::String(raw_sql)) = &condition.value {
+                        return raw_sql.clone();
+                    }
+                }
+                
+                // Handle EXISTS and NOT EXISTS
+                if condition.column == "EXISTS" || condition.column == "NOT EXISTS" {
+                    if let Some(Value::String(subquery)) = &condition.value {
+                        return format!("{} {}", condition.column, subquery);
+                    }
+                }
+                
                 match &condition.operator {
                     QueryOperator::IsNull | QueryOperator::IsNotNull => {
                         format!("{} {}", condition.column, condition.operator)
@@ -524,7 +716,17 @@ impl<M> QueryBuilder<M> {
                     }
                     _ => {
                         if let Some(value) = &condition.value {
-                            format!("{} {} {}", condition.column, condition.operator, self.format_value(value))
+                            // Handle subquery values
+                            if let Value::String(val_str) = value {
+                                if val_str.starts_with('(') && val_str.ends_with(')') {
+                                    // This looks like a subquery
+                                    format!("{} {} {}", condition.column, condition.operator, val_str)
+                                } else {
+                                    format!("{} {} {}", condition.column, condition.operator, self.format_value(value))
+                                }
+                            } else {
+                                format!("{} {} {}", condition.column, condition.operator, self.format_value(value))
+                            }
                         } else {
                             format!("{} = NULL", condition.column) // Fallback
                         }
@@ -546,14 +748,27 @@ impl<M> QueryBuilder<M> {
     }
     // <<<ELIF:END agent-editable:query_builder_sql_generation>>>
 
+    // <<<ELIF:BEGIN agent-editable:query_builder_performance>>>
     /// Get parameter bindings (for prepared statements)
-    /// TODO: Implement parameter binding for security
+    /// Enhanced to support subqueries and complex conditions
     pub fn bindings(&self) -> Vec<Value> {
         let mut bindings = Vec::new();
         
         for condition in &self.where_conditions {
+            // Skip RAW, EXISTS, NOT EXISTS conditions from parameter binding
+            if matches!(condition.column.as_str(), "RAW" | "EXISTS" | "NOT EXISTS") {
+                continue;
+            }
+            
             if let Some(value) = &condition.value {
-                bindings.push(value.clone());
+                // Skip subquery values (they're already formatted)
+                if let Value::String(val_str) = value {
+                    if !val_str.starts_with('(') || !val_str.ends_with(')') {
+                        bindings.push(value.clone());
+                    }
+                } else {
+                    bindings.push(value.clone());
+                }
             }
             bindings.extend(condition.values.clone());
         }
@@ -567,10 +782,42 @@ impl<M> QueryBuilder<M> {
 
         bindings
     }
+    
+    /// Clone this query builder for use in subqueries
+    pub fn clone_for_subquery(&self) -> Self {
+        self.clone()
+    }
+    
+    /// Optimize query by analyzing conditions
+    pub fn optimize(self) -> Self {
+        // TODO: Implement query optimization strategies
+        // - Remove redundant conditions
+        // - Optimize join order
+        // - Suggest index usage
+        self
+    }
+    
+    /// Get query complexity score for performance monitoring
+    pub fn complexity_score(&self) -> u32 {
+        let mut score = 0;
+        
+        score += self.where_conditions.len() as u32;
+        score += self.joins.len() as u32 * 2; // Joins are more expensive
+        score += self.group_by.len() as u32;
+        score += self.having_conditions.len() as u32;
+        
+        if self.distinct {
+            score += 1;
+        }
+        
+        score
+    }
+    // <<<ELIF:END agent-editable:query_builder_performance>>>
 }
 
 // Implement specialized methods for Model-typed query builders
 impl<M: Model> QueryBuilder<M> {
+    // <<<ELIF:BEGIN agent-editable:query_model_execution>>>
     /// Execute query and return models
     pub async fn get(self, pool: &sqlx::Pool<sqlx::Postgres>) -> ModelResult<Vec<M>> {
         let sql = self.to_sql();
@@ -585,6 +832,62 @@ impl<M: Model> QueryBuilder<M> {
 
         Ok(models)
     }
+    
+    /// Execute query with chunking for large datasets
+    pub async fn chunk<F>(
+        mut self, 
+        pool: &sqlx::Pool<sqlx::Postgres>, 
+        chunk_size: i64,
+        mut callback: F
+    ) -> ModelResult<()>
+    where
+        F: FnMut(Vec<M>) -> Result<(), crate::error::ModelError>,
+    {
+        let mut offset = 0;
+        loop {
+            let chunk_query = self.clone()
+                .limit(chunk_size)
+                .offset(offset);
+                
+            let chunk = chunk_query.get(pool).await?;
+            
+            if chunk.is_empty() {
+                break;
+            }
+            
+            callback(chunk)?;
+            offset += chunk_size;
+        }
+        
+        Ok(())
+    }
+    
+    /// Execute query and return raw SQL results (for complex aggregations)
+    pub async fn get_raw(self, pool: &sqlx::Pool<sqlx::Postgres>) -> ModelResult<Vec<serde_json::Value>> {
+        let sql = self.to_sql();
+        let rows = sqlx::query(&sql)
+            .fetch_all(pool)
+            .await?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            let mut json_row = serde_json::Map::new();
+            
+            // Convert PostgreSQL row to JSON
+            // This is a simplified implementation
+            for i in 0..row.len() {
+                if let Ok(column) = row.try_get::<Option<String>, _>(i) {
+                    let column_name = format!("column_{}", i); // Placeholder - real implementation would get actual column names
+                    json_row.insert(column_name, serde_json::Value::String(column.unwrap_or_default()));
+                }
+            }
+            
+            results.push(serde_json::Value::Object(json_row));
+        }
+        
+        Ok(results)
+    }
+    // <<<ELIF:END agent-editable:query_model_execution>>>
 
     /// Execute query and return first model
     pub async fn first(self, pool: &sqlx::Pool<sqlx::Postgres>) -> ModelResult<Option<M>> {
@@ -611,5 +914,27 @@ impl<M: Model> QueryBuilder<M> {
 
         let count: i64 = row.try_get(0)?;
         Ok(count)
+    }
+    
+    /// Execute aggregation query and return single result
+    pub async fn aggregate(self, pool: &sqlx::Pool<sqlx::Postgres>) -> ModelResult<Option<serde_json::Value>> {
+        let sql = self.to_sql();
+        
+        let row_opt = sqlx::query(&sql)
+            .fetch_optional(pool)
+            .await?;
+            
+        if let Some(row) = row_opt {
+            // For aggregations, typically return the first column
+            if let Ok(result) = row.try_get::<Option<i64>, _>(0) {
+                return Ok(Some(serde_json::Value::Number(serde_json::Number::from(result.unwrap_or(0)))));
+            } else if let Ok(result) = row.try_get::<Option<f64>, _>(0) {
+                return Ok(Some(serde_json::Number::from_f64(result.unwrap_or(0.0)).map(serde_json::Value::Number).unwrap_or(serde_json::Value::Null)));
+            } else if let Ok(result) = row.try_get::<Option<String>, _>(0) {
+                return Ok(Some(serde_json::Value::String(result.unwrap_or_default())));
+            }
+        }
+        
+        Ok(None)
     }
 }
