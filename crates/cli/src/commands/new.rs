@@ -5,7 +5,7 @@ use std::path::Path;
 pub async fn create_app(name: &str, target_path: Option<&str>) -> Result<(), ElifError> {
     let app_path = match target_path {
         Some(path) => format!("{}/{}", path, name),
-        None => format!("../{}", name),
+        None => format!("./{}", name),
     };
     
     let app_dir = Path::new(&app_path);
