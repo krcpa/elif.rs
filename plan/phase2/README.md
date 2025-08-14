@@ -1,439 +1,350 @@
-# Phase 2: Database Layer
+# Phase 2: Web Foundation 🌐
 
-**Duration**: Months 4-6 (12 weeks)  
-**Team**: 2-3 developers  
-**Goal**: Full-featured ORM matching Eloquent's capabilities  
-**Status**: Phase 2.1 (ORM Foundation) ✅ COMPLETE
+**Duration**: 3-4 weeks  
+**Goal**: Working HTTP server with database integration  
+**Status**: Ready to implement
 
 ## Overview
 
-Phase 2 builds a complete database layer on top of the architecture foundation from Phase 1. This includes a full ORM with relationships, query builder, migrations, connection management, and model events.
-
-## ✅ Phase 2.1 Completion Status
-
-**Completed Components**:
-- ✅ **Model System**: Complete Model trait with CRUD operations, timestamps, soft deletes
-- ✅ **Query Builder**: Type-safe fluent query builder (940+ lines of functionality)  
-- ✅ **Advanced Features**: Subqueries, aggregations, cursor pagination, performance optimization
-- ✅ **Error Handling**: Comprehensive error system with proper error propagation
-- ✅ **Primary Key Support**: UUID, integer, and composite primary key handling
-- ✅ **Testing**: 36 unit tests including 6 performance benchmarks
-- ✅ **Performance**: Outstanding results - 3μs query building, 208 bytes memory overhead
-
-**Test Results**: 36/36 tests passing
-**Performance**: All targets exceeded (target: <10ms, actual: 3μs)
-**Memory**: Minimal overhead (target: <1KB, actual: 208 bytes)
+Phase 2 creates the essential web server foundation that transforms elif.rs from a DI container into a working web framework. This includes HTTP routing, middleware pipeline, request/response handling, and integration with our existing ORM foundation.
 
 ## Dependencies
 
-- **Phase 1**: Requires working DI container and module system for service registration
-- **External**: SQLx for database connectivity, async runtime support
+- **Phase 1**: ✅ Complete (DI container, module system, config management)
+- **Phase 2.1**: ✅ Complete (ORM foundation - Model trait, Query builder)
 
 ## Key Components
 
-### 1. Base Model System ✅ COMPLETE
-**File**: `crates/orm/src/model.rs`
+### 1. HTTP Server & Routing
+**Files**: `crates/elif-http/src/server.rs`, `crates/elif-http/src/router.rs`
 
-Core model trait and derive macro for database entities.
-
-**✅ Implemented Requirements**:
-- ✅ Model trait with standard CRUD operations (find, create, update, delete, all, count)
-- 🔄 Derive macro for automatic implementation (framework ready, implementation pending)
-- ✅ Primary key handling (auto-increment, UUID, composite) with PrimaryKey enum
-- ✅ Timestamps (created_at, updated_at) with automatic management
-- ✅ Soft deletes support with deleted_at column
-- ✅ Model serialization/deserialization with serde integration
-
-**API Design**:
-```rust
-#[derive(Model, Debug, Serialize, Deserialize)]
-#[model(table = "users")]
-pub struct User {
-    #[model(primary_key)]
-    pub id: u64,
-    
-    pub email: String,
-    pub name: String,
-    
-    #[model(relationship = "HasMany", target = "Post", foreign_key = "user_id")]
-    pub posts: Lazy<Vec<Post>>,
-    
-    #[model(relationship = "HasOne", target = "Profile", foreign_key = "user_id")]
-    pub profile: Lazy<Profile>,
-    
-    #[model(timestamps)]
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    
-    #[model(soft_delete)]
-    pub deleted_at: Option<DateTime<Utc>>,
-}
-```
-
-### 2. Query Builder ✅ COMPLETE
-**File**: `crates/orm/src/query.rs`
-
-Type-safe, fluent query builder for complex database operations.
-
-**✅ Implemented Requirements**:
-- ✅ Fluent interface for building queries (940+ lines of functionality)
-- ✅ Type safety with generic parameters and compile-time validation
-- ✅ Support for joins (INNER, LEFT, RIGHT), subqueries, aggregations
-- ✅ Pagination support (offset-based and cursor-based pagination)
-- ✅ Raw SQL escape hatches (where_raw, select_raw)
-- ✅ Query optimization and performance monitoring (complexity scoring, bindings)
-
-**API Design**:
-```rust
-// Basic queries
-let users = User::query()
-    .where_eq("active", true)
-    .where_gt("created_at", yesterday)
-    .order_by("name")
-    .limit(10)
-    .get()
-    .await?;
-
-// Complex queries with joins
-let posts_with_users = Post::query()
-    .with("user")
-    .where_in("status", vec!["published", "featured"])
-    .order_by_desc("created_at")
-    .paginate(15)
-    .get()
-    .await?;
-
-// Aggregations
-let stats = User::query()
-    .select("COUNT(*) as total, AVG(age) as avg_age")
-    .where_not_null("email_verified_at")
-    .group_by("country")
-    .get()
-    .await?;
-```
-
-### 3. Relationships
-**File**: `crates/elif-db/src/relationships.rs`
-
-Full relationship system supporting all major relationship types.
+Modern HTTP server with async support and flexible routing.
 
 **Requirements**:
-- HasOne, HasMany relationships
-- BelongsTo, BelongsToMany relationships
-- Polymorphic relationships
-- Eager loading and lazy loading
-- Relationship constraints and cascading
-- Through relationships (HasManyThrough)
+- HTTP/1.1 and HTTP/2 support
+- Route registration with parameters (/{id}, /user/{user}/posts/{post})  
+- HTTP method handling (GET, POST, PUT, DELETE, PATCH, OPTIONS)
+- Route groups and prefixes
+- Route parameter binding and validation
+- Static file serving
 
 **API Design**:
 ```rust
-// Relationship definitions
-impl User {
-    pub fn posts(&self) -> HasMany<Post> {
-        HasMany::new(self, "user_id")
-    }
-    
-    pub fn profile(&self) -> HasOne<Profile> {
-        HasOne::new(self, "user_id")
-    }
-    
-    pub fn roles(&self) -> BelongsToMany<Role> {
-        BelongsToMany::new(self, "user_roles", "user_id", "role_id")
-    }
+#[derive(Clone)]
+pub struct HttpServer {
+    router: Arc<Router>,
+    middleware: MiddlewareStack,
+    config: ServerConfig,
+}
+
+// Route definition
+Route::get("/users/{id}", UserController::show)
+    .middleware(AuthMiddleware::new())
+    .name("users.show");
+
+Route::group("/api/v1", |group| {
+    group.resource("users", UserController::new());
+    group.resource("posts", PostController::new());
+});
+```
+
+### 2. Middleware Pipeline Architecture
+**File**: `crates/elif-http/src/middleware.rs`
+
+Flexible middleware system for request/response processing.
+
+**Requirements**:
+- Middleware trait for before/after request processing
+- Pipeline composition and ordering
+- Context passing between middleware
+- Short-circuiting (early returns)
+- Error handling middleware
+- Built-in middleware (logging, timing, CORS basics)
+
+**API Design**:
+```rust
+pub trait Middleware: Send + Sync {
+    async fn handle(&self, request: Request, next: Next) -> Response;
 }
 
 // Usage
-let user = User::with("posts.comments").find(1).await?;
-for post in user.posts.await? {
-    println!("Post: {}", post.title);
-    for comment in post.comments.await? {
-        println!("  Comment: {}", comment.content);
-    }
-}
+app.middleware(LoggingMiddleware::new())
+   .middleware(TimingMiddleware::new())
+   .middleware(ErrorHandlerMiddleware::new());
 ```
 
-### 4. Migration System
-**File**: `crates/elif-db/src/migrations.rs`
+### 3. Request/Response System
+**Files**: `crates/elif-http/src/request.rs`, `crates/elif-http/src/response.rs`
 
-Schema management with version control and rollbacks.
+Rich request/response abstractions with JSON, form data, and file handling.
 
 **Requirements**:
-- Up/down migration support
-- Schema builder with type-safe operations
-- Migration versioning and tracking
-- Batch migration operations
-- Migration rollback capabilities
-- Fresh database setup
+- Request parsing (headers, query params, form data, JSON)
+- File upload handling
+- Response builders with status codes and headers
+- JSON serialization/deserialization
+- Content negotiation basics
+- Request validation integration
 
 **API Design**:
 ```rust
-pub struct CreateUsersTable;
+// Request handling
+pub struct Request {
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Body,
+    params: HashMap<String, String>,
+    query: HashMap<String, String>,
+    extensions: Extensions,
+}
 
-impl Migration for CreateUsersTable {
-    fn up(&self) -> Schema {
-        Schema::create_table("users", |table| {
-            table.id();
-            table.string("email").unique();
-            table.string("name");
-            table.timestamp("email_verified_at").nullable();
-            table.timestamps();
-            table.soft_deletes();
-        })
+impl Request {
+    pub fn json<T: DeserializeOwned>(&mut self) -> Result<T>;
+    pub fn form<T: DeserializeOwned>(&mut self) -> Result<T>;
+    pub fn param(&self, key: &str) -> Option<&str>;
+    pub fn query(&self, key: &str) -> Option<&str>;
+}
+
+// Response building
+Response::json(user)
+    .status(201)
+    .header("Location", format!("/users/{}", user.id));
+
+Response::ok()
+    .json(json!({"message": "Success", "data": posts}));
+```
+
+### 4. Controller System
+**File**: `crates/elif-http/src/controller.rs`
+
+Controller pattern for organizing request handlers.
+
+**Requirements**:
+- Controller trait with standard REST methods
+- Resource controllers (index, show, create, store, edit, update, destroy)
+- Controller dependency injection
+- Action method routing
+- Controller middleware
+
+**API Design**:
+```rust
+pub trait Controller: Send + Sync {
+    fn index(&self, request: Request) -> impl Future<Output = Response>;
+    fn show(&self, request: Request) -> impl Future<Output = Response>;
+    fn store(&self, request: Request) -> impl Future<Output = Response>;
+    fn update(&self, request: Request) -> impl Future<Output = Response>;
+    fn destroy(&self, request: Request) -> impl Future<Output = Response>;
+}
+
+// Example controller
+pub struct UserController {
+    user_service: Arc<UserService>,
+}
+
+impl Controller for UserController {
+    async fn index(&self, request: Request) -> Response {
+        let users = User::all(self.user_service.pool()).await?;
+        Response::json(users)
     }
     
-    fn down(&self) -> Schema {
-        Schema::drop_table("users")
+    async fn show(&self, request: Request) -> Response {
+        let id: u64 = request.param("id")?.parse()?;
+        let user = User::find(self.user_service.pool(), id).await?;
+        Response::json(user)
     }
 }
 ```
 
-### 5. Connection Management
-**File**: `crates/elif-db/src/connection.rs`
+### 5. Integration with Existing ORM
+**File**: `crates/elif-http/src/database.rs`
 
-Database connection pooling and management.
+Seamless integration between HTTP layer and our existing ORM foundation.
 
 **Requirements**:
-- Connection pooling with configurable limits
-- Read/write splitting support
-- Transaction management
-- Connection health monitoring
-- Multiple database support
-- Connection middleware for logging/metrics
+- Request-scoped database connections
+- Transaction middleware for atomic operations
+- Database connection injection into controllers
+- Error handling for database operations
+- Connection pool management integration
 
 **API Design**:
 ```rust
-#[derive(Config)]
-pub struct DatabaseConfig {
-    pub url: String,
-    pub pool_min: u32,
-    pub pool_max: u32,
-    pub timeout: Duration,
-    pub read_urls: Vec<String>, // For read replicas
+// Database middleware
+pub struct DatabaseMiddleware {
+    pool: Arc<Pool<Postgres>>,
 }
 
-pub struct ConnectionManager {
-    write_pool: Pool<Postgres>,
-    read_pools: Vec<Pool<Postgres>>,
-    config: DatabaseConfig,
+// In controllers
+impl UserController {
+    async fn store(&self, mut request: Request) -> Response {
+        let pool = request.database_pool()?;
+        let user_data: CreateUserRequest = request.json()?;
+        
+        let user = User::create(pool, user_data.into()).await?;
+        Response::json(user).status(201)
+    }
 }
 ```
 
-### 6. Model Events & Observers
-**File**: `crates/elif-db/src/events.rs`
+### 6. Error Handling & Response Formatting
+**File**: `crates/elif-http/src/errors.rs`
 
-Event system for model lifecycle hooks.
+Comprehensive error handling with consistent JSON error responses.
 
 **Requirements**:
-- Model lifecycle events (creating, created, updating, updated, deleting, deleted)
-- Observer pattern for event handling
-- Async event handlers
-- Event propagation control
-- Global and model-specific observers
+- HTTP error types (400, 404, 422, 500, etc.)
+- Error response formatting
+- Error middleware for catching panics
+- Validation error handling
+- Database error conversion
 
 **API Design**:
 ```rust
-pub trait ModelObserver<M: Model> {
-    async fn creating(&self, model: &mut M) -> Result<(), EventError> { Ok(()) }
-    async fn created(&self, model: &M) -> Result<(), EventError> { Ok(()) }
-    async fn updating(&self, model: &mut M) -> Result<(), EventError> { Ok(()) }
-    async fn updated(&self, model: &M) -> Result<(), EventError> { Ok(()) }
-    async fn deleting(&self, model: &M) -> Result<(), EventError> { Ok(()) }
-    async fn deleted(&self, model: &M) -> Result<(), EventError> { Ok(()) }
-}
-
-// Usage
-pub struct UserObserver;
-
-impl ModelObserver<User> for UserObserver {
-    async fn creating(&self, user: &mut User) -> Result<(), EventError> {
-        user.email = user.email.to_lowercase();
-        Ok(())
-    }
+#[derive(Error, Debug)]
+pub enum HttpError {
+    #[error("Not found")]
+    NotFound,
     
-    async fn created(&self, user: &User) -> Result<(), EventError> {
-        // Send welcome email
-        EmailService::send_welcome(user).await?;
-        Ok(())
+    #[error("Validation failed: {0}")]
+    ValidationError(ValidationErrors),
+    
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] ModelError),
+}
+
+// Error response format
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "User not found",
+    "details": {
+      "resource": "User",
+      "id": 123
     }
+  }
 }
 ```
 
-## ✅ Implementation Status & Plan
+## Implementation Plan
 
-### ✅ Phase 2.1 Complete: ORM Foundation (Week 1-4 equivalent)
-- ✅ **Model System**: Define Model trait and core functionality
-- ✅ **CRUD Operations**: Complete implementation (find, create, update, delete, all, count)
-- ✅ **Primary Key Support**: UUID, integer, and composite primary key handling
-- ✅ **Timestamps & Soft Deletes**: Automatic timestamp management and soft delete support
-- ✅ **Query Builder**: Complete fluent query builder (940+ lines)
-- ✅ **Advanced Query Features**: WHERE clauses, joins, subqueries, aggregations
-- ✅ **Pagination**: Both offset-based and cursor-based pagination
-- ✅ **Performance Optimization**: Query complexity scoring, efficient memory usage
-- ✅ **Testing**: Comprehensive test suite (36 tests including performance benchmarks)
+### Week 1: HTTP Server Core
+- [ ] HTTP server implementation with async runtime
+- [ ] Basic routing system with parameter extraction
+- [ ] Request/Response abstractions
+- [ ] Integration with DI container
 
-### 🚧 Phase 2.2: Connection Pooling & Transactions (Week 5-6)
-- [ ] Connection pooling implementation
-- [ ] Transaction support with auto-rollback
-- [ ] Read/write splitting
-- [ ] Connection health monitoring
-- [ ] Database configuration management
+### Week 2: Middleware System
+- [ ] Middleware trait and pipeline
+- [ ] Built-in middleware (logging, timing, error handling)
+- [ ] Middleware composition and ordering
+- [ ] Context passing and extensions
 
-### 🔄 Phase 2.3: Model Events & Observers (Week 7-8) 
-- [ ] Model event system and observers
-- [ ] Lifecycle hooks (creating, created, updating, updated, deleting, deleted)
-- [ ] Event propagation control
-- [ ] Async event handlers
+### Week 3: Controllers & Database Integration
+- [ ] Controller trait and resource controllers
+- [ ] Database middleware and connection injection
+- [ ] ORM integration with request lifecycle
+- [ ] Transaction handling middleware
 
-### 🔄 Phase 2.4: Database Seeding & Factory System (Week 9-10)
-- [ ] Database seeding system
-- [ ] Model factory system for testing
-- [ ] Seed runners and management
-- [ ] Test data generation
-
-### ⏭️ Future (Week 11-12): Relationships & Advanced Features
-- [ ] HasOne and HasMany relationships  
-- [ ] BelongsTo and BelongsToMany relationships
-- [ ] Eager loading and lazy loading mechanisms
-- [ ] Migration system with schema builder
-- [ ] Advanced query features (UNION, complex subqueries)
-
-## Database Support
-
-### Primary Database: PostgreSQL
-- Full feature support including JSON columns, arrays
-- Advanced indexing and constraints
-- Connection pooling optimized for PostgreSQL
-
-### Secondary Databases (Future):
-- SQLite for development and testing
-- MySQL for broader compatibility
-- Database-specific optimizations
-
-## Performance Requirements
-
-### Query Performance:
-- Simple queries: <10ms
-- Complex queries with joins: <50ms  
-- Bulk operations: >1000 records/second
-
-### Memory Usage:
-- Connection pool: <50MB for 100 connections
-- Query builder: <1KB overhead per query
-- Model instances: <500 bytes overhead per model
-
-### Connection Management:
-- Pool warmup: <100ms
-- Connection acquisition: <1ms
-- Transaction overhead: <0.1ms
+### Week 4: Polish & Testing
+- [ ] Comprehensive error handling
+- [ ] File upload support
+- [ ] Static file serving
+- [ ] Integration testing with example API
 
 ## Testing Strategy
 
-### Unit Tests:
-- Model CRUD operations
-- Query builder functionality
-- Relationship loading and constraints
-- Migration up/down operations
-- Event system triggering
+### Unit Tests
+- Route matching and parameter extraction
+- Middleware pipeline execution
+- Request/response parsing
+- Controller method dispatching
 
-### Integration Tests:
-- Full database integration with real PostgreSQL
-- Transaction rollback testing
-- Connection pool stress testing
-- Migration system end-to-end
+### Integration Tests
+- Full HTTP request lifecycle
+- Database operations through HTTP
+- Error handling scenarios
+- File upload functionality
 
-### Performance Tests:
-- Query performance benchmarks
-- Connection pool performance
-- Memory usage under load
-- Concurrent operation testing
+### Example Application
+Build a simple blog API to demonstrate:
+- CRUD operations for users and posts
+- Authentication middleware
+- Validation and error handling
+- Database relationships through HTTP
 
 ## Success Criteria
 
-### ✅ Phase 2.1 Functional Requirements (COMPLETE):
-- ✅ Query builder provides fluent, type-safe API
-- ✅ Model trait supports all standard CRUD operations  
-- ✅ Primary key handling works for UUID, integer, and composite keys
-- ✅ Timestamps and soft deletes function correctly
-- ✅ Advanced query features (subqueries, aggregations, joins) work
+### Functional Requirements
+- [ ] Can serve HTTP requests with routing
+- [ ] Middleware pipeline processes requests/responses
+- [ ] Controllers handle CRUD operations with database
+- [ ] JSON APIs work end-to-end
+- [ ] Error handling provides consistent responses
 
-### 🔄 Pending Phase 2.2+ Functional Requirements:
-- [ ] Can define models with relationships using derive macros
-- [ ] All relationship types work with eager/lazy loading
-- [ ] Migrations can create and modify complex schemas
-- [ ] Connection pooling handles concurrent requests efficiently
-- [ ] Model events trigger correctly and support async handlers
+### Performance Requirements
+- [ ] Handle 1000+ concurrent requests
+- [ ] Response time <50ms for simple operations
+- [ ] Database connection pooling efficiency
 
-### ✅ Phase 2.1 Performance Requirements (EXCEEDED):
-- ✅ Query building: 3μs average (target: <10ms) - **333x better than target**
-- ✅ Model instantiation: 104 bytes memory (target: <100μs per model)
-- ✅ Query builder overhead: 208 bytes (target: <1KB) - **5x better than target**
-
-### 🔄 Pending Phase 2.2+ Performance Requirements:
-- [ ] Simple database queries execute in <10ms
-- [ ] Connection pool supports 1000+ concurrent connections  
-- [ ] Migration execution: <1s for typical schema changes
-
-### ✅ Phase 2.1 Quality Requirements (ACHIEVED):
-- ✅ >90% test coverage for ORM functionality (36 comprehensive tests)
-- ✅ No memory leaks (efficient memory usage measured)
-- ✅ Comprehensive error messages for common issues
-- ✅ Full API documentation with examples
-
-### 🔄 Pending Phase 2.2+ Quality Requirements:
-- [ ] Integration testing with real database connections
-- [ ] Long-running application stability testing
-- [ ] Connection pool stress testing
+### API Completeness
+- [ ] RESTful resource controllers
+- [ ] Parameter binding and validation
+- [ ] File upload handling
+- [ ] Static file serving
 
 ## Deliverables
 
-1. **Core Crates**:
-   - `elif-db` - ORM, query builder, migrations, connections
-   - `elif-db-derive` - Derive macros for models
-   - `elif-migrations` - Migration CLI and utilities
+1. **HTTP Server System**:
+   - Complete HTTP/1.1 server with routing
+   - Middleware pipeline architecture
+   - Request/response abstractions
 
-2. **Documentation**:
-   - Model definition guide
-   - Query builder reference
-   - Relationship documentation
-   - Migration system guide
+2. **Controller Framework**:
+   - Controller trait and implementations
+   - Resource routing and method dispatch
+   - Database integration layer
 
-3. **Examples**:
-   - Blog application with User/Post/Comment models
-   - E-commerce models with complex relationships
-   - Migration examples for common scenarios
+3. **Example Application**:
+   - Blog API with users and posts
+   - Demonstrates full HTTP + Database functionality
+   - Testing and documentation
 
-4. **Tools**:
-   - Migration CLI commands
-   - Schema inspection utilities
-   - Query debugging tools
+4. **Documentation**:
+   - HTTP server configuration guide
+   - Controller and middleware development guide
+   - API design best practices
 
-## File Structure
+## Files Structure
 ```
-crates/elif-db/
+crates/elif-http/
 ├── src/
-│   ├── lib.rs                 # Public API exports
-│   ├── model.rs              # Model trait and base functionality
-│   ├── query.rs              # Query builder implementation
-│   ├── relationships.rs       # Relationship system
-│   ├── migrations.rs         # Migration system
-│   ├── connection.rs         # Connection management
-│   ├── events.rs             # Model events and observers
-│   ├── schema.rs             # Schema builder
-│   └── error.rs              # Database error types
+│   ├── lib.rs              # Public exports
+│   ├── server.rs           # HTTP server implementation
+│   ├── router.rs           # Route matching and dispatch
+│   ├── middleware.rs       # Middleware system
+│   ├── request.rs          # Request abstraction
+│   ├── response.rs         # Response building
+│   ├── controller.rs       # Controller pattern
+│   ├── database.rs         # Database integration
+│   └── errors.rs           # HTTP error types
 ├── tests/
-│   ├── model_tests.rs
-│   ├── query_tests.rs
-│   ├── relationship_tests.rs
-│   ├── migration_tests.rs
+│   ├── server_tests.rs
+│   ├── routing_tests.rs
+│   ├── middleware_tests.rs
 │   └── integration_tests.rs
 └── Cargo.toml
 
-crates/elif-db-derive/
+examples/blog-api/
 ├── src/
-│   ├── lib.rs                # Derive macro implementations
-│   ├── model.rs              # Model derive macro
-│   └── relationship.rs        # Relationship derive helpers
+│   ├── main.rs             # Application entry point
+│   ├── controllers/
+│   │   ├── users.rs        # User controller
+│   │   └── posts.rs        # Post controller
+│   └── models/
+│       ├── user.rs         # User model
+│       └── post.rs         # Post model
 └── Cargo.toml
 ```
 
-This phase creates a database layer that rivals Laravel's Eloquent ORM while maintaining type safety and performance characteristics expected in Rust applications.
+This phase transforms elif.rs into a working web framework that can serve HTTP requests, handle database operations, and provide a foundation for more advanced features.

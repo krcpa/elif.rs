@@ -1,544 +1,352 @@
-# Phase 3: Security Core
+# Phase 3: Essential Middleware & Validation 🛡️
 
-**Duration**: Months 7-9 (12 weeks)  
-**Team**: 2-3 developers  
-**Goal**: Enterprise-grade security matching Laravel's Guard system
+**Duration**: 2-3 weeks  
+**Goal**: Secure, validated web server  
+**Status**: Ready after Phase 2
 
 ## Overview
 
-Phase 3 implements comprehensive security features including authentication, authorization, input validation, and security middleware. This phase focuses on making the framework secure by default while providing flexibility for different authentication methods.
+Phase 3 adds essential security middleware and input validation to create a production-ready web server. This includes CORS, CSRF protection, rate limiting, comprehensive input validation, and security-focused middleware.
 
 ## Dependencies
 
-- **Phase 1**: DI container for service registration and middleware system
-- **Phase 2**: Database layer for user storage and session management
-- **External**: JWT libraries, password hashing, validation libraries
+- **Phase 2**: ✅ HTTP server, routing, middleware pipeline, controllers
 
 ## Key Components
 
-### 1. Authentication System
-**File**: `crates/elif-auth/src/guard.rs`
+### 1. Security Middleware Collection
+**File**: `crates/elif-security/src/middleware/mod.rs`
 
-Multi-provider authentication system supporting various auth methods.
-
-**Requirements**:
-- Multiple authentication guards (JWT, session, API token)
-- User provider abstraction for different user sources
-- Authentication middleware for route protection
-- Password verification and hashing
-- Remember me functionality
-- Account lockout and rate limiting
-
-**API Design**:
-```rust
-pub trait AuthGuard: Send + Sync {
-    type User: User;
-    
-    async fn attempt(&self, credentials: Credentials) -> Result<Self::User, AuthError>;
-    async fn user(&self, request: &Request) -> Result<Option<Self::User>, AuthError>;
-    async fn login(&self, user: Self::User, remember: bool) -> Result<AuthToken, AuthError>;
-    async fn logout(&self, request: &Request) -> Result<(), AuthError>;
-    async fn refresh(&self, token: &str) -> Result<AuthToken, AuthError>;
-}
-
-// JWT Guard Implementation
-pub struct JwtGuard<U: User, P: UserProvider<U>> {
-    user_provider: P,
-    jwt_config: JwtConfig,
-    _phantom: PhantomData<U>,
-}
-
-impl<U: User, P: UserProvider<U>> AuthGuard for JwtGuard<U, P> {
-    type User = U;
-    
-    async fn attempt(&self, credentials: Credentials) -> Result<U, AuthError> {
-        let user = self.user_provider
-            .retrieve_by_credentials(&credentials)
-            .await?;
-            
-        if self.verify_password(&credentials.password, &user.password()).await? {
-            Ok(user)
-        } else {
-            Err(AuthError::InvalidCredentials)
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct AuthToken {
-    pub token: String,
-    pub token_type: String,
-    pub expires_at: DateTime<Utc>,
-    pub refresh_token: Option<String>,
-}
-
-pub struct Credentials {
-    pub email: String,
-    pub password: String,
-}
-```
-
-### 2. Authorization System
-**File**: `crates/elif-auth/src/authorization.rs`
-
-Policy-based authorization with roles and permissions.
+Production-ready security middleware for common web vulnerabilities.
 
 **Requirements**:
-- Policy definition and registration
-- Gate system for ability checking
-- Role-based access control (RBAC)
-- Resource-based permissions
-- Authorization middleware
-- Super user bypass mechanism
-
-**API Design**:
-```rust
-pub trait Gate: Send + Sync {
-    async fn allows<U: User>(
-        &self,
-        user: &U,
-        ability: &str,
-        resource: Option<&dyn Any>
-    ) -> bool;
-    
-    async fn denies<U: User>(
-        &self,
-        user: &U,
-        ability: &str,
-        resource: Option<&dyn Any>
-    ) -> bool {
-        !self.allows(user, ability, resource).await
-    }
-    
-    fn define<F>(&mut self, ability: &str, callback: F)
-    where
-        F: Fn(&dyn User, Option<&dyn Any>) -> bool + Send + Sync + 'static;
-}
-
-// Policy trait for resource-specific authorization
-pub trait Policy<T>: Send + Sync {
-    async fn view(&self, user: &dyn User, resource: &T) -> bool { false }
-    async fn create(&self, user: &dyn User) -> bool { false }
-    async fn update(&self, user: &dyn User, resource: &T) -> bool { false }
-    async fn delete(&self, user: &dyn User, resource: &T) -> bool { false }
-}
-
-// Usage example
-pub struct PostPolicy;
-
-impl Policy<Post> for PostPolicy {
-    async fn view(&self, user: &dyn User, post: &Post) -> bool {
-        post.published || post.user_id == user.id()
-    }
-    
-    async fn update(&self, user: &dyn User, post: &Post) -> bool {
-        post.user_id == user.id() || user.has_role("admin")
-    }
-}
-
-// Authorization macro for easy checking
-#[macro_export]
-macro_rules! authorize {
-    ($gate:expr, $user:expr, $ability:expr) => {
-        if !$gate.allows($user, $ability, None).await {
-            return Err(AuthError::Unauthorized);
-        }
-    };
-    ($gate:expr, $user:expr, $ability:expr, $resource:expr) => {
-        if !$gate.allows($user, $ability, Some($resource)).await {
-            return Err(AuthError::Unauthorized);
-        }
-    };
-}
-```
-
-### 3. Input Validation
-**File**: `crates/elif-validation/src/validator.rs`
-
-Comprehensive input validation with custom rules and error messages.
-
-**Requirements**:
-- Built-in validation rules (required, email, min/max length, etc.)
-- Custom validation rules
-- Nested validation for complex structures
-- Localized error messages
-- Validation middleware for automatic request validation
-- File upload validation
-
-**API Design**:
-```rust
-pub trait Validate {
-    fn validate(&self) -> Result<(), ValidationError>;
-}
-
-// Derive macro for automatic validation
-#[derive(Validate, Deserialize)]
-pub struct CreateUserRequest {
-    #[validate(email, message = "Invalid email address")]
-    pub email: String,
-    
-    #[validate(length(min = 8, max = 255), message = "Password must be 8-255 characters")]
-    pub password: String,
-    
-    #[validate(length(min = 2, max = 100))]
-    pub name: String,
-    
-    #[validate(custom = "validate_age")]
-    pub age: u8,
-}
-
-fn validate_age(age: u8) -> Result<(), ValidationError> {
-    if age < 18 {
-        Err(ValidationError::new("age", "Must be at least 18 years old"))
-    } else {
-        Ok(())
-    }
-}
-
-// Usage in controllers
-pub async fn create_user(
-    Json(request): Json<CreateUserRequest>
-) -> Result<Json<User>, ValidationError> {
-    request.validate()?; // Automatic validation
-    
-    // Create user logic...
-    Ok(Json(user))
-}
-```
-
-### 4. Security Middleware
-**File**: `crates/elif-auth/src/middleware.rs`
-
-Essential security middleware for common attack prevention.
-
-**Requirements**:
-- CORS middleware with configurable policies
-- CSRF protection with token verification
-- Rate limiting per IP and per user
+- CORS (Cross-Origin Resource Sharing) middleware
+- CSRF (Cross-Site Request Forgery) protection  
+- Rate limiting with multiple strategies
+- Security headers middleware (HSTS, X-Frame-Options, etc.)
 - Request size limiting
-- Security headers (HSTS, CSP, X-Frame-Options)
-- IP filtering and geo-blocking
+- IP whitelisting/blacklisting
 
 **API Design**:
 ```rust
 // CORS Middleware
-pub struct CorsMiddleware {
-    config: CorsConfig,
+CorsMiddleware::new()
+    .allow_origin("https://example.com")
+    .allow_methods(vec![Method::GET, Method::POST])
+    .allow_headers(vec!["Authorization", "Content-Type"])
+    .allow_credentials(true)
+    .max_age(3600);
+
+// Rate Limiting
+RateLimitMiddleware::new()
+    .requests_per_minute(60)
+    .per_ip(true)
+    .with_redis("redis://localhost") // or in-memory
+    .custom_key_fn(|req| format!("user:{}", req.user_id()));
+
+// CSRF Protection  
+CsrfMiddleware::new()
+    .token_header("X-CSRF-Token")
+    .cookie_name("_csrf")
+    .exclude_routes(vec!["/api/webhook"]);
+```
+
+### 2. Input Validation System
+**File**: `crates/elif-validation/src/lib.rs`
+
+Comprehensive input validation with derive macros and custom validators.
+
+**Requirements**:
+- Validation derive macro for structs
+- Built-in validators (required, email, min/max, regex, etc.)
+- Custom validator support
+- Nested validation for complex objects
+- Conditional validation rules
+- Internationalized error messages
+
+**API Design**:
+```rust
+#[derive(Validate, Deserialize)]
+pub struct CreateUserRequest {
+    #[validate(length(min = 1, max = 100), custom = "validate_username")]
+    pub username: String,
+    
+    #[validate(email, length(max = 255))]
+    pub email: String,
+    
+    #[validate(length(min = 8), custom = "validate_password_strength")]
+    pub password: String,
+    
+    #[validate(range(min = 18, max = 120))]
+    pub age: Option<u8>,
+    
+    #[validate(nested)]
+    pub profile: CreateProfileRequest,
 }
 
-#[derive(Debug, Clone)]
-pub struct CorsConfig {
-    pub allowed_origins: Vec<String>,
-    pub allowed_methods: Vec<String>,
-    pub allowed_headers: Vec<String>,
-    pub max_age: Duration,
-    pub allow_credentials: bool,
-}
-
-impl Middleware for CorsMiddleware {
-    async fn handle(&self, request: Request, next: Next) -> Result<Response, MiddlewareError> {
-        let origin = request.headers().get("Origin");
-        
-        if self.is_preflight(&request) {
-            return Ok(self.handle_preflight(origin));
-        }
-        
-        let mut response = next.run(request).await?;
-        self.add_cors_headers(&mut response, origin);
-        Ok(response)
+// Custom validator
+fn validate_username(username: &str) -> Result<(), ValidationError> {
+    if username.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        Ok(())
+    } else {
+        Err(ValidationError::new("invalid_username"))
     }
 }
 
-// Rate Limiting Middleware
-pub struct RateLimitMiddleware {
-    store: Box<dyn RateLimitStore>,
-    config: RateLimitConfig,
-}
-
-#[derive(Debug, Clone)]
-pub struct RateLimitConfig {
-    pub max_attempts: u32,
-    pub window_seconds: u64,
-    pub key_generator: KeyGenerator,
-}
-
-pub enum KeyGenerator {
-    IpAddress,
-    UserId,
-    Custom(Box<dyn Fn(&Request) -> String + Send + Sync>),
-}
-
-// CSRF Middleware
-pub struct CsrfMiddleware {
-    config: CsrfConfig,
-}
-
-impl Middleware for CsrfMiddleware {
-    async fn handle(&self, request: Request, next: Next) -> Result<Response, MiddlewareError> {
-        if self.should_verify(&request) {
-            self.verify_token(&request)?;
-        }
-        
-        let response = next.run(request).await?;
-        Ok(self.add_csrf_token(response))
+// Usage in controller
+impl UserController {
+    async fn store(&self, mut request: Request) -> Response {
+        let user_data: CreateUserRequest = request.validate_json()?;
+        // ... rest of the logic
     }
 }
 ```
 
-### 5. Password Security
-**File**: `crates/elif-auth/src/password.rs`
+### 3. Request Sanitization
+**File**: `crates/elif-validation/src/sanitization.rs`
 
-Secure password hashing and verification.
+Input sanitization to prevent XSS and injection attacks.
 
 **Requirements**:
-- Multiple hashing algorithms (Argon2, bcrypt)
-- Automatic algorithm upgrading
-- Password strength validation
-- Secure random salt generation
-- Timing attack prevention
-- Password history tracking
+- HTML sanitization and escaping
+- SQL injection prevention (already handled by ORM)
+- NoSQL injection prevention
+- Path traversal prevention
+- Script tag removal
+- Whitespace normalization
 
 **API Design**:
 ```rust
-pub trait PasswordHasher: Send + Sync {
-    async fn hash(&self, password: &str) -> Result<String, PasswordError>;
-    async fn verify(&self, password: &str, hash: &str) -> Result<bool, PasswordError>;
-    fn needs_rehash(&self, hash: &str) -> bool;
-}
-
-pub struct Argon2Hasher {
-    config: Argon2Config,
-}
-
-impl PasswordHasher for Argon2Hasher {
-    async fn hash(&self, password: &str) -> Result<String, PasswordError> {
-        let salt = generate_salt();
-        let hash = argon2::hash_encoded(
-            password.as_bytes(),
-            &salt,
-            &self.config.into()
-        )?;
-        Ok(hash)
-    }
+#[derive(Sanitize, Deserialize)]
+pub struct BlogPostRequest {
+    #[sanitize(trim, html_escape)]
+    pub title: String,
     
-    async fn verify(&self, password: &str, hash: &str) -> Result<bool, PasswordError> {
-        // Timing-safe verification
-        Ok(argon2::verify_encoded(hash, password.as_bytes())?)
-    }
+    #[sanitize(html_clean, whitespace_normalize)]
+    pub content: String,
+    
+    #[sanitize(path_safe)]
+    pub slug: String,
+    
+    #[sanitize(array(item = "trim, lowercase"))]
+    pub tags: Vec<String>,
 }
+```
 
-// Password strength validation
-pub struct PasswordValidator {
-    min_length: usize,
-    require_uppercase: bool,
-    require_lowercase: bool,
-    require_numbers: bool,
-    require_symbols: bool,
-    check_common_passwords: bool,
+### 4. Logging & Request Tracing Middleware
+**File**: `crates/elif-http/src/middleware/logging.rs`
+
+Structured logging with request tracing and correlation IDs.
+
+**Requirements**:
+- Request logging with timing
+- Correlation ID generation and tracking
+- Structured logging (JSON format)
+- Log level configuration
+- Request/response body logging (configurable)
+- Error logging with stack traces
+
+**API Design**:
+```rust
+LoggingMiddleware::new()
+    .log_requests(true)
+    .log_responses(false) // don't log response bodies
+    .log_errors(true)
+    .exclude_paths(vec!["/health", "/metrics"])
+    .correlation_header("X-Correlation-ID")
+    .format(LogFormat::Json);
+
+// Log output example
+{
+  "timestamp": "2025-01-13T10:30:00Z",
+  "level": "INFO",
+  "correlation_id": "abc123",
+  "method": "POST",
+  "path": "/api/users",
+  "status": 201,
+  "duration_ms": 45.2,
+  "user_id": "user_456"
 }
+```
 
-impl PasswordValidator {
-    pub fn validate(&self, password: &str) -> Result<(), PasswordError> {
-        if password.len() < self.min_length {
-            return Err(PasswordError::TooShort(self.min_length));
-        }
-        
-        if self.require_uppercase && !password.chars().any(|c| c.is_uppercase()) {
-            return Err(PasswordError::MissingUppercase);
-        }
-        
-        // Additional validations...
-        
-        Ok(())
-    }
+### 5. Request/Response Transformation Pipeline
+**File**: `crates/elif-http/src/middleware/transform.rs`
+
+Middleware for transforming requests and responses.
+
+**Requirements**:
+- Content-Type negotiation and transformation
+- Compression middleware (gzip, brotli)
+- Response caching headers
+- API versioning support
+- Request/response interceptors
+
+**API Design**:
+```rust
+// Compression
+CompressionMiddleware::new()
+    .enable_gzip()
+    .enable_brotli()
+    .min_size(1024); // Don't compress small responses
+
+// API Versioning
+ApiVersionMiddleware::new()
+    .header_name("Api-Version")
+    .default_version("v1")
+    .supported_versions(vec!["v1", "v2"]);
+
+// Response transformation
+ResponseTransformMiddleware::new()
+    .wrap_responses(true) // Wrap all responses in {"data": ..., "meta": ...}
+    .add_timestamp(true)
+    .add_request_id(true);
+```
+
+### 6. Health Check & Monitoring
+**File**: `crates/elif-http/src/health.rs`
+
+Built-in health check endpoints and monitoring capabilities.
+
+**Requirements**:
+- Health check endpoint (/health)
+- Readiness/liveness probes
+- Database connection health
+- Dependency health checks
+- Metrics collection integration
+- Status page functionality
+
+**API Design**:
+```rust
+HealthCheckMiddleware::new()
+    .endpoint("/health")
+    .check_database(true)
+    .check_redis(true)
+    .custom_check("external_api", || {
+        // Custom health check logic
+        async { Ok(()) }
+    });
+
+// Health response format
+{
+  "status": "healthy",
+  "timestamp": "2025-01-13T10:30:00Z",
+  "checks": {
+    "database": {"status": "healthy", "response_time_ms": 2.1},
+    "redis": {"status": "healthy", "response_time_ms": 0.5},
+    "external_api": {"status": "degraded", "error": "High latency"}
+  }
 }
 ```
 
 ## Implementation Plan
 
-### Week 1-2: Authentication Foundation
-- [ ] Define authentication traits and interfaces
-- [ ] Implement JWT authentication guard
-- [ ] Add session-based authentication
-- [ ] Password hashing and verification
-- [ ] Basic user provider abstraction
-
-### Week 3-4: Authorization System
-- [ ] Policy trait and registration system
-- [ ] Gate implementation for ability checking
-- [ ] Role-based access control
-- [ ] Authorization middleware
-- [ ] Permission caching for performance
-
-### Week 5-6: Input Validation
-- [ ] Validation trait and derive macro
-- [ ] Built-in validation rules library
-- [ ] Custom validation rule support
-- [ ] Validation error handling and messages
-- [ ] File upload validation
-
-### Week 7-8: Security Middleware
-- [ ] CORS middleware implementation
-- [ ] CSRF protection system
-- [ ] Rate limiting middleware
+### Week 1: Security Middleware Foundation
+- [ ] CORS middleware with full configuration
+- [ ] CSRF protection with token generation/validation
+- [ ] Basic rate limiting with in-memory storage
 - [ ] Security headers middleware
-- [ ] Request size limiting
 
-### Week 9-10: Advanced Security Features
-- [ ] API token authentication
-- [ ] Account lockout mechanisms
-- [ ] Security event logging
-- [ ] Password strength validation
-- [ ] Two-factor authentication foundation
+### Week 2: Validation & Sanitization System
+- [ ] Validation derive macro and built-in validators
+- [ ] Input sanitization for XSS prevention
+- [ ] Integration with request parsing
+- [ ] Custom validator framework
 
-### Week 11-12: Testing & Hardening
-- [ ] Comprehensive security testing
-- [ ] Penetration testing simulation
-- [ ] Performance benchmarks for auth operations
-- [ ] Security audit and vulnerability assessment
-- [ ] Documentation and security guidelines
-
-## Security Considerations
-
-### Authentication Security:
-- Timing-safe password verification
-- Secure session token generation
-- JWT token expiration and refresh
-- Account lockout after failed attempts
-- Password complexity requirements
-
-### Authorization Security:
-- Principle of least privilege
-- Policy-based access control
-- Resource-level permissions
-- Role hierarchy validation
-- Permission caching security
-
-### Input Validation Security:
-- SQL injection prevention
-- XSS attack prevention
-- File upload security
-- Size limiting and validation
-- Content type validation
-
-### General Security:
-- HTTPS enforcement
-- Secure cookie settings
-- CSRF token validation
-- Rate limiting implementation
-- Security header configuration
-
-## Performance Requirements
-
-### Authentication Performance:
-- Password hashing: <200ms per operation
-- JWT verification: <1ms per token
-- Session lookup: <5ms per request
-- User resolution: <10ms per request
-
-### Authorization Performance:
-- Policy evaluation: <1ms per check
-- Role verification: <0.5ms per check
-- Permission caching: 99%+ hit rate
-- Gate resolution: <2ms per ability check
+### Week 3: Advanced Features & Polish
+- [ ] Advanced rate limiting with Redis backend
+- [ ] Comprehensive logging and tracing
+- [ ] Health check system
+- [ ] Request/response transformation pipeline
+- [ ] Integration testing and documentation
 
 ## Testing Strategy
 
-### Security Tests:
-- Authentication bypass attempts
-- Authorization escalation tests
-- Input validation bypass tests
-- CSRF attack simulations
-- Rate limiting effectiveness
+### Unit Tests
+- Individual middleware functionality
+- Validation rules and error messages
+- Sanitization effectiveness
+- Rate limiting accuracy
 
-### Performance Tests:
-- Authentication throughput testing
-- Authorization performance under load
-- Validation performance with large inputs
-- Middleware overhead measurement
+### Integration Tests
+- Full middleware pipeline processing
+- Security vulnerability testing
+- Performance under rate limiting
+- Health check endpoint functionality
 
-### Integration Tests:
-- Full authentication flow testing
-- Authorization with database integration
-- Validation with complex nested structures
-- Middleware chain interaction
+### Security Tests
+- CORS policy enforcement
+- CSRF attack prevention
+- XSS prevention through sanitization
+- Rate limiting bypass attempts
 
 ## Success Criteria
 
-### Functional Requirements:
-- [ ] Users can authenticate via multiple methods (JWT, session, API token)
-- [ ] Authorization policies enforce access control correctly
-- [ ] Input validation prevents malicious data submission
-- [ ] Security middleware blocks common attacks
-- [ ] Password security meets industry standards
+### Security Requirements
+- [ ] CORS policies prevent unauthorized cross-origin requests
+- [ ] CSRF protection blocks forged requests
+- [ ] Rate limiting prevents abuse
+- [ ] Input validation prevents malformed data
+- [ ] Sanitization prevents XSS attacks
 
-### Security Requirements:
-- [ ] Passes OWASP security checklist
-- [ ] Resistant to common attacks (CSRF, XSS, injection)
-- [ ] Timing attack resistant authentication
-- [ ] Secure by default configuration
-- [ ] Comprehensive security logging
+### Performance Requirements
+- [ ] Middleware overhead <1ms per request
+- [ ] Rate limiting doesn't impact normal traffic
+- [ ] Validation processes <100 fields in <1ms
 
-### Performance Requirements:
-- [ ] Authentication operations complete within 200ms
-- [ ] Authorization checks complete within 2ms
-- [ ] Middleware adds <1ms overhead per request
-- [ ] Can handle 1000+ auth operations per second
+### Usability Requirements
+- [ ] Clear validation error messages
+- [ ] Easy middleware configuration
+- [ ] Comprehensive logging for debugging
 
 ## Deliverables
 
-1. **Core Crates**:
-   - `elif-auth` - Authentication and authorization
-   - `elif-validation` - Input validation system
-   - `elif-security` - Security middleware collection
+1. **Security Middleware Suite**:
+   - CORS, CSRF, rate limiting, security headers
+   - Configurable and production-ready
 
-2. **Documentation**:
-   - Authentication setup guide
-   - Authorization policy documentation
-   - Validation rules reference
+2. **Validation Framework**:
+   - Derive macro for automatic validation
+   - Comprehensive built-in validators
+   - Custom validator support
+
+3. **Monitoring & Observability**:
+   - Request logging and tracing
+   - Health check system
+   - Performance monitoring hooks
+
+4. **Documentation & Examples**:
    - Security best practices guide
+   - Middleware configuration examples
+   - Validation patterns and recipes
 
-3. **Examples**:
-   - Multi-provider authentication setup
-   - Complex authorization policies
-   - Custom validation rules
-   - Security middleware configuration
-
-4. **Security Tools**:
-   - Security audit commands
-   - Permission debugging utilities
-   - Validation testing helpers
-
-## File Structure
+## Files Structure
 ```
-crates/elif-auth/
+crates/elif-security/
 ├── src/
-│   ├── lib.rs                # Public API exports
-│   ├── guard.rs             # Authentication guards
-│   ├── authorization.rs      # Authorization system
-│   ├── password.rs          # Password hashing
-│   ├── middleware.rs        # Auth middleware
-│   └── error.rs            # Auth error types
+│   ├── lib.rs              # Public exports
+│   ├── middleware/
+│   │   ├── mod.rs          # Middleware collection
+│   │   ├── cors.rs         # CORS middleware
+│   │   ├── csrf.rs         # CSRF protection
+│   │   ├── rate_limit.rs   # Rate limiting
+│   │   └── headers.rs      # Security headers
+│   └── config.rs           # Security configuration
 └── Cargo.toml
 
 crates/elif-validation/
 ├── src/
-│   ├── lib.rs              # Public API exports
-│   ├── validator.rs        # Validation system
-│   ├── rules.rs           # Built-in validation rules
-│   ├── custom.rs          # Custom rule support
-│   └── error.rs          # Validation errors
+│   ├── lib.rs              # Public exports
+│   ├── validators/         # Built-in validators
+│   ├── sanitization.rs     # Input sanitization
+│   ├── errors.rs           # Validation errors
+│   └── macros.rs           # Derive macros
 └── Cargo.toml
 
-crates/elif-security/
-├── src/
-│   ├── lib.rs              # Public API exports
-│   ├── cors.rs            # CORS middleware
-│   ├── csrf.rs            # CSRF protection
-│   ├── rate_limit.rs      # Rate limiting
-│   ├── headers.rs         # Security headers
-│   └── encryption.rs      # Encryption utilities
-└── Cargo.toml
+crates/elif-http/src/middleware/
+├── logging.rs              # Request logging
+├── transform.rs            # Request/response transformation
+├── compression.rs          # Response compression
+└── health.rs               # Health checks
 ```
 
-This phase creates enterprise-grade security capabilities that protect applications by default while providing the flexibility needed for complex authorization scenarios.
+This phase ensures that elif.rs applications are secure by default and provide enterprise-grade validation and monitoring capabilities.
