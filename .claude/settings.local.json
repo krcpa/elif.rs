@@ -25,7 +25,13 @@
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
       "Bash(gh issue view:*)",
-      "Bash(gh issue close:*)"
+      "Bash(gh issue close:*)",
+      "Bash(timeout 30 cargo test -p elif-core module::tests::test_application_lifecycle -- --exact --nocapture)",
+      "Bash(gtimeout 30 cargo test -p elif-core module::tests::test_application_lifecycle -- --exact --nocapture)",
+      "Bash(gh issue comment:*)",
+      "Bash(./target/release/elif:*)",
+      "Bash(target/release/elif:*)",
+      "Bash(~/.cargo/bin/elif:*)"
     ],
     "deny": []
   }

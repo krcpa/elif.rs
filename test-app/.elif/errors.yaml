@@ -1,0 +1,57 @@
+# Standardized error codes for consistent API responses
+# Use these codes in your controllers for uniform error handling
+
+# Authentication & Authorization
+- code: INVALID_CREDENTIALS
+  http: 401
+  message: "Invalid email or password"
+  hint: "Check your login credentials and try again"
+
+- code: UNAUTHORIZED
+  http: 401
+  message: "Authentication required"
+  hint: "Please provide valid authentication credentials"
+
+- code: FORBIDDEN
+  http: 403
+  message: "Access denied"
+  hint: "You don't have permission to access this resource"
+
+# Validation Errors
+- code: VALIDATION_FAILED
+  http: 400
+  message: "Request validation failed"
+  hint: "Check the request payload and try again"
+
+- code: REQUIRED_FIELD_MISSING
+  http: 400
+  message: "Required field is missing"
+  hint: "Include all required fields in your request"
+
+# Resource Errors
+- code: RESOURCE_NOT_FOUND
+  http: 404
+  message: "Resource not found"
+  hint: "The requested resource may have been deleted or moved"
+
+- code: RESOURCE_ALREADY_EXISTS
+  http: 409
+  message: "Resource already exists"
+  hint: "Use a different identifier or update the existing resource"
+
+# Server Errors
+- code: INTERNAL_SERVER_ERROR
+  http: 500
+  message: "Internal server error"
+  hint: "Please try again later or contact support"
+
+- code: DATABASE_ERROR
+  http: 503
+  message: "Database temporarily unavailable"
+  hint: "Please try again in a few moments"
+
+# Rate Limiting
+- code: RATE_LIMIT_EXCEEDED
+  http: 429
+  message: "Rate limit exceeded"
+  hint: "Please wait before making more requests"

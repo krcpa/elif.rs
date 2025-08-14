@@ -1,0 +1,10 @@
+name: test-app
+version: "0.1.0" 
+database:
+  url_env: DATABASE_URL
+  migrations_dir: migrations
+server:
+  host: "0.0.0.0"
+  port: 3000
+routes:
+  prefix: "/api/v1"
