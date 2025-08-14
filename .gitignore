@@ -27,6 +27,11 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+temp-test/
+test-app/
+
+# Cache directories
+.mcp-cache/
 
 # Logs
 *.log
