@@ -533,12 +533,13 @@ impl<M> QueryBuilder<M> {
 
     /// Add a subquery in the WHERE clause
     pub fn where_subquery<T: Into<Value>>(mut self, column: &str, operator: QueryOperator, subquery: QueryBuilder<M>) -> Self {
-        // TODO: Implement subquery support in WHERE clauses
-        // For now, add as a placeholder condition
+        let subquery_sql = subquery.to_sql();
+        let formatted_value = format!("({})", subquery_sql);
+        
         self.where_conditions.push(WhereCondition {
             column: column.to_string(),
             operator,
-            value: Some(Value::String(format!("({})", subquery.to_sql()))),
+            value: Some(Value::String(formatted_value)),
             values: Vec::new(),
         });
         self
@@ -695,12 +696,24 @@ impl<M> QueryBuilder<M> {
                         format!("{} {}", condition.column, condition.operator)
                     }
                     QueryOperator::In | QueryOperator::NotIn => {
-                        let values: Vec<String> = condition
-                            .values
-                            .iter()
-                            .map(|v| self.format_value(v))
-                            .collect();
-                        format!("{} {} ({})", condition.column, condition.operator, values.join(", "))
+                        // Handle subqueries (stored in value field) vs regular IN lists (stored in values field)
+                        if let Some(Value::String(subquery)) = &condition.value {
+                            if subquery.starts_with('(') && subquery.ends_with(')') {
+                                // This is a subquery
+                                format!("{} {} {}", condition.column, condition.operator, subquery)
+                            } else {
+                                // Single value IN (unusual case)
+                                format!("{} {} ({})", condition.column, condition.operator, self.format_value(&condition.value.as_ref().unwrap()))
+                            }
+                        } else {
+                            // Regular IN with multiple values
+                            let values: Vec<String> = condition
+                                .values
+                                .iter()
+                                .map(|v| self.format_value(v))
+                                .collect();
+                            format!("{} {} ({})", condition.column, condition.operator, values.join(", "))
+                        }
                     }
                     QueryOperator::Between => {
                         if condition.values.len() == 2 {

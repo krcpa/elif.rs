@@ -11,6 +11,9 @@ pub mod model;
 pub mod query;
 pub mod error;
 
+#[cfg(test)]
+mod tests;
+
 // Re-export core traits and types
 pub use model::*;
 pub use query::*;
