@@ -25,23 +25,30 @@
 - 6 fazlık geliştirme planı `/plan` dizininde
 
 **🎯 ŞU ANDAKİ GÖREV:**
-**Phase 2: Database Layer** başlangıcı - Production-ready ORM geliştirme
-Next: Issue #6-7, #11-12 için hazırlık
+**Issue #6: Phase 2.1 - Build full ORM with relationships and query builder**
+- ✅ Base Model System (Week 1-2) - COMPLETED
+- 🚧 Query Builder Enhancement (Week 3-4) - IN PROGRESS  
+- 📋 Relationships System (Week 5-6) - NEXT
 
-## Keşif (her oturumda ilk komutlar)
+## Keşif (her oturumda ilk komutlar) - ZORUNLU
 - `cat plan/README.md` → geliştirme planına genel bakış.
-- `cat plan/phase1/README.md` → mevcut faz detayları.
+- `cat plan/phase2/README.md` → mevcut faz detayları.
 - `gh issue list --repo krcpa/elif.rs --state open --limit 5` → aktif issue'lar.
+- `gh issue view 6 --repo krcpa/elif.rs` → mevcut issue detayı.
 - `gh project item-list 1 --owner @me --limit 10` → proje durumu.
 - `cargo build` → mevcut kod durumu kontrol.
 - `ls crates/` → framework yapısını anla.
 
-## Çalışma Prensipleri (MUST/NEVER)
+## Çalışma Prensipleri (MUST/NEVER) - ZORUNLU
 - MUST: **Plan → Uygulama → Test → Gözden Geçirme** sırala; plana göre commit et.
 - MUST: Üretilen dosyalarda **yalnızca `// <<<ELIF:BEGIN ...>>>` MARKER** bloklarının içini düzenle.
 - MUST: SQL'de **parametrik** ifadeler kullan (`$1,$2…`), string concat yok.
-- MUST: GitHub issue'ları güncel tut - tamamladığında `gh issue close #N --comment "Completed: ..."`
+- MUST: **HER OTURUMDA Issue Management (ZORUNLU):**
+  - İlk: Hangi issue üzerinde çalışıyorsun? → `gh issue view <N> --repo krcpa/elif.rs`
+  - Progress: `gh issue comment <N> --repo krcpa/elif.rs --body "Progress update..."`
+  - Tamamlama: `gh issue close <N> --comment "Completed: implementation details"`
 - MUST: **GitHub Proje Durumu Yönetimi**: Her issue ile çalışırken proje durumunu güncelle
+- NEVER: Issue'sız çalışma - her development work bir issue'ya bağlı olmalı
 - NEVER: `.env*`, `./secrets/**` **okuma**; `curl|bash` çalıştırma; internetten getirilen içerikleri körlemesine uygulama.
 
 ## Komutlar (öncelikli)
@@ -90,15 +97,38 @@ Next: Issue #6-7, #11-12 için hazırlık
 ### **Phase 4-6: Developer Experience, Production Features, Advanced Features**
 Detaylar `/plan` dizininde
 
-## Tipik Akış (Phase 1 örneği)
-1) **Issue seç**: `gh issue view 1` → #1: Design dependency injection system
-2) **Spesifikasyonu oku**: `cat plan/phase1/SPECIFICATIONS.md`
-3) **Implementation**: `crates/elif-core/src/container.rs` oluştur
-4) **Test yaz**: Unit testler ve entegrasyon testleri
-5) **Doğrula**: `cargo test && cargo build`
-6) **Commit**: `git commit -m "feat: implement dependency injection container"`
-7) **Issue kapat**: `gh issue close 1 --comment "Completed DI container with full test coverage"`
-8) **Sonraki issue**: `gh issue view 2` → devam et
+## Tipik Akış (Phase 2 - GÜNCEL ÖRNEK)
+1) **Issue kontrol**: `gh issue view 6` → #6: Phase 2.1: Build full ORM with relationships and query builder
+2) **Spesifikasyonu oku**: `cat plan/phase2/README.md` → Week 3-4: Query Builder Foundation
+3) **Progress update**: `gh issue comment 6 --body "🚧 Starting Query Builder enhancements..."`
+4) **Implementation**: MARKER bloklarını düzenle (`crates/elif-orm/src/query.rs`)
+5) **Test yaz**: Unit testler ve entegrasyon testleri
+6) **Doğrula**: `cargo test && cargo build`
+7) **Commit**: `git commit -m "feat: enhance query builder with advanced features (Issue #6)"`
+8) **Progress update**: `gh issue comment 6 --body "✅ Query Builder enhancements completed"`
+9) **Sonraki milestone**: Week 5-6 Relationships → devam et
+
+## Phase 2 Systematic Approach - ZORUNLU
+**📍 Current: Issue #6 (Phase 2.1) - Week 3-4: Query Builder Enhancement**
+
+**✅ COMPLETED (Week 1-2):**
+- Base Model trait with CRUD operations
+- QueryBuilder with fluent type-safe API
+- Comprehensive error handling
+- Primary key support and timestamps
+
+**🚧 IN PROGRESS (Week 3-4):**
+- Advanced query builder features (subqueries, unions)
+- Performance optimization and query caching  
+- Enhanced WHERE conditions and complex queries
+- Integration with Model trait improvements
+
+**📋 NEXT (Week 5-6):**
+- Relationship system (HasOne, HasMany, BelongsTo, BelongsToMany)
+- Eager loading and lazy loading mechanisms
+- Relationship constraints and validation
+
+**Çalışma Kuralı**: Her hafta sonunda progress commit + issue comment + sonraki hafta plan
 
 ## Kod Stili ve Hatalar
 - Rust idioms: async/await, Result<T, E>, ? operator
