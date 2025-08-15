@@ -23,6 +23,8 @@ pub mod request;
 pub mod response;
 pub mod json;
 pub mod middleware;
+pub mod controller;
+pub mod database;
 
 // pub use server::{HttpServer, HttpServerBuilder};
 // pub use simple_server::SimpleHttpServer;
@@ -52,6 +54,12 @@ pub use middleware::{
     logging::LoggingMiddleware,
     timing::{TimingMiddleware, RequestStartTime, format_duration},
 };
+
+// Re-export controller types
+pub use controller::{Controller, BaseController, PaginationParams};
+
+// Re-export database types
+pub use database::{DatabaseServiceProvider, create_database_pool, get_database_pool, get_named_database_pool};
 
 // Re-export commonly used types
 pub use axum::{

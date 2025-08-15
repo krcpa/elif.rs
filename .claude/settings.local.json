@@ -33,7 +33,8 @@
       "Bash(target/release/elif:*)",
       "Bash(~/.cargo/bin/elif:*)",
       "Bash(rm:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

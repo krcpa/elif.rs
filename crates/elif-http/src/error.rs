@@ -41,6 +41,24 @@ pub enum HttpError {
     
     #[error("Health check failed: {reason}")]
     HealthCheckFailed { reason: String },
+    
+    #[error("Database error: {message}")]
+    DatabaseError { message: String },
+    
+    #[error("Validation error: {message}")]
+    ValidationError { message: String },
+    
+    #[error("Resource not found: {resource}")]
+    NotFound { resource: String },
+    
+    #[error("Resource already exists: {message}")]
+    Conflict { message: String },
+    
+    #[error("Unauthorized access")]
+    Unauthorized,
+    
+    #[error("Access forbidden: {message}")]
+    Forbidden { message: String },
 }
 
 impl HttpError {
@@ -92,6 +110,53 @@ impl HttpError {
             reason: reason.into() 
         }
     }
+    
+    /// Create a database error
+    pub fn database_error<T: Into<String>>(message: T) -> Self {
+        HttpError::DatabaseError { 
+            message: message.into() 
+        }
+    }
+    
+    /// Create a validation error
+    pub fn validation_error<T: Into<String>>(message: T) -> Self {
+        HttpError::ValidationError { 
+            message: message.into() 
+        }
+    }
+    
+    /// Create a not found error
+    pub fn not_found<T: Into<String>>(resource: T) -> Self {
+        HttpError::NotFound { 
+            resource: resource.into() 
+        }
+    }
+    
+    /// Create a conflict error
+    pub fn conflict<T: Into<String>>(message: T) -> Self {
+        HttpError::Conflict { 
+            message: message.into() 
+        }
+    }
+    
+    /// Create an unauthorized error
+    pub fn unauthorized() -> Self {
+        HttpError::Unauthorized
+    }
+    
+    /// Create a forbidden error
+    pub fn forbidden<T: Into<String>>(message: T) -> Self {
+        HttpError::Forbidden { 
+            message: message.into() 
+        }
+    }
+    
+    /// Create an internal server error
+    pub fn internal_server_error<T: Into<String>>(message: T) -> Self {
+        HttpError::InternalError { 
+            message: message.into() 
+        }
+    }
 
     /// Get the appropriate HTTP status code for this error
     pub fn status_code(&self) -> StatusCode {
@@ -105,6 +170,12 @@ impl HttpError {
             HttpError::BadRequest { .. } => StatusCode::BAD_REQUEST,
             HttpError::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             HttpError::HealthCheckFailed { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            HttpError::DatabaseError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::ValidationError { .. } => StatusCode::BAD_REQUEST,
+            HttpError::NotFound { .. } => StatusCode::NOT_FOUND,
+            HttpError::Conflict { .. } => StatusCode::CONFLICT,
+            HttpError::Unauthorized => StatusCode::UNAUTHORIZED,
+            HttpError::Forbidden { .. } => StatusCode::FORBIDDEN,
         }
     }
 
@@ -120,6 +191,12 @@ impl HttpError {
             HttpError::BadRequest { .. } => "BAD_REQUEST",
             HttpError::InternalError { .. } => "INTERNAL_ERROR",
             HttpError::HealthCheckFailed { .. } => "HEALTH_CHECK_FAILED",
+            HttpError::DatabaseError { .. } => "DATABASE_ERROR",
+            HttpError::ValidationError { .. } => "VALIDATION_ERROR",
+            HttpError::NotFound { .. } => "RESOURCE_NOT_FOUND",
+            HttpError::Conflict { .. } => "RESOURCE_CONFLICT",
+            HttpError::Unauthorized => "UNAUTHORIZED_ACCESS",
+            HttpError::Forbidden { .. } => "ACCESS_FORBIDDEN",
         }
     }
 }
@@ -169,6 +246,50 @@ impl From<hyper::Error> for HttpError {
     fn from(err: hyper::Error) -> Self {
         HttpError::InternalError { 
             message: format!("Hyper error: {}", err) 
+        }
+    }
+}
+
+// Convert from ORM ModelError
+impl From<elif_orm::ModelError> for HttpError {
+    fn from(err: elif_orm::ModelError) -> Self {
+        match err {
+            elif_orm::ModelError::Database(msg) => HttpError::DatabaseError { message: msg },
+            elif_orm::ModelError::Validation(msg) => HttpError::ValidationError { message: msg },
+            elif_orm::ModelError::NotFound(resource) => HttpError::NotFound { resource },
+            elif_orm::ModelError::Serialization(msg) => HttpError::InternalError { 
+                message: format!("Serialization error: {}", msg) 
+            },
+            _ => HttpError::InternalError { 
+                message: format!("ORM error: {}", err) 
+            },
+        }
+    }
+}
+
+// Convert from sqlx errors
+impl From<sqlx::Error> for HttpError {
+    fn from(err: sqlx::Error) -> Self {
+        match err {
+            sqlx::Error::RowNotFound => HttpError::NotFound { 
+                resource: "Resource not found in database".to_string() 
+            },
+            sqlx::Error::Database(db_err) => {
+                // Check for common database constraint violations
+                let err_msg = db_err.message();
+                if err_msg.contains("unique constraint") || err_msg.contains("duplicate key") {
+                    HttpError::Conflict { 
+                        message: "Resource already exists".to_string() 
+                    }
+                } else {
+                    HttpError::DatabaseError { 
+                        message: format!("Database error: {}", err_msg) 
+                    }
+                }
+            },
+            _ => HttpError::DatabaseError { 
+                message: format!("Database operation failed: {}", err) 
+            },
         }
     }
 }
