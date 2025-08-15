@@ -8,6 +8,11 @@ pub mod eager_loading;
 pub mod loader;
 pub mod cache;
 
+// Phase 6.2.1: Relationship Metadata System
+pub mod metadata;
+pub mod types;
+pub mod registry;
+
 #[cfg(test)]
 pub mod eager_loading_tests;
 
@@ -19,3 +24,8 @@ pub use belongs_to::*;
 pub use eager_loading::*;
 pub use loader::*;
 pub use cache::*;
+
+// Re-export metadata system types
+pub use metadata::*;
+pub use types::*;
+pub use registry::*;
