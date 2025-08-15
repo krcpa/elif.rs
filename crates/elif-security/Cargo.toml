@@ -38,6 +38,7 @@ log = "0.4"
 time = { version = "0.3", features = ["serde"] }
 sha2 = "0.10"
 rand = "0.8"
+base64 = "0.22"
 
 [dev-dependencies]
 tokio-test = "0.4"
