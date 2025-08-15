@@ -2,93 +2,142 @@ use std::fs;
 use std::path::Path;
 use chrono::Utc;
 use elif_core::ElifError;
+use elif_orm::{MigrationManager, MigrationRunner};
 
 pub async fn create(name: &str) -> Result<(), ElifError> {
-    // Create migrations directory if it doesn't exist
-    fs::create_dir_all("migrations").map_err(|e| ElifError::Io(e))?;
+    let manager = MigrationManager::new();
     
-    let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
-    let filename = format!("migrations/{}__{}.sql", timestamp, name);
-    
-    // Create migration template
-    let template = format!(
-        "-- Migration: {}\n-- Created: {}\n\n-- Up migration\n\n\n-- Down migration\n-- This will be used for rollbacks\n\n",
-        name,
-        Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
-    );
-    
-    fs::write(&filename, template).map_err(|e| ElifError::Io(e))?;
-    
-    println!("Created migration: {}", filename);
-    Ok(())
+    match manager.create_migration(name).await {
+        Ok(filename) => {
+            println!("✓ Created migration: {}", filename);
+            Ok(())
+        }
+        Err(e) => Err(ElifError::Database(format!("Failed to create migration: {}", e)))
+    }
 }
 
 pub async fn run() -> Result<(), ElifError> {
-    // Check if migrations directory exists
-    if !Path::new("migrations").exists() {
-        println!("No migrations directory found");
-        return Ok(());
+    // Get database URL from environment
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://elif:elif@localhost:5432/elif_dev".to_string());
+    
+    // Create migration manager and runner
+    let manager = MigrationManager::new();
+    let runner = MigrationRunner::from_url(manager, &database_url).await
+        .map_err(|e| ElifError::Database(format!("Failed to create migration runner: {}", e)))?;
+    
+    println!("🚀 Running database migrations...");
+    
+    match runner.run_migrations().await {
+        Ok(result) => {
+            if result.applied_count == 0 {
+                println!("✓ No pending migrations found. Database is up to date.");
+                if result.skipped_count > 0 {
+                    println!("  {} migrations already applied.", result.skipped_count);
+                }
+            } else {
+                println!("✓ Applied {} migration(s) successfully:", result.applied_count);
+                for migration_id in &result.applied_migrations {
+                    println!("  - {}", migration_id);
+                }
+                println!("  Execution time: {}ms", result.execution_time_ms);
+            }
+            Ok(())
+        }
+        Err(e) => Err(ElifError::Database(format!("Migration failed: {}", e)))
     }
-    
-    // For now, just list pending migrations
-    let mut entries: Vec<_> = fs::read_dir("migrations")
-        .map_err(|e| ElifError::Io(e))?
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            entry.path().extension().map_or(false, |ext| ext == "sql")
-        })
-        .collect();
-    
-    entries.sort_by_key(|entry| entry.file_name());
-    
-    if entries.is_empty() {
-        println!("No migrations found");
-        return Ok(());
-    }
-    
-    println!("Found {} migration(s):", entries.len());
-    for entry in entries {
-        println!("  {}", entry.file_name().to_string_lossy());
-    }
-    
-    println!("NOTE: Migration execution will be implemented with database integration");
-    Ok(())
 }
 
 pub async fn rollback() -> Result<(), ElifError> {
-    println!("Rollback functionality will be implemented with database integration");
-    Ok(())
+    // Get database URL from environment
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://elif:elif@localhost:5432/elif_dev".to_string());
+    
+    // Create migration manager and runner
+    let manager = MigrationManager::new();
+    let runner = MigrationRunner::from_url(manager, &database_url).await
+        .map_err(|e| ElifError::Database(format!("Failed to create migration runner: {}", e)))?;
+    
+    println!("🔄 Rolling back last batch of migrations...");
+    
+    match runner.rollback_last_batch().await {
+        Ok(result) => {
+            if result.applied_count == 0 {
+                println!("✓ No migrations to rollback.");
+            } else {
+                println!("✓ Rolled back {} migration(s) successfully:", result.applied_count);
+                for migration_id in &result.applied_migrations {
+                    println!("  - {}", migration_id);
+                }
+                println!("  Execution time: {}ms", result.execution_time_ms);
+            }
+            Ok(())
+        }
+        Err(e) => Err(ElifError::Database(format!("Rollback failed: {}", e)))
+    }
 }
 
 pub async fn status() -> Result<(), ElifError> {
-    // Check migrations directory
-    if !Path::new("migrations").exists() {
-        println!("No migrations directory found");
-        return Ok(());
-    }
+    // Get database URL from environment
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://elif:elif@localhost:5432/elif_dev".to_string());
     
-    let mut entries: Vec<_> = fs::read_dir("migrations")
-        .map_err(|e| ElifError::Io(e))?
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            entry.path().extension().map_or(false, |ext| ext == "sql")
-        })
-        .collect();
-    
-    entries.sort_by_key(|entry| entry.file_name());
+    // Create migration manager and runner
+    let manager = MigrationManager::new();
+    let runner = MigrationRunner::from_url(manager, &database_url).await
+        .map_err(|e| ElifError::Database(format!("Failed to create migration runner: {}", e)))?;
     
     println!("Migration Status:");
     println!("================");
     
-    if entries.is_empty() {
-        println!("No migrations found");
-    } else {
-        for entry in entries {
-            let filename = entry.file_name().to_string_lossy().to_string();
-            println!("  ⏳ {}", filename);
+    match runner.get_migration_status().await {
+        Ok(status_list) => {
+            if status_list.is_empty() {
+                println!("No migrations found");
+            } else {
+                for (migration, is_applied) in &status_list {
+                    let status_icon = if *is_applied { "✅" } else { "⏳" };
+                    let status_text = if *is_applied { "Applied" } else { "Pending" };
+                    
+                    println!("  {} {} - {} ({})", 
+                        status_icon, 
+                        migration.id, 
+                        migration.name,
+                        status_text
+                    );
+                    
+                    if *is_applied {
+                        continue;
+                    }
+                    
+                    // Show a preview of pending migration
+                    if !migration.up_sql.trim().is_empty() {
+                        let preview = migration.up_sql
+                            .lines()
+                            .take(2)
+                            .filter(|line| !line.trim().is_empty() && !line.trim().starts_with("--"))
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        if !preview.is_empty() {
+                            println!("     Preview: {}", 
+                                if preview.len() > 60 { 
+                                    format!("{}...", &preview[..60]) 
+                                } else { 
+                                    preview 
+                                }
+                            );
+                        }
+                    }
+                }
+                
+                let applied_count = status_list.iter().filter(|(_, applied)| *applied).count();
+                let pending_count = status_list.len() - applied_count;
+                
+                println!();
+                println!("Summary: {} applied, {} pending", applied_count, pending_count);
+            }
+            Ok(())
         }
-        println!("\n⏳ = Pending (database integration needed)");
+        Err(e) => Err(ElifError::Database(format!("Failed to get migration status: {}", e)))
     }
-    
-    Ok(())
 }

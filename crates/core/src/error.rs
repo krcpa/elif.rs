@@ -22,6 +22,9 @@ pub enum ElifError {
     #[error("Template error: {0}")]
     Template(String),
     
+    #[error("Database error: {0}")]
+    Database(String),
+    
     #[error("API error: {code} - {message}")]
     Api { code: String, message: String, hint: Option<String> },
 }

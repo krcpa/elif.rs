@@ -12,6 +12,8 @@ pub mod query;
 pub mod error;
 pub mod database;
 pub mod transaction;
+pub mod migration;
+pub mod migration_runner;
 
 #[cfg(test)]
 mod tests;
@@ -25,6 +27,8 @@ pub use query::*;
 pub use error::*;
 pub use database::*;
 pub use transaction::*;
+pub use migration::*;
+pub use migration_runner::*;
 
 // Derive macro re-exports (when implemented in future)
 // pub use elif_orm_derive::*;

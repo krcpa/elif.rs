@@ -455,6 +455,9 @@ pub struct PoolRegistry {
     pools: std::collections::HashMap<String, Arc<ManagedPool>>,
 }
 
+/// Type alias for database pool used by migration runner
+pub type DatabasePool = ManagedPool;
+
 impl PoolRegistry {
     pub fn new() -> Self {
         Self {

@@ -8,6 +8,12 @@ use std::fmt;
 /// Result type alias for model operations
 pub type ModelResult<T> = Result<T, ModelError>;
 
+/// ORM error type alias
+pub type OrmError = ModelError;
+
+/// ORM result type alias  
+pub type OrmResult<T> = ModelResult<T>;
+
 /// Error types for ORM operations
 #[derive(Debug, Clone)]
 pub enum ModelError {
