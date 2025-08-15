@@ -130,6 +130,15 @@ pub trait AuthorizationProvider: Send + Sync {
     /// Check if user has a specific permission
     async fn has_permission(&self, user: &Self::User, permission: &str) -> AuthResult<bool>;
 
+    /// Check if user has a specific permission with context
+    async fn has_permission_with_context(
+        &self, 
+        user: &Self::User, 
+        resource: &str,
+        action: &str,
+        context: Option<&HashMap<String, serde_json::Value>>
+    ) -> AuthResult<bool>;
+
     /// Check if user has any of the specified roles
     async fn has_any_role(&self, user: &Self::User, roles: &[String]) -> AuthResult<bool> {
         for role in roles {

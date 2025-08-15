@@ -45,13 +45,22 @@ pub use request::{ElifRequest, RequestExtractor, ElifQuery, ElifPath, ElifState}
 pub use response::{ElifResponse, ResponseBody, IntoElifResponse, ElifStatusCode, ElifHeaderMap};
 pub use json::{ElifJson, JsonError, JsonResponse, ValidationErrors, ApiResponse};
 
+// Re-export middleware types
+pub use middleware::{
+    Middleware, MiddlewarePipeline, ErrorHandlingMiddleware,
+    error_handler::{
+        ErrorHandlerMiddleware, ErrorHandlerConfig, ErrorHandlerLayer,
+        error_handler_middleware, error_handler_with_config, 
+        error_handler_layer, error_handler_layer_with_config
+    },
+};
+
 // Re-export authentication types (if auth feature is enabled)
 #[cfg(feature = "auth")]
 pub use auth::{RequestAuthExt, AuthMiddleware};
 
-// Re-export middleware types
+// Re-export additional middleware types
 pub use middleware::{
-    Middleware, MiddlewarePipeline, ErrorHandlingMiddleware,
     logging::LoggingMiddleware,
     enhanced_logging::{EnhancedLoggingMiddleware, LoggingConfig as MiddlewareLoggingConfig, RequestContext},
     timing::{TimingMiddleware, RequestStartTime, format_duration},

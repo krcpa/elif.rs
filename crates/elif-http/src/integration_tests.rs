@@ -164,7 +164,7 @@ mod tests {
         let validation_error = HttpError::ValidationError {
             message: "Invalid input".to_string(),
         };
-        assert_eq!(validation_error.status_code(), StatusCode::BAD_REQUEST);
+        assert_eq!(validation_error.status_code(), StatusCode::UNPROCESSABLE_ENTITY);
 
         let not_found_error = HttpError::NotFound {
             resource: "User".to_string(),

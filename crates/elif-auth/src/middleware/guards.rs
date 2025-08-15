@@ -2,9 +2,29 @@
 //! 
 //! Provides authentication middleware that can work with any auth provider
 
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use crate::{UserContext, AuthError, AuthResult};
+
+/// Resource-action pair for RBAC permissions
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceAction {
+    /// Resource identifier (e.g., "users", "articles")
+    pub resource: String,
+    
+    /// Action identifier (e.g., "create", "read", "update", "delete")
+    pub action: String,
+}
+
+impl ResourceAction {
+    /// Create a new resource-action pair
+    pub fn new(resource: impl Into<String>, action: impl Into<String>) -> Self {
+        Self {
+            resource: resource.into(),
+            action: action.into(),
+        }
+    }
+}
 
 /// Authentication guard configuration
 #[derive(Debug, Clone)]
@@ -26,6 +46,12 @@ pub struct AuthGuardConfig {
     
     /// Whether to require all permissions (true) or any permission (false)
     pub require_all_permissions: bool,
+    
+    /// Required resource-action permissions for RBAC
+    pub required_resource_actions: Vec<ResourceAction>,
+    
+    /// Authorization context for conditional permissions
+    pub auth_context: HashMap<String, serde_json::Value>,
 }
 
 impl Default for AuthGuardConfig {
@@ -40,6 +66,8 @@ impl Default for AuthGuardConfig {
             required_permissions: Vec::new(),
             require_all_roles: false,
             require_all_permissions: false,
+            required_resource_actions: Vec::new(),
+            auth_context: HashMap::new(),
         }
     }
 }
@@ -54,6 +82,36 @@ pub trait AuthGuard {
     
     /// Validate user context against guard requirements
     fn validate_user(&self, user: &UserContext) -> AuthResult<()>;
+    
+    /// Validate user context with RBAC resource-action permissions
+    fn validate_user_with_rbac(&self, user: &UserContext) -> AuthResult<()> {
+        // First run standard validation
+        self.validate_user(user)?;
+        
+        // Then validate resource-action permissions
+        if !self.config().required_resource_actions.is_empty() {
+            self.validate_resource_actions(user)?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Validate resource-action permissions
+    fn validate_resource_actions(&self, user: &UserContext) -> AuthResult<()> {
+        for resource_action in &self.config().required_resource_actions {
+            let permission_key = format!("{}.{}", resource_action.resource, resource_action.action);
+            
+            if !user.permissions.contains(&permission_key) {
+                return Err(AuthError::insufficient_permissions(&format!(
+                    "User lacks permission for {}.{}",
+                    resource_action.resource,
+                    resource_action.action
+                )));
+            }
+        }
+        
+        Ok(())
+    }
     
     /// Get guard configuration
     fn config(&self) -> &AuthGuardConfig;
@@ -137,6 +195,46 @@ impl RequireAuth {
     /// Require ALL specified permissions instead of ANY
     pub fn require_all_permissions(mut self) -> Self {
         self.config.require_all_permissions = true;
+        self
+    }
+    
+    /// Require specific resource-action permission
+    pub fn require_resource_action(mut self, resource: impl Into<String>, action: impl Into<String>) -> Self {
+        self.config.required_resource_actions.push(ResourceAction::new(resource, action));
+        self
+    }
+    
+    /// Require multiple resource-action permissions
+    pub fn require_resource_actions<I>(mut self, resource_actions: I) -> Self
+    where
+        I: IntoIterator<Item = (String, String)>,
+    {
+        for (resource, action) in resource_actions {
+            self.config.required_resource_actions.push(ResourceAction::new(resource, action));
+        }
+        self
+    }
+    
+    /// Add context for conditional permissions
+    pub fn with_context<K, V>(mut self, key: K, value: V) -> Self
+    where
+        K: Into<String>,
+        V: Into<serde_json::Value>,
+    {
+        self.config.auth_context.insert(key.into(), value.into());
+        self
+    }
+    
+    /// Add multiple context values
+    pub fn with_contexts<I, K, V>(mut self, contexts: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<serde_json::Value>,
+    {
+        for (key, value) in contexts {
+            self.config.auth_context.insert(key.into(), value.into());
+        }
         self
     }
 }
@@ -405,5 +503,83 @@ mod tests {
         assert!(guard.should_skip_path("/v1"));
         assert!(guard.should_skip_path("/v2"));
         assert!(!guard.should_skip_path("/protected"));
+    }
+
+    #[test]
+    fn test_resource_action_creation() {
+        let resource_action = ResourceAction::new("users", "create");
+        assert_eq!(resource_action.resource, "users");
+        assert_eq!(resource_action.action, "create");
+    }
+
+    #[test]
+    fn test_require_auth_rbac_resource_actions() {
+        let mut user = create_test_user();
+        user.permissions = vec![
+            "users.create".to_string(),
+            "articles.read".to_string(),
+            "articles.edit".to_string(),
+        ];
+        
+        // Should pass - user has users.create permission
+        let guard = RequireAuth::new()
+            .require_resource_action("users", "create");
+        assert!(guard.validate_user_with_rbac(&user).is_ok());
+        
+        // Should fail - user doesn't have users.delete permission
+        let guard = RequireAuth::new()
+            .require_resource_action("users", "delete");
+        assert!(guard.validate_user_with_rbac(&user).is_err());
+        
+        // Should pass - user has both required permissions
+        let guard = RequireAuth::new()
+            .require_resource_actions([
+                ("users".to_string(), "create".to_string()),
+                ("articles".to_string(), "read".to_string()),
+            ]);
+        assert!(guard.validate_user_with_rbac(&user).is_ok());
+        
+        // Should fail - user doesn't have users.delete permission
+        let guard = RequireAuth::new()
+            .require_resource_actions([
+                ("users".to_string(), "create".to_string()),
+                ("users".to_string(), "delete".to_string()),
+            ]);
+        assert!(guard.validate_user_with_rbac(&user).is_err());
+    }
+
+    #[test]
+    fn test_require_auth_with_context() {
+        let guard = RequireAuth::new()
+            .with_context("owner", "user123")
+            .with_contexts([
+                ("department".to_string(), serde_json::json!("engineering")),
+                ("role_level".to_string(), serde_json::json!(5)),
+            ]);
+        
+        assert_eq!(guard.config().auth_context.get("owner").unwrap(), "user123");
+        assert_eq!(guard.config().auth_context.get("department").unwrap(), "engineering");
+        assert_eq!(guard.config().auth_context.get("role_level").unwrap(), &serde_json::json!(5));
+    }
+
+    #[test]
+    fn test_validate_resource_actions() {
+        let mut user = create_test_user();
+        user.permissions = vec!["users.create".to_string(), "articles.read".to_string()];
+        
+        let guard = RequireAuth::new()
+            .require_resource_action("users", "create")
+            .require_resource_action("articles", "read");
+        
+        // Should pass validation
+        assert!(guard.validate_resource_actions(&user).is_ok());
+        
+        // Add a permission the user doesn't have
+        let guard = RequireAuth::new()
+            .require_resource_action("users", "create")
+            .require_resource_action("users", "delete");
+        
+        // Should fail validation
+        assert!(guard.validate_resource_actions(&user).is_err());
     }
 }

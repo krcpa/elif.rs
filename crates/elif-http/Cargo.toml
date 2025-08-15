@@ -42,6 +42,7 @@ log = "0.4"
 [features]
 default = []
 auth = ["elif-auth"]
+orm = []
 
 [dev-dependencies]
 tokio-test = "0.4"

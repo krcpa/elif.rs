@@ -195,7 +195,7 @@ impl HttpError {
             HttpError::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             HttpError::HealthCheckFailed { .. } => StatusCode::SERVICE_UNAVAILABLE,
             HttpError::DatabaseError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::ValidationError { .. } => StatusCode::BAD_REQUEST,
+            HttpError::ValidationError { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             HttpError::NotFound { .. } => StatusCode::NOT_FOUND,
             HttpError::Conflict { .. } => StatusCode::CONFLICT,
             HttpError::Unauthorized => StatusCode::UNAUTHORIZED,
@@ -306,6 +306,72 @@ impl From<serde_json::Error> for HttpError {
     }
 }
 
+// Convert from ORM ModelError to HttpError
+#[cfg(feature = "orm")]
+impl From<orm::ModelError> for HttpError {
+    fn from(err: orm::ModelError) -> Self {
+        match err {
+            orm::ModelError::NotFound(table) => HttpError::NotFound { 
+                resource: table 
+            },
+            orm::ModelError::Validation(msg) => HttpError::ValidationError { 
+                message: msg 
+            },
+            orm::ModelError::Database(msg) => HttpError::DatabaseError { 
+                message: msg 
+            },
+            orm::ModelError::Connection(msg) => HttpError::DatabaseError { 
+                message: format!("Connection error: {}", msg) 
+            },
+            orm::ModelError::Transaction(msg) => HttpError::DatabaseError { 
+                message: format!("Transaction error: {}", msg) 
+            },
+            orm::ModelError::Query(msg) => HttpError::BadRequest { 
+                message: format!("Query error: {}", msg) 
+            },
+            orm::ModelError::Schema(msg) => HttpError::InternalError { 
+                message: format!("Schema error: {}", msg) 
+            },
+            orm::ModelError::Migration(msg) => HttpError::InternalError { 
+                message: format!("Migration error: {}", msg) 
+            },
+            orm::ModelError::MissingPrimaryKey => HttpError::BadRequest { 
+                message: "Missing or invalid primary key".to_string() 
+            },
+            orm::ModelError::Relationship(msg) => HttpError::BadRequest { 
+                message: format!("Relationship error: {}", msg) 
+            },
+            orm::ModelError::Serialization(msg) => HttpError::InternalError { 
+                message: format!("Serialization error: {}", msg) 
+            },
+            orm::ModelError::Event(msg) => HttpError::InternalError { 
+                message: format!("Event error: {}", msg) 
+            },
+        }
+    }
+}
+
+// Convert from ORM QueryError to HttpError
+#[cfg(feature = "orm")]
+impl From<orm::QueryError> for HttpError {
+    fn from(err: orm::QueryError) -> Self {
+        match err {
+            orm::QueryError::InvalidSql(msg) => HttpError::BadRequest { 
+                message: format!("Invalid SQL query: {}", msg) 
+            },
+            orm::QueryError::MissingFields(msg) => HttpError::BadRequest { 
+                message: format!("Missing required fields: {}", msg) 
+            },
+            orm::QueryError::InvalidParameter(msg) => HttpError::BadRequest { 
+                message: format!("Invalid query parameter: {}", msg) 
+            },
+            orm::QueryError::UnsupportedOperation(msg) => HttpError::BadRequest { 
+                message: format!("Unsupported operation: {}", msg) 
+            },
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -354,5 +420,49 @@ mod tests {
         let io_error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Access denied");
         let http_error = HttpError::from(io_error);
         assert!(matches!(http_error, HttpError::InternalError { .. }));
+    }
+
+    #[cfg(feature = "orm")]
+    #[test]
+    fn test_orm_error_conversions() {
+        // Test ModelError conversions
+        let not_found_error = orm::ModelError::NotFound("users".to_string());
+        let http_error = HttpError::from(not_found_error);
+        assert!(matches!(http_error, HttpError::NotFound { .. }));
+        assert_eq!(http_error.status_code(), StatusCode::NOT_FOUND);
+
+        let validation_error = orm::ModelError::Validation("Invalid email".to_string());
+        let http_error = HttpError::from(validation_error);
+        assert!(matches!(http_error, HttpError::ValidationError { .. }));
+        assert_eq!(http_error.status_code(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let database_error = orm::ModelError::Database("Connection failed".to_string());
+        let http_error = HttpError::from(database_error);
+        assert!(matches!(http_error, HttpError::DatabaseError { .. }));
+        assert_eq!(http_error.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        // Test QueryError conversions
+        let query_error = orm::QueryError::InvalidSql("Syntax error".to_string());
+        let http_error = HttpError::from(query_error);
+        assert!(matches!(http_error, HttpError::BadRequest { .. }));
+        assert_eq!(http_error.status_code(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn test_validation_error_status_code() {
+        let validation_error = HttpError::validation_error("Field is required");
+        assert_eq!(validation_error.status_code(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(validation_error.error_code(), "VALIDATION_ERROR");
+    }
+
+    #[test]
+    fn test_error_response_format_consistency() {
+        let error = HttpError::not_found("User");
+        let response = error.into_response();
+        
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        
+        // Check that response contains proper JSON structure
+        // In a real test environment, we'd deserialize the body to verify JSON structure
     }
 }

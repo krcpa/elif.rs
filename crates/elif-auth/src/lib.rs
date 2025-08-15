@@ -9,6 +9,7 @@ pub mod traits;
 pub mod providers;
 pub mod middleware;
 pub mod utils;
+pub mod rbac;
 
 // Re-exports for convenient access
 pub use config::*;
@@ -16,6 +17,7 @@ pub use error::*;
 pub use traits::*;
 pub use providers::*;
 pub use utils::*;
+pub use rbac::*;
 
 /// Authentication result type alias
 pub type AuthResult<T> = Result<T, AuthError>;
