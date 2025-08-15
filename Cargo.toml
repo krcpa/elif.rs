@@ -8,6 +8,7 @@ members = [
     "crates/elif-http",
     "crates/elif-security",
     "crates/elif-validation",
+    "crates/elif-auth",
 ]
 resolver = "2"
 

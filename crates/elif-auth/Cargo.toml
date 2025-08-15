@@ -1,0 +1,52 @@
+[package]
+name = "elif-auth"
+version = "0.1.0"
+edition = "2021"
+description = "Authentication and authorization system for elif.rs framework"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/krcpa/elif.rs"
+
+[dependencies]
+# Framework dependencies
+elif-core = { path = "../core", version = "0.2.1" }
+elif-orm = { path = "../orm", version = "0.5.1" }
+
+# Database
+sqlx = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Cryptography and hashing
+argon2 = { version = "0.5", features = ["std"], optional = true }
+bcrypt = { version = "0.15", optional = true }
+rand = "0.8"
+
+# JWT support
+jsonwebtoken = { version = "9.2", optional = true }
+
+# Time handling
+chrono = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[features]
+default = ["argon2", "bcrypt", "jwt"]
+argon2 = ["dep:argon2"]
+bcrypt = ["dep:bcrypt"]
+jwt = ["dep:jsonwebtoken"]
+session = []
