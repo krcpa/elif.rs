@@ -2,19 +2,15 @@
 //! 
 //! HTTP server core for the elif.rs LLM-friendly web framework.
 //! 
-//! This crate provides the fundamental HTTP server functionality including:
-//! - Axum-based HTTP server with async support
+//! This crate provides a NestJS-like HTTP server experience with:
+//! - Clean, intuitive API that abstracts Axum complexity
 //! - Integration with the elif-core DI container
-//! - Configuration management
+//! - Built-in middleware pipeline
 //! - Graceful shutdown handling
 //! - Health check endpoints
+//! - Framework-native routing system
 
 pub mod server;
-// pub mod simple_server;
-pub mod minimal_server;
-pub mod server_with_middleware;
-pub mod stateful_server;
-pub mod simple_stateful_server;
 pub mod config;
 pub mod error;
 pub mod tests;
@@ -26,12 +22,8 @@ pub mod middleware;
 pub mod controller;
 pub mod database;
 
-pub use server::{HttpServer, HttpServerBuilder, ServerState};
-pub use stateful_server::{StatefulHttpServer, StatefulHttpServerBuilder, AppState};
-// pub use simple_server::SimpleHttpServer;
-pub use minimal_server::MinimalHttpServer;
-pub use server_with_middleware::MiddlewareHttpServer;
-pub use simple_stateful_server::SimpleStatefulHttpServer;
+// Main server API - NestJS-like experience
+pub use server::Server;
 pub use config::HttpConfig;
 pub use error::{HttpError, HttpResult};
 
