@@ -42,4 +42,3 @@ base64 = "0.22"
 
 [dev-dependencies]
 tokio-test = "0.4"
-axum-test = "15.0"

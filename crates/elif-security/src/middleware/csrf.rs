@@ -6,11 +6,11 @@
 use std::sync::Arc;
 use std::collections::HashMap;
 use axum::{
-    extract::{Request, State},
+    extract::Request,
     http::{HeaderMap, Method, StatusCode, header},
-    middleware::Next,
     response::{IntoResponse, Response},
 };
+use elif_http::middleware::{Middleware, BoxFuture};
 use sha2::{Sha256, Digest};
 use rand::{thread_rng, Rng};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -161,40 +161,53 @@ impl CsrfMiddleware {
     }
 }
 
-/// Axum middleware implementation
-pub async fn csrf_middleware(
-    State(middleware): State<CsrfMiddleware>,
-    request: Request,
-    next: Next,
-) -> Result<Response, SecurityError> {
-    let method = request.method();
-    let uri = request.uri();
-    let headers = request.headers();
-    
-    // Skip CSRF protection for safe methods (GET, HEAD, OPTIONS)
-    if matches!(method, &Method::GET | &Method::HEAD | &Method::OPTIONS) {
-        return Ok(next.run(request).await);
+/// Implementation of our Middleware trait for CSRF protection
+impl Middleware for CsrfMiddleware {
+    fn process_request<'a>(
+        &'a self, 
+        request: Request
+    ) -> BoxFuture<'a, Result<Request, Response>> {
+        Box::pin(async move {
+            let method = request.method();
+            let uri = request.uri();
+            let headers = request.headers();
+            
+            // Skip CSRF protection for safe methods (GET, HEAD, OPTIONS)
+            if matches!(method, &Method::GET | &Method::HEAD | &Method::OPTIONS) {
+                return Ok(request);
+            }
+            
+            // Skip exempt paths
+            if self.is_exempt_path(uri.path()) {
+                return Ok(request);
+            }
+            
+            // Extract and validate token
+            let user_agent = headers.get(header::USER_AGENT)
+                .and_then(|h| h.to_str().ok());
+                
+            if let Some(token) = self.extract_token(headers) {
+                if self.validate_token(&token, user_agent).await {
+                    // Consume token for single-use (optional - can be configured)
+                    // self.consume_token(&token).await;
+                    return Ok(request);
+                }
+            }
+            
+            // CSRF validation failed - return 403 Forbidden
+            let error_response = Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .header("Content-Type", "application/json")
+                .body(r#"{"error":{"code":"CSRF_VALIDATION_FAILED","message":"CSRF token validation failed"}}"#.into())
+                .unwrap();
+                
+            Err(error_response)
+        })
     }
     
-    // Skip exempt paths
-    if middleware.is_exempt_path(uri.path()) {
-        return Ok(next.run(request).await);
+    fn name(&self) -> &'static str {
+        "CSRF Protection"
     }
-    
-    // Extract and validate token
-    let user_agent = headers.get(header::USER_AGENT)
-        .and_then(|h| h.to_str().ok());
-        
-    if let Some(token) = middleware.extract_token(headers) {
-        if middleware.validate_token(&token, user_agent).await {
-            // Consume token for single-use (optional - can be configured)
-            // middleware.consume_token(&token).await;
-            return Ok(next.run(request).await);
-        }
-    }
-    
-    // CSRF validation failed
-    Err(SecurityError::CsrfValidationFailed)
 }
 
 impl IntoResponse for SecurityError {
@@ -273,18 +286,10 @@ impl Default for CsrfMiddlewareBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{
-        http::HeaderValue,
-        middleware::from_fn_with_state,
-        routing::{get, post},
-        Router,
-    };
-    use axum_test::TestServer;
+    use axum::http::{HeaderValue, Method};
+    use elif_http::middleware::MiddlewarePipeline;
     use std::collections::HashSet;
 
-    async fn test_handler() -> &'static str {
-        "OK"
-    }
 
     fn create_test_middleware() -> CsrfMiddleware {
         let mut exempt_paths = HashSet::new();
@@ -391,73 +396,86 @@ mod tests {
     #[tokio::test]
     async fn test_csrf_middleware_get_requests() {
         let middleware = create_test_middleware();
+        let pipeline = MiddlewarePipeline::new().add(middleware);
         
-        let app = Router::new()
-            .route("/test", get(test_handler))
-            .layer(from_fn_with_state(middleware, csrf_middleware));
-            
-        let server = TestServer::new(app).unwrap();
+        // Create GET request
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("/test")
+            .body(axum::body::Body::empty())
+            .unwrap();
         
         // GET requests should pass without CSRF token
-        let response = server.get("/test").await;
-        response.assert_status_ok();
-        response.assert_text("OK");
+        let result = pipeline.process_request(request).await;
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_csrf_middleware_post_without_token() {
         let middleware = create_test_middleware();
+        let pipeline = MiddlewarePipeline::new().add(middleware);
         
-        let app = Router::new()
-            .route("/test", post(test_handler))
-            .layer(from_fn_with_state(middleware, csrf_middleware));
-            
-        let server = TestServer::new(app).unwrap();
+        // Create POST request without CSRF token
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("/test")
+            .body(axum::body::Body::empty())
+            .unwrap();
         
         // POST without CSRF token should fail
-        let response = server.post("/test").await;
-        response.assert_status_forbidden();
+        let result = pipeline.process_request(request).await;
+        assert!(result.is_err());
+        
+        // Check that it returns 403 Forbidden
+        if let Err(response) = result {
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        }
     }
 
     #[tokio::test]
     async fn test_csrf_middleware_post_with_valid_token() {
         let middleware = create_test_middleware();
         let token = middleware.generate_token(Some("TestAgent")).await;
+        let pipeline = MiddlewarePipeline::new().add(middleware);
         
-        let app = Router::new()
-            .route("/test", post(test_handler))
-            .layer(from_fn_with_state(middleware, csrf_middleware));
-            
-        let server = TestServer::new(app).unwrap();
+        // Create POST request with valid CSRF token
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("/test")
+            .header("X-CSRF-Token", &token)
+            .header("User-Agent", "TestAgent")
+            .body(axum::body::Body::empty())
+            .unwrap();
         
         // POST with valid CSRF token should pass
-        let response = server
-            .post("/test")
-            .add_header("X-CSRF-Token", &token)
-            .add_header("User-Agent", "TestAgent")
-            .await;
-            
-        response.assert_status_ok();
-        response.assert_text("OK");
+        let result = pipeline.process_request(request).await;
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_csrf_middleware_exempt_paths() {
         let middleware = create_test_middleware();
+        let pipeline = MiddlewarePipeline::new().add(middleware);
         
-        let app = Router::new()
-            .route("/api/webhook", post(test_handler))
-            .route("/public/upload", post(test_handler))
-            .layer(from_fn_with_state(middleware, csrf_middleware));
-            
-        let server = TestServer::new(app).unwrap();
+        // Test exempt exact path
+        let request1 = Request::builder()
+            .method(Method::POST)
+            .uri("/api/webhook")
+            .body(axum::body::Body::empty())
+            .unwrap();
         
-        // Exempt paths should pass without CSRF token
-        let response1 = server.post("/api/webhook").await;
-        response1.assert_status_ok();
+        let result1 = pipeline.process_request(request1).await;
+        assert!(result1.is_ok());
         
-        let response2 = server.post("/public/upload").await;
-        response2.assert_status_ok();
+        // Test exempt glob path
+        let request2 = Request::builder()
+            .method(Method::POST)
+            .uri("/public/upload")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        
+        let result2 = pipeline.process_request(request2).await;
+        assert!(result2.is_ok());
     }
 
     #[tokio::test]
