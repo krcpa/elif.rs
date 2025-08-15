@@ -13,12 +13,24 @@
   - Module system with dependency resolution
   - Configuration management with environment variables
   - Application lifecycle with graceful shutdown
-- ✅ **Phase 2.1 ORM Foundation** - COMPLETED (36/36 tests passing)
+- ✅ **Phase 2: Web Foundation** - COMPLETED (112/112 tests passing)
+  - HTTP server and routing system with pure framework types
+  - Basic middleware pipeline architecture
+  - Request/response handling & JSON API abstractions  
+  - Controller system with database integration
+  - Production-ready web server foundation
+- ✅ **Phase 2.1 ORM Foundation** - COMPLETED (39/39 tests passing)
   - Model trait with CRUD operations, timestamps, soft deletes
   - Advanced Query builder with fluent API (940+ lines)
   - Subqueries, aggregations, cursor pagination, performance optimization
   - Comprehensive error system with proper error propagation
   - Primary key support (UUID, integer, composite)
+- ✅ **Phase 3: Security & Validation** - COMPLETED (151/151 tests passing)
+  - Security middleware (CORS, CSRF, rate limiting)
+  - Input validation and sanitization system
+  - Logging and request tracing middleware
+  - Security headers and protection
+  - Production-ready security infrastructure
 - ✅ **Release & Publication**: All crates published to crates.io
   - elif-core v0.1.0
   - elif-introspect v0.1.0
@@ -38,9 +50,19 @@
 - 17 manageable issues created (old big phases closed)
 
 **🎯 ŞU ANDAKİ GÖREV:**
-**Phase 3.13+: Security Middleware & Advanced Features (Issues #31-34, #56)**
-**Priority**: High - Security Infrastructure  
-**Status**: Ready to Start - After Phase 3.12 completion
+**Phase 4: Database Operations Foundation (Issues #60-65)**
+**Priority**: High - Core Database Infrastructure  
+**Status**: Ready to Start - Phase 3 Complete, Database Abstraction Needed
+
+**Current Phase 4 Tasks:**
+- **#60**: Phase 4.1: Database Service Integration (3 days)
+- **#61**: Phase 4.2: Basic Connection Pool Management (3 days)  
+- **#62**: Phase 4.3: Simple Transaction Support (4 days)
+- **#63**: Phase 4.4: Basic Migration System (4 days)
+- **#64**: Phase 4.5: Model-Database Integration (3 days)
+- **#65**: Phase 4.6: Basic CRUD Operations (2 days)
+
+**Goal**: Complete foundational database layer with DI integration, basic pooling, transactions, migrations, and working CRUD operations.
 
 ## Keşif (her oturumda ilk komutlar) - ZORUNLU
 - `gh issue list --repo krcpa/elif.rs --state open --limit 5` → açık task'ları kontrol et.
@@ -97,126 +119,28 @@
 - ✅ Application lifecycle and bootstrapping (graceful shutdown)
 **Sonuç**: 33/33 test geçiyor, production-ready temel
 
-### **Phase 2: Web Foundation** 🚧 (CURRENT - Issue #23-28)
-**Tasks Ready**: 6 manageable tasks (3-6 days each)
-- #23: HTTP Server Core Implementation (3-5 days) **← ŞU AN**
-- #24: HTTP Routing System (4-6 days)
-- #25: Request/Response Abstractions (3-4 days)  
-- #26: Basic Middleware Pipeline (3-4 days)
-- #27: Controller System & Database Integration (4-5 days)
-- #28: Error Handling & JSON API Response Format (2-3 days)
-**Hedef**: Working HTTP server with database integration
+### **Phase 2: Web Foundation** - HTTP server, routing, middleware
+### **Phase 3: Security & Validation** - CORS, CSRF, rate limiting, input validation
 
-### **Phase 3: Essential Middleware & Validation + Architectural Consistency** 📋 (CURRENT - Issue #29-56)
-**Tasks Ready**: 13 manageable tasks (2-6 days each)
-
-**🏗️ Architectural Consistency FIRST (Phase 3.7-3.12 - Pure Framework Approach):**
-- #50: Phase 3.7: Framework Core Architecture - Remove Axum Re-exports (2-3 days) **← CURRENT**
-- #51: Phase 3.8: Security Middleware Framework Integration (3-4 days)
-- #52: Phase 3.9: Server Architecture - Framework Middleware Integration (4-5 days)
-- #53: Phase 3.10: Examples and CLI Templates - Pure Framework Usage (3-4 days)
-- #54: Phase 3.11: Router API Consistency - Pure Framework Types (2-3 days)
-- #55: Phase 3.12: Test Infrastructure - Framework Abstractions Validation (2-3 days)
-
-**🔒 Security & Middleware AFTER Cleanup (Phase 3.13-3.17):**
-- ✅ #29: Phase 3.1: CORS Middleware Implementation (2-3 days) - COMPLETED 
-- ✅ #30: Phase 3.2: CSRF Protection Middleware (3-4 days) - COMPLETED
-- #31: Phase 3.13: Rate Limiting Middleware (Pure Framework) (4-5 days)
-- #32: Phase 3.14: Input Validation System (Pure Framework) (4-6 days)
-- #33: Phase 3.15: Request Sanitization & Security Headers (Pure Framework) (2-3 days)
-- #34: Phase 3.16: Enhanced Logging & Request Tracing (Pure Framework) (3-4 days)
-- #56: Phase 3.17: Security Middleware Integration Testing & Documentation (2-3 days)
-
-**Hedef**: Secure, validated web server + Architecturally consistent pure framework
-
-### **Phase 4-9: Database Operations, Auth, Advanced ORM, Developer Experience, Production, Advanced Features**
-**Status**: Big phase issues exist (#18-22) but **need task breakdown when reached**
+### **Phase 4: Database Operations** - Connection pooling, transactions, migrations
+### **Phase 5-9: Auth, Advanced ORM, Developer Experience, Production, Advanced Features**
+**Status**: Phase 4 ready with foundational database tasks (#60-65)
 **Rule**: Break down into 2-6 day tasks before starting implementation
 
-## Tipik Akış (Manageable Task - GÜNCEL ÖRNEK)
-1) **Task kontrol**: `gh issue view 23` → #23: Phase 2.1: HTTP Server Core Implementation
-2) **Task breakdown kontrolü**: 3-5 days, clear scope, ready to implement
-3) **Progress update**: `gh issue comment 23 --body "🚧 Starting HTTP Server Core Implementation..."`
-4) **Implementation**: 
-   - Create `crates/elif-http` crate structure
-   - Implement basic HTTP server using Tokio/Axum
-   - Add server configuration integration with existing config system
-   - Integrate server with DI container for service injection
-5) **Test yaz**: Unit testler ve entegrasyon testleri (health check endpoint test)
-6) **Doğrula**: `cargo test && cargo build`
-7) **Commit**: `git commit -m "feat: implement HTTP server core with DI integration (Issue #23)"`
-8) **Task completion**: `gh issue close 23 --comment "Completed: HTTP server core implemented"`
-9) **Sonraki task**: #24: HTTP Routing System → otomatik geç
+## Tipik Akış (Task Implementation)
+1) **Task kontrol**: `gh issue view X` 
+2) **Progress update**: `gh issue comment X --body "🚧 Starting..."`
+3) **Implementation + Test + Validate**: `cargo test && cargo build`
+4) **Commit**: `git commit -m "feat: description (Issue #X)"`
+5) **Complete**: `gh issue close X --comment "Completed: details"`
 
-## Task Management Systematic Approach - ZORUNLU
-**📍 Current: Issue #50 (Phase 3.7) - Framework Core Architecture - Remove Axum Re-exports**
+## Task Management - ZORUNLU
+**Current Status**: Use `gh issue list --repo krcpa/elif.rs --state open --limit 5` to check active tasks
+**Rule**: Every development work must be linked to a GitHub issue
 
-**✅ COMPLETED (Phase 1 + ORM Foundation):**
-- Phase 1: Architecture Foundation (33/33 tests passing)
-- Phase 2.1 ORM: Base Model trait, QueryBuilder, advanced features (36/36 tests)
-
-**✅ COMPLETED (Phases 3.7-3.9 & 3.18):**
-- ✅ Phase 3.7: Framework Core Architecture - Remove Axum Re-exports 
-- ✅ Phase 3.8: Security Middleware Framework Integration
-- ✅ Phase 3.9: Server Architecture - Framework Middleware Integration  
-- ✅ Phase 3.18: HTTP Server Architecture Cleanup - Pure Framework Implementation **← SON TAMAMLANAN**
-
-**📋 READY TO IMPLEMENT (Phase 3 remaining tasks):**
-
-**✅ COMPLETED (Phase 3 Architecture & Developer Experience):**
-- ✅ #53: Phase 3.10: Examples and CLI Templates - Pure Framework Usage 
-- ✅ #54: Phase 3.11: Router API Consistency - Pure Framework Types
-- ✅ #55: Phase 3.12: Test Infrastructure - Framework Abstractions Validation **← JUST COMPLETED**
-
-**🏗️ Developer Experience & Framework Consistency (Phase 3.13-3.17):**
-- #34: Phase 3.16: Enhanced Logging & Request Tracing (Pure Framework) (3-4 days) 
-- ✅ #56: Phase 3.17: Security Middleware Integration Testing & Documentation (2-3 days) **← JUST COMPLETED**
-  - ✅ Comprehensive integration tests for all security middleware interactions
-  - ✅ Attack simulation tests (CORS spoofing, CSRF bypass, rate limit evasion)
-  - ✅ Production-ready security documentation (SECURITY.md)
-  - ✅ Security best practices examples (basic & production configurations)  
-  - ✅ Documented security considerations and deployment guidelines
-
-**⚠️ Security & Middleware (DEFERRED - Architecture Must Come First):**
-- #31: Phase 3.13: Rate Limiting Middleware (Pure Framework) (4-5 days) 
-- #32: Phase 3.14: Input Validation System (Pure Framework) (4-6 days)
-- #33: Phase 3.15: Request Sanitization & Security Headers (Pure Framework) (2-3 days)
-- #34: Phase 3.16: Enhanced Logging & Request Tracing (Pure Framework) (3-4 days)
-- #56: Phase 3.17: Security Middleware Integration Testing & Documentation (2-3 days)
-
-**📋 NEED TASK BREAKDOWN (When Phase 2 complete):**
-- Big Phase issues #18-22 need to be broken down into 2-6 day tasks
-- Rule: Never start implementation without manageable task breakdown
-
-**Çalışma Kuralı**: Her task sonunda close + comment + sonraki task'e geç
-
-## Task Breakdown Guidelines - ZORUNLU
-**When to Break Down Big Issues:**
-- Any issue > 1 week (6+ days) must be broken down
-- Issues without clear daily milestones need breakdown
-- Big phase issues (#18-22) are placeholders - break down before implementation
-
-**How to Break Down:**
-1. Create 2-6 day sub-tasks with clear scope
-2. Each sub-task should have:
-   - Specific files to create/modify
-   - Clear success criteria
-   - Time estimate (2-6 days)
-   - Dependencies clearly listed
-3. Add sub-tasks to GitHub project board
-4. Close big phase issue when breakdown complete
-
-**Example Task Breakdown Pattern:**
-```
-Big Issue: "Phase 4: Database Operations" (too big)
-→ Break into:
-  - Task 4.1: Connection Pooling Implementation (3-4 days)
-  - Task 4.2: Transaction Management System (4-5 days)  
-  - Task 4.3: Advanced Query Features (4-6 days)
-  - Task 4.4: Migration System (3-4 days)
-```
-
-**Next Breakdown Needed:** Phase 4-9 issues (#18-22) when Phase 3 complete
+## Task Breakdown Guidelines
+- Issues > 6 days must be broken down into 2-6 day sub-tasks
+- Each sub-task needs: specific scope, success criteria, time estimate
 
 ## Kod Stili ve Hatalar
 - Rust idioms: async/await, Result<T, E>, ? operator
@@ -246,19 +170,9 @@ Big Issue: "Phase 4: Database Operations" (too big)
 - **Otomatik proje ekleme**: `phase-1`, `phase-2`, `phase-3`, `phase-4`, `phase-5`, `phase-6` etiketli issue/PR'lar otomatik olarak projeye eklenir
 - **Otomatik öncelik**: Phase 1-3 → High, Phase 4-5 → Medium, Phase 6 → Low
 
-### 🔄 GitHub Project Status Yönetimi (ZORUNLU)
-**Issue ile çalışmaya başlarken:**
-1. `gh project item-edit --project-id 1 --id PVTI_xxx --field-id Status --single-select-option-id "In Progress"`
-2. Issue bitince: `gh project item-edit --project-id 1 --id PVTI_xxx --field-id Status --single-select-option-id "Done"`
-
-**Pratik kullanım:**
-- Issue #2 in-progress yapmak için: `gh project item-edit --project-id 1 --id PVTI_lAHOCsaWs84BAaWnzgdnCRQ --field-id Status --single-select-option-id "In Progress"`
-- Diğer issue'lar Backlog'a taşımak gerekirse: `gh project item-edit --project-id 1 --id PVTI_xxx --field-id Status --single-select-option-id "Backlog"`
-
-**Status ID'leri:**
-- Backlog: `"Backlog"`
-- In Progress: `"In Progress"`  
-- Done: `"Done"`
+### GitHub Project Status
+- Start: `gh project item-edit --project-id 1 --id PVTI_xxx --field-id Status --single-select-option-id "In Progress"`
+- Complete: `gh project item-edit --project-id 1 --id PVTI_xxx --field-id Status --single-select-option-id "Done"`
 
 ## İnceleme/PR
 - PR açıklaması: kapsam, risk, test durumu, geri alma planı.
@@ -291,86 +205,21 @@ crates/
 4. **Code build**: `cargo build`
 5. **Geliştirme başla**: İlk açık issue ile başla
 
-## 🚀 Release Process (crates.io Yayınlama)
+## 🚀 Release Process
+**Publication Order**: `cargo publish -p elif-core && cargo publish -p elif-orm && cargo publish -p elifrs`  
+**Checklist**: Tests pass, version bumps, git commit, tag release  
+**CLI**: Package name `elifrs`, install with `cargo install elifrs`
 
-### Version Strategy
-- **Major phases**: Major version bump (0.1.x → 0.2.0 for Phase 2)
-- **Hot fixes**: Patch version bump (0.1.0 → 0.1.1)
-- **Breaking changes**: Major version bump (0.x.y → 1.0.0 for production)
-
-### Publication Order (ZORUNLU)
-```bash
-# 1. Core dependencies first
-cargo publish -p elif-core
-cargo publish -p elif-introspect  
-cargo publish -p elif-codegen
-
-# 2. Domain crates (depend on core)
-cargo publish -p elif-orm
-
-# 3. CLI last (depends on all)
-cargo publish -p elifrs
-```
-
-### Pre-Release Checklist
-- [ ] All tests passing: `cargo test --workspace`
-- [ ] No clippy warnings: `cargo clippy --workspace`
-- [ ] Version bumps in Cargo.toml files
-- [ ] Git commit with release message
-- [ ] LICENSE file exists (MIT)
-- [ ] README files updated with current features
-
-### Metadata Requirements (crates.io)
-Each Cargo.toml needs:
-```toml
-[package]
-description = "..."
-license = "MIT"
-authors = ["krcpa <krcpa@users.noreply.github.com>"]
-repository = "https://github.com/krcpa/elif.rs"
-homepage = "https://github.com/krcpa/elif.rs"
-documentation = "https://docs.rs/crate-name"
-keywords = ["web", "framework", "..."]
-categories = ["web-programming", "..."]
-```
-
-### CLI Naming Convention
-- **Package name**: `elifrs` (avoids shell conflicts)
-- **Binary name**: `elifrs` (NOT `elif` - shell reserved word)
-- **Installation**: `cargo install elifrs`
-- **Usage**: `elifrs new myapp`
-
-### Version Dependencies
-Path dependencies must specify versions for crates.io:
-```toml
-elif-core = { version = "0.1.0", path = "../core" }
-```
-
-### Post-Release Actions
-1. Test global installation: `cargo install elifrs --force`
-2. Update CLAUDE.md with new version status
-3. Git tag: `git tag v0.1.1 && git push origin v0.1.1`
-4. GitHub release (optional): `gh release create v0.1.1`
-
-## Session Continuity (Yeni Oturum)
-**Yeni oturumda "continue" dediğinde yapılacaklar:**
-1. `cat CLAUDE.md` → proje durumunu anla
-2. `git log --oneline -3` → son commit'leri kontrol et
-3. `cargo build && cargo test` → mevcut durumu doğrula
-4. `gh issue list --repo krcpa/elif.rs --state open --limit 5` → açık işleri gör
-5. Phase durumuna göre next action: 
-   - Phase 1 complete → Phase 2 başlat
-   - Release tamamlandı → sonraki feature development
-   - Issue açık → devam et
-
-## Hızlı referans
-- `/help`, `/permissions`, `/agents`, `/mcp`.
-- Headless mod (CI): `claude -p "…talimat…" --output-format stream-json --max-turns 3`.
+## Session Continuity
+**New session "continue" checklist:**
+1. `cat CLAUDE.md` → understand project status
+2. `gh issue list --repo krcpa/elif.rs --state open --limit 5` → check open tasks  
+3. `cargo build && cargo test` → validate current state
 
 ---
 
-**Son güncelleme**: 2025-08-14  
-**Mevcut durum**: Phase 1 ✅ COMPLETE, Released to crates.io  
-**Şu anki görev**: Phase 2 Database Layer başlangıçı  
+**Son güncelleme**: 2025-08-15  
+**Mevcut durum**: Phase 1-3 ✅ COMPLETE (353 tests passing)  
+**Şu anki görev**: Phase 4 Database Operations Foundation (Issues #60-65)  
 **Global CLI**: `cargo install elifrs` → `elifrs` komutu  
 **Hedef**: Production-ready LLM-friendly Rust web framework
