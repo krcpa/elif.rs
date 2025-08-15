@@ -30,6 +30,9 @@ mod security_tests_minimal;
 #[cfg(test)]
 mod security_tests_comprehensive;
 
+#[cfg(test)]
+mod security_injection_tests;
+
 // Re-export core traits and types
 pub use model::*;
 pub use query::*;

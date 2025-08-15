@@ -197,11 +197,16 @@ impl<M> QueryBuilderWithEagerLoading<M> {
                 continue;
             }
 
-            // Build the count query based on relationship type
-            let count_query = self.build_count_query(relation, &model_ids)?;
+            // Build the secure count query with parameters
+            let (count_query, params) = self.build_secure_count_query(relation, &model_ids)?;
             
-            // Execute the count query
-            let rows = sqlx::query(&count_query).fetch_all(pool).await
+            // Execute the parameterized count query
+            let mut query = sqlx::query(&count_query);
+            for param in params {
+                query = query.bind(param);
+            }
+            
+            let rows = query.fetch_all(pool).await
                 .map_err(|e| crate::error::ModelError::Database(e.to_string()))?;
 
             // Map counts back to models
@@ -220,28 +225,55 @@ impl<M> QueryBuilderWithEagerLoading<M> {
         Ok(())
     }
 
-    /// Build a count query for a relationship
-    fn build_count_query(&self, relation: &str, parent_ids: &[String]) -> ModelResult<String> {
-        let parent_ids_str = parent_ids
-            .iter()
-            .map(|id| format!("'{}'", id))
-            .collect::<Vec<_>>()
-            .join(",");
+    /// Build a secure count query for a relationship using parameterized queries
+    fn build_secure_count_query(&self, relation: &str, parent_ids: &[String]) -> ModelResult<(String, Vec<String>)> {
+        use crate::security::{escape_identifier, validate_identifier};
+        
+        // Validate the relationship name to prevent injection through table names
+        validate_identifier(relation).map_err(|_| 
+            crate::error::ModelError::Validation(
+                format!("Invalid relationship name: {}", relation)
+            )
+        )?;
 
-        // Basic relationship-to-table mapping
+        // Basic relationship-to-table mapping with validation
         let (table_name, foreign_key) = match relation {
             "posts" => ("posts", "user_id"),
-            "comments" => ("comments", "post_id"),
+            "comments" => ("comments", "post_id"), 
             "profile" => ("profiles", "user_id"),
-            _ => (relation, "parent_id"), // fallback
+            _ => {
+                // For custom relations, use the relation name as table name
+                // but validate it first
+                validate_identifier(relation).map_err(|_|
+                    crate::error::ModelError::Validation(
+                        format!("Invalid table name derived from relation: {}", relation)
+                    )
+                )?;
+                (relation, "parent_id")
+            }
         };
+
+        // Validate table and column names
+        validate_identifier(table_name)?;
+        validate_identifier(foreign_key)?;
+
+        // Build parameterized query with proper escaping
+        let escaped_table = escape_identifier(table_name);
+        let escaped_foreign_key = escape_identifier(foreign_key);
+        
+        // Create parameter placeholders ($1, $2, $3, etc.)
+        let placeholders: Vec<String> = (1..=parent_ids.len())
+            .map(|i| format!("${}", i))
+            .collect();
+        let placeholders_str = placeholders.join(", ");
 
         let query = format!(
             "SELECT {} as parent_id, COUNT(*) as count FROM {} WHERE {} IN ({}) GROUP BY {}",
-            foreign_key, table_name, foreign_key, parent_ids_str, foreign_key
+            escaped_foreign_key, escaped_table, escaped_foreign_key, placeholders_str, escaped_foreign_key
         );
 
-        Ok(query)
+        // Return both query and parameters
+        Ok((query, parent_ids.to_vec()))
     }
 
     /// Attach loaded relationships to models
