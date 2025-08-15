@@ -9,11 +9,11 @@
 //! - Graceful shutdown handling
 //! - Health check endpoints
 
-// pub mod server;
+pub mod server;
 // pub mod simple_server;
 pub mod minimal_server;
 pub mod server_with_middleware;
-// pub mod stateful_server;
+pub mod stateful_server;
 pub mod simple_stateful_server;
 pub mod config;
 pub mod error;
@@ -26,11 +26,11 @@ pub mod middleware;
 pub mod controller;
 pub mod database;
 
-// pub use server::{HttpServer, HttpServerBuilder};
+pub use server::{HttpServer, HttpServerBuilder, ServerState};
+pub use stateful_server::{StatefulHttpServer, StatefulHttpServerBuilder, AppState};
 // pub use simple_server::SimpleHttpServer;
 pub use minimal_server::MinimalHttpServer;
 pub use server_with_middleware::MiddlewareHttpServer;
-// pub use stateful_server::{StatefulHttpServer, StatefulHttpServerBuilder, AppState};
 pub use simple_stateful_server::SimpleStatefulHttpServer;
 pub use config::HttpConfig;
 pub use error::{HttpError, HttpResult};
@@ -53,6 +53,9 @@ pub use middleware::{
     Middleware, MiddlewarePipeline, ErrorHandlingMiddleware,
     logging::LoggingMiddleware,
     timing::{TimingMiddleware, RequestStartTime, format_duration},
+    tracing::{TracingMiddleware, TracingConfig, RequestMetadata},
+    timeout::{TimeoutMiddleware, TimeoutConfig, TimeoutInfo, apply_timeout},
+    body_limit::{BodyLimitMiddleware, BodyLimitConfig, BodyLimitInfo, limit_body_size, limits},
 };
 
 // Re-export controller types

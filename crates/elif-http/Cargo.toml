@@ -42,3 +42,4 @@ sqlx = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
+tracing-test = "0.2"

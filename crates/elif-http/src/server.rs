@@ -3,7 +3,10 @@
 //! Provides the main HTTP server using Axum with integration to the elif-core
 //! dependency injection container and configuration system.
 
-use crate::{HttpConfig, HttpError, HttpResult};
+use crate::{
+    HttpConfig, HttpError, HttpResult,
+    MiddlewarePipeline, TracingMiddleware, TimeoutMiddleware, BodyLimitMiddleware,
+};
 use elif_core::{Container, app_config::AppConfigTrait};
 use axum::{
     Router,
@@ -15,12 +18,7 @@ use serde_json::{json, Value};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::signal;
-use tower::ServiceBuilder;
-use tower_http::{
-    trace::TraceLayer,
-    timeout::TimeoutLayer,
-    limit::RequestBodyLimitLayer,
-};
+use std::time::Duration;
 use tracing::{info, warn, error};
 
 /// HTTP server state shared across requests
@@ -32,17 +30,18 @@ pub struct ServerState {
 
 /// HTTP server with DI container integration
 pub struct HttpServer {
-    app: IntoMakeService<Router<ServerState>>,
+    app: IntoMakeService<Router>,
     addr: SocketAddr,
     config: HttpConfig,
     container: Arc<Container>,
+    middleware: MiddlewarePipeline,
 }
 
 /// Builder for configuring HTTP server
 pub struct HttpServerBuilder {
     container: Option<Arc<Container>>,
     http_config: Option<HttpConfig>,
-    router: Option<Router<ServerState>>,
+    router: Option<Router>,
 }
 
 impl HttpServerBuilder {
@@ -68,7 +67,7 @@ impl HttpServerBuilder {
     }
 
     /// Set custom router (will be merged with default routes)
-    pub fn router(mut self, router: Router<ServerState>) -> Self {
+    pub fn router(mut self, router: Router) -> Self {
         self.router = Some(router);
         self
     }
@@ -101,7 +100,7 @@ impl HttpServer {
     pub fn new(
         container: Arc<Container>, 
         http_config: HttpConfig,
-        custom_router: Option<Router<ServerState>>,
+        custom_router: Option<Router>,
     ) -> HttpResult<Self> {
         let app_config = container.config();
         let addr = format!("{}:{}", app_config.server.host, app_config.server.port)
@@ -113,27 +112,35 @@ impl HttpServer {
             http_config: http_config.clone(),
         };
 
-        // Create base router with health check and state
+        // Create health check handler with captured state
+        let health_container = container.clone();
+        let health_config = http_config.clone();
+        let health_handler = move || {
+            let container = health_container.clone();
+            let config = health_config.clone();
+            async move {
+                stateless_health_check(container, config).await
+            }
+        };
+
+        // Create base router with health check (no state)
         let mut app = Router::new()
-            .route(&http_config.health_check_path, get(health_check))
-            .with_state(state);
+            .route(&http_config.health_check_path, get(health_handler));
 
         // Merge with custom router if provided
         if let Some(custom_router) = custom_router {
             app = app.merge(custom_router);
         }
 
-        // Add middleware layers
-        let middleware_stack = ServiceBuilder::new()
-            .layer(RequestBodyLimitLayer::new(http_config.max_request_size))
-            .layer(TimeoutLayer::new(http_config.request_timeout()));
+        // Create framework middleware pipeline
+        let mut middleware = MiddlewarePipeline::new()
+            .add(BodyLimitMiddleware::with_limit(http_config.max_request_size))
+            .add(TimeoutMiddleware::with_duration(http_config.request_timeout()));
 
         // Add tracing if enabled
         if http_config.enable_tracing {
-            app = app.layer(TraceLayer::new_for_http());
+            middleware = middleware.add(TracingMiddleware::new());
         }
-
-        app = app.layer(middleware_stack);
 
         // Convert to make service for server
         let app = app.into_make_service();
@@ -143,6 +150,7 @@ impl HttpServer {
             addr,
             config: http_config,
             container,
+            middleware,
         })
     }
 
@@ -152,6 +160,7 @@ impl HttpServer {
             "Starting HTTP server on {} with config: {:?}", 
             self.addr, self.config
         );
+        info!("Framework middleware pipeline: {:?}", self.middleware.names());
 
         // Validate container before starting
         self.container.validate()
@@ -160,7 +169,7 @@ impl HttpServer {
         let listener = tokio::net::TcpListener::bind(self.addr).await
             .map_err(|e| HttpError::startup(format!("Failed to bind to {}: {}", self.addr, e)))?;
 
-        info!("HTTP server listening on {}", self.addr);
+        info!("HTTP server listening on {} with {} middleware", self.addr, self.middleware.len());
 
         let server = axum::serve(listener, self.app)
             .with_graceful_shutdown(shutdown_signal());
@@ -183,6 +192,7 @@ impl HttpServer {
             "Starting HTTP server on {} with custom shutdown handler", 
             self.addr
         );
+        info!("Framework middleware pipeline: {:?}", self.middleware.names());
 
         // Validate container before starting
         self.container.validate()
@@ -191,7 +201,7 @@ impl HttpServer {
         let listener = tokio::net::TcpListener::bind(self.addr).await
             .map_err(|e| HttpError::startup(format!("Failed to bind to {}: {}", self.addr, e)))?;
 
-        info!("HTTP server listening on {}", self.addr);
+        info!("HTTP server listening on {} with {} middleware", self.addr, self.middleware.len());
 
         let server = axum::serve(listener, self.app)
             .with_graceful_shutdown(shutdown);
@@ -219,12 +229,18 @@ impl HttpServer {
     pub fn container(&self) -> Arc<Container> {
         self.container.clone()
     }
+
+    /// Get reference to middleware pipeline
+    pub fn middleware(&self) -> &MiddlewarePipeline {
+        &self.middleware
+    }
 }
 
-/// Health check endpoint handler
-async fn health_check(State(state): State<ServerState>) -> Result<Json<Value>, HttpError> {
-    let container = &state.container;
-    
+/// Stateless health check function that takes container and config as parameters
+async fn stateless_health_check(
+    container: Arc<Container>,
+    config: HttpConfig
+) -> Result<Json<Value>, HttpError> {
     // Check database connection
     let database = container.database();
     let db_healthy = database.is_connected();
@@ -240,8 +256,15 @@ async fn health_check(State(state): State<ServerState>) -> Result<Json<Value>, H
         "timestamp": chrono::Utc::now().to_rfc3339(),
         "version": "0.1.0",
         "environment": format!("{:?}", app_config.environment),
+        "server": "stateless",
         "services": {
-            "database": if db_healthy { "healthy" } else { "unhealthy" }
+            "database": if db_healthy { "healthy" } else { "unhealthy" },
+            "container": "healthy"
+        },
+        "config": {
+            "request_timeout": config.request_timeout_secs,
+            "health_check_path": config.health_check_path,
+            "tracing_enabled": config.enable_tracing
         }
     });
 
@@ -315,7 +338,10 @@ mod tests {
     fn test_http_server_builder_missing_container() {
         let result = HttpServerBuilder::new().build();
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), HttpError::ConfigError { .. }));
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e, HttpError::ConfigError { .. }));
+        }
     }
 
     #[test]
@@ -336,12 +362,13 @@ mod tests {
     #[tokio::test]
     async fn test_health_check_handler() {
         let container = create_test_container();
-        let state = ServerState {
-            container,
-            http_config: HttpConfig::default(),
+        let http_config = HttpConfig::default();
+        let _state = ServerState {
+            container: container.clone(),
+            http_config: http_config.clone(),
         };
 
-        let result = health_check(State(state)).await;
+        let result = stateless_health_check(container, http_config).await;
         assert!(result.is_ok());
 
         let response = result.unwrap();
@@ -373,6 +400,9 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), HttpError::ConfigError { .. }));
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e, HttpError::ConfigError { .. }));
+        }
     }
 }

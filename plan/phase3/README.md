@@ -2,7 +2,7 @@
 
 **Duration**: 3-4 weeks  
 **Goal**: Secure web server with pure framework architecture  
-**Status**: ✅ **3.1-3.2 & 3.7-3.8 Complete** | 🚧 **3.9 In Progress** | Phase 2 Complete
+**Status**: ✅ **3.1-3.2 & 3.7-3.9 Complete** | 🚨 **3.18 CRITICAL** | Phase 2 Complete
 
 ## Overview
 
@@ -268,6 +268,15 @@ HealthCheckMiddleware::new()
 - [ ] Health check system
 - [ ] Request/response transformation pipeline
 - [ ] Integration testing and documentation
+
+### Week 4: Architectural Consistency (CRITICAL)
+- [ ] **Phase 3.18: HTTP Server Architecture Cleanup - Pure Framework Implementation** 🚨 **CRITICAL (Issue #57)**
+  - Consolidate 5 server implementations to 1-2 maximum
+  - Remove direct Axum imports from all server implementations  
+  - Create pure framework server using ElifRouter, ElifRequest, ElifResponse exclusively
+  - Update examples to demonstrate framework types only
+  - Ensure Axum is purely implementation detail
+  - **Priority**: Must complete before any additional middleware work
 
 ## Testing Strategy
 

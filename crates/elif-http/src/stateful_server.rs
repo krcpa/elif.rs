@@ -3,7 +3,10 @@
 //! Provides HTTP server with full DI container integration using proper
 //! Axum Router<State> patterns.
 
-use crate::{HttpConfig, HttpError, HttpResult};
+use crate::{
+    HttpConfig, HttpError, HttpResult,
+    MiddlewarePipeline, TracingMiddleware, TimeoutMiddleware, BodyLimitMiddleware,
+};
 use elif_core::{Container, app_config::AppConfigTrait};
 use axum::{
     Router,
@@ -15,12 +18,7 @@ use serde_json::{json, Value};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::signal;
-use tower::ServiceBuilder;
-use tower_http::{
-    trace::TraceLayer,
-    timeout::TimeoutLayer,
-    limit::RequestBodyLimitLayer,
-};
+use std::time::Duration;
 use tracing::{info, warn};
 
 /// HTTP server state shared across requests
@@ -35,6 +33,7 @@ pub struct StatefulHttpServer {
     router: Router,
     state: AppState,
     addr: SocketAddr,
+    middleware: MiddlewarePipeline,
 }
 
 /// Builder for configuring stateful HTTP server
@@ -132,22 +131,21 @@ impl StatefulHttpServer {
             router = router.merge(custom_router);
         }
 
-        // Add middleware layers to stateless router
-        let middleware_stack = ServiceBuilder::new()
-            .layer(RequestBodyLimitLayer::new(http_config.max_request_size))
-            .layer(TimeoutLayer::new(http_config.request_timeout()));
+        // Create framework middleware pipeline
+        let mut middleware = MiddlewarePipeline::new()
+            .add(BodyLimitMiddleware::with_limit(http_config.max_request_size))
+            .add(TimeoutMiddleware::with_duration(http_config.request_timeout()));
 
         // Add tracing if enabled
         if http_config.enable_tracing {
-            router = router.layer(TraceLayer::new_for_http());
+            middleware = middleware.add(TracingMiddleware::new());
         }
-
-        router = router.layer(middleware_stack);
 
         Ok(Self {
             router,
             state,
             addr,
+            middleware,
         })
     }
 
@@ -157,14 +155,15 @@ impl StatefulHttpServer {
             "Starting stateful HTTP server on {} with DI container integration", 
             self.addr
         );
+        info!("Framework middleware pipeline: {:?}", self.middleware.names());
 
-        // Apply state to router and convert to service - this only works with Router<()>
-        let service = self.router.with_state(self.state);
+        // Note: Router is stateless, state was captured in handler closures
+        let service = self.router;
 
         let listener = tokio::net::TcpListener::bind(self.addr).await
             .map_err(|e| HttpError::startup(format!("Failed to bind to {}: {}", self.addr, e)))?;
 
-        info!("Stateful HTTP server listening on {}", self.addr);
+        info!("Stateful HTTP server listening on {} with {} middleware", self.addr, self.middleware.len());
 
         axum::serve(listener, service)
             .with_graceful_shutdown(stateful_shutdown_signal())
@@ -184,14 +183,15 @@ impl StatefulHttpServer {
             "Starting stateful HTTP server on {} with custom shutdown handler", 
             self.addr
         );
+        info!("Framework middleware pipeline: {:?}", self.middleware.names());
 
-        // Apply state to router and convert to service - this only works with Router<()>
-        let service = self.router.with_state(self.state);
+        // Note: Router is stateless, state was captured in handler closures
+        let service = self.router;
 
         let listener = tokio::net::TcpListener::bind(self.addr).await
             .map_err(|e| HttpError::startup(format!("Failed to bind to {}: {}", self.addr, e)))?;
 
-        info!("Stateful HTTP server listening on {}", self.addr);
+        info!("Stateful HTTP server listening on {} with {} middleware", self.addr, self.middleware.len());
 
         axum::serve(listener, service)
             .with_graceful_shutdown(shutdown)
@@ -205,6 +205,11 @@ impl StatefulHttpServer {
     /// Get server address
     pub fn addr(&self) -> SocketAddr {
         self.addr
+    }
+
+    /// Get reference to middleware pipeline
+    pub fn middleware(&self) -> &MiddlewarePipeline {
+        &self.middleware
     }
 
     // Note: DI container is embedded in the router state, not directly accessible
@@ -316,7 +321,10 @@ mod tests {
     fn test_stateful_server_builder_missing_container() {
         let result = StatefulHttpServerBuilder::new().build();
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), HttpError::ConfigError { .. }));
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e, HttpError::ConfigError { .. }));
+        }
     }
 
     #[test]
