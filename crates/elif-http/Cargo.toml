@@ -14,6 +14,7 @@ categories = ["web-programming", "network-programming"]
 [dependencies]
 # Framework dependencies
 elif-core = { version = "0.2.0", path = "../core" }
+elif-auth = { version = "0.1.0", path = "../elif-auth", optional = true }
 
 # HTTP server
 axum = { workspace = true }
@@ -37,6 +38,10 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 log = "0.4"
 
+
+[features]
+default = []
+auth = ["elif-auth"]
 
 [dev-dependencies]
 tokio-test = "0.4"

@@ -69,8 +69,12 @@
 
 **✅ COMPLETED TASKS:**
 - ✅ **Phase 5.2: JWT Token Management System** (Issue #68) - Complete JWT provider with token generation, validation, middleware, and 36 passing tests
+- ✅ **Phase 5.3: Session-Based Authentication Provider** (Issue #69) - Complete session management with storage backends, middleware, and CSRF integration
 
-**Next Steps**: Continue with Phase 5.3 Session-Based Authentication Provider (Issue #69)
+**📦 PUBLISHED CRATES:**
+- ✅ **elif-auth v0.1.0** - Authentication system with JWT, sessions, password hashing, and middleware (51 passing tests)
+
+**Next Steps**: Continue with Phase 5.4 User Authentication Middleware (Issue #70)
 
 ## Keşif (her oturumda ilk komutlar) - ZORUNLU
 - `gh issue list --repo krcpa/elif.rs --state open --limit 5` → açık task'ları kontrol et.

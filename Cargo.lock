@@ -589,9 +589,7 @@ dependencies = [
  "bcrypt",
  "chrono",
  "elif-core",
- "elif-http",
  "elif-orm",
- "elif-security",
  "jsonwebtoken",
  "rand 0.8.5",
  "serde",
@@ -641,6 +639,7 @@ version = "0.5.0"
 dependencies = [
  "axum",
  "chrono",
+ "elif-auth",
  "elif-core",
  "hyper",
  "log",

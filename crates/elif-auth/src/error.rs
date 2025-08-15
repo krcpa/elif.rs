@@ -154,6 +154,16 @@ impl AuthError {
     pub fn configuration_error(message: impl Into<String>) -> Self {
         Self::config_error(message)
     }
+    
+    /// Create an insufficient permissions error (alias for access_denied)
+    pub fn insufficient_permissions(message: impl Into<String>) -> Self {
+        Self::access_denied(message)
+    }
+    
+    /// Create an unauthorized error (alias for InvalidCredentials with message)
+    pub fn unauthorized(message: impl Into<String>) -> Self {
+        Self::Generic { message: format!("Unauthorized: {}", message.into()) }
+    }
 }
 
 // Conversion from common error types

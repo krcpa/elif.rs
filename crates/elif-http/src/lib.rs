@@ -24,6 +24,9 @@ pub mod controller;
 pub mod handler;
 pub mod logging;
 
+#[cfg(feature = "auth")]
+pub mod auth;
+
 // Main server API - NestJS-like experience
 pub use server::Server;
 pub use config::HttpConfig;
@@ -41,6 +44,10 @@ pub use routing::{
 pub use request::{ElifRequest, RequestExtractor, ElifQuery, ElifPath, ElifState};
 pub use response::{ElifResponse, ResponseBody, IntoElifResponse, ElifStatusCode, ElifHeaderMap};
 pub use json::{ElifJson, JsonError, JsonResponse, ValidationErrors, ApiResponse};
+
+// Re-export authentication types (if auth feature is enabled)
+#[cfg(feature = "auth")]
+pub use auth::{RequestAuthExt, AuthMiddleware};
 
 // Re-export middleware types
 pub use middleware::{
