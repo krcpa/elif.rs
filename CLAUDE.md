@@ -5,7 +5,7 @@
 - Önce **okuma/plan**: Değişiklik yapmadan önce proje haritasını ve sözleşmeleri anla (aşağıdaki "Keşif" adımları).
 - Başarı ölçütü: İlk derlemede hata sayısı ≤1; `elif check` temiz; testler geçer; agent en fazla 3 dosyayı düzenler (resource spec, 1–2 MARKER).
 
-## Proje Durumu (GÜNCEL - 2025-08-14)
+## Proje Durumu (GÜNCEL - 2025-08-15)
 **✅ TAMAMLANAN BILEŞENLER:**
 - ✅ **Phase 1: Architecture Foundation** - COMPLETED (33/33 tests passing)
   - Dependency injection container with service-builder
@@ -32,11 +32,11 @@
   - Security headers and protection
   - Production-ready security infrastructure
 - ✅ **Release & Publication**: All crates published to crates.io
-  - elif-core v0.1.0
-  - elif-introspect v0.1.0
-  - elif-codegen v0.1.0
-  - elif-orm v0.1.0 → v0.2.0 (Phase 2.1 ORM complete)
-  - elifrs v0.1.1 (CLI - global installation available)
+  - elif-core v0.2.1 (adds Database error variant)
+  - elif-introspect v0.2.0
+  - elif-codegen v0.3.0
+  - elif-orm v0.5.1 (with updated elif-core dependency)
+  - elifrs v0.5.2 (CLI - global installation available with migration system)
 - ✅ **Plan Restructured**: Iterative development approach implemented
   - 9-phase structure for working framework at each phase
   - Middleware before authentication (as requested)
@@ -49,21 +49,22 @@
 - Repository: https://github.com/krcpa/elif.rs
 - 17 manageable issues created (old big phases closed)
 
+- ✅ **Phase 4: Database Operations Foundation** - COMPLETED (Issues #60-66) 
+  - Database service integration with dependency injection
+  - Connection pooling and transaction support
+  - Migration system with CLI commands
+  - Model-database integration with CRUD operations
+  - Database architecture refactor (moved to elif-orm)
+
 **🎯 ŞU ANDAKİ GÖREV:**
-**Phase 4: Database Operations Foundation (Issues #60-66)**
-**Priority**: High - Core Database Infrastructure  
-**Status**: In Progress - Phase 4.1-4.2 Complete, Architecture Refactor Next
+**Phase 4.6: Basic CRUD Operations (Issue #65)**
+**Priority**: High - Complete Phase 4 Database Foundation  
+**Status**: Ready to Start - All previous Phase 4 tasks completed
 
-**Current Phase 4 Tasks:**
-- **#60**: ✅ Phase 4.1: Database Service Integration (COMPLETED)
-- **#61**: ✅ Phase 4.2: Basic Connection Pool Management (COMPLETED)
-- **#66**: 🔄 Phase 4.7: Database Architecture Refactor (ACTIVE - Move DB from elif-http to elif-orm)
-- **#62**: Phase 4.3: Simple Transaction Support (4 days)
-- **#63**: Phase 4.4: Basic Migration System (4 days)
-- **#64**: Phase 4.5: Model-Database Integration (3 days)
-- **#65**: Phase 4.6: Basic CRUD Operations (2 days)
+**Current Task Details:**
+- **#65**: Phase 4.6: Basic CRUD Operations - Complete end-to-end CRUD with Controller integration, error handling, and JSON responses. Test with simple User model. Duration: 2 days.
 
-**Goal**: Complete foundational database layer with proper architecture, DI integration, connection pooling, transactions, migrations, and working CRUD operations.
+**Goal**: Complete the final piece of Phase 4 with working CRUD operations that integrate controllers, database models, and JSON responses.
 
 ## Keşif (her oturumda ilk komutlar) - ZORUNLU
 - `gh issue list --repo krcpa/elif.rs --state open --limit 5` → açık task'ları kontrol et.
