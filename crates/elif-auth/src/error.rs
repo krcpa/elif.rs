@@ -164,6 +164,16 @@ impl AuthError {
     pub fn unauthorized(message: impl Into<String>) -> Self {
         Self::Generic { message: format!("Unauthorized: {}", message.into()) }
     }
+
+    /// Create an invalid credentials error with message
+    pub fn invalid_credentials(message: impl Into<String>) -> Self {
+        Self::Generic { message: format!("Invalid credentials: {}", message.into()) }
+    }
+
+    /// Create a not found error
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Self::Generic { message: format!("Not found: {}", message.into()) }
+    }
 }
 
 // Conversion from common error types
