@@ -12,8 +12,10 @@ pub mod upsert;
 pub mod sql_generation;
 pub mod execution;
 pub mod performance;
+pub mod with;
 
 // Re-export main types and builder
 pub use types::*;
 pub use builder::QueryBuilder;
 pub use upsert::UpsertBuilder;
+pub use with::{QueryBuilderWithMethods, QueryBuilderWithEagerLoading};

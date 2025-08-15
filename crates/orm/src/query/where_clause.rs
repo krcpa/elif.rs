@@ -197,4 +197,27 @@ impl<M> QueryBuilder<M> {
         });
         self
     }
+
+    /// Add WHERE condition with custom operator
+    pub fn where_condition<T: Into<Value>>(mut self, column: &str, operator: &str, value: T) -> Self {
+        let op = match operator {
+            "=" | "==" => QueryOperator::Equal,
+            "!=" | "<>" => QueryOperator::NotEqual,
+            ">" => QueryOperator::GreaterThan,
+            ">=" => QueryOperator::GreaterThanOrEqual,
+            "<" => QueryOperator::LessThan,
+            "<=" => QueryOperator::LessThanOrEqual,
+            "LIKE" | "like" => QueryOperator::Like,
+            "NOT LIKE" | "not like" => QueryOperator::NotLike,
+            _ => QueryOperator::Equal, // Default fallback
+        };
+
+        self.where_conditions.push(WhereCondition {
+            column: column.to_string(),
+            operator: op,
+            value: Some(value.into()),
+            values: Vec::new(),
+        });
+        self
+    }
 }
