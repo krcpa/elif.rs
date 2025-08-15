@@ -540,7 +540,7 @@ dependencies = [
 
 [[package]]
 name = "elif-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -591,7 +591,7 @@ dependencies = [
 
 [[package]]
 name = "elif-orm"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "chrono",

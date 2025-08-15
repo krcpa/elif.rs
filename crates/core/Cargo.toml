@@ -1,6 +1,6 @@
 [package]
 name = "elif-core"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Core architecture foundation for the elif.rs LLM-friendly web framework"
 license = "MIT"
