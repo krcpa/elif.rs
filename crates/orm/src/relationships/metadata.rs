@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 use crate::error::{ModelError, ModelResult};
 
 /// Defines the type of relationship between models
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum RelationshipType {
     /// One-to-one relationship (hasOne)
+    #[default]
     HasOne,
     /// One-to-many relationship (hasMany)
     HasMany,
@@ -41,7 +42,7 @@ impl RelationshipType {
 }
 
 /// Comprehensive relationship metadata containing all necessary information
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct RelationshipMetadata {
     /// The type of relationship
     pub relationship_type: RelationshipType,
@@ -98,6 +99,31 @@ impl RelationshipMetadata {
             local_key: "id".to_string(),
             custom_name: None,
             pivot_config: None,
+            polymorphic_config: None,
+            eager_load: false,
+            constraints: Vec::new(),
+            inverse: None,
+        }
+    }
+
+    /// Create a new RelationshipMetadata instance with pivot configuration
+    pub fn new_with_pivot(
+        relationship_type: RelationshipType,
+        name: String,
+        related_table: String,
+        related_model: String,
+        foreign_key: ForeignKeyConfig,
+        pivot_config: PivotConfig,
+    ) -> Self {
+        Self {
+            relationship_type,
+            name,
+            related_table,
+            related_model,
+            foreign_key,
+            local_key: "id".to_string(),
+            custom_name: None,
+            pivot_config: Some(pivot_config),
             polymorphic_config: None,
             eager_load: false,
             constraints: Vec::new(),
@@ -187,7 +213,7 @@ impl RelationshipMetadata {
 }
 
 /// Foreign key configuration for relationships
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ForeignKeyConfig {
     /// The foreign key column name(s)
     pub columns: Vec<String>,

@@ -16,8 +16,17 @@ pub mod registry;
 // Phase 6.2.3: Constraint System 
 pub mod constraints;
 
+// Phase 6.2.5: Type-Safe Relationship Loading
+pub mod containers;
+pub mod hydration;
+pub mod inference;
+pub mod type_safe_eager_loading;
+
 #[cfg(test)]
 pub mod eager_loading_tests;
+
+#[cfg(test)]
+pub mod type_safe_tests;
 
 // Re-export main types
 pub use traits::*;
@@ -35,3 +44,9 @@ pub use registry::*;
 
 // Re-export constraint system types
 pub use constraints::*;
+
+// Re-export type-safe relationship types
+pub use containers::*;
+pub use hydration::*;
+pub use inference::*;
+pub use type_safe_eager_loading::*;

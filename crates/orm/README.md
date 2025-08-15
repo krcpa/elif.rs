@@ -11,7 +11,7 @@ Production-ready **Object-Relational Mapping (ORM)** for Rust, designed as the d
 ### **Core ORM Capabilities**
 - **Model System**: Type-safe model definitions with automatic CRUD operations
 - **Query Builder**: Fluent, type-safe query construction with compile-time validation
-- **Relationships**: Foreign keys, joins, and relationship loading (planned)
+- **Relationships**: Type-safe eager loading with compile-time guarantees
 - **Primary Key Support**: UUID, integer, and composite primary keys
 - **Timestamps**: Automatic `created_at`/`updated_at` management
 - **Soft Deletes**: Logical deletion with `deleted_at` timestamps
@@ -35,7 +35,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-elif-orm = "0.5.0"
+elif-orm = "0.5.2"
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono"] }
 ```
 
@@ -279,6 +279,58 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
     // ... and more
 }
 ```
+
+### Type-Safe Relationships (New in 0.5.2)
+
+Define and load relationships with compile-time type safety:
+
+```rust
+use elif_orm::relationships::*;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct User {
+    pub id: Option<i64>,
+    pub name: String,
+    
+    // Type-safe relationships
+    #[serde(skip)]
+    pub posts: HasMany<Post>,
+    
+    #[serde(skip)]
+    pub profile: HasOne<Profile>,
+    
+    #[serde(skip)]
+    pub roles: ManyToMany<Role>,
+}
+
+// Load relationships eagerly
+let user = User::find(pool, 1)
+    .await?
+    .with("posts")
+    .with("profile")
+    .load()
+    .await?;
+
+// Access loaded relationships with type safety
+let posts: &Vec<Post> = user.posts.get().unwrap();
+let profile: &Option<Profile> = user.profile.get().unwrap();
+
+// Polymorphic relationships
+#[serde(skip)]
+pub comments: MorphMany<Comment>,
+
+// Relationship inference
+let engine = RelationshipInferenceEngine::<User>::new();
+let metadata = engine.infer_relationship::<Post>("posts", RelationshipType::HasMany)?;
+```
+
+Features:
+- Zero runtime type casting
+- Compile-time relationship validation
+- Automatic foreign key inference
+- Support for all relationship types (1:1, 1:N, N:N, polymorphic)
+- Efficient eager loading with N+1 query prevention
+- Thread-safe relationship containers
 
 ### QueryBuilder
 
