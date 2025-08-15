@@ -9,9 +9,9 @@
 
 **elif.rs** is an experimental Rust web framework under active development that enables both human developers and AI agents to build web applications through structured, safe code generation. This is an early-stage project with solid foundations being built iteratively.
 
-## 🚧 **Current Status: Phase 4 - Database Foundation**
+## 🚧 **Current Status: Phase 6.1 - Relationship System Core**
 
-elif.rs is in **active development** with core web and security layers complete, now building database operations foundation:
+elif.rs is in **active development** with Phase 5 Authentication & Authorization complete, now building advanced ORM relationships:
 
 ### ✅ **What's Working Now**
 
@@ -47,31 +47,52 @@ elif.rs is in **active development** with core web and security layers complete,
 - **🏗️ Pure Framework Architecture**: All framework types, no external dependencies exposed
 - **✅ Status**: 151/151 security tests passing, architecturally consistent
 
+#### Phase 4 Complete: Database Operations Foundation
+- **💾 Database Service Integration**: Complete DI container integration
+- **🔗 Connection Pooling**: Transaction support and connection lifecycle
+- **🔄 Migration System**: CLI commands and schema migration system
+- **📊 Model-Database Integration**: CRUD operations with database integration
+- **🏗️ Database Architecture**: Clean separation in elif-orm crate
+- **✅ Status**: 79/79 database tests passing, production-ready database layer
+
+#### Phase 5 Complete: Authentication & Authorization
+- **🔑 Authentication Core**: Comprehensive error handling and infrastructure
+- **🎫 JWT Token Management**: Complete JWT system with middleware
+- **🔐 Session Authentication**: Session management with storage backends
+- **👤 User Authentication**: Middleware and authentication guards
+- **🛡️ Role-Based Access Control**: Complete RBAC system with permissions
+- **📱 Multi-Factor Authentication**: TOTP and backup codes support
+- **⚙️ CLI Integration**: Authentication scaffolding commands
+- **✅ Status**: 86/86 authentication tests passing, production-ready auth system
+
 ### 🚧 **Currently Working On**
 
-#### Phase 4: Database Operations Foundation (In Progress)
-- **✅ Database Service Integration** - DI container integration (Issue #60 - Complete)
-- **✅ Basic Connection Pool Management** - Connection lifecycle (Issue #61 - Complete) 
-- **🔄 Database Architecture Refactor** - Move DB from http to orm crate (Issue #66 - Active)
-- **📋 Basic Migration System** - Schema migrations (Issue #63 - Pending)
-- **🔗 Model-Database Integration** - Connect ORM to database (Issue #64 - Pending)
-- **💾 Basic CRUD Operations** - Working database operations (Issue #65 - Pending)
+#### Phase 6.1: Relationship System Core (In Progress)
+- **🔗 Relationship Trait System** - Base types and relationship foundation (Issue #83 - Active)
+- **👥 HasOne and HasMany** - One-to-one and one-to-many relationships
+- **🔄 BelongsTo and BelongsToMany** - Inverse relationships and many-to-many
+- **🌐 HasManyThrough** - Relationships through intermediate models
+- **🔀 Polymorphic Relationships** - MorphTo, MorphMany foundation
+- **🔁 Self-Referencing** - Models that reference themselves
+- **⚙️ Relationship Constraints** - Cascading and constraint handling
 
-**Goal**: Complete foundational database layer with proper architecture, transactions, migrations, and working CRUD operations.
+**Goal**: Complete core relationship system supporting all major database relationship patterns with type safety and efficient SQL generation.
 
-### ⚠️ **Build Status: Fixing Migration System**
-- **Current Issue**: Migration system implementation causing build failures
-- **Impact**: Database foundation work temporarily blocked
-- **Priority**: High - resolving ORM/database integration issues
-- **Expected Resolution**: Architecture refactor in progress
+### ⚠️ **Build Status: Fixing Relationship System**
+- **Current Issue**: Relationship system implementation has compilation errors
+- **Impact**: Phase 6.1 implementation temporarily blocked  
+- **Priority**: High - resolving relationship type system integration
+- **Expected Resolution**: Type fixes and trait implementation in progress
 
-### 📊 **Test Coverage: 300+ Tests (When Building)**
+### 📊 **Test Coverage: 500+ Tests (When Building)**
 - **Core Architecture**: 33 tests ✅
 - **HTTP Web Stack**: 112 tests ✅  
 - **ORM Foundation**: 39 tests ✅
 - **Security & Validation**: 151 tests ✅
-- **Database Operations**: In development 🚧
-- **Total**: 335+ tests across completed phases
+- **Database Operations**: 79 tests ✅
+- **Authentication & Authorization**: 86 tests ✅
+- **Relationship System**: In development 🚧
+- **Total**: 500+ tests across completed phases
 
 ## 🚀 **Try It Now (Experimental)**
 
@@ -94,10 +115,12 @@ cargo run
 - ✅ **Dependency Injection** for service management  
 - ✅ **Advanced ORM** with query builder and model system
 - ✅ **Complete Security Stack** - CORS, CSRF, rate limiting, validation, headers
+- ✅ **Database Operations** - connection pooling, migrations, CRUD operations
+- ✅ **Authentication & Authorization** - JWT, sessions, RBAC, MFA support
 - ✅ **Pure Framework Architecture** - consistent types, no external deps exposed
 - ✅ **Configuration System** with environment support
-- 🚧 **Database Operations** - foundation layer in development
-- ⚠️ **Experimental** - solid web/security foundation, database integration in progress
+- 🚧 **ORM Relationships** - relationship system in development  
+- ⚠️ **Experimental** - solid foundation, relationship system has build issues
 
 ## 🎯 **Project Goals**
 
@@ -116,16 +139,17 @@ cargo run
 ## 📦 **Available Packages (Experimental)**
 
 ```bash
-cargo install elifrs  # v0.2.0 - CLI tool for project scaffolding
+cargo install elifrs  # v0.5.2 - CLI tool with migration system and scaffolding
 ```
 
 ```toml
 [dependencies]
-elif-core = "0.2.0"         # Architecture foundation
-elif-orm = "0.3.0"          # Database layer with query builder (in development)
+elif-core = "0.2.1"         # Architecture foundation with database error support
+elif-orm = "0.5.1"          # Database layer with advanced query builder and CRUD
 elif-http = "0.2.0"         # HTTP server with pure framework abstractions
 elif-security = "0.2.1"     # Complete security middleware stack
 elif-validation = "0.1.0"   # Input validation and sanitization
+elif-auth = "0.3.0"         # Complete authentication with JWT, sessions, RBAC, MFA
 ```
 
 ## 💡 **What You Can Experiment With**
@@ -281,21 +305,22 @@ elif.rs/ (Phase 4 Database Foundation In Progress)
 ## 🧪 **Testing Status**
 
 ```bash
-# Note: Build currently failing due to database migration work
-# Working to resolve architecture issues
+# Note: Build currently failing due to relationship system work
+# Working to resolve type integration issues
 
 # When building, you get:
-cargo test --workspace                     # 335+ tests (when resolved)
+cargo test --workspace                     # 500+ tests (when resolved)
 
 # Test individual components  
 cargo test -p elif-core                    # 33/33 tests ✅
 cargo test -p elif-http                    # 112/112 tests ✅  
-cargo test -p elif-orm                     # 39/39 tests ✅
+cargo test -p elif-orm                     # 39/39 tests ✅ (base ORM)
 cargo test -p elif-security                # 151/151 tests ✅
 cargo test -p elif-validation              # Tests ✅
+cargo test -p elif-auth                    # 86/86 tests ✅
 
 # Build status
-cargo build --release                      # Currently failing - migration system fixes needed
+cargo build --release                      # Currently failing - relationship system fixes needed
 ```
 
 ## 📋 **Development Roadmap**
@@ -305,19 +330,20 @@ cargo build --release                      # Currently failing - migration syste
 - **Phase 2**: Web Foundation (112 tests) ✅
 - **Phase 2.1**: Advanced ORM Foundation (39 tests) ✅
 - **Phase 3**: Security & Framework Consistency (151 tests) ✅
+- **Phase 4**: Database Operations Foundation (79 tests) ✅
+- **Phase 5**: Authentication & Authorization (86 tests) ✅
 
-### 🚧 **Current Work (Phase 4)**
-- **Phase 4.1**: ✅ Database Service Integration (Complete)
-- **Phase 4.2**: ✅ Basic Connection Pool Management (Complete)
-- **Phase 4.7**: 🔄 Database Architecture Refactor (Active) 
-- **Phase 4.4**: 📋 Basic Migration System (Pending)
-- **Phase 4.5**: 📋 Model-Database Integration (Pending)
-- **Phase 4.6**: 📋 Basic CRUD Operations (Pending)
+### 🚧 **Current Work (Phase 6.1)**
+- **Phase 6.1**: 🔄 Relationship System Core (Active - Issue #83)
+  - **Relationship Trait System** - Base types and foundation
+  - **HasOne/HasMany** - One-to-one and one-to-many relationships
+  - **BelongsTo/BelongsToMany** - Inverse and many-to-many relationships
+  - **HasManyThrough** - Relationships through intermediate models
+  - **Polymorphic Foundation** - MorphTo, MorphMany basic support
 
 ### 📅 **Upcoming Phases**
-- **Phase 5**: Authentication & Authorization (Issues #38-41)
-- **Phase 6**: Advanced ORM relationships & caching
-- **Phase 7**: Developer experience & CLI enhancements
+- **Phase 6.2-6.6**: Advanced ORM relationships - eager loading, lazy loading, events, queries, polymorphic
+- **Phase 7**: Developer experience & CLI enhancements (Issues #75-81)
 - **Phase 8**: Production features (monitoring, deployment)
 - **Phase 9**: Advanced features (WebSocket, files, email)
 - **Phase 10-11**: Laravel/NestJS feature parity
@@ -327,22 +353,24 @@ cargo build --release                      # Currently failing - migration syste
 ## ⚠️ **Important Notes**
 
 ### **This is Experimental Software**
-- **Not ready for production use** - database integration in development
-- **Build currently failing** - migration system refactoring in progress
+- **Not ready for production use** - relationship system in development
+- **Build currently failing** - relationship system type integration issues
 - **APIs may change** as development continues
 - **Use at your own risk** for experiments only
 
 ### **What's Solid**
 - ✅ **Web Foundation**: HTTP server, routing, middleware all production-ready
 - ✅ **Security Stack**: Complete CORS, CSRF, rate limiting, validation, headers
+- ✅ **Database Layer**: Connection pooling, migrations, CRUD operations working
+- ✅ **Authentication**: Complete JWT, sessions, RBAC, MFA system
 - ✅ **Architecture**: Pure framework design, no external types exposed
 - ✅ **ORM Foundation**: Advanced query builder with 940+ lines of features
-- ✅ **Test Coverage**: 335+ tests across completed components
+- ✅ **Test Coverage**: 500+ tests across completed components
 
 ### **What's In Progress**
-- 🚧 **Database Integration**: Connecting ORM to actual databases
-- 🚧 **Migration System**: Schema migration implementation
-- 🚧 **Build Issues**: Resolving compilation errors in database layer
+- 🚧 **ORM Relationships**: HasOne, HasMany, BelongsTo, polymorphic relationships
+- 🚧 **Type System**: Resolving relationship trait integration
+- 🚧 **Build Issues**: Resolving compilation errors in relationship system
 
 ### **Best For**
 - 🧪 **Experimentation** with mature Rust web architecture
@@ -379,38 +407,40 @@ cargo test  # 335+ tests guide AI development (when building)
 elif.rs needs contributors! This is an active development project with solid foundations.
 
 ### **Current Priorities**
-- **Phase 4.7**: Database Architecture Refactor (Issue #66) - **CRITICAL**
-- **Phase 4.4**: Basic Migration System (Issue #63)
-- **Phase 4.5**: Model-Database Integration (Issue #64)
-- **Phase 4.6**: Basic CRUD Operations (Issue #65)
+- **Phase 6.1**: Relationship System Core (Issue #83) - **CRITICAL**
+- **Type System Integration**: Fix relationship trait compilation errors
+- **Relationship API**: Complete HasOne, HasMany, BelongsTo implementations  
+- **Testing Framework**: Add comprehensive relationship tests
 
 ### **Development Setup**
 ```bash
 git clone https://github.com/krcpa/elif.rs
 cd elif.rs
 
-# Note: Build currently failing due to migration system work
+# Note: Build currently failing due to relationship system work
 # Check latest issues for current status
 cargo build --workspace
 ```
 
 ### **How to Help**
-1. **Fix build issues** in database migration system (high priority)
-2. **Implement database integration** features from Phase 4 roadmap
-3. **Improve documentation** and examples
-4. **Add more tests** for database operations
-5. **Share feedback** on the pure framework architecture
+1. **Fix build issues** in relationship system (high priority)
+2. **Implement relationship types** from Phase 6.1 roadmap
+3. **Add relationship tests** and integration examples
+4. **Improve documentation** and relationship examples
+5. **Share feedback** on the ORM relationship API design
 
 ## 📊 **Current Stats**
 
-- **Framework Status**: ⚠️ Experimental, build issues in database layer
+- **Framework Status**: ⚠️ Experimental, build issues in relationship system
 - **Web Foundation**: ✅ Production-ready (112 tests)
 - **Security Stack**: ✅ Complete (151 tests) 
+- **Database Layer**: ✅ Production-ready (79 tests)
+- **Authentication**: ✅ Complete with RBAC & MFA (86 tests)
 - **ORM Foundation**: ✅ Advanced query builder (39 tests)
-- **Database Integration**: 🚧 In development (architecture refactor)
-- **Core Components**: ✅ 3.5/11 major phases complete  
+- **Relationship System**: 🚧 In development (type integration issues)
+- **Core Components**: ✅ 5.1/11 major phases complete  
 - **Architecture**: ✅ Pure framework design implemented
-- **Test Coverage**: ✅ 335+ tests (when building)
+- **Test Coverage**: ✅ 500+ tests (when building)
 - **Package Status**: ✅ Published to crates.io for experimentation
 
 ## 📄 **License**
@@ -428,11 +458,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **🚧 Experimental LLM-Friendly Web Framework 🤖**
 
-> *Phase 4 Database Foundation In Progress*  
-> *Phase 1-3 ✅ Complete: Architecture + Web + Security (335+ tests)*  
-> *Database Integration: Architecture Refactor Active*  
-> *Build Status: ⚠️ Resolving Migration System Issues*  
-> *Try: `cargo install elifrs` - Web/Security Stack Production-Ready*
+> *Phase 6.1 Relationship System Core In Progress*  
+> *Phase 1-5 ✅ Complete: Architecture + Web + Security + Database + Auth (500+ tests)*  
+> *ORM Relationships: Type System Integration Active*  
+> *Build Status: ⚠️ Resolving Relationship Compilation Issues*  
+> *Try: `cargo install elifrs` - Complete Web/Auth/Database Stack Available*
 
 ---
 

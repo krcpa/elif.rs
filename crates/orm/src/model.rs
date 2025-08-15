@@ -39,6 +39,12 @@ impl std::fmt::Display for PrimaryKey {
     }
 }
 
+impl Default for PrimaryKey {
+    fn default() -> Self {
+        PrimaryKey::Integer(0)
+    }
+}
+
 impl PrimaryKey {
     pub fn as_i64(&self) -> Option<i64> {
         match self {
@@ -58,7 +64,7 @@ impl PrimaryKey {
 /// Trait for database models with standard ORM operations
 pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
     /// The type used for this model's primary key
-    type PrimaryKey: Clone + Send + Sync + Debug + std::fmt::Display;
+    type PrimaryKey: Clone + Send + Sync + Debug + std::fmt::Display + Default;
 
     /// Table name for this model
     fn table_name() -> &'static str;

@@ -8,12 +8,13 @@
 //! for relationships, migrations, and connection management.
 
 pub mod model;
-pub mod query;
+pub mod query; // Directory-based module
 pub mod error;
 pub mod database;
 pub mod transaction;
 pub mod migration;
 pub mod migration_runner;
+pub mod relationships;
 
 #[cfg(test)]
 mod tests;
@@ -29,6 +30,7 @@ pub use database::*;
 pub use transaction::*;
 pub use migration::*;
 pub use migration_runner::*;
+pub use relationships::*;
 
 // Derive macro re-exports (when implemented in future)
 // pub use elif_orm_derive::*;

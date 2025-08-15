@@ -257,7 +257,7 @@ mod query_builder_tests {
         let query = QueryBuilder::<TestUser>::new()
             .select("*")
             .from("users")
-            .where_subquery::<String>("id", QueryOperator::In, subquery);
+            .where_subquery("id", QueryOperator::In, subquery);
         
         let sql = query.to_sql();
         assert!(sql.contains("id IN (SELECT user_id FROM orders WHERE total > 1000)"));
@@ -627,7 +627,7 @@ mod performance_tests {
             QueryBuilder::<TestUser>::new()
                 .select("*")
                 .from("users")
-                .where_subquery::<String>("id", QueryOperator::In, 
+                .where_subquery("id", QueryOperator::In, 
                     QueryBuilder::<TestUser>::new()
                         .select("user_id")
                         .from("orders")

@@ -694,6 +694,7 @@ name = "elif-orm"
 version = "0.5.1"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "elif-core",
  "serde",

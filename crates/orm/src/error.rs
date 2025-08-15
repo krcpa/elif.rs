@@ -41,6 +41,10 @@ pub enum ModelError {
     Query(String),
     /// Event system error
     Event(String),
+    /// Configuration error
+    Configuration(String),
+    /// Invalid key error
+    InvalidKey(String),
 }
 
 impl fmt::Display for ModelError {
@@ -58,6 +62,8 @@ impl fmt::Display for ModelError {
             ModelError::Schema(msg) => write!(f, "Schema error: {}", msg),
             ModelError::Query(msg) => write!(f, "Query error: {}", msg),
             ModelError::Event(msg) => write!(f, "Event error: {}", msg),
+            ModelError::Configuration(msg) => write!(f, "Configuration error: {}", msg),
+            ModelError::InvalidKey(msg) => write!(f, "Invalid key error: {}", msg),
         }
     }
 }
