@@ -1,6 +1,6 @@
 # elif.rs
 
-> A production-ready LLM-friendly Rust web framework designed for AI agent-driven development
+> An LLM-friendly Rust web framework under active development, designed for AI agent-driven development
 
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -8,451 +8,359 @@
 [![Crates.io](https://img.shields.io/crates/v/elifrs.svg)](https://crates.io/crates/elifrs)
 [![Downloads](https://img.shields.io/crates/d/elifrs.svg)](https://crates.io/crates/elifrs)
 
-**elif.rs** is a production-ready Rust web framework that enables both human developers and AI agents to build secure, scalable web applications. With comprehensive HTTP server capabilities, advanced ORM, and security middleware, elif.rs is ready for real-world applications.
+**elif.rs** is an experimental Rust web framework under active development that enables both human developers and AI agents to build web applications through structured, safe code generation. This is an early-stage project with solid foundations being built iteratively.
 
-## 🚀 **Get Started Now**
+## 🚧 **Current Status: Active Development**
 
-### Quick Installation
+elif.rs is in **active development** with several foundational layers now complete and ready for experimentation:
 
-```bash
-# Install the CLI globally
-cargo install elifrs
+### ✅ **What's Working Now**
 
-# Create a new project
-elifrs new my-web-app
-cd my-web-app
-
-# Build and run
-cargo run
-```
-
-**That's it!** You now have a working web application with:
-- ✅ **HTTP Server** with Axum integration and middleware pipeline
-- ✅ **Dependency Injection** container for service management
-- ✅ **Advanced ORM** with query builder and relationships
-- ✅ **Security Middleware** with CORS protection
-- ✅ **Configuration Management** with environment support
-- ✅ **Request/Response** abstractions with JSON API support
-
-## 🎯 **Why elif.rs?**
-
-### **For Production Applications**
-- **🌐 Complete Web Server**: HTTP routing, middleware, controllers, database integration
-- **🛡️ Security First**: CORS, CSRF protection, rate limiting, input validation
-- **🏗️ Architecture-First**: Robust dependency injection and clean separation
-- **⚡ High Performance**: Optimized for throughput with minimal overhead
-- **🧪 Battle-Tested**: 135+ tests ensuring production reliability
-
-### **For AI Agents**  
-- **🤖 LLM-Optimized**: Framework designed specifically for AI code generation
-- **📋 Spec-Driven**: Configuration over convention approach
-- **🔍 Introspective**: Built-in project understanding capabilities
-- **🛡️ Safe Editing**: MARKER zones prevent AI from breaking core logic
-
-## 📦 **Available Packages**
-
-All packages published and ready for production use:
-
-```bash
-cargo install elifrs  # v0.2.0 - Global CLI for project management
-```
-
-```toml
-[dependencies]
-elif-core = "0.1.0"        # Architecture foundation  
-elif-orm = "0.2.0"         # Advanced ORM with query builder
-elif-http = "0.2.0"        # HTTP server with Axum integration
-elif-security = "0.1.0"    # Security middleware (CORS, CSRF, etc.)
-```
-
-## 🏆 **Production Ready: Complete Web Foundation**
-
-elif.rs has evolved beyond early preview - it's now a **production-ready framework** with complete web application capabilities:
-
-### ✅ **Phase 1 Complete**: Architecture Foundation
-- **🔧 Dependency Injection**: Robust DI container with service resolution
-- **⚙️ Configuration Management**: Environment-based config with validation  
+#### Phase 1 Complete: Architecture Foundation
+- **🔧 Dependency Injection**: Robust DI container with service resolution  
+- **⚙️ Configuration Management**: Environment-based config with validation
 - **🔄 Application Lifecycle**: Graceful startup/shutdown with signal handling
 - **📦 Module System**: Organize features with dependency resolution
 - **✅ Status**: 33/33 tests passing, stable foundation
 
-### ✅ **Phase 2 Complete**: Web Foundation
-- **🌐 HTTP Server Core**: Full Axum integration with DI container
+#### Phase 2 Complete: Web Foundation  
+- **🌐 HTTP Server**: Axum-based server with DI integration
 - **🛣️ Routing System**: Dynamic params, route groups, middleware support
-- **📡 Request/Response**: JSON handling, validation, error responses
-- **⚙️ Middleware Pipeline**: Logging, timing, custom middleware
+- **📡 Request/Response**: JSON handling, error responses  
+- **⚙️ Middleware Pipeline**: Logging, timing, extensible middleware
 - **🎯 Controller System**: Service-oriented controllers with database integration
-- **❌ Error Handling**: Comprehensive JSON API error responses
-- **✅ Status**: 61/61 tests passing, production-ready HTTP stack
+- **✅ Status**: 61/61 tests passing, functional web stack
 
-### ✅ **Phase 2.1 Complete**: Advanced ORM
-- **📊 Model System**: Complete CRUD operations with timestamps, soft deletes
-- **🔍 Query Builder**: Type-safe fluent API with 940+ lines of functionality
-- **⚡ Advanced Features**: Subqueries, aggregations, pagination, relationships
-- **🧪 Comprehensive Testing**: 36 unit tests + performance benchmarks
-- **✅ Status**: Production-ready ORM with excellent performance
+#### Phase 2.1 Complete: Advanced ORM
+- **📊 Model System**: CRUD operations with timestamps, soft deletes
+- **🔍 Query Builder**: Type-safe fluent API with advanced features
+- **⚡ Complex Queries**: Subqueries, aggregations, joins, pagination
+- **🧪 Well Tested**: 36 unit tests + performance benchmarks
+- **✅ Status**: Functional ORM layer, ready for experimentation
 
-### ✅ **Phase 3.1 Complete**: Security Middleware
-- **🛡️ CORS Protection**: Complete Cross-Origin Resource Sharing middleware
-- **🏗️ Tower Integration**: Full compatibility with Axum middleware pipeline
-- **⚙️ Flexible Configuration**: Builder pattern API with production defaults
-- **🧪 Security Testing**: 5 comprehensive tests for CORS functionality
-- **✅ Status**: Production-ready security middleware
+#### Phase 3.1 Complete: CORS Security
+- **🛡️ CORS Middleware**: Complete Cross-Origin Resource Sharing implementation
+- **🏗️ Tower Integration**: Works seamlessly with Axum middleware pipeline
+- **⚙️ Flexible Config**: Builder pattern API with security defaults
+- **✅ Status**: 5/5 tests passing, first security middleware complete
 
-### 🚧 **Phase 3.2 In Progress**: CSRF Protection & Advanced Security
-- **🔐 CSRF Protection**: Cross-Site Request Forgery middleware (In Progress)
-- **⏱️ Rate Limiting**: Request limiting with multiple strategies
-- **🔒 Security Headers**: HSTS, X-Frame-Options, CSP headers
-- **✅ Input Validation**: Comprehensive validation with sanitization
+### 🚧 **Currently Working On**
 
-## 💡 **Build Production Applications Today**
+#### Phase 3.2: CSRF Protection (In Progress)
+- **🔐 CSRF Middleware**: Cross-Site Request Forgery protection (partially implemented)
+- **⏱️ Rate Limiting**: Request limiting (planned)
+- **🔒 Security Headers**: Additional security middleware (planned)
 
-### 🌐 **Complete Web Applications**
+### 📊 **Test Coverage: 135+ Tests**
+- **Core Architecture**: 33 tests
+- **HTTP Server**: 61 tests  
+- **ORM Layer**: 36 tests
+- **Security**: 5 tests (CORS)
+- **Total**: 135+ tests passing across framework
+
+## 🚀 **Try It Now (Experimental)**
+
+### Quick Installation
+
 ```bash
-elifrs new my-api
-cd my-api
-cargo run  # Production-ready HTTP server on localhost:3000
+# Install the experimental CLI
+cargo install elifrs
+
+# Create a new project
+elifrs new my-experiment
+cd my-experiment
+
+# Build and run (basic functionality works)
+cargo run
 ```
 
-### 🛡️ **Secure by Default**
+**What you get:**
+- ✅ **HTTP Server** that starts and handles requests
+- ✅ **Dependency Injection** for service management  
+- ✅ **Database Integration** with working ORM
+- ✅ **CORS Security** for cross-origin requests
+- ✅ **Configuration System** with environment support
+- ⚠️ **Basic functionality** - many features still in development
+
+## 🎯 **Project Goals**
+
+### **For Human Developers**
+- **🏗️ Clean Architecture**: Dependency injection and modular design
+- **📝 Type Safety**: Rust's type system for reliable web applications
+- **⚡ Performance**: Built on Axum/Tokio for high performance
+- **🧪 Well Tested**: Comprehensive test coverage for reliability
+
+### **For AI Agents**
+- **🤖 LLM-Optimized**: Framework designed with AI code generation in mind
+- **📋 Spec-Driven**: Clear specifications and safe editing zones
+- **🔍 Introspective**: APIs for understanding project structure
+- **🛡️ Safe Zones**: MARKER blocks for AI-safe code modification
+
+## 📦 **Available Packages (Experimental)**
+
+```bash
+cargo install elifrs  # v0.2.0 - CLI tool for project scaffolding
+```
+
+```toml
+[dependencies]
+elif-core = "0.1.0"        # Architecture foundation
+elif-orm = "0.2.0"         # Database layer with query builder
+elif-http = "0.2.0"        # HTTP server with Axum integration  
+elif-security = "0.1.0"    # Security middleware (CORS implemented)
+```
+
+## 💡 **What You Can Experiment With**
+
+### 🌐 **Basic Web Applications**
 ```rust
-use elif_security::CorsMiddleware;
-use axum::Router;
+use elif_http::*;
+use axum::{routing::get, Router};
 
+async fn hello() -> &'static str {
+    "Hello from elif.rs!"
+}
+
+// Basic HTTP server (works)
 let app = Router::new()
-    .route("/api/users", get(get_users))
-    .layer(CorsMiddleware::new(CorsConfig::default())
-        .allow_origin("https://myapp.com")
-        .allow_methods(vec![Method::GET, Method::POST])
-        .allow_credentials(true));
+    .route("/", get(hello));
+    
+// Run on localhost:3000
 ```
 
-### 📊 **Advanced Database Operations**
+### 📊 **Database Operations**
 ```rust
 use elif_orm::*;
 
-#[derive(Model, Debug, Serialize, Deserialize)]
+// Define a model (works)
+#[derive(Debug, Serialize, Deserialize)]
 struct User {
     id: Option<Uuid>,
-    email: String,
+    email: String,  
     name: String,
     created_at: Option<DateTime<Utc>>,
     updated_at: Option<DateTime<Utc>>,
 }
 
-// Production-ready ORM with advanced querying
+// Use the query builder (works)
 let users = User::query()
     .where_eq("active", true)
-    .where_like("name", "%john%")
-    .join("profiles", "users.id", "profiles.user_id")
-    .select(&["users.*", "profiles.bio"])
-    .order_by("created_at")
-    .paginate(20)
-    .get(&pool)
+    .order_by("created_at")  
+    .limit(10)
+    .get(&pool)  // Note: You need to set up the pool
     .await?;
 ```
 
-### 🎯 **Service-Oriented Controllers**
+### 🛡️ **CORS Security**  
 ```rust
-use elif_http::Controller;
+use elif_security::CorsMiddleware;
 
-impl UserController {
-    async fn index(&self, request: Request) -> Response {
-        let query_params = request.query_params();
-        let page = query_params.get("page").unwrap_or("1");
-        
-        let users = self.user_service
-            .get_paginated_users(page.parse()?)
-            .await?;
-            
-        Response::json(&users)
-            .with_status(200)
-            .with_header("X-Total-Count", users.len().to_string())
-    }
-    
-    async fn store(&self, mut request: Request) -> Response {
-        let user_data: CreateUserRequest = request.validate_json()?;
-        let user = self.user_service.create_user(user_data).await?;
-        Response::json(&user).with_status(201)
-    }
-}
+// CORS protection (works)
+let cors = CorsMiddleware::new(CorsConfig::default())
+    .allow_origin("https://localhost:3000")
+    .allow_methods(vec![Method::GET, Method::POST]);
+
+let app = Router::new()
+    .route("/api/data", get(get_data))
+    .layer(CorsLayer::new(cors.config));
 ```
 
-## 🏗️ Architecture Overview
+### 🏗️ **Dependency Injection**
+```rust
+use elif_core::*;
 
-elif.rs follows a modular, production-ready architecture:
+// Service registration (works)
+let app = Application::builder()
+    .provider(DatabaseProvider)  
+    .module(ApiModule)
+    .build()?;
+
+// Note: You'll need to implement your providers
+```
+
+## 🏗️ **Architecture Overview**
 
 ```
-elif.rs/
+elif.rs/ (Under Development)
 ├── crates/
-│   ├── elif-core/         # 🟢 Architecture foundation
-│   │   ├── container/     # Dependency injection container
-│   │   ├── provider/      # Service provider system  
-│   │   ├── module/        # Module system & app lifecycle
-│   │   └── config/        # Configuration management
+│   ├── elif-core/         # ✅ Architecture foundation
+│   │   ├── container/     # Dependency injection
+│   │   ├── provider/      # Service providers
+│   │   ├── module/        # Module system  
+│   │   └── config/        # Configuration
 │   │
-│   ├── elif-http/         # 🟢 HTTP server (v0.2.0)
-│   │   ├── server/        # Axum-based HTTP server
-│   │   ├── routing/       # Dynamic routing with params
-│   │   ├── middleware/    # Logging, timing, custom middleware
-│   │   ├── controller/    # Service-oriented controllers
-│   │   └── response/      # JSON API responses
+│   ├── elif-http/         # ✅ HTTP server basics
+│   │   ├── server/        # Axum integration
+│   │   ├── routing/       # Route handling
+│   │   ├── middleware/    # Basic middleware
+│   │   └── controller/    # Controller system
 │   │
-│   ├── elif-orm/          # 🟢 Advanced ORM (v0.2.0)
-│   │   ├── model/         # Model trait with CRUD operations
-│   │   ├── query/         # Advanced query builder
-│   │   └── primary_key/   # UUID, integer, composite keys
+│   ├── elif-orm/          # ✅ Database layer
+│   │   ├── model/         # Model definitions
+│   │   ├── query/         # Query builder
+│   │   └── primary_key/   # Key handling
 │   │
-│   ├── elif-security/     # 🟢 Security middleware (v0.1.0)
-│   │   ├── cors/          # CORS middleware
-│   │   ├── csrf/          # CSRF protection (in progress)
-│   │   └── headers/       # Security headers
+│   ├── elif-security/     # 🚧 Security (CORS done)
+│   │   ├── cors/          # ✅ CORS middleware
+│   │   ├── csrf/          # 🚧 CSRF (in progress)
+│   │   └── headers/       # ❌ Security headers (planned)
 │   │
-│   ├── elif-cli/          # 🟢 Command line interface (v0.2.0)
-│   └── elif-codegen/      # 🔴 Code generation (planned)
+│   └── elif-cli/          # ✅ Basic CLI tools
 │
-├── apps/
-│   └── api/               # Example API application
-│
-└── plan/                  # Development roadmap & specifications
-    ├── phase1/            # 🟢 Architecture (COMPLETE)
-    ├── phase2/            # 🟢 Web Foundation (COMPLETE)
-    ├── phase3/            # 🟡 Security Middleware (3.1 COMPLETE, 3.2 IN PROGRESS)
-    └── phase4-9/          # 🔴 Future phases
+└── plan/                  # Development roadmap
+    ├── phase1/            # ✅ COMPLETE
+    ├── phase2/            # ✅ COMPLETE  
+    ├── phase3/            # 🚧 IN PROGRESS (3.1 done, 3.2 active)
+    └── phase4-9/          # ❌ PLANNED
 ```
 
-**Legend**: 🟢 Complete & Published | 🟡 In Progress | 🔴 Planned
+**Legend**: ✅ Working | 🚧 In Progress | ❌ Planned
 
-## 🧪 **Production Quality: 135+ Tests**
+## 🧪 **Testing Status**
 
 ```bash
-# Run all tests - comprehensive coverage
+# Run all tests (they pass!)
 cargo test --workspace                     # ✅ 135+ tests passing
 
-# Individual component testing
-cargo test -p elif-core                    # 33/33 architecture tests
-cargo test -p elif-http                    # 61/61 HTTP server tests  
-cargo test -p elif-orm                     # 36/36 ORM tests
-cargo test -p elif-security                # 5/5 security tests
+# Test individual components  
+cargo test -p elif-core                    # 33/33 tests
+cargo test -p elif-http                    # 61/61 tests
+cargo test -p elif-orm                     # 36/36 tests  
+cargo test -p elif-security                # 5/5 tests
 
-# Production build
-cargo build --release                      # Clean compilation, ready for deployment
+# Build the project
+cargo build --release                      # Clean compilation
 ```
 
-### **Performance & Quality Metrics**
-- **Test Coverage**: 135+ comprehensive tests across all components
-- **HTTP Performance**: Optimized Axum integration with minimal overhead
-- **Query Performance**: Advanced query builder with efficient SQL generation
-- **Memory Efficiency**: Minimal allocations, production-ready footprint
-- **Security**: CORS, CSRF protection, input validation, security headers
+## 📋 **Development Roadmap**
 
-## 🛠️ **Production APIs**
+### ✅ **Completed Phases**
+- **Phase 1**: Architecture Foundation (33 tests)
+- **Phase 2**: Web Foundation (61 tests) 
+- **Phase 2.1**: Advanced ORM (36 tests)
+- **Phase 3.1**: CORS Security (5 tests)
 
-### **Complete HTTP Server** - Production-Ready Web Applications
-```rust
-use elif_http::*;
+### 🚧 **Current Work (Phase 3.2)**
+- [ ] CSRF protection middleware
+- [ ] Rate limiting implementation
+- [ ] Security headers middleware
+- [ ] Input validation system
 
-let server = HttpServer::new(container)
-    .middleware(LoggingMiddleware::new())
-    .middleware(CorsMiddleware::strict())
-    .controller("/api/users", UserController::new())
-    .controller("/api/posts", PostController::new())
-    .health_check("/health")
-    .bind("0.0.0.0:3000")
-    .await?;
-
-server.serve().await?;  // Production-ready with graceful shutdown
-```
-
-### **Advanced ORM** - Enterprise Database Operations
-```rust
-use elif_orm::*;
-
-// Complex queries with joins and aggregations
-let user_stats = User::query()
-    .select("users.country")
-    .select_count("*", Some("total_users"))
-    .select_avg("age", Some("avg_age"))
-    .join("profiles", "users.id", "profiles.user_id")
-    .where_not_null("profiles.bio")
-    .group_by("users.country")
-    .having_gt("COUNT(*)", 100)
-    .order_by_desc("avg_age")
-    .get_raw(&pool).await?;
-
-// Cursor-based pagination for large datasets
-let paginated = Post::query()
-    .where_eq("published", true)
-    .order_by("created_at")
-    .cursor_paginate(50, last_cursor)
-    .get(&pool).await?;
-```
-
-### **Security Middleware** - Production Security
-```rust
-use elif_security::*;
-
-// Comprehensive CORS configuration
-let cors = CorsMiddleware::new(CorsConfig::default())
-    .allow_origin("https://myapp.com")
-    .allow_methods(vec![Method::GET, Method::POST, Method::PUT])
-    .allow_headers(vec!["Authorization", "Content-Type"])
-    .allow_credentials(true)
-    .max_age(3600);
-
-// CSRF protection (Phase 3.2)
-let csrf = CsrfMiddleware::new()
-    .token_header("X-CSRF-Token")
-    .cookie_name("_csrf")
-    .exclude_routes(vec!["/api/webhook"]);
-```
-
-## 📋 Development Status & Roadmap
-
-### ✅ **Production Ready Components**
-
-#### Phase 1: Architecture Foundation (Complete)
-- [x] Dependency injection system with service resolution
-- [x] Service provider lifecycle management  
-- [x] Module system with dependency resolution
-- [x] Configuration management with environment validation
-- [x] Application lifecycle with graceful startup/shutdown
-- **Status**: 33/33 tests passing, production stable
-
-#### Phase 2: Web Foundation (Complete)
-- [x] HTTP server core with Axum integration
-- [x] Dynamic routing system with parameters and groups
-- [x] Request/response abstractions with JSON support
-- [x] Middleware pipeline (logging, timing, custom)
-- [x] Controller system with database integration
-- [x] Comprehensive error handling with JSON API responses
-- **Status**: 61/61 tests passing, production ready
-
-#### Phase 2.1: Advanced ORM (Complete)
-- [x] Model trait with CRUD operations, timestamps, soft deletes
-- [x] Advanced query builder with fluent API (940+ lines)
-- [x] Complex queries: subqueries, aggregations, joins
-- [x] Cursor pagination and performance optimization
-- [x] Primary key support (UUID, integer, composite)
-- **Status**: 36/36 tests passing, production ORM
-
-#### Phase 3.1: CORS Security (Complete)
-- [x] Complete CORS middleware with Tower integration
-- [x] Preflight request handling and origin validation
-- [x] Builder pattern API with flexible configuration
-- [x] Production security defaults and comprehensive testing
-- **Status**: 5/5 tests passing, production security
-
-### 🚧 **In Active Development**
-
-#### Phase 3.2: CSRF Protection & Advanced Security (In Progress)
-- [ ] **CSRF middleware** with token generation/validation
-- [ ] **Rate limiting** with Redis and in-memory backends
-- [ ] **Security headers** middleware (HSTS, X-Frame-Options, CSP)
-- [ ] **Input validation** system with sanitization
-
-### 🔮 **Coming Soon**
-
-#### Phase 3.3-3.6: Complete Security Suite
-- [ ] Request sanitization and XSS prevention
-- [ ] Advanced logging and request tracing
-- [ ] Health check system with dependency monitoring
-- [ ] Request/response transformation pipeline
-
-#### Phase 4+: Advanced Features
-- [ ] Authentication & authorization (JWT, sessions, RBAC)
-- [ ] Real-time features (WebSockets, SSE)
-- [ ] Job queues and background processing
-- [ ] Caching layer (Redis, in-memory)
-- [ ] File storage and uploads
-- [ ] Email system integration
+### 📅 **Upcoming Phases**
+- **Phase 4**: Authentication & Authorization  
+- **Phase 5**: Advanced ORM features
+- **Phase 6**: Developer experience tools
+- **Phase 7**: Production features
+- **Phase 8**: Advanced features
 
 **Track Progress**: [GitHub Project Board](https://github.com/users/krcpa/projects/1/views/1)
 
+## ⚠️ **Important Notes**
+
+### **This is Experimental Software**
+- **Not ready for production use**
+- **APIs may change** as development continues
+- **Missing features** that production apps need
+- **Documentation is incomplete**
+- **Use at your own risk** for experiments only
+
+### **What's Missing**
+- Authentication & authorization
+- Comprehensive validation  
+- Production security features
+- Advanced ORM relationships
+- Caching layer
+- Job queues
+- File handling
+- Email integration
+- Many other production necessities
+
+### **Best For**
+- 🧪 **Experimentation** with Rust web frameworks
+- 🤖 **AI development** research and testing
+- 📚 **Learning** modern Rust web architecture
+- 🔬 **Contributing** to framework development
+
 ## 🤖 **AI Agent Development**
 
-elif.rs follows the **"Plan → Implement → Test → Deploy"** workflow optimized for AI agents:
+elif.rs is specifically designed to work well with AI agents:
 
 ```bash
-# 1. Plan: Create production-ready project structure
-elifrs new my-production-app
+# 1. Plan: AI can understand the project structure
+elifrs new my-experiment
 
-# 2. Implement: AI-safe development with MARKER zones
-# Code generation works within predefined safe zones
+# 2. Implement: AI works within safe MARKER zones  
+# Safe code generation in predefined areas
 
-# 3. Test: Comprehensive testing built-in
-cargo test  # ✅ 135+ tests covering all functionality
+# 3. Test: Comprehensive testing provides feedback
+cargo test  # 135+ tests guide AI development
 
-# 4. Deploy: Production-ready from day one  
-cargo run   # Complete HTTP server with security middleware
+# 4. Iterate: Fast compilation enables rapid iteration
 ```
 
-### **LLM-Optimized Features**
+### **LLM-Friendly Features**
 - **🛡️ MARKER Zones**: Safe areas for AI code modification
-- **📋 Spec-Driven**: Configuration over convention reduces AI confusion
-- **🔍 Introspection**: Built-in APIs help AI understand project structure  
-- **⚡ Fast Feedback**: Optimized compilation and testing for rapid iteration
+- **📋 Clear Specs**: Detailed specifications reduce AI confusion  
+- **🔍 Introspection**: Built-in project understanding
+- **⚡ Fast Feedback**: Quick compilation and testing
 
-## 🤝 Contributing
+## 🤝 **Contributing**
 
-elif.rs is built for the community - contributions welcome!
+elif.rs needs contributors! This is an active development project.
 
-### Development Setup
+### **Current Priorities**
+- **Phase 3.2**: CSRF Protection (Issue #30)
+- **Phase 3.3**: Rate Limiting (Issue #31)
+- **Phase 3.4**: Input Validation (Issue #32)
+
+### **Development Setup**
 ```bash
 git clone https://github.com/krcpa/elif.rs
 cd elif.rs
-cargo build --release
-cargo test --workspace  # Ensure all 135+ tests pass
+cargo build
+cargo test --workspace  # Should see 135+ tests passing
 ```
 
-### Current Priorities
-- **Phase 3.2**: CSRF Protection Middleware (Issue #30)
-- **Phase 3.3**: Rate Limiting Implementation (Issue #31) 
-- **Phase 3.4**: Input Validation System (Issue #32)
+### **How to Help**
+1. **Try it out** and report issues
+2. **Implement missing features** from the roadmap
+3. **Improve documentation** and examples
+4. **Add more tests** for better coverage
+5. **Share feedback** on the API design
 
-## 📊 Production Metrics
+## 📊 **Current Stats**
 
-- **Architecture**: ✅ Production foundation (Phase 1)
-- **Web Server**: ✅ Complete HTTP stack (Phase 2) 
-- **Database**: ✅ Advanced ORM capabilities (Phase 2.1)
-- **Security**: ✅ CORS protection (Phase 3.1), CSRF in progress
-- **Tests**: ✅ 135+ comprehensive tests, all passing
-- **Performance**: ✅ Production-optimized, minimal overhead
-- **Build**: ✅ Clean compilation, ready for deployment
-- **Packages**: ✅ All published to crates.io
+- **Framework Status**: ⚠️ Experimental, not production-ready
+- **Test Coverage**: ✅ 135+ tests passing
+- **Core Components**: ✅ 4/9 major phases complete  
+- **Security**: ✅ Basic CORS, 🚧 CSRF in progress
+- **Database**: ✅ Functional ORM with advanced queries
+- **HTTP Stack**: ✅ Basic server with middleware support
+- **Build Status**: ✅ Clean compilation
+- **Package Status**: ✅ Published to crates.io for experimentation
 
-## 🚀 **Ready for Production**
-
-elif.rs is no longer an early preview - it's a **production-ready web framework** suitable for:
-
-- **🌐 Web APIs**: Complete HTTP server with routing, middleware, controllers
-- **📊 Database Applications**: Advanced ORM with complex querying capabilities  
-- **🛡️ Secure Services**: CORS protection, CSRF middleware, security headers
-- **🏗️ Microservices**: Dependency injection, service-oriented architecture
-- **🤖 AI Applications**: LLM-optimized structure for AI-driven development
-
-## 📄 License
+## 📄 **License**
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🔗 Links
+## 🔗 **Links**
 
 - **Repository**: [https://github.com/krcpa/elif.rs](https://github.com/krcpa/elif.rs)
 - **Issues**: [GitHub Issues](https://github.com/krcpa/elif.rs/issues)
-- **Project Board**: [Development Roadmap](https://github.com/users/krcpa/projects/1/views/1)
-- **Documentation**: [API Docs](https://docs.rs/elifrs)
+- **Project Board**: [Development Progress](https://github.com/users/krcpa/projects/1/views/1)
+- **Discussions**: [GitHub Discussions](https://github.com/krcpa/elif.rs/discussions)
 
 ---
 
-**Production-Ready LLM-Friendly Web Framework** 🚀
+**🚧 Experimental LLM-Friendly Web Framework 🤖**
 
-> *Ready for Production - Try it now with `cargo install elifrs`*  
-> *Phase 1 ✅ Architecture Foundation Complete*  
-> *Phase 2 ✅ Web Foundation Complete - 61 Tests*  
-> *Phase 2.1 ✅ Advanced ORM Complete - 36 Tests*  
-> *Phase 3.1 ✅ CORS Security Complete - 5 Tests*  
+> *Active Development - Try the experiment with `cargo install elifrs`*  
+> *Phase 1 ✅ Architecture Complete (33 tests)*  
+> *Phase 2 ✅ Web Foundation Complete (61 tests)*  
+> *Phase 2.1 ✅ Advanced ORM Complete (36 tests)*  
+> *Phase 3.1 ✅ CORS Security Complete (5 tests)*  
 > *Phase 3.2 🚧 CSRF Protection In Progress*  
-> *Total: 135+ Tests Passing*
+> *Total: 135+ Tests - Solid Foundation, Many Features Still Needed*
 
 ---
 
