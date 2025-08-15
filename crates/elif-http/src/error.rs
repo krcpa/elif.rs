@@ -296,22 +296,6 @@ impl From<hyper::Error> for HttpError {
     }
 }
 
-// Convert from ORM ModelError
-impl From<elif_orm::ModelError> for HttpError {
-    fn from(err: elif_orm::ModelError) -> Self {
-        match err {
-            elif_orm::ModelError::Database(msg) => HttpError::DatabaseError { message: msg },
-            elif_orm::ModelError::Validation(msg) => HttpError::ValidationError { message: msg },
-            elif_orm::ModelError::NotFound(resource) => HttpError::NotFound { resource },
-            elif_orm::ModelError::Serialization(msg) => HttpError::InternalError { 
-                message: format!("Serialization error: {}", msg) 
-            },
-            _ => HttpError::InternalError { 
-                message: format!("ORM error: {}", err) 
-            },
-        }
-    }
-}
 
 // Convert from serde_json errors
 impl From<serde_json::Error> for HttpError {

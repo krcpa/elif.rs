@@ -558,12 +558,11 @@ dependencies = [
 
 [[package]]
 name = "elif-http"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "axum",
  "chrono",
  "elif-core",
- "elif-orm",
  "hyper",
  "log",
  "serde",
