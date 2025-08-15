@@ -106,7 +106,7 @@ mod tests {
     #[test]
     fn test_http_error_types() {
         use crate::error::HttpError;
-        use axum::http::StatusCode;
+        use crate::response::ElifStatusCode as StatusCode;
         
         let startup_error = HttpError::startup("Failed to bind");
         assert_eq!(startup_error.status_code(), StatusCode::INTERNAL_SERVER_ERROR);

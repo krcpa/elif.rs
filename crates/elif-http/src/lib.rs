@@ -14,6 +14,7 @@ pub mod server;
 pub mod config;
 pub mod error;
 pub mod tests;
+pub mod integration_tests;
 pub mod routing;
 pub mod request;
 pub mod response;

@@ -6,9 +6,9 @@
 use elif_core::{Container, container::test_implementations::*};
 use elif_http::{
     Server, HttpConfig, ElifRouter, 
-    ElifRequest, ElifResponse, ElifQuery,
-    StatusCode,
+    ElifResponse,
 };
+use axum::extract::Query;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -66,34 +66,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // Clean handler functions using pure framework abstractions
-async fn list_users(params: UserQuery) -> ElifResponse {
+async fn list_users(Query(params): Query<UserQuery>) -> ElifResponse {
     let users = vec![
         User { id: 1, name: "Alice".to_string(), age: 30 },
         User { id: 2, name: "Bob".to_string(), age: 25 },
     ];
     
-    ElifResponse::json(json!({
+    let response_data = json!({
         "users": users,
         "query": params,
         "framework": "Elif.rs - Pure framework abstractions",
         "note": "No underlying web framework types exposed"
-    })).with_status(StatusCode::OK)
+    });
+    
+    match ElifResponse::ok().json(&response_data) {
+        Ok(resp) => resp,
+        Err(_) => ElifResponse::internal_server_error().text("Failed to serialize response")
+    }
 }
 
 async fn create_user() -> ElifResponse {
-    ElifResponse::json(json!({
+    let response_data = json!({
         "message": "User creation endpoint",
         "note": "Framework-native handler with no external dependencies",
         "framework": "Pure Elif.rs abstractions"
-    })).with_status(StatusCode::CREATED)
+    });
+    
+    match ElifResponse::created().json(&response_data) {
+        Ok(resp) => resp,
+        Err(_) => ElifResponse::internal_server_error().text("Failed to serialize response")
+    }
 }
 
 async fn api_status() -> ElifResponse {
-    ElifResponse::json(json!({
+    let response_data = json!({
         "api_version": "v1",
         "status": "operational",
         "framework": "Elif.rs",
         "architecture": "Pure framework abstractions",
         "experience": "Framework-native development"
-    })).with_status(StatusCode::OK)
+    });
+    
+    match ElifResponse::ok().json(&response_data) {
+        Ok(resp) => resp,
+        Err(_) => ElifResponse::internal_server_error().text("Failed to serialize response")
+    }
 }

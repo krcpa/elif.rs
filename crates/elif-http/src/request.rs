@@ -299,7 +299,7 @@ impl<T: Clone> ElifState<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{Method, Uri};
+    use axum::http::{Method, Uri}; // TODO: Replace with framework types when available
     use std::collections::HashMap;
 
     #[test]

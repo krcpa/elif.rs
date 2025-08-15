@@ -149,7 +149,8 @@ impl<M: Middleware> Middleware for ErrorHandlingMiddleware<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{StatusCode, Method};
+    use crate::response::ElifStatusCode as StatusCode;
+    use axum::http::Method; // TODO: Replace with framework type when available
     
     struct TestMiddleware {
         name: &'static str,
