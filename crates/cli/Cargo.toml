@@ -1,6 +1,6 @@
 [package]
 name = "elifrs"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "LLM-friendly Rust web framework CLI - AI agent-optimized development tools"
 license = "MIT"

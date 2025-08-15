@@ -56,7 +56,7 @@ pub use middleware::{
 };
 
 // Re-export controller types
-pub use controller::{Controller, BaseController, PaginationParams};
+pub use controller::{Controller, BaseController, QueryParams, PaginationMeta};
 
 // Re-export database types
 pub use database::{DatabaseServiceProvider, create_database_pool, get_database_pool, get_named_database_pool};

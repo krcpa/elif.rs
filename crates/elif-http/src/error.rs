@@ -267,6 +267,15 @@ impl From<elif_orm::ModelError> for HttpError {
     }
 }
 
+// Convert from serde_json errors
+impl From<serde_json::Error> for HttpError {
+    fn from(err: serde_json::Error) -> Self {
+        HttpError::InternalError { 
+            message: format!("JSON serialization error: {}", err) 
+        }
+    }
+}
+
 // Convert from sqlx errors
 impl From<sqlx::Error> for HttpError {
     fn from(err: sqlx::Error) -> Self {

@@ -34,7 +34,9 @@
       "Bash(~/.cargo/bin/elif:*)",
       "Bash(rm:*)",
       "Bash(rg:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(rustc --version)",
+      "Bash(gh issue edit:*)"
     ],
     "deny": []
   }
