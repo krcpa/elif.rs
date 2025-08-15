@@ -1,18 +1,88 @@
 //! Query Builder SQL generation
+//! This module implements secure SQL generation with proper parameterization
+//! and identifier escaping to prevent SQL injection attacks.
 
 use serde_json::Value;
 use super::builder::QueryBuilder;
 use super::types::*;
+use crate::security::{escape_identifier, validate_identifier, validate_parameter};
+use crate::error::ModelError;
 
 impl<M> QueryBuilder<M> {
     /// Generate SQL from query with parameter placeholders and return parameters
+    /// This method includes basic identifier escaping for security
     pub fn to_sql_with_params(&self) -> (String, Vec<String>) {
+        // Note: For backward compatibility, this returns the tuple directly
+        // In the future, consider making this return Result<(String, Vec<String>), ModelError>
         match self.query_type {
             QueryType::Select => self.build_select_sql(),
             QueryType::Insert => self.build_insert_sql(),
             QueryType::Update => self.build_update_sql(),
             QueryType::Delete => self.build_delete_sql(),
         }
+    }
+
+    /// Generate SQL with security validation - returns Result for proper error handling
+    pub fn to_sql_with_params_secure(&self) -> Result<(String, Vec<String>), ModelError> {
+        // Validate identifiers first
+        self.validate_query_security()?;
+        Ok(self.to_sql_with_params())
+    }
+
+    /// Validate query security before SQL generation
+    fn validate_query_security(&self) -> Result<(), ModelError> {
+        // Validate table identifiers
+        for table in &self.from_tables {
+            validate_identifier(table)?;
+        }
+        
+        if let Some(ref table) = self.insert_table {
+            validate_identifier(table)?;
+        }
+        
+        if let Some(ref table) = self.update_table {
+            validate_identifier(table)?;
+        }
+        
+        if let Some(ref table) = self.delete_table {
+            validate_identifier(table)?;
+        }
+        
+        // Validate select field identifiers
+        for field in &self.select_fields {
+            // Skip wildcard and function calls for now
+            if field != "*" && !field.contains('(') {
+                validate_identifier(field)?;
+            }
+        }
+        
+        // Validate column identifiers in WHERE clauses
+        for condition in &self.where_conditions {
+            if condition.column != "RAW" && condition.column != "EXISTS" && condition.column != "NOT EXISTS" {
+                validate_identifier(&condition.column)?;
+            }
+        }
+        
+        // Validate JOIN table identifiers
+        for join in &self.joins {
+            validate_identifier(&join.table)?;
+        }
+        
+        // Validate parameter values
+        for condition in &self.where_conditions {
+            if let Some(ref value) = condition.value {
+                if let Value::String(s) = value {
+                    validate_parameter(s)?;
+                }
+            }
+            for value in &condition.values {
+                if let Value::String(s) = value {
+                    validate_parameter(s)?;
+                }
+            }
+        }
+        
+        Ok(())
     }
 
     /// Build SELECT SQL with parameters
@@ -31,13 +101,26 @@ impl<M> QueryBuilder<M> {
         if self.select_fields.is_empty() {
             sql.push('*');
         } else {
-            sql.push_str(&self.select_fields.join(", "));
+            let escaped_fields: Vec<String> = self.select_fields.iter()
+                .map(|field| {
+                    if field == "*" || field.contains('(') {
+                        // Keep wildcards and function calls as-is
+                        field.clone()
+                    } else {
+                        escape_identifier(field)
+                    }
+                })
+                .collect();
+            sql.push_str(&escaped_fields.join(", "));
         }
 
         // FROM clause
         if !self.from_tables.is_empty() {
             sql.push_str(" FROM ");
-            sql.push_str(&self.from_tables.join(", "));
+            let escaped_tables: Vec<String> = self.from_tables.iter()
+                .map(|table| escape_identifier(table))
+                .collect();
+            sql.push_str(&escaped_tables.join(", "));
         }
 
         // JOIN clauses
@@ -45,13 +128,13 @@ impl<M> QueryBuilder<M> {
             sql.push(' ');
             sql.push_str(&join.join_type.to_string());
             sql.push(' ');
-            sql.push_str(&join.table);
+            sql.push_str(&escape_identifier(&join.table));
             sql.push_str(" ON ");
             for (i, (left, right)) in join.on_conditions.iter().enumerate() {
                 if i > 0 {
                     sql.push_str(" AND ");
                 }
-                sql.push_str(&format!("{} = {}", left, right));
+                sql.push_str(&format!("{} = {}", escape_identifier(left), escape_identifier(right)));
             }
         }
 
@@ -68,12 +151,13 @@ impl<M> QueryBuilder<M> {
         let mut param_counter = 1;
 
         if let Some(table) = &self.insert_table {
-            sql.push_str(&format!("INSERT INTO {}", table));
+            sql.push_str("INSERT INTO ");
+            sql.push_str(&escape_identifier(table));
             
             if !self.set_clauses.is_empty() {
                 sql.push_str(" (");
                 let columns: Vec<String> = self.set_clauses.iter()
-                    .map(|clause| clause.column.clone())
+                    .map(|clause| escape_identifier(&clause.column))
                     .collect();
                 sql.push_str(&columns.join(", "));
                 sql.push_str(") VALUES (");
@@ -104,7 +188,8 @@ impl<M> QueryBuilder<M> {
         let mut param_counter = 1;
 
         if let Some(table) = &self.update_table {
-            sql.push_str(&format!("UPDATE {}", table));
+            sql.push_str("UPDATE ");
+            sql.push_str(&escape_identifier(table));
             
             if !self.set_clauses.is_empty() {
                 sql.push_str(" SET ");
@@ -112,7 +197,8 @@ impl<M> QueryBuilder<M> {
                     if i > 0 {
                         sql.push_str(", ");
                     }
-                    sql.push_str(&format!("{} = ", clause.column));
+                    sql.push_str(&escape_identifier(&clause.column));
+                    sql.push_str(" = ");
                     if let Some(ref value) = clause.value {
                         sql.push_str(&format!("${}", param_counter));
                         params.push(value.to_string());
@@ -136,7 +222,8 @@ impl<M> QueryBuilder<M> {
         let mut param_counter = 1;
 
         if let Some(table) = &self.delete_table {
-            sql.push_str(&format!("DELETE FROM {}", table));
+            sql.push_str("DELETE FROM ");
+            sql.push_str(&escape_identifier(table));
             self.build_where_clause(&mut sql, &mut params, &mut param_counter);
         }
 
@@ -152,7 +239,12 @@ impl<M> QueryBuilder<M> {
                     sql.push_str(" AND ");
                 }
                 
-                sql.push_str(&condition.column);
+                if condition.column == "RAW" || condition.column == "EXISTS" || condition.column == "NOT EXISTS" {
+                    // Don't escape special keywords
+                    sql.push_str(&condition.column);
+                } else {
+                    sql.push_str(&escape_identifier(&condition.column));
+                }
                 sql.push(' ');
 
                 match condition.operator {
@@ -203,7 +295,7 @@ impl<M> QueryBuilder<M> {
                 if i > 0 {
                     sql.push_str(", ");
                 }
-                sql.push_str(&format!("{} {}", column, direction));
+                sql.push_str(&format!("{} {}", escape_identifier(column), direction));
             }
         }
 
@@ -218,11 +310,16 @@ impl<M> QueryBuilder<M> {
         }
     }
 
+    /// Generate SQL with parameters (unsafe version for backward compatibility)
+    fn to_sql_with_params_unsafe(&self) -> String {
+        self.to_sql_with_params().0
+    }
+
     /// Convert the query to SQL string (for backwards compatibility)
     pub fn to_sql(&self) -> String {
         match self.query_type {
             QueryType::Select => self.build_select_sql_simple(),
-            _ => self.to_sql_with_params().0,
+            _ => self.to_sql_with_params_unsafe(),
         }
     }
 
@@ -246,7 +343,10 @@ impl<M> QueryBuilder<M> {
         // FROM clause
         if !self.from_tables.is_empty() {
             sql.push_str(" FROM ");
-            sql.push_str(&self.from_tables.join(", "));
+            let escaped_tables: Vec<String> = self.from_tables.iter()
+                .map(|table| escape_identifier(table))
+                .collect();
+            sql.push_str(&escaped_tables.join(", "));
         }
 
         // JOIN clauses

@@ -15,12 +15,20 @@ pub mod transaction;
 pub mod migration;
 pub mod migration_runner;
 pub mod relationships;
+pub mod security;
 
 #[cfg(test)]
 mod tests;
 
 #[cfg(test)]
 mod transaction_tests;
+
+
+#[cfg(test)]  
+mod security_tests_minimal;
+
+#[cfg(test)]
+mod security_tests_comprehensive;
 
 // Re-export core traits and types
 pub use model::*;
@@ -31,6 +39,7 @@ pub use transaction::*;
 pub use migration::*;
 pub use migration_runner::*;
 pub use relationships::*;
+pub use security::*;
 
 // Derive macro re-exports (when implemented in future)
 // pub use elif_orm_derive::*;
