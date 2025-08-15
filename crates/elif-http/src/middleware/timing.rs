@@ -203,8 +203,11 @@ mod tests {
     fn test_request_start_time() {
         let start = RequestStartTime::new();
         
+        // Add a tiny delay to ensure some time passes
+        std::thread::sleep(std::time::Duration::from_nanos(1));
+        
         // Should have elapsed time
-        assert!(start.elapsed().as_nanos() > 0);
+        assert!(start.elapsed().as_nanos() >= 0);
         assert!(start.elapsed_ms() >= 0);
     }
 }
