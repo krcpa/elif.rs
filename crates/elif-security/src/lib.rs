@@ -11,6 +11,7 @@ pub mod integration;
 pub use config::*;
 pub use middleware::cors::{CorsMiddleware, CorsConfig};
 pub use middleware::csrf::{CsrfMiddleware, CsrfConfig};
+pub use middleware::rate_limit::{RateLimitMiddleware, RateLimitConfig, RateLimitIdentifier};
 pub use integration::{
     SecurityMiddlewareBuilder, 
     basic_security_pipeline, 
@@ -32,6 +33,9 @@ pub enum SecurityError {
     
     #[error("Rate limit exceeded: {limit} requests per {window_seconds} seconds")]
     RateLimitExceeded { limit: u32, window_seconds: u32 },
+    
+    #[error("Rate limiting error: {0}")]
+    RateLimitError(String),
     
     #[error("Configuration error: {message}")]
     ConfigError { message: String },

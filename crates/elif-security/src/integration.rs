@@ -5,8 +5,8 @@
 
 use elif_http::middleware::MiddlewarePipeline;
 use crate::{
-    middleware::{cors::CorsMiddleware, csrf::CsrfMiddleware},
-    config::{CorsConfig, CsrfConfig},
+    middleware::{cors::CorsMiddleware, csrf::CsrfMiddleware, rate_limit::RateLimitMiddleware},
+    config::{CorsConfig, CsrfConfig, RateLimitConfig},
 };
 
 /// Security middleware suite builder that helps configure and integrate
@@ -15,6 +15,7 @@ use crate::{
 pub struct SecurityMiddlewareBuilder {
     cors_config: Option<CorsConfig>,
     csrf_config: Option<CsrfConfig>,
+    rate_limit_config: Option<RateLimitConfig>,
 }
 
 impl SecurityMiddlewareBuilder {
@@ -47,11 +48,35 @@ impl SecurityMiddlewareBuilder {
         self
     }
     
+    /// Add rate limiting middleware with configuration
+    pub fn with_rate_limit(mut self, config: RateLimitConfig) -> Self {
+        self.rate_limit_config = Some(config);
+        self
+    }
+    
+    /// Add rate limiting middleware with default configuration (100 req/min by IP)
+    pub fn with_rate_limit_default(mut self) -> Self {
+        self.rate_limit_config = Some(RateLimitConfig::default());
+        self
+    }
+    
+    /// Add rate limiting middleware with strict configuration (10 req/min by IP)
+    pub fn with_rate_limit_strict(mut self) -> Self {
+        self.rate_limit_config = Some(RateLimitConfig {
+            max_requests: 10,
+            window_seconds: 60,
+            identifier: crate::config::RateLimitIdentifier::IpAddress,
+            exempt_paths: std::collections::HashSet::new(),
+        });
+        self
+    }
+    
     /// Build the security middleware pipeline
     /// 
     /// The middleware are added in the following order for optimal security:
     /// 1. CORS middleware (handles preflight requests early)
-    /// 2. CSRF middleware (validates tokens after CORS)
+    /// 2. Rate limiting middleware (prevents abuse before processing)
+    /// 3. CSRF middleware (validates tokens after rate limiting)
     pub fn build(self) -> MiddlewarePipeline {
         let mut pipeline = MiddlewarePipeline::new();
         
@@ -61,7 +86,13 @@ impl SecurityMiddlewareBuilder {
             pipeline = pipeline.add(cors_middleware);
         }
         
-        // Add CSRF middleware second (validates after CORS)
+        // Add rate limiting middleware second (prevents abuse early)
+        if let Some(rate_limit_config) = self.rate_limit_config {
+            let rate_limit_middleware = RateLimitMiddleware::new(rate_limit_config);
+            pipeline = pipeline.add(rate_limit_middleware);
+        }
+        
+        // Add CSRF middleware third (validates tokens after rate limiting)
         if let Some(csrf_config) = self.csrf_config {
             let csrf_middleware = CsrfMiddleware::new(csrf_config);
             pipeline = pipeline.add(csrf_middleware);
@@ -73,10 +104,11 @@ impl SecurityMiddlewareBuilder {
 
 /// Quick setup functions for common security configurations
 
-/// Create a basic security pipeline with permissive CORS and default CSRF
+/// Create a basic security pipeline with permissive CORS, moderate rate limiting, and default CSRF
 pub fn basic_security_pipeline() -> MiddlewarePipeline {
     SecurityMiddlewareBuilder::new()
         .with_cors_permissive()
+        .with_rate_limit_default()
         .with_csrf_default()
         .build()
 }
@@ -98,8 +130,16 @@ pub fn strict_security_pipeline(allowed_origins: Vec<String>) -> MiddlewarePipel
         ..CsrfConfig::default()
     };
     
+    let rate_limit_config = RateLimitConfig {
+        max_requests: 30, // Strict rate limiting
+        window_seconds: 60,
+        identifier: crate::config::RateLimitIdentifier::IpAddress,
+        exempt_paths: std::collections::HashSet::new(),
+    };
+    
     SecurityMiddlewareBuilder::new()
         .with_cors(cors_config)
+        .with_rate_limit(rate_limit_config)
         .with_csrf(csrf_config)
         .build()
 }
@@ -118,8 +158,16 @@ pub fn development_security_pipeline() -> MiddlewarePipeline {
         ..CsrfConfig::default()
     };
     
+    let rate_limit_config = RateLimitConfig {
+        max_requests: 1000, // Permissive rate limiting for development
+        window_seconds: 60,
+        identifier: crate::config::RateLimitIdentifier::IpAddress,
+        exempt_paths: std::collections::HashSet::new(),
+    };
+    
     SecurityMiddlewareBuilder::new()
         .with_cors(cors_config)
+        .with_rate_limit(rate_limit_config)
         .with_csrf(csrf_config)
         .build()
 }
@@ -133,9 +181,9 @@ mod tests {
     async fn test_basic_security_pipeline() {
         let pipeline = basic_security_pipeline();
         
-        // Should have both CORS and CSRF middleware
-        assert_eq!(pipeline.len(), 2);
-        assert_eq!(pipeline.names(), vec!["CorsMiddleware", "CsrfMiddleware"]);
+        // Should have CORS, Rate Limiting, and CSRF middleware
+        assert_eq!(pipeline.len(), 3);
+        assert_eq!(pipeline.names(), vec!["CorsMiddleware", "RateLimit", "CsrfMiddleware"]);
     }
     
     #[tokio::test]
@@ -196,7 +244,7 @@ mod tests {
         let allowed_origins = vec!["https://trusted.com".to_string()];
         let pipeline = strict_security_pipeline(allowed_origins);
         
-        assert_eq!(pipeline.len(), 2);
+        assert_eq!(pipeline.len(), 3);
         
         // Test request from allowed origin
         let request = Request::builder()
@@ -225,7 +273,7 @@ mod tests {
     async fn test_development_security_pipeline() {
         let pipeline = development_security_pipeline();
         
-        assert_eq!(pipeline.len(), 2);
+        assert_eq!(pipeline.len(), 3);
         
         // Should allow any origin in development mode
         let request = Request::builder()

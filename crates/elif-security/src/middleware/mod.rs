@@ -2,7 +2,8 @@
 
 pub mod cors;
 pub mod csrf;
-// Future middleware modules will be added here
+pub mod rate_limit;
 
 pub use cors::{CorsMiddleware, CorsConfig};
 pub use csrf::{CsrfMiddleware, CsrfConfig};
+pub use rate_limit::{RateLimitMiddleware, RateLimitConfig, RateLimitIdentifier};

@@ -2,7 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::time::Duration;
 
 /// Global security configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
