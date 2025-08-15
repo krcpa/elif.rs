@@ -1,21 +1,28 @@
 //! Authentication middleware for HTTP requests
 //! 
-//! This module will be implemented in Phase 5.4
+//! Provides middleware for JWT and session-based authentication
+
+pub mod jwt;
+pub mod session;
+
+// Re-exports for convenient access
+pub use jwt::{JwtMiddleware, JwtMiddlewareBuilder, JwtMiddlewareConfig};
+pub use session::{SessionMiddleware, SessionMiddlewareBuilder, SessionMiddlewareConfig, CookieSameSite};
 
 use crate::{AuthError, AuthResult};
 
-/// Authentication middleware (placeholder)
+/// Generic authentication middleware (placeholder for Phase 5.4)
 /// 
-/// This will be implemented in Phase 5.4: User Authentication Middleware
+/// This will be expanded in Phase 5.4: User Authentication Middleware
 pub struct AuthMiddleware {
-    // Implementation will be added in Phase 5.4
+    // Implementation will be expanded in Phase 5.4
     _placeholder: (),
 }
 
 impl AuthMiddleware {
     /// Create a new authentication middleware
     pub fn new() -> AuthResult<Self> {
-        // TODO: Implement in Phase 5.4
-        Err(AuthError::generic_error("Auth middleware not yet implemented - will be completed in Phase 5.4"))
+        // TODO: Expand implementation in Phase 5.4
+        Err(AuthError::generic_error("Generic auth middleware not yet implemented - will be completed in Phase 5.4. Use JwtMiddleware for JWT authentication."))
     }
 }

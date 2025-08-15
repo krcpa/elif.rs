@@ -144,6 +144,16 @@ impl AuthError {
     pub fn generic_error(message: impl Into<String>) -> Self {
         Self::Generic { message: message.into() }
     }
+    
+    /// Create an authentication failed error (alias for InvalidCredentials with message)
+    pub fn authentication_failed(message: impl Into<String>) -> Self {
+        Self::Generic { message: format!("Authentication failed: {}", message.into()) }
+    }
+    
+    /// Create a configuration error (alias for config_error)
+    pub fn configuration_error(message: impl Into<String>) -> Self {
+        Self::config_error(message)
+    }
 }
 
 // Conversion from common error types
