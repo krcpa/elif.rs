@@ -151,6 +151,20 @@
 4) **Commit**: `git commit -m "feat: description (Issue #X)"`
 5) **Complete**: `gh issue close X --comment "Completed: details"`
 
+## Test-Driven Development Approach (ZORUNLU)
+- MUST: Her implementation adımından sonra test yaz
+- MUST: Feature implement et → Test yaz → Validate → Sonraki feature'a geç
+- MUST: TodoWrite kullanırken her implementation task'ından sonra test task'ı ekle
+- NEVER: Tüm implementation'ı bitirip sonra test yazma
+- Example flow:
+  1. Implement Feature A
+  2. Write tests for Feature A
+  3. Run tests and fix issues
+  4. Implement Feature B
+  5. Write tests for Feature B
+  6. Run all tests
+  7. Continue...
+
 ## Task Management - ZORUNLU
 **Current Status**: Use `gh issue list --repo krcpa/elif.rs --state open --limit 5` to check active tasks
 **Rule**: Every development work must be linked to a GitHub issue

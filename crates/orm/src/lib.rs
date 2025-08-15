@@ -16,6 +16,7 @@ pub mod migration;
 pub mod migration_runner;
 pub mod relationships;
 pub mod security;
+pub mod loading;
 
 #[cfg(test)]
 mod tests;
