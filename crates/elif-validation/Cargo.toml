@@ -1,0 +1,29 @@
+[package]
+name = "elif-validation"
+version = "0.1.0"
+edition = "2021"
+description = "Input validation system for the elif framework"
+license = "MIT"
+authors = ["krcpa <krcpa@users.noreply.github.com>"]
+repository = "https://github.com/krcpa/elif.rs"
+homepage = "https://github.com/krcpa/elif.rs"
+documentation = "https://docs.rs/elif-validation"
+keywords = ["web", "framework", "validation", "input", "security"]
+categories = ["web-programming", "development-tools"]
+
+[dependencies]
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tokio-test = "0.4"
+
+[[example]]
+name = "validation_demo"
+path = "examples/validation_demo.rs"

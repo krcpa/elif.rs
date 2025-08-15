@@ -36,7 +36,8 @@
       "Bash(rg:*)",
       "Bash(grep:*)",
       "Bash(rustc --version)",
-      "Bash(gh issue edit:*)"
+      "Bash(gh issue edit:*)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }

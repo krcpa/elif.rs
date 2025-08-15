@@ -8,6 +8,7 @@ members = [
     "crates/cli",
     "crates/elif-http",
     "crates/elif-security",
+    "crates/elif-validation",
 ]
 resolver = "2"
 
@@ -39,6 +40,8 @@ thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json"] }
 tokio = { version = "1.0", features = ["full"] }
+regex = "1.10"
+async-trait = "0.1"
 
 
 # CLI
