@@ -8,3 +8,4 @@ pub mod test;
 pub mod map;
 pub mod openapi;
 pub mod migrate;
+pub mod auth;

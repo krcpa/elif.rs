@@ -73,6 +73,12 @@ enum Commands {
         #[command(subcommand)]
         migrate_command: MigrateCommands,
     },
+    
+    /// Authentication management
+    Auth {
+        #[command(subcommand)]
+        auth_command: AuthCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -146,6 +152,49 @@ enum MigrateCommands {
     Status,
 }
 
+#[derive(Subcommand)]
+enum AuthCommands {
+    /// Set up authentication configuration
+    Setup {
+        /// Authentication provider (jwt, session)
+        #[arg(long, value_enum, default_value = "jwt")]
+        provider: AuthProvider,
+        
+        /// Include MFA support
+        #[arg(long)]
+        mfa: bool,
+        
+        /// Include RBAC support
+        #[arg(long)]
+        rbac: bool,
+    },
+    
+    /// Generate JWT secret key
+    GenerateKey {
+        /// Key length in bytes
+        #[arg(long, default_value = "64")]
+        length: usize,
+    },
+    
+    /// Generate authentication scaffold
+    Scaffold {
+        /// Include registration endpoints
+        #[arg(long)]
+        registration: bool,
+        
+        /// Include password reset
+        #[arg(long)]
+        reset_password: bool,
+    },
+}
+
+#[derive(clap::ValueEnum, Clone)]
+enum AuthProvider {
+    Jwt,
+    Session,
+    Both,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), ElifError> {
     let cli = Cli::parse();
@@ -210,6 +259,19 @@ async fn main() -> Result<(), ElifError> {
                 }
                 MigrateCommands::Status => {
                     migrate::status().await?;
+                }
+            }
+        }
+        Commands::Auth { auth_command } => {
+            match auth_command {
+                AuthCommands::Setup { provider, mfa, rbac } => {
+                    auth::setup(provider, mfa, rbac).await?;
+                }
+                AuthCommands::GenerateKey { length } => {
+                    auth::generate_key(length).await?;
+                }
+                AuthCommands::Scaffold { registration, reset_password } => {
+                    auth::scaffold(registration, reset_password).await?;
                 }
             }
         }
