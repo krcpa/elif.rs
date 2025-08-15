@@ -5,11 +5,18 @@
 
 pub mod config;
 pub mod middleware;
+pub mod integration;
 
 // Re-export main types
 pub use config::*;
 pub use middleware::cors::{CorsMiddleware, CorsConfig};
 pub use middleware::csrf::{CsrfMiddleware, CsrfConfig};
+pub use integration::{
+    SecurityMiddlewareBuilder, 
+    basic_security_pipeline, 
+    strict_security_pipeline, 
+    development_security_pipeline
+};
 
 /// Common result type for security operations
 pub type SecurityResult<T> = Result<T, SecurityError>;

@@ -7,10 +7,13 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use axum::{
     extract::Request,
-    http::{HeaderMap, Method, StatusCode, header},
-    response::{IntoResponse, Response},
+    http::{HeaderMap, Method, header},
+    response::{Response, IntoResponse},
 };
-use elif_http::middleware::{Middleware, BoxFuture};
+use elif_http::{
+    middleware::{Middleware, BoxFuture},
+    ElifStatusCode,  // Use framework-native status codes
+};
 use sha2::{Sha256, Digest};
 use rand::{thread_rng, Rng};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -196,7 +199,7 @@ impl Middleware for CsrfMiddleware {
             
             // CSRF validation failed - return 403 Forbidden
             let error_response = Response::builder()
-                .status(StatusCode::FORBIDDEN)
+                .status(ElifStatusCode::FORBIDDEN)
                 .header("Content-Type", "application/json")
                 .body(r#"{"error":{"code":"CSRF_VALIDATION_FAILED","message":"CSRF token validation failed"}}"#.into())
                 .unwrap();
@@ -206,7 +209,7 @@ impl Middleware for CsrfMiddleware {
     }
     
     fn name(&self) -> &'static str {
-        "CSRF Protection"
+        "CsrfMiddleware"
     }
 }
 
@@ -214,9 +217,9 @@ impl IntoResponse for SecurityError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
             SecurityError::CsrfValidationFailed => {
-                (StatusCode::FORBIDDEN, "CSRF token validation failed")
+                (ElifStatusCode::FORBIDDEN, "CSRF token validation failed")
             }
-            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Security error"),
+            _ => (ElifStatusCode::INTERNAL_SERVER_ERROR, "Security error"),
         };
         
         (status, message).into_response()
@@ -428,7 +431,7 @@ mod tests {
         
         // Check that it returns 403 Forbidden
         if let Err(response) = result {
-            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            assert_eq!(response.status(), ElifStatusCode::FORBIDDEN);
         }
     }
 
