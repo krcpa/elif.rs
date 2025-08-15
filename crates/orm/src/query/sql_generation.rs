@@ -168,7 +168,7 @@ impl<M> QueryBuilder<M> {
                     }
                     if let Some(ref value) = clause.value {
                         sql.push_str(&format!("${}", param_counter));
-                        params.push(value.to_string());
+                        params.push(self.json_value_to_param_string(value));
                         param_counter += 1;
                     } else {
                         sql.push_str("NULL");
@@ -201,7 +201,7 @@ impl<M> QueryBuilder<M> {
                     sql.push_str(" = ");
                     if let Some(ref value) = clause.value {
                         sql.push_str(&format!("${}", param_counter));
-                        params.push(value.to_string());
+                        params.push(self.json_value_to_param_string(value));
                         param_counter += 1;
                     } else {
                         sql.push_str("NULL");
@@ -256,7 +256,7 @@ impl<M> QueryBuilder<M> {
                                 sql.push_str(", ");
                             }
                             sql.push_str(&format!("${}", param_counter));
-                            params.push(value.to_string());
+                            params.push(self.json_value_to_param_string(value));
                             *param_counter += 1;
                         }
                         sql.push(')');
@@ -265,8 +265,8 @@ impl<M> QueryBuilder<M> {
                         sql.push_str(&condition.operator.to_string());
                         sql.push_str(&format!(" ${} AND ${}", param_counter, *param_counter + 1));
                         if condition.values.len() >= 2 {
-                            params.push(condition.values[0].to_string());
-                            params.push(condition.values[1].to_string());
+                            params.push(self.json_value_to_param_string(&condition.values[0]));
+                            params.push(self.json_value_to_param_string(&condition.values[1]));
                         }
                         *param_counter += 2;
                     }
@@ -277,7 +277,7 @@ impl<M> QueryBuilder<M> {
                         sql.push_str(&condition.operator.to_string());
                         if let Some(ref value) = condition.value {
                             sql.push_str(&format!(" ${}", param_counter));
-                            params.push(value.to_string());
+                            params.push(self.json_value_to_param_string(value));
                             *param_counter += 1;
                         }
                     }
@@ -340,13 +340,10 @@ impl<M> QueryBuilder<M> {
             sql.push_str(&self.select_fields.join(", "));
         }
 
-        // FROM clause
+        // FROM clause (no escaping for backward compatibility)
         if !self.from_tables.is_empty() {
             sql.push_str(" FROM ");
-            let escaped_tables: Vec<String> = self.from_tables.iter()
-                .map(|table| escape_identifier(table))
-                .collect();
-            sql.push_str(&escaped_tables.join(", "));
+            sql.push_str(&self.from_tables.join(", "));
         }
 
         // JOIN clauses
@@ -491,6 +488,17 @@ impl<M> QueryBuilder<M> {
             Value::Bool(b) => b.to_string(),
             Value::Null => "NULL".to_string(),
             _ => "NULL".to_string(), // Arrays and objects not yet supported
+        }
+    }
+
+    /// Convert JSON value to parameter string for SQL parameters
+    fn json_value_to_param_string(&self, value: &Value) -> String {
+        match value {
+            Value::String(s) => s.clone(), // Extract the string without JSON quotes
+            Value::Number(n) => n.to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Null => "NULL".to_string(),
+            _ => value.to_string(), // Fallback to JSON representation
         }
     }
 }

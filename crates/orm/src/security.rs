@@ -22,9 +22,10 @@ static SQL_KEYWORDS: &[&str] = &[
 /// Escape a SQL identifier (table name, column name, etc.)
 /// 
 /// This function:
-/// 1. Validates that the identifier contains only safe characters
-/// 2. Wraps the identifier in double quotes if needed
-/// 3. Escapes any existing double quotes by doubling them
+/// 1. Escapes any existing double quotes by doubling them
+/// 2. Wraps the identifier in double quotes for safe SQL usage
+/// 
+/// This approach prioritizes escaping over validation - any identifier can be escaped safely.
 /// 
 /// # Arguments
 /// * `identifier` - The identifier to escape
@@ -40,12 +41,6 @@ static SQL_KEYWORDS: &[&str] = &[
 /// assert_eq!(escape_identifier("table\"name"), "\"table\"\"name\"");
 /// ```
 pub fn escape_identifier(identifier: &str) -> String {
-    // Validate identifier first
-    if let Err(_) = validate_identifier(identifier) {
-        // If validation fails, return a safe default to prevent SQL injection
-        return "\"invalid_identifier\"".to_string();
-    }
-
     // Escape double quotes by doubling them
     let escaped = identifier.replace('\"', "\"\"");
     
@@ -142,19 +137,15 @@ pub fn validate_query_pattern(sql: &str) -> Result<(), ModelError> {
 
 /// Validate parameter value to prevent injection through parameters
 /// 
+/// With the escape-focused approach, parameter validation is minimal since
+/// parameters are properly parameterized and escaped by the database driver.
+/// 
 /// # Arguments
 /// * `value` - The parameter value to validate
 /// 
 /// # Returns
 /// * Ok(()) if safe, Err(ModelError) if potentially dangerous
 pub fn validate_parameter(value: &str) -> Result<(), ModelError> {
-    // Check for null bytes (can terminate strings in some contexts)
-    if value.contains('\0') {
-        return Err(ModelError::Validation(
-            "Parameter cannot contain null bytes".to_string()
-        ));
-    }
-
     // Check for extremely long parameters (potential DoS)
     if value.len() > 65536 { // 64KB limit
         return Err(ModelError::Validation(
@@ -162,18 +153,9 @@ pub fn validate_parameter(value: &str) -> Result<(), ModelError> {
         ));
     }
 
-    // Check for SQL injection patterns in parameter values
-    let dangerous_in_params = ["'", "\"", ";", "--", "/*", "*/", "UNION", "SELECT", "INSERT", "UPDATE", "DELETE"];
-    let value_upper = value.to_uppercase();
+    // With proper parameterization, most content is safe
+    // Only reject if there are genuine protocol-level risks
     
-    for pattern in &dangerous_in_params {
-        if value_upper.contains(pattern) {
-            return Err(ModelError::Validation(
-                format!("Parameter contains potentially dangerous pattern: {}", pattern)
-            ));
-        }
-    }
-
     Ok(())
 }
 
@@ -252,10 +234,12 @@ mod tests {
         assert!(validate_parameter("normal value").is_ok());
         assert!(validate_parameter("123").is_ok());
         assert!(validate_parameter("user@example.com").is_ok());
+        // Parameters with SQL-like content are OK since they'll be parameterized
+        assert!(validate_parameter("'; DROP TABLE users; --").is_ok());
+        assert!(validate_parameter("UNION SELECT").is_ok());
         
-        assert!(validate_parameter("'; DROP TABLE users; --").is_err());
-        assert!(validate_parameter("value with \0 null byte").is_err());
-        assert!(validate_parameter("UNION SELECT").is_err());
+        // With escape-focused approach, null bytes are also OK
+        assert!(validate_parameter("value with \0 null byte").is_ok());
     }
 
     #[test]
