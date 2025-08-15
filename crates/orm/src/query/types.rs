@@ -4,7 +4,7 @@ use std::fmt;
 use serde_json::Value;
 
 /// Query operator types
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum QueryOperator {
     Equal,
     NotEqual,
@@ -19,6 +19,7 @@ pub enum QueryOperator {
     IsNull,
     IsNotNull,
     Between,
+    Raw, // For raw SQL expressions
 }
 
 impl fmt::Display for QueryOperator {
@@ -37,6 +38,7 @@ impl fmt::Display for QueryOperator {
             QueryOperator::IsNull => write!(f, "IS NULL"),
             QueryOperator::IsNotNull => write!(f, "IS NOT NULL"),
             QueryOperator::Between => write!(f, "BETWEEN"),
+            QueryOperator::Raw => write!(f, "RAW"), // This won't be used in SQL generation
         }
     }
 }

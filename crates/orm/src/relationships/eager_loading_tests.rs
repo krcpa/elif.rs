@@ -186,11 +186,11 @@ mod tests {
     fn test_eager_loading_spec_structure() {
         let spec = EagerLoadSpec {
             relation: "posts.comments".to_string(),
-            constraint_callback: None,
+            constraints: None,
         };
         
         assert_eq!(spec.relation, "posts.comments");
-        assert!(spec.constraint_callback.is_none());
+        assert!(spec.constraints.is_none());
         
         // Verify it can be debugged (has Debug trait)
         let debug_str = format!("{:?}", spec);

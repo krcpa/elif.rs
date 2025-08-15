@@ -8,113 +8,370 @@ use sqlx::{Pool, Postgres, Row, Column};
 
 use crate::error::{ModelError, ModelResult};
 use crate::model::Model;
-use crate::query::QueryBuilder;
+use crate::query::{QueryBuilder, OrderDirection, QueryOperator};
 
 /// Represents a relationship to be eagerly loaded
 #[derive(Debug)]
 pub struct EagerLoadSpec {
     /// Relationship name (e.g., "posts" or "posts.comments")  
     pub relation: String,
-    /// Optional constraint for the relationship query (stored as callback)
-    pub constraint_callback: Option<fn(&mut QueryBuilder) -> Result<(), ModelError>>,
+    /// Optional constraints for the relationship query
+    pub constraints: Option<RelationshipConstraintBuilder>,
+}
+
+/// Constraint types for relationship queries
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ConstraintType {
+    Where,
+    Order,
+    Limit,
+    Offset,
+    Having,
+    GroupBy,
+    Join,
+    Raw,
 }
 
 /// Trait for applying constraints to relationship queries
 #[async_trait]
-pub trait RelationshipConstraint: Send + Sync {
+pub trait RelationshipConstraint: Send + Sync + std::fmt::Debug {
     /// Apply constraint to the query builder
     async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()>;
+    
+    /// Get the type of constraint
+    fn constraint_type(&self) -> ConstraintType;
+    
+    /// Get a description of the constraint for debugging
+    fn description(&self) -> String;
+    
+    /// Validate the constraint before applying
+    fn validate(&self) -> ModelResult<()> {
+        Ok(()) // Default implementation - constraints can override
+    }
 }
 
-/// Builder for relationship constraints
+/// Builder for relationship constraints with type safety and validation
+#[derive(Debug)]
 pub struct RelationshipConstraintBuilder {
     constraints: Vec<Box<dyn RelationshipConstraint>>,
+    /// Track constraint types to prevent conflicts
+    applied_types: std::collections::HashSet<ConstraintType>,
 }
 
 impl RelationshipConstraintBuilder {
     pub fn new() -> Self {
         Self {
             constraints: Vec::new(),
+            applied_types: std::collections::HashSet::new(),
         }
     }
+    
+    /// Apply all constraints to the query builder
+    pub async fn apply_all(&self, query: &mut QueryBuilder) -> ModelResult<()> {
+        for constraint in &self.constraints {
+            constraint.validate()?;
+            constraint.apply(query).await?;
+        }
+        Ok(())
+    }
+    
+    /// Get all constraints
+    pub fn constraints(&self) -> &[Box<dyn RelationshipConstraint>] {
+        &self.constraints
+    }
+    
+    /// Check if a constraint type has been applied
+    pub fn has_constraint_type(&self, constraint_type: &ConstraintType) -> bool {
+        self.applied_types.contains(constraint_type)
+    }
+    
+    /// Add a constraint and track its type
+    fn add_constraint(&mut self, constraint: Box<dyn RelationshipConstraint>) {
+        let constraint_type = constraint.constraint_type();
+        self.applied_types.insert(constraint_type);
+        self.constraints.push(constraint);
+    }
 
+    /// Add WHERE equals constraint
     pub fn where_eq<V>(mut self, field: &str, value: V) -> Self 
     where
-        V: Send + Sync + std::fmt::Display + 'static,
+        V: Send + Sync + std::fmt::Display + Clone + 'static,
     {
         let constraint = WhereConstraint {
             field: field.to_string(),
-            operator: "=".to_string(),
-            value: value.to_string(),
+            operator: QueryOperator::Equal,
+            value: serde_json::Value::String(value.to_string()),
         };
-        self.constraints.push(Box::new(constraint));
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add WHERE not equals constraint
+    pub fn where_ne<V>(mut self, field: &str, value: V) -> Self 
+    where
+        V: Send + Sync + std::fmt::Display + Clone + 'static,
+    {
+        let constraint = WhereConstraint {
+            field: field.to_string(),
+            operator: QueryOperator::NotEqual,
+            value: serde_json::Value::String(value.to_string()),
+        };
+        self.add_constraint(Box::new(constraint));
         self
     }
 
+    /// Add WHERE greater than constraint
     pub fn where_gt<V>(mut self, field: &str, value: V) -> Self 
     where
-        V: Send + Sync + std::fmt::Display + 'static,
+        V: Send + Sync + std::fmt::Display + Clone + 'static,
     {
         let constraint = WhereConstraint {
             field: field.to_string(),
-            operator: ">".to_string(), 
-            value: value.to_string(),
+            operator: QueryOperator::GreaterThan,
+            value: serde_json::Value::String(value.to_string()),
         };
-        self.constraints.push(Box::new(constraint));
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add WHERE greater than or equal constraint
+    pub fn where_gte<V>(mut self, field: &str, value: V) -> Self 
+    where
+        V: Send + Sync + std::fmt::Display + Clone + 'static,
+    {
+        let constraint = WhereConstraint {
+            field: field.to_string(),
+            operator: QueryOperator::GreaterThanOrEqual,
+            value: serde_json::Value::String(value.to_string()),
+        };
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add WHERE less than constraint
+    pub fn where_lt<V>(mut self, field: &str, value: V) -> Self 
+    where
+        V: Send + Sync + std::fmt::Display + Clone + 'static,
+    {
+        let constraint = WhereConstraint {
+            field: field.to_string(),
+            operator: QueryOperator::LessThan,
+            value: serde_json::Value::String(value.to_string()),
+        };
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add WHERE less than or equal constraint
+    pub fn where_lte<V>(mut self, field: &str, value: V) -> Self 
+    where
+        V: Send + Sync + std::fmt::Display + Clone + 'static,
+    {
+        let constraint = WhereConstraint {
+            field: field.to_string(),
+            operator: QueryOperator::LessThanOrEqual,
+            value: serde_json::Value::String(value.to_string()),
+        };
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add WHERE LIKE constraint
+    pub fn where_like(mut self, field: &str, pattern: &str) -> Self {
+        let constraint = WhereConstraint {
+            field: field.to_string(),
+            operator: QueryOperator::Like,
+            value: serde_json::Value::String(pattern.to_string()),
+        };
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add WHERE IN constraint
+    pub fn where_in<V>(mut self, field: &str, values: Vec<V>) -> Self 
+    where
+        V: Send + Sync + std::fmt::Display + Clone + 'static,
+    {
+        let constraint = WhereInConstraint {
+            field: field.to_string(),
+            values: values.into_iter().map(|v| serde_json::Value::String(v.to_string())).collect(),
+        };
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add raw WHERE constraint
+    pub fn where_raw(mut self, condition: &str) -> Self {
+        let constraint = RawConstraint {
+            sql: condition.to_string(),
+            constraint_type: ConstraintType::Where,
+        };
+        self.add_constraint(Box::new(constraint));
         self
     }
 
+    /// Add ORDER BY constraint
+    pub fn order_by(mut self, field: &str) -> Self {
+        let constraint = OrderConstraint {
+            field: field.to_string(),
+            direction: OrderDirection::Asc,
+        };
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add ORDER BY DESC constraint
     pub fn order_by_desc(mut self, field: &str) -> Self {
         let constraint = OrderConstraint {
             field: field.to_string(),
-            direction: "DESC".to_string(),
+            direction: OrderDirection::Desc,
         };
-        self.constraints.push(Box::new(constraint));
+        self.add_constraint(Box::new(constraint));
         self
     }
 
+    /// Add LIMIT constraint
     pub fn limit(mut self, count: i64) -> Self {
         let constraint = LimitConstraint { count };
-        self.constraints.push(Box::new(constraint));
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add OFFSET constraint
+    pub fn offset(mut self, count: i64) -> Self {
+        let constraint = OffsetConstraint { count };
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add GROUP BY constraint
+    pub fn group_by(mut self, field: &str) -> Self {
+        let constraint = GroupByConstraint {
+            field: field.to_string(),
+        };
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add HAVING constraint
+    pub fn having<V>(mut self, field: &str, operator: QueryOperator, value: V) -> Self 
+    where
+        V: Send + Sync + std::fmt::Display + Clone + 'static,
+    {
+        let constraint = HavingConstraint {
+            field: field.to_string(),
+            operator,
+            value: serde_json::Value::String(value.to_string()),
+        };
+        self.add_constraint(Box::new(constraint));
+        self
+    }
+    
+    /// Add raw HAVING constraint
+    pub fn having_raw(mut self, condition: &str) -> Self {
+        let constraint = RawConstraint {
+            sql: condition.to_string(),
+            constraint_type: ConstraintType::Having,
+        };
+        self.add_constraint(Box::new(constraint));
         self
     }
 }
 
 /// WHERE constraint implementation
+#[derive(Debug, Clone)]
 struct WhereConstraint {
     field: String,
-    operator: String,
-    value: String,
+    operator: QueryOperator,
+    value: serde_json::Value,
 }
 
 #[async_trait]
 impl RelationshipConstraint for WhereConstraint {
     async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()> {
-        // Apply the WHERE condition to the query builder
-        *query = query.clone().where_condition(&self.field, &self.operator, self.value.clone());
+        // Apply the WHERE condition using the appropriate method based on operator
+        *query = match self.operator {
+            QueryOperator::Equal => query.clone().where_eq(&self.field, self.value.clone()),
+            QueryOperator::NotEqual => query.clone().where_ne(&self.field, self.value.clone()),
+            QueryOperator::GreaterThan => query.clone().where_gt(&self.field, self.value.clone()),
+            QueryOperator::GreaterThanOrEqual => query.clone().where_gte(&self.field, self.value.clone()),
+            QueryOperator::LessThan => query.clone().where_lt(&self.field, self.value.clone()),
+            QueryOperator::LessThanOrEqual => query.clone().where_lte(&self.field, self.value.clone()),
+            QueryOperator::Like => {
+                if let Some(pattern) = self.value.as_str() {
+                    query.clone().where_like(&self.field, pattern)
+                } else {
+                    return Err(ModelError::Validation("LIKE operator requires string value".to_string()));
+                }
+            },
+            QueryOperator::NotLike => {
+                if let Some(pattern) = self.value.as_str() {
+                    query.clone().where_not_like(&self.field, pattern)
+                } else {
+                    return Err(ModelError::Validation("NOT LIKE operator requires string value".to_string()));
+                }
+            },
+            _ => {
+                return Err(ModelError::Validation(format!(
+                    "Unsupported operator {:?} for WHERE constraint", self.operator
+                )));
+            }
+        };
+        Ok(())
+    }
+    
+    fn constraint_type(&self) -> ConstraintType {
+        ConstraintType::Where
+    }
+    
+    fn description(&self) -> String {
+        format!("WHERE {} {:?} {}", self.field, self.operator, self.value)
+    }
+    
+    fn validate(&self) -> ModelResult<()> {
+        if self.field.trim().is_empty() {
+            return Err(ModelError::Validation("WHERE constraint field cannot be empty".to_string()));
+        }
         Ok(())
     }
 }
 
 /// ORDER BY constraint implementation  
+#[derive(Debug, Clone)]
 struct OrderConstraint {
     field: String,
-    direction: String,
+    direction: OrderDirection,
 }
 
 #[async_trait]
 impl RelationshipConstraint for OrderConstraint {
     async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()> {
         // Apply the ORDER BY condition to the query builder
-        *query = match self.direction.as_str() {
-            "DESC" => query.clone().order_by_desc(&self.field),
-            _ => query.clone().order_by(&self.field),
+        *query = match self.direction {
+            OrderDirection::Desc => query.clone().order_by_desc(&self.field),
+            OrderDirection::Asc => query.clone().order_by(&self.field),
         };
+        Ok(())
+    }
+    
+    fn constraint_type(&self) -> ConstraintType {
+        ConstraintType::Order
+    }
+    
+    fn description(&self) -> String {
+        format!("ORDER BY {} {:?}", self.field, self.direction)
+    }
+    
+    fn validate(&self) -> ModelResult<()> {
+        if self.field.trim().is_empty() {
+            return Err(ModelError::Validation("ORDER BY constraint field cannot be empty".to_string()));
+        }
         Ok(())
     }
 }
 
 /// LIMIT constraint implementation
+#[derive(Debug, Clone)]
 struct LimitConstraint {
     count: i64,
 }
@@ -124,6 +381,201 @@ impl RelationshipConstraint for LimitConstraint {
     async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()> {
         // Apply the LIMIT condition to the query builder
         *query = query.clone().limit(self.count);
+        Ok(())
+    }
+    
+    fn constraint_type(&self) -> ConstraintType {
+        ConstraintType::Limit
+    }
+    
+    fn description(&self) -> String {
+        format!("LIMIT {}", self.count)
+    }
+    
+    fn validate(&self) -> ModelResult<()> {
+        if self.count < 0 {
+            return Err(ModelError::Validation("LIMIT count must be non-negative".to_string()));
+        }
+        Ok(())
+    }
+}
+
+/// OFFSET constraint implementation
+#[derive(Debug, Clone)]
+struct OffsetConstraint {
+    count: i64,
+}
+
+#[async_trait]
+impl RelationshipConstraint for OffsetConstraint {
+    async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()> {
+        *query = query.clone().offset(self.count);
+        Ok(())
+    }
+    
+    fn constraint_type(&self) -> ConstraintType {
+        ConstraintType::Offset
+    }
+    
+    fn description(&self) -> String {
+        format!("OFFSET {}", self.count)
+    }
+    
+    fn validate(&self) -> ModelResult<()> {
+        if self.count < 0 {
+            return Err(ModelError::Validation("OFFSET count must be non-negative".to_string()));
+        }
+        Ok(())
+    }
+}
+
+/// WHERE IN constraint implementation
+#[derive(Debug, Clone)]
+struct WhereInConstraint {
+    field: String,
+    values: Vec<serde_json::Value>,
+}
+
+#[async_trait]
+impl RelationshipConstraint for WhereInConstraint {
+    async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()> {
+        // Convert values to strings for the where_in method
+        let string_values: Vec<String> = self.values
+            .iter()
+            .map(|v| match v {
+                serde_json::Value::String(s) => s.clone(),
+                _ => v.to_string(),
+            })
+            .collect();
+        
+        *query = query.clone().where_in(&self.field, string_values);
+        Ok(())
+    }
+    
+    fn constraint_type(&self) -> ConstraintType {
+        ConstraintType::Where
+    }
+    
+    fn description(&self) -> String {
+        format!("WHERE {} IN ({} values)", self.field, self.values.len())
+    }
+    
+    fn validate(&self) -> ModelResult<()> {
+        if self.field.trim().is_empty() {
+            return Err(ModelError::Validation("WHERE IN constraint field cannot be empty".to_string()));
+        }
+        if self.values.is_empty() {
+            return Err(ModelError::Validation("WHERE IN constraint must have at least one value".to_string()));
+        }
+        Ok(())
+    }
+}
+
+/// GROUP BY constraint implementation
+#[derive(Debug, Clone)]
+struct GroupByConstraint {
+    field: String,
+}
+
+#[async_trait]
+impl RelationshipConstraint for GroupByConstraint {
+    async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()> {
+        *query = query.clone().group_by(&self.field);
+        Ok(())
+    }
+    
+    fn constraint_type(&self) -> ConstraintType {
+        ConstraintType::GroupBy
+    }
+    
+    fn description(&self) -> String {
+        format!("GROUP BY {}", self.field)
+    }
+    
+    fn validate(&self) -> ModelResult<()> {
+        if self.field.trim().is_empty() {
+            return Err(ModelError::Validation("GROUP BY constraint field cannot be empty".to_string()));
+        }
+        Ok(())
+    }
+}
+
+/// HAVING constraint implementation
+#[derive(Debug, Clone)]
+struct HavingConstraint {
+    field: String,
+    operator: QueryOperator,
+    value: serde_json::Value,
+}
+
+#[async_trait]
+impl RelationshipConstraint for HavingConstraint {
+    async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()> {
+        // Apply HAVING constraint using the having method
+        *query = query.clone().having(&self.field, self.operator, self.value.clone());
+        Ok(())
+    }
+    
+    fn constraint_type(&self) -> ConstraintType {
+        ConstraintType::Having
+    }
+    
+    fn description(&self) -> String {
+        format!("HAVING {} {:?} {}", self.field, self.operator, self.value)
+    }
+    
+    fn validate(&self) -> ModelResult<()> {
+        if self.field.trim().is_empty() {
+            return Err(ModelError::Validation("HAVING constraint field cannot be empty".to_string()));
+        }
+        Ok(())
+    }
+}
+
+/// Raw SQL constraint implementation for complex cases
+#[derive(Debug, Clone)]
+struct RawConstraint {
+    sql: String,
+    constraint_type: ConstraintType,
+}
+
+#[async_trait]
+impl RelationshipConstraint for RawConstraint {
+    async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()> {
+        // Apply raw constraint based on its type
+        match self.constraint_type {
+            ConstraintType::Where => {
+                *query = query.clone().where_raw(&self.sql);
+            },
+            ConstraintType::Having => {
+                *query = query.clone().having_raw(&self.sql);
+            },
+            ConstraintType::Raw => {
+                // For generic raw constraints, we'd need a way to append raw SQL
+                // This would require extending the QueryBuilder with a raw method
+                return Err(ModelError::Validation("Raw constraints not yet supported".to_string()));
+            },
+            _ => {
+                return Err(ModelError::Validation(format!(
+                    "Raw constraints not supported for type {:?}", self.constraint_type
+                )));
+            }
+        }
+        Ok(())
+    }
+    
+    fn constraint_type(&self) -> ConstraintType {
+        self.constraint_type.clone()
+    }
+    
+    fn description(&self) -> String {
+        format!("RAW {:?}: {}", self.constraint_type, self.sql)
+    }
+    
+    fn validate(&self) -> ModelResult<()> {
+        if self.sql.trim().is_empty() {
+            return Err(ModelError::Validation("Raw constraint SQL cannot be empty".to_string()));
+        }
         Ok(())
     }
 }
@@ -149,21 +601,23 @@ impl EagerLoader {
     pub fn with(mut self, relation: &str) -> Self {
         self.specs.push(EagerLoadSpec {
             relation: relation.to_string(),
-            constraint_callback: None,
+            constraints: None,
         });
         self
     }
 
     /// Add a relationship with constraints
-    pub fn with_constraint<F>(mut self, relation: &str, _constraint_fn: F) -> Self
+    pub fn with_constraint<F>(mut self, relation: &str, constraint_fn: F) -> Self
     where
         F: FnOnce(RelationshipConstraintBuilder) -> RelationshipConstraintBuilder + 'static,
     {
-        // For now, we'll store the spec without the constraint
-        // In a full implementation, we'd store the built constraint as a callback
+        // Build the constraint and store it
+        let builder = RelationshipConstraintBuilder::new();
+        let built_constraints = constraint_fn(builder);
+        
         self.specs.push(EagerLoadSpec {
             relation: relation.to_string(),
-            constraint_callback: None,
+            constraints: Some(built_constraints),
         });
         self
     }
@@ -195,8 +649,26 @@ impl EagerLoader {
         let parts: Vec<&str> = relation.split('.').collect();
         
         if parts.len() == 1 {
-            // Simple relationship
-            self.load_simple_relationship(pool, models, relation).await?;
+            // Simple relationship - find constraints for this relation
+            let spec_index = self.specs
+                .iter()
+                .position(|spec| spec.relation == relation);
+                
+            if let Some(index) = spec_index {
+                let has_constraints = self.specs[index].constraints.is_some();
+                if has_constraints {
+                    // We need to work around the borrow checker by taking ownership temporarily
+                    let mut spec = self.specs.remove(index);
+                    let constraints = spec.constraints.as_ref();
+                    let result = self.load_simple_relationship(pool, models, relation, constraints).await;
+                    self.specs.insert(index, spec);
+                    result?;
+                } else {
+                    self.load_simple_relationship(pool, models, relation, None).await?;
+                }
+            } else {
+                self.load_simple_relationship(pool, models, relation, None).await?;
+            }
         } else {
             // Nested relationship - load step by step
             self.load_nested_relationship(pool, models, &parts).await?;
@@ -206,7 +678,7 @@ impl EagerLoader {
     }
 
     /// Load a simple (non-nested) relationship
-    async fn load_simple_relationship<M>(&mut self, pool: &Pool<Postgres>, models: &[M], relation: &str) -> ModelResult<()>
+    async fn load_simple_relationship<M>(&mut self, pool: &Pool<Postgres>, models: &[M], relation: &str, constraints: Option<&RelationshipConstraintBuilder>) -> ModelResult<()>
     where
         M: Model + Send + Sync,
     {
@@ -220,10 +692,8 @@ impl EagerLoader {
             return Ok(());
         }
 
-        // Build the relationship query based on the relation type
-        // This is a simplified version - in practice, we'd need to determine
-        // the relationship type and foreign keys from model metadata
-        let query = self.build_relationship_query(relation, &parent_keys)?;
+        // Build the relationship query with constraints
+        let query = self.build_relationship_query(relation, &parent_keys, constraints).await?;
         
         // Execute the query
         let rows = sqlx::query(&query).fetch_all(pool).await
@@ -261,7 +731,7 @@ impl EagerLoader {
         let mut current_models: Vec<serde_json::Value> = Vec::new();
         
         // Load the first level relationship  
-        self.load_simple_relationship(pool, models, parts[0]).await?;
+        self.load_simple_relationship(pool, models, parts[0], None).await?;
         
         // Get the loaded first level data
         if let Some(first_level_data) = self.loaded_data.get(parts[0]) {
@@ -285,8 +755,8 @@ impl EagerLoader {
                 continue;
             }
 
-            // Build and execute query for this level
-            let query = self.build_relationship_query(current_relation, &parent_keys)?;
+            // Build and execute query for this level  
+            let query = self.build_relationship_query(current_relation, &parent_keys, None).await?;
             let rows = sqlx::query(&query).fetch_all(pool).await
                 .map_err(|e| ModelError::Database(e.to_string()))?;
 
@@ -314,17 +784,11 @@ impl EagerLoader {
         Ok(())
     }
 
-    /// Build SQL query for a relationship
-    fn build_relationship_query(&self, relation: &str, parent_keys: &[String]) -> ModelResult<String> {
-        // This is a simplified implementation
-        // In practice, we'd need relationship metadata to build proper queries
+    /// Build SQL query for a relationship with constraints
+    async fn build_relationship_query(&self, relation: &str, parent_keys: &[String], constraints: Option<&RelationshipConstraintBuilder>) -> ModelResult<String> {
+        // Build base query using QueryBuilder  
+        let mut query = QueryBuilder::<()>::new();
         
-        let parent_keys_str = parent_keys
-            .iter()
-            .map(|k| format!("'{}'", k))
-            .collect::<Vec<_>>()
-            .join(",");
-
         // Determine table name and foreign key from relation name
         // This is a basic implementation - needs proper metadata
         let table_name = match relation {
@@ -342,13 +806,20 @@ impl EagerLoader {
             "profile" => "user_id",
             _ => "parent_id", // fallback
         };
-
-        let query = format!(
-            "SELECT * FROM {} WHERE {} IN ({})",
-            table_name, foreign_key, parent_keys_str
-        );
-
-        Ok(query)
+        
+        // Build base query
+        query = query
+            .select("*")
+            .from(table_name)
+            .where_in(foreign_key, parent_keys.to_vec());
+            
+        // Apply constraints if present
+        if let Some(constraint_builder) = constraints {
+            constraint_builder.apply_all(&mut query).await?;
+        }
+        
+        // Generate SQL
+        Ok(query.to_sql())
     }
 
     /// Convert a database row to JSON value

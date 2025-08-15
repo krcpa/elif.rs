@@ -364,11 +364,11 @@ mod tests {
         // Test that EagerLoadSpec can be created
         let spec = EagerLoadSpec {
             relation: "posts".to_string(),
-            constraint_callback: None,
+            constraints: None,
         };
         
         assert_eq!(spec.relation, "posts");
-        assert!(spec.constraint_callback.is_none());
+        assert!(spec.constraints.is_none());
     }
 
     #[test]

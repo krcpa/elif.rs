@@ -23,12 +23,34 @@ impl<M> QueryBuilder<M> {
         self
     }
 
-    /// Add HAVING clause (same as WHERE for now)
+    /// Add HAVING clause with equals
     pub fn having_eq<T: Into<Value>>(mut self, column: &str, value: T) -> Self {
         self.having_conditions.push(WhereCondition {
             column: column.to_string(),
             operator: QueryOperator::Equal,
             value: Some(value.into()),
+            values: Vec::new(),
+        });
+        self
+    }
+    
+    /// Add HAVING clause with custom operator and value  
+    pub fn having<T: Into<Value>>(mut self, column: &str, operator: QueryOperator, value: T) -> Self {
+        self.having_conditions.push(WhereCondition {
+            column: column.to_string(),
+            operator,
+            value: Some(value.into()),
+            values: Vec::new(),
+        });
+        self
+    }
+    
+    /// Add raw HAVING clause
+    pub fn having_raw(mut self, raw_condition: &str) -> Self {
+        self.having_conditions.push(WhereCondition {
+            column: "".to_string(), // Empty column for raw conditions
+            operator: QueryOperator::Raw,
+            value: Some(Value::String(raw_condition.to_string())),
             values: Vec::new(),
         });
         self
