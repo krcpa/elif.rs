@@ -127,14 +127,20 @@ impl MigrationManager {
             .and_then(|s| s.to_str())
             .ok_or_else(|| OrmError::Migration("Invalid migration filename".to_string()))?;
 
-        // Extract ID and name from filename (format: timestamp_name)
-        let parts: Vec<&str> = filename.splitn(2, '_').collect();
+        // Extract ID and name from filename (format: YYYYMMDD_HHMMSS_name or timestamp_name)
+        let parts: Vec<&str> = filename.split('_').collect();
         if parts.len() < 2 {
             return Err(OrmError::Migration("Migration filename must follow format: timestamp_name".to_string()));
         }
 
         let id = filename.to_string();
-        let name = parts[1..].join("_").replace('_', " ");
+        let name = if parts.len() >= 3 && parts[0].len() == 8 && parts[1].len() == 6 {
+            // Handle format: YYYYMMDD_HHMMSS_name
+            parts[2..].join("_").replace('_', " ")
+        } else {
+            // Handle format: timestamp_name
+            parts[1..].join("_").replace('_', " ")
+        };
 
         // Parse UP and DOWN sections
         let (up_sql, down_sql) = self.parse_migration_content(&content)?;

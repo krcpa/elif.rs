@@ -299,8 +299,8 @@ impl ManagedPool {
     }
 
     /// Close the connection pool
-    pub fn close(&self) {
-        self.pool.close();
+    pub async fn close(&self) {
+        self.pool.close().await;
     }
 }
 
@@ -708,7 +708,7 @@ mod tests {
 
     #[test]
     fn test_pool_registry_creation() {
-        let mut registry = PoolRegistry::new();
+        let registry = PoolRegistry::new();
         assert!(registry.get_default().is_none());
         assert!(registry.pool_names().is_empty());
         
