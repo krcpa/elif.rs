@@ -185,7 +185,7 @@ mod tests {
         assert_eq!(health_data["status"], "healthy");
         assert_eq!(health_data["framework"], "Elif.rs");
         assert!(health_data["timestamp"].is_number());
-        assert_eq!(health_data["version"], "0.3.0");
+        assert_eq!(health_data["version"], "0.5.0");
     }
 
     #[test]
