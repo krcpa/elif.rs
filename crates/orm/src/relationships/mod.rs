@@ -28,6 +28,9 @@ pub mod eager_loading_tests;
 #[cfg(test)]
 pub mod type_safe_tests;
 
+#[cfg(test)]
+pub mod lazy_loading_tests;
+
 // Re-export main types
 pub use traits::*;
 pub use has_one::*;

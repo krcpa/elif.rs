@@ -1,6 +1,6 @@
 use crate::{
     error::{OrmError, OrmResult},
-    relationships::RelationshipType,
+    relationships::{RelationshipType, metadata::RelationshipMetadata},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -13,13 +13,15 @@ pub struct QueryNode {
     pub table: String,
     /// Type of relationship from parent
     pub relationship_type: Option<RelationshipType>,
+    /// Full relationship metadata if available
+    pub relationship_metadata: Option<RelationshipMetadata>,
     /// Parent node ID (None for root)
     pub parent_id: Option<String>,
     /// Child node IDs
     pub children: Vec<String>,
     /// Depth in the relationship tree
     pub depth: usize,
-    /// Estimated row count
+    /// Estimated row count (can be updated from metadata)
     pub estimated_rows: usize,
     /// Whether this node can be executed in parallel with siblings
     pub parallel_safe: bool,
@@ -27,6 +29,10 @@ pub struct QueryNode {
     pub foreign_key: Option<String>,
     /// Additional constraints for optimization
     pub constraints: Vec<String>,
+    /// Column names available in this table (for better query construction)
+    pub available_columns: Vec<String>,
+    /// Index hints for the optimizer
+    pub index_hints: Vec<String>,
 }
 
 impl QueryNode {
@@ -36,6 +42,7 @@ impl QueryNode {
             id,
             table,
             relationship_type: None,
+            relationship_metadata: None,
             parent_id: None,
             children: Vec::new(),
             depth: 0,
@@ -43,6 +50,8 @@ impl QueryNode {
             parallel_safe: true,
             foreign_key: None,
             constraints: Vec::new(),
+            available_columns: Vec::new(),
+            index_hints: Vec::new(),
         }
     }
 
@@ -65,6 +74,31 @@ impl QueryNode {
         node.parent_id = Some(parent_id);
         node.relationship_type = Some(relationship_type);
         node.foreign_key = Some(foreign_key);
+        node
+    }
+
+    /// Create a child node with full relationship metadata
+    pub fn child_with_metadata(
+        id: String,
+        table: String,
+        parent_id: String,
+        metadata: RelationshipMetadata
+    ) -> Self {
+        let mut node = Self::new(id, table);
+        node.parent_id = Some(parent_id);
+        node.relationship_type = Some(metadata.relationship_type);
+        node.relationship_metadata = Some(metadata.clone());
+        node.foreign_key = Some(metadata.foreign_key.primary_column().to_string());
+        
+        // Set estimated rows based on relationship type
+        node.estimated_rows = match metadata.relationship_type {
+            RelationshipType::HasMany | RelationshipType::ManyToMany | RelationshipType::MorphMany => 10000,
+            _ => 1, // HasOne, BelongsTo, MorphOne, MorphTo
+        };
+        
+        // Set parallel safety based on relationship characteristics
+        node.parallel_safe = !metadata.relationship_type.requires_pivot();
+        
         node
     }
 
@@ -103,6 +137,61 @@ impl QueryNode {
     /// Check if this node is a leaf node
     pub fn is_leaf(&self) -> bool {
         self.children.is_empty()
+    }
+
+    /// Update metadata for this node
+    pub fn set_metadata(&mut self, metadata: RelationshipMetadata) {
+        self.relationship_type = Some(metadata.relationship_type);
+        self.relationship_metadata = Some(metadata.clone());
+        self.foreign_key = Some(metadata.foreign_key.primary_column().to_string());
+        
+        // Update estimates based on metadata
+        self.estimated_rows = match metadata.relationship_type {
+            RelationshipType::HasMany | RelationshipType::ManyToMany | RelationshipType::MorphMany => 10000,
+            _ => 1,
+        };
+        
+        self.parallel_safe = !metadata.relationship_type.requires_pivot();
+    }
+
+    /// Set column information for better query construction
+    pub fn set_columns(&mut self, columns: Vec<String>) {
+        self.available_columns = columns;
+    }
+
+    /// Add index hints for optimization
+    pub fn add_index_hint(&mut self, index: String) {
+        if !self.index_hints.contains(&index) {
+            self.index_hints.push(index);
+        }
+    }
+
+    /// Get the primary key column name (defaults to "id")
+    pub fn primary_key(&self) -> &str {
+        if let Some(metadata) = &self.relationship_metadata {
+            &metadata.local_key
+        } else {
+            "id"
+        }
+    }
+
+    /// Get the foreign key column name for relationships
+    pub fn get_foreign_key(&self) -> Option<&str> {
+        self.foreign_key.as_deref()
+    }
+
+    /// Check if this node represents a collection relationship
+    pub fn is_collection(&self) -> bool {
+        self.relationship_type
+            .map(|rt| rt.is_collection())
+            .unwrap_or(false)
+    }
+
+    /// Check if this node requires a pivot table
+    pub fn requires_pivot(&self) -> bool {
+        self.relationship_type
+            .map(|rt| rt.requires_pivot())
+            .unwrap_or(false)
     }
 }
 
