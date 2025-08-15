@@ -1,29 +1,23 @@
-use axum::{
-    response::Json,
-    routing::get,
-    Router,
-};
+use elif_http::{ElifRouter, ElifJson, JsonResponse};
 use elif_introspect::MapGenerator;
 use serde_json::Value;
 use std::path::PathBuf;
 use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
 
-pub fn router() -> Router {
-    Router::new()
-        .route("/_map.json", get(map_handler))
-        .route("/_openapi.json", get(openapi_handler))
-        .route("/_health", get(health_handler))
-        .merge(SwaggerUi::new("/_ui").url("/_openapi.json", create_openapi_doc()))
+pub fn router() -> ElifRouter {
+    ElifRouter::new()
+        .get("/_map.json", map_handler)
+        .get("/_openapi.json", openapi_handler)
+        .get("/_health", health_handler)
 }
 
-async fn map_handler() -> Json<Value> {
+async fn map_handler() -> ElifJson<Value> {
     let project_root = PathBuf::from("../../");
     let generator = MapGenerator::new(project_root);
     
     match generator.generate() {
-        Ok(map) => Json(serde_json::to_value(map).unwrap_or_default()),
-        Err(_) => Json(serde_json::json!({
+        Ok(map) => ElifJson(serde_json::to_value(map).unwrap_or_default()),
+        Err(_) => ElifJson(serde_json::json!({
             "routes": [],
             "models": [],
             "specs": []
@@ -31,12 +25,12 @@ async fn map_handler() -> Json<Value> {
     }
 }
 
-async fn openapi_handler() -> Json<Value> {
-    Json(create_openapi_spec())
+async fn openapi_handler() -> ElifJson<Value> {
+    ElifJson(create_openapi_spec())
 }
 
-async fn health_handler() -> Json<Value> {
-    Json(serde_json::json!({
+async fn health_handler() -> ElifJson<Value> {
+    ElifJson(serde_json::json!({
         "status": "ok",
         "timestamp": chrono::Utc::now().to_rfc3339()
     }))

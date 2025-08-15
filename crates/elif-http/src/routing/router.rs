@@ -135,14 +135,44 @@ where
         self
     }
 
-    /// Merge another router
-    pub fn merge(mut self, other: AxumRouter<S>) -> Self {
+    /// Merge another ElifRouter - the primary method for composing routers
+    pub fn merge(mut self, other: Router<S>) -> Self {
+        // Merge the registries
+        if let (Ok(mut self_registry), Ok(other_registry)) = 
+            (self.registry.lock(), other.registry.lock()) {
+            for (id, route_info) in other_registry.all_routes() {
+                self_registry.register(id.clone(), route_info.clone());
+            }
+        }
+        
+        // Merge the underlying Axum routers
+        self.axum_router = self.axum_router.merge(other.axum_router);
+        self
+    }
+
+    /// Internal method to merge with Axum router (for framework internals only)
+    pub(crate) fn merge_axum(mut self, other: AxumRouter<S>) -> Self {
         self.axum_router = self.axum_router.merge(other);
         self
     }
 
     /// Nest routes under a path prefix
-    pub fn nest(mut self, path: &str, router: AxumRouter<S>) -> Self {
+    pub fn nest(mut self, path: &str, router: Router<S>) -> Self {
+        // Note: Nested routes inherit their path prefix, so we don't need to modify the registry paths
+        // The registry will contain the original paths, and Axum handles the prefixing internally
+        if let (Ok(mut self_registry), Ok(router_registry)) = 
+            (self.registry.lock(), router.registry.lock()) {
+            for (id, route_info) in router_registry.all_routes() {
+                self_registry.register(id.clone(), route_info.clone());
+            }
+        }
+        
+        self.axum_router = self.axum_router.nest(path, router.axum_router);
+        self
+    }
+
+    /// Internal method to nest with Axum router (for framework internals only)
+    pub(crate) fn nest_axum(mut self, path: &str, router: AxumRouter<S>) -> Self {
         self.axum_router = self.axum_router.nest(path, router);
         self
     }

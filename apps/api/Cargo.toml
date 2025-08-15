@@ -7,6 +7,8 @@ edition = "2021"
 elif-core = { path = "../../crates/core" }
 elif-orm = { path = "../../crates/orm" }
 elif-introspect = { path = "../../crates/introspect" }
+elif-http = { path = "../../crates/elif-http" }
+elif-security = { path = "../../crates/elif-security" }
 axum = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true, features = ["cors"] }

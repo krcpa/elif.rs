@@ -21,8 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into();
 
     // Create HTTP configuration
-    let mut http_config = HttpConfig::default();
-    http_config.port = 8080;
+    let http_config = HttpConfig::default();
 
     // Create application router with framework abstractions
     let router = create_app_router();
@@ -47,6 +46,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn create_app_router() -> ElifRouter {
     ElifRouter::new()
-        .merge(introspection::framework_router())
-        .merge(routes::framework_router())
+        .merge(introspection::router())
+        .merge(routes::router())
 }
