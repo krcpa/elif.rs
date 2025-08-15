@@ -11,6 +11,12 @@ use axum::{
 use serde::Serialize;
 use crate::error::{HttpError, HttpResult};
 
+/// Framework-native status codes - use instead of axum::http::StatusCode
+pub use axum::http::StatusCode as ElifStatusCode;
+
+/// Framework-native header map - use instead of axum::http::HeaderMap  
+pub use axum::http::HeaderMap as ElifHeaderMap;
+
 /// Response builder for creating HTTP responses with fluent API
 #[derive(Debug)]
 pub struct ElifResponse {

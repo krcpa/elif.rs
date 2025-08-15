@@ -38,9 +38,9 @@
 - 17 manageable issues created (old big phases closed)
 
 **🎯 ŞU ANDAKİ GÖREV:**
-**Phase 3.3: Rate Limiting Middleware (Issue #31)**
-**Priority**: High - Continue Phase 3 security sequence
-**Status**: Ready to implement - CSRF middleware completed
+**Phase 3.7: Framework Core Architecture - Remove Axum Re-exports (Issue #50)**
+**Priority**: Critical - Framework Foundation Issue  
+**Status**: In Progress - Architectural consistency FIRST before security middleware
 
 ## Keşif (her oturumda ilk komutlar) - ZORUNLU
 - `gh issue view 23 --repo krcpa/elif.rs` → mevcut görev detayı (Issue #23).
@@ -103,24 +103,25 @@
 - #28: Error Handling & JSON API Response Format (2-3 days)
 **Hedef**: Working HTTP server with database integration
 
-### **Phase 3: Essential Middleware & Validation + Architectural Consistency** 📋 (CURRENT - Issue #29-55)
-**Tasks Ready**: 12 manageable tasks (2-6 days each)
+### **Phase 3: Essential Middleware & Validation + Architectural Consistency** 📋 (CURRENT - Issue #29-56)
+**Tasks Ready**: 13 manageable tasks (2-6 days each)
 
-**🔒 Security & Middleware (Phase 3.1-3.6):**
-- ✅ #29: Phase 3.1: CORS Middleware Implementation (2-3 days) - COMPLETED 
-- ✅ #30: Phase 3.2: CSRF Protection Middleware (3-4 days) - COMPLETED
-- #31: Phase 3.3: Rate Limiting Middleware (4-5 days) **← CURRENT**
-- #32: Phase 3.4: Input Validation System (4-6 days)
-- #33: Phase 3.5: Request Sanitization & Security Headers (2-3 days)
-- #34: Phase 3.6: Enhanced Logging & Request Tracing (3-4 days)
-
-**🏗️ Architectural Consistency (Phase 3.7-3.12 - Pure Framework Approach):**
-- #50: Phase 3.7: Framework Core Architecture - Remove Axum Re-exports (2-3 days)
+**🏗️ Architectural Consistency FIRST (Phase 3.7-3.12 - Pure Framework Approach):**
+- #50: Phase 3.7: Framework Core Architecture - Remove Axum Re-exports (2-3 days) **← CURRENT**
 - #51: Phase 3.8: Security Middleware Framework Integration (3-4 days)
 - #52: Phase 3.9: Server Architecture - Framework Middleware Integration (4-5 days)
 - #53: Phase 3.10: Examples and CLI Templates - Pure Framework Usage (3-4 days)
 - #54: Phase 3.11: Router API Consistency - Pure Framework Types (2-3 days)
 - #55: Phase 3.12: Test Infrastructure - Framework Abstractions Validation (2-3 days)
+
+**🔒 Security & Middleware AFTER Cleanup (Phase 3.13-3.17):**
+- ✅ #29: Phase 3.1: CORS Middleware Implementation (2-3 days) - COMPLETED 
+- ✅ #30: Phase 3.2: CSRF Protection Middleware (3-4 days) - COMPLETED
+- #31: Phase 3.13: Rate Limiting Middleware (Pure Framework) (4-5 days)
+- #32: Phase 3.14: Input Validation System (Pure Framework) (4-6 days)
+- #33: Phase 3.15: Request Sanitization & Security Headers (Pure Framework) (2-3 days)
+- #34: Phase 3.16: Enhanced Logging & Request Tracing (Pure Framework) (3-4 days)
+- #56: Phase 3.17: Security Middleware Integration Testing & Documentation (2-3 days)
 
 **Hedef**: Secure, validated web server + Architecturally consistent pure framework
 
@@ -144,30 +145,30 @@
 9) **Sonraki task**: #24: HTTP Routing System → otomatik geç
 
 ## Task Management Systematic Approach - ZORUNLU
-**📍 Current: Issue #23 (Phase 2.1) - HTTP Server Core Implementation**
+**📍 Current: Issue #50 (Phase 3.7) - Framework Core Architecture - Remove Axum Re-exports**
 
 **✅ COMPLETED (Phase 1 + ORM Foundation):**
 - Phase 1: Architecture Foundation (33/33 tests passing)
 - Phase 2.1 ORM: Base Model trait, QueryBuilder, advanced features (36/36 tests)
 
-**🚧 IN PROGRESS (Phase 2: Web Foundation):**
-- #23: HTTP Server Core Implementation (3-5 days) **← ŞU AN**
+**🚧 IN PROGRESS (Phase 3.7: Framework Core Architecture):**
+- #50: Phase 3.7: Framework Core Architecture - Remove Axum Re-exports (2-3 days) **← ŞU AN**
 
 **📋 READY TO IMPLEMENT (Phase 3 remaining tasks):**
 
-**🔒 Security & Middleware (Phase 3.3-3.6 - Proper Sequence):**
-- #31: Phase 3.3: Rate Limiting Middleware (4-5 days) **← NEXT**
-- #32: Phase 3.4: Input Validation System (4-6 days)
-- #33: Phase 3.5: Request Sanitization & Security Headers (2-3 days)
-- #34: Phase 3.6: Enhanced Logging & Request Tracing (3-4 days)
-
-**🏗️ Architectural Consistency (Phase 3.7-3.12 - After Security Complete):**
-- #50: Phase 3.7: Framework Core Architecture - Remove Axum Re-exports (2-3 days)
-- #51: Phase 3.8: Security Middleware Framework Integration (3-4 days)
+**🏗️ Architectural Consistency (Phase 3.8-3.12 - NEXT AFTER 3.7):**
+- #51: Phase 3.8: Security Middleware Framework Integration (3-4 days) **← NEXT**
 - #52: Phase 3.9: Server Architecture - Framework Middleware Integration (4-5 days)
 - #53: Phase 3.10: Examples and CLI Templates - Pure Framework Usage (3-4 days)
 - #54: Phase 3.11: Router API Consistency - Pure Framework Types (2-3 days)
 - #55: Phase 3.12: Test Infrastructure - Framework Abstractions Validation (2-3 days)
+
+**⚠️ Security & Middleware (DEFERRED - Architecture Must Come First):**
+- #31: Phase 3.13: Rate Limiting Middleware (Pure Framework) (4-5 days) 
+- #32: Phase 3.14: Input Validation System (Pure Framework) (4-6 days)
+- #33: Phase 3.15: Request Sanitization & Security Headers (Pure Framework) (2-3 days)
+- #34: Phase 3.16: Enhanced Logging & Request Tracing (Pure Framework) (3-4 days)
+- #56: Phase 3.17: Security Middleware Integration Testing & Documentation (2-3 days)
 
 **📋 NEED TASK BREAKDOWN (When Phase 2 complete):**
 - Big Phase issues #18-22 need to be broken down into 2-6 day tasks

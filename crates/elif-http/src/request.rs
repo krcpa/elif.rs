@@ -4,12 +4,10 @@
 
 use std::collections::HashMap;
 use axum::{
-    extract::{Query, Path, Form},
-    http::{HeaderMap, HeaderName, HeaderValue, Method, Uri},
+    http::{HeaderMap, HeaderValue, Method, Uri},
     body::Bytes,
-    Extension,
 };
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::de::DeserializeOwned;
 use crate::error::{HttpError, HttpResult};
 
 /// Request abstraction that wraps Axum's request types
@@ -245,6 +243,58 @@ pub trait RequestExtractor {
 }
 
 impl RequestExtractor for ElifRequest {}
+
+/// Framework-native Query extractor - use instead of axum::extract::Query
+#[derive(Debug)]
+pub struct ElifQuery<T>(pub T);
+
+impl<T: DeserializeOwned> ElifQuery<T> {
+    /// Extract and deserialize query parameters from request
+    pub fn from_request(request: &ElifRequest) -> HttpResult<Self> {
+        let query_str = request.query_string().unwrap_or("");
+        let data = serde_urlencoded::from_str::<T>(query_str)
+            .map_err(|e| HttpError::bad_request(format!("Invalid query parameters: {}", e)))?;
+        Ok(ElifQuery(data))
+    }
+}
+
+/// Framework-native Path extractor - use instead of axum::extract::Path  
+#[derive(Debug)]
+pub struct ElifPath<T>(pub T);
+
+impl<T: DeserializeOwned> ElifPath<T> {
+    /// Extract and deserialize path parameters from request
+    pub fn from_request(request: &ElifRequest) -> HttpResult<Self> {
+        // Convert HashMap to JSON for deserialization
+        let json_value = serde_json::to_value(&request.path_params)
+            .map_err(|e| HttpError::internal_server_error(format!("Failed to serialize path params: {}", e)))?;
+        
+        let data = serde_json::from_value::<T>(json_value)
+            .map_err(|e| HttpError::bad_request(format!("Invalid path parameters: {}", e)))?;
+        Ok(ElifPath(data))
+    }
+}
+
+/// Framework-native State extractor - use instead of axum::extract::State
+#[derive(Debug)]  
+pub struct ElifState<T>(pub T);
+
+impl<T: Clone> ElifState<T> {
+    /// Extract state from application context
+    pub fn new(state: T) -> Self {
+        ElifState(state)
+    }
+    
+    /// Get reference to inner state
+    pub fn inner(&self) -> &T {
+        &self.0
+    }
+    
+    /// Get owned copy of inner state (requires Clone)
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
 
 #[cfg(test)]
 mod tests {

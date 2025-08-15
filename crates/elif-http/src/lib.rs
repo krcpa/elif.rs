@@ -43,9 +43,9 @@ pub use routing::{
     RouteGroup, GroupBuilder,
 };
 
-// Re-export request/response types
-pub use request::{ElifRequest, RequestExtractor};
-pub use response::{ElifResponse, ResponseBody, IntoElifResponse};
+// Re-export request/response types  
+pub use request::{ElifRequest, RequestExtractor, ElifQuery, ElifPath, ElifState};
+pub use response::{ElifResponse, ResponseBody, IntoElifResponse, ElifStatusCode, ElifHeaderMap};
 pub use json::{ElifJson, JsonError, JsonResponse, ValidationErrors, ApiResponse};
 
 // Re-export middleware types
@@ -61,10 +61,8 @@ pub use controller::{Controller, BaseController, QueryParams, PaginationMeta};
 // Re-export database types
 pub use database::{DatabaseServiceProvider, create_database_pool, get_database_pool, get_named_database_pool};
 
-// Re-export commonly used types
-pub use axum::{
-    Router, 
-    response::{Json, Response},
-    extract::{State, Query, Path},
-    http::{StatusCode, HeaderMap},
-};
+// Framework-native types - Use these instead of raw Axum types
+// Note: Use Router from routing module, not axum::Router
+// Note: Use ElifJson instead of axum::Json
+// Note: Use ElifResponse instead of axum::Response  
+// Note: HTTP types are available through response/request modules when needed
