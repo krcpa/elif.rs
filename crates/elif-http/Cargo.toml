@@ -14,7 +14,7 @@ categories = ["web-programming", "network-programming"]
 [dependencies]
 # Framework dependencies
 elif-core = { version = "0.2.0", path = "../core" }
-elif-auth = { version = "0.2.0", path = "../elif-auth", optional = true }
+elif-auth = { version = "0.3.0", path = "../elif-auth", optional = true }
 
 # HTTP server
 axum = { workspace = true }
