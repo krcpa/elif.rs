@@ -12,6 +12,8 @@ pub use config::*;
 pub use middleware::cors::{CorsMiddleware, CorsConfig};
 pub use middleware::csrf::{CsrfMiddleware, CsrfConfig};
 pub use middleware::rate_limit::{RateLimitMiddleware, RateLimitConfig, RateLimitIdentifier};
+pub use middleware::sanitization::{SanitizationMiddleware, SanitizationConfig};
+pub use middleware::security_headers::{SecurityHeadersMiddleware, SecurityHeadersConfig};
 pub use integration::{
     SecurityMiddlewareBuilder, 
     basic_security_pipeline, 

@@ -1,7 +1,7 @@
 //! Security configuration types and utilities
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 /// Global security configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,6 +17,9 @@ pub struct SecurityConfig {
     
     /// Security headers configuration
     pub security_headers: Option<SecurityHeadersConfig>,
+    
+    /// Request sanitization configuration
+    pub sanitization: Option<SanitizationConfig>,
 }
 
 impl Default for SecurityConfig {
@@ -26,6 +29,7 @@ impl Default for SecurityConfig {
             csrf: Some(CsrfConfig::default()),
             rate_limiting: Some(RateLimitConfig::default()),
             security_headers: Some(SecurityHeadersConfig::default()),
+            sanitization: Some(SanitizationConfig::default()),
         }
     }
 }
@@ -152,57 +156,111 @@ pub enum RateLimitIdentifier {
 /// Security headers configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityHeadersConfig {
-    /// Enable X-Frame-Options header
+    /// Content Security Policy header
+    pub content_security_policy: Option<String>,
+    
+    /// HTTP Strict Transport Security header
+    pub strict_transport_security: Option<String>,
+    
+    /// X-Frame-Options header
     pub x_frame_options: Option<String>,
     
-    /// Enable X-Content-Type-Options header
-    pub x_content_type_options: bool,
+    /// X-Content-Type-Options header
+    pub x_content_type_options: Option<String>,
     
-    /// Enable X-XSS-Protection header
-    pub x_xss_protection: bool,
+    /// X-XSS-Protection header
+    pub x_xss_protection: Option<String>,
     
-    /// Strict-Transport-Security header (HSTS)
-    pub hsts: Option<HstsConfig>,
-    
-    /// Content Security Policy header
-    pub csp: Option<String>,
-    
-    /// Referrer Policy header
+    /// Referrer-Policy header
     pub referrer_policy: Option<String>,
+    
+    /// Permissions-Policy header
+    pub permissions_policy: Option<String>,
+    
+    /// Cross-Origin-Embedder-Policy header
+    pub cross_origin_embedder_policy: Option<String>,
+    
+    /// Cross-Origin-Opener-Policy header
+    pub cross_origin_opener_policy: Option<String>,
+    
+    /// Cross-Origin-Resource-Policy header
+    pub cross_origin_resource_policy: Option<String>,
+    
+    /// Custom headers to add
+    pub custom_headers: HashMap<String, String>,
+    
+    /// Remove Server header from responses
+    pub remove_server_header: bool,
+    
+    /// Remove X-Powered-By header from responses
+    pub remove_x_powered_by: bool,
 }
 
 impl Default for SecurityHeadersConfig {
     fn default() -> Self {
         Self {
+            content_security_policy: Some("default-src 'self'".to_string()),
+            strict_transport_security: Some("max-age=31536000; includeSubDomains".to_string()),
             x_frame_options: Some("DENY".to_string()),
-            x_content_type_options: true,
-            x_xss_protection: true,
-            hsts: Some(HstsConfig::default()),
-            csp: Some("default-src 'self'".to_string()),
+            x_content_type_options: Some("nosniff".to_string()),
+            x_xss_protection: Some("1; mode=block".to_string()),
             referrer_policy: Some("strict-origin-when-cross-origin".to_string()),
+            permissions_policy: None,
+            cross_origin_embedder_policy: None,
+            cross_origin_opener_policy: None,
+            cross_origin_resource_policy: None,
+            custom_headers: HashMap::new(),
+            remove_server_header: false,
+            remove_x_powered_by: true,
         }
     }
 }
 
-/// HTTP Strict Transport Security (HSTS) configuration
+/// Request sanitization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HstsConfig {
-    /// Maximum age in seconds
-    pub max_age: u32,
+pub struct SanitizationConfig {
+    /// Enable XSS protection and pattern matching
+    pub enable_xss_protection: bool,
     
-    /// Include subdomains
-    pub include_subdomains: bool,
+    /// Enable SQL injection pattern detection
+    pub enable_sql_injection_protection: bool,
     
-    /// Preload directive
-    pub preload: bool,
+    /// Enable path traversal protection
+    pub enable_path_traversal_protection: bool,
+    
+    /// Remove script tags from input
+    pub enable_script_tag_removal: bool,
+    
+    /// HTML encode dangerous characters
+    pub enable_html_encoding: bool,
+    
+    /// Maximum request size in bytes
+    pub max_request_size: Option<usize>,
+    
+    /// Regex patterns to block in requests
+    pub blocked_patterns: Vec<String>,
+    
+    /// HTML tags that are allowed (when HTML encoding is disabled)
+    pub allowed_html_tags: HashSet<String>,
 }
 
-impl Default for HstsConfig {
+impl Default for SanitizationConfig {
     fn default() -> Self {
         Self {
-            max_age: 31536000, // 1 year
-            include_subdomains: true,
-            preload: false,
+            enable_xss_protection: true,
+            enable_sql_injection_protection: false,
+            enable_path_traversal_protection: true,
+            enable_script_tag_removal: true,
+            enable_html_encoding: false,
+            max_request_size: Some(1024 * 1024), // 1MB
+            blocked_patterns: vec![
+                r"<script[^>]*>.*?</script>".to_string(),
+                r"javascript:".to_string(),
+            ],
+            allowed_html_tags: vec!["b", "i", "em", "strong", "p", "br"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
         }
     }
 }

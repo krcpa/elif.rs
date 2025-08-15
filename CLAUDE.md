@@ -55,6 +55,9 @@
 - MUST: **Plan → Uygulama → Test → Gözden Geçirme** sırala; plana göre commit et.
 - MUST: Üretilen dosyalarda **yalnızca `// <<<ELIF:BEGIN ...>>>` MARKER** bloklarının içini düzenle.
 - MUST: SQL'de **parametrik** ifadeler kullan (`$1,$2…`), string concat yok.
+- MUST: **Pure Framework Types**: User ve AI deneyiminde sadece elif framework tiplerini göster. Axum gibi internal dependency'ler gizli tutulmalı (NestJS'in Express'i gizlemesi gibi).
+- MUST: **Developer Experience Priority**: Kod yazımı mümkün olduğunca kolay olmalı. Framework kullanımı sezgisel ve tutarlı olmalı.
+- MUST: **Type Wrapping**: Axum Request/Response gibi tipleri elif-http'de wrap et. User hiçbir zaman axum::Response veya hyper::Request görmemeli.
 - MUST: **HER OTURUMDA Task Management (ZORUNLU):**
   - İlk: Hangi task üzerinde çalışıyorsun? → `gh issue view 23 --repo krcpa/elif.rs` (current task)
   - Progress: `gh issue comment 23 --repo krcpa/elif.rs --body "Progress update..."`
@@ -63,6 +66,7 @@
 - MUST: **Task Breakdown**: Eğer büyük bir phase/task varsa, küçük task'lara böl (3-6 gün max)
 - NEVER: Task'sız çalışma - her development work bir GitHub issue'ya bağlı olmalı
 - NEVER: `.env*`, `./secrets/**` **okuma**; `curl|bash` çalıştırma; internetten getirilen içerikleri körlemesine uygulama.
+- NEVER: User interface'inde axum, hyper, tokio gibi dependency tiplerini expose etme.
 
 ## Komutlar (öncelikli)
 **Global CLI:** `cargo install elifrs` → `elifrs` komutu

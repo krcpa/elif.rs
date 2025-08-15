@@ -40,6 +40,9 @@ sha2 = "0.10"
 rand = "0.8"
 base64 = "0.22"
 
+# HTML encoding for sanitization
+html-escape = "0.2"
+
 [dev-dependencies]
 tokio-test = "0.4"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
