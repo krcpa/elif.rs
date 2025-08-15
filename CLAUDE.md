@@ -50,19 +50,20 @@
 - 17 manageable issues created (old big phases closed)
 
 **🎯 ŞU ANDAKİ GÖREV:**
-**Phase 4: Database Operations Foundation (Issues #60-65)**
+**Phase 4: Database Operations Foundation (Issues #60-66)**
 **Priority**: High - Core Database Infrastructure  
-**Status**: Ready to Start - Phase 3 Complete, Database Abstraction Needed
+**Status**: In Progress - Phase 4.1-4.2 Complete, Architecture Refactor Next
 
 **Current Phase 4 Tasks:**
-- **#60**: Phase 4.1: Database Service Integration (3 days)
-- **#61**: Phase 4.2: Basic Connection Pool Management (3 days)  
+- **#60**: ✅ Phase 4.1: Database Service Integration (COMPLETED)
+- **#61**: ✅ Phase 4.2: Basic Connection Pool Management (COMPLETED)
+- **#66**: 🔄 Phase 4.7: Database Architecture Refactor (ACTIVE - Move DB from elif-http to elif-orm)
 - **#62**: Phase 4.3: Simple Transaction Support (4 days)
 - **#63**: Phase 4.4: Basic Migration System (4 days)
 - **#64**: Phase 4.5: Model-Database Integration (3 days)
 - **#65**: Phase 4.6: Basic CRUD Operations (2 days)
 
-**Goal**: Complete foundational database layer with DI integration, basic pooling, transactions, migrations, and working CRUD operations.
+**Goal**: Complete foundational database layer with proper architecture, DI integration, connection pooling, transactions, migrations, and working CRUD operations.
 
 ## Keşif (her oturumda ilk komutlar) - ZORUNLU
 - `gh issue list --repo krcpa/elif.rs --state open --limit 5` → açık task'ları kontrol et.
@@ -220,6 +221,6 @@ crates/
 
 **Son güncelleme**: 2025-08-15  
 **Mevcut durum**: Phase 1-3 ✅ COMPLETE (353 tests passing)  
-**Şu anki görev**: Phase 4 Database Operations Foundation (Issues #60-65)  
+**Şu anki görev**: Phase 4 Database Operations Foundation (Issues #60-66) - 2/7 Complete  
 **Global CLI**: `cargo install elifrs` → `elifrs` komutu  
 **Hedef**: Production-ready LLM-friendly Rust web framework
