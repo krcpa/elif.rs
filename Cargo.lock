@@ -281,6 +281,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
 name = "base64ct"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -601,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "elif-codegen"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "elif-core",
@@ -614,7 +620,7 @@ dependencies = [
 
 [[package]]
 name = "elif-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -655,7 +661,7 @@ dependencies = [
 
 [[package]]
 name = "elif-introspect"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "elif-core",
@@ -679,10 +685,11 @@ dependencies = [
 
 [[package]]
 name = "elif-security"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "axum-test",
+ "base64 0.22.1",
  "elif-core",
  "elif-http",
  "http 1.3.1",
@@ -702,7 +709,7 @@ dependencies = [
 
 [[package]]
 name = "elifrs"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1887,7 +1894,7 @@ version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c74cae0a4cf6ccbbf5f359f08efdf8ee7e1dc532573bf0db71968cb56b1448c"
 dependencies = [
- "base64",
+ "base64 0.21.7",
 ]
 
 [[package]]
@@ -2241,7 +2248,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ed31390216d20e538e447a7a9b959e06ed9fc51c37b514b46eb758016ecd418"
 dependencies = [
  "atoi",
- "base64",
+ "base64 0.21.7",
  "bitflags",
  "byteorder",
  "bytes",
@@ -2285,7 +2292,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c824eb80b894f926f89a0b9da0c7f435d27cdd35b8c655b114e58223918577e"
 dependencies = [
  "atoi",
- "base64",
+ "base64 0.21.7",
  "bitflags",
  "byteorder",
  "chrono",
