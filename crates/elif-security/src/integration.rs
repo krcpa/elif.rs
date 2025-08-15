@@ -300,9 +300,9 @@ mod tests {
     async fn test_basic_security_pipeline() {
         let pipeline = basic_security_pipeline();
         
-        // Should have CORS, Rate Limiting, and CSRF middleware
-        assert_eq!(pipeline.len(), 3);
-        assert_eq!(pipeline.names(), vec!["CorsMiddleware", "RateLimit", "CsrfMiddleware"]);
+        // Should have CORS, Security Headers, Rate Limiting, Sanitization, and CSRF middleware
+        assert_eq!(pipeline.len(), 5);
+        assert_eq!(pipeline.names(), vec!["CorsMiddleware", "SecurityHeadersMiddleware", "RateLimit", "SanitizationMiddleware", "CsrfMiddleware"]);
     }
     
     #[tokio::test]
@@ -363,7 +363,7 @@ mod tests {
         let allowed_origins = vec!["https://trusted.com".to_string()];
         let pipeline = strict_security_pipeline(allowed_origins);
         
-        assert_eq!(pipeline.len(), 3);
+        assert_eq!(pipeline.len(), 5);
         
         // Test request from allowed origin
         let request = Request::builder()
@@ -392,7 +392,7 @@ mod tests {
     async fn test_development_security_pipeline() {
         let pipeline = development_security_pipeline();
         
-        assert_eq!(pipeline.len(), 3);
+        assert_eq!(pipeline.len(), 5);
         
         // Should allow any origin in development mode
         let request = Request::builder()

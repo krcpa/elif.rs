@@ -33,6 +33,7 @@ serde_urlencoded = "0.7"
 # Utilities
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 log = "0.4"

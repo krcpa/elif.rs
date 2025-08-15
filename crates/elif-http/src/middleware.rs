@@ -4,6 +4,7 @@
 //! Provides async middleware trait and pipeline composition.
 
 pub mod logging;
+pub mod enhanced_logging;
 pub mod timing;
 pub mod tracing;
 pub mod timeout;

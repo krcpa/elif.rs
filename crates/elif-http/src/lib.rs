@@ -23,6 +23,7 @@ pub mod middleware;
 pub mod controller;
 pub mod database;
 pub mod handler;
+pub mod logging;
 
 // Main server API - NestJS-like experience
 pub use server::Server;
@@ -46,10 +47,17 @@ pub use json::{ElifJson, JsonError, JsonResponse, ValidationErrors, ApiResponse}
 pub use middleware::{
     Middleware, MiddlewarePipeline, ErrorHandlingMiddleware,
     logging::LoggingMiddleware,
+    enhanced_logging::{EnhancedLoggingMiddleware, LoggingConfig as MiddlewareLoggingConfig, RequestContext},
     timing::{TimingMiddleware, RequestStartTime, format_duration},
     tracing::{TracingMiddleware, TracingConfig, RequestMetadata},
     timeout::{TimeoutMiddleware, TimeoutConfig, TimeoutInfo, apply_timeout},
     body_limit::{BodyLimitMiddleware, BodyLimitConfig, BodyLimitInfo, limit_body_size, limits},
+};
+
+// Re-export structured logging types
+pub use logging::{
+    LoggingConfig, init_logging, log_startup_info, log_shutdown_info, 
+    LoggingContext, structured,
 };
 
 // Re-export controller types

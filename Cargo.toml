@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "apps/api",
     "crates/core",
     "crates/orm",
     "crates/codegen",
