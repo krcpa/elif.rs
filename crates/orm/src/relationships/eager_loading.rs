@@ -89,10 +89,9 @@ struct WhereConstraint {
 
 #[async_trait]
 impl RelationshipConstraint for WhereConstraint {
-    async fn apply(&self, _query: &mut QueryBuilder) -> ModelResult<()> {
-        // This would integrate with QueryBuilder's where methods
-        // For now, we'll add the logic to store constraints
-        // The actual implementation would depend on QueryBuilder API
+    async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()> {
+        // Apply the WHERE condition to the query builder
+        *query = query.clone().where_condition(&self.field, &self.operator, self.value.clone());
         Ok(())
     }
 }
@@ -105,8 +104,12 @@ struct OrderConstraint {
 
 #[async_trait]
 impl RelationshipConstraint for OrderConstraint {
-    async fn apply(&self, _query: &mut QueryBuilder) -> ModelResult<()> {
-        // This would integrate with QueryBuilder's order_by methods
+    async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()> {
+        // Apply the ORDER BY condition to the query builder
+        *query = match self.direction.as_str() {
+            "DESC" => query.clone().order_by_desc(&self.field),
+            _ => query.clone().order_by(&self.field),
+        };
         Ok(())
     }
 }
@@ -118,8 +121,9 @@ struct LimitConstraint {
 
 #[async_trait] 
 impl RelationshipConstraint for LimitConstraint {
-    async fn apply(&self, _query: &mut QueryBuilder) -> ModelResult<()> {
-        // This would integrate with QueryBuilder's limit method
+    async fn apply(&self, query: &mut QueryBuilder) -> ModelResult<()> {
+        // Apply the LIMIT condition to the query builder
+        *query = query.clone().limit(self.count);
         Ok(())
     }
 }
