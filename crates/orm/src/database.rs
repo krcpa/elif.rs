@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicU64, Ordering};
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 use elif_core::{ServiceProvider, Container, ContainerBuilder};
-use crate::HttpError;
+use crate::error::ModelError;
 
 /// Database connection pool error types
 #[derive(Debug, thiserror::Error)]
@@ -32,26 +32,27 @@ pub enum PoolError {
     ConfigurationError { message: String },
 }
 
-impl From<PoolError> for HttpError {
+/// ORM-specific error for database operations
+impl From<PoolError> for ModelError {
     fn from(err: PoolError) -> Self {
         match err {
             PoolError::AcquisitionFailed(sqlx_err) => {
-                HttpError::database_error(format!("Database connection failed: {}", sqlx_err))
+                ModelError::Connection(format!("Database connection failed: {}", sqlx_err))
             },
             PoolError::PoolClosed => {
-                HttpError::database_error("Database pool is closed".to_string())
+                ModelError::Connection("Database pool is closed".to_string())
             },
             PoolError::ConnectionTimeout { timeout } => {
-                HttpError::database_error(format!("Database connection timeout after {}s", timeout))
+                ModelError::Connection(format!("Database connection timeout after {}s", timeout))
             },
             PoolError::PoolExhausted { max_connections } => {
-                HttpError::database_error(format!("Database pool exhausted: {} connections in use", max_connections))
+                ModelError::Connection(format!("Database pool exhausted: {} connections in use", max_connections))
             },
             PoolError::HealthCheckFailed { reason } => {
-                HttpError::database_error(format!("Database health check failed: {}", reason))
+                ModelError::Connection(format!("Database health check failed: {}", reason))
             },
             PoolError::ConfigurationError { message } => {
-                HttpError::database_error(format!("Database configuration error: {}", message))
+                ModelError::Connection(format!("Database configuration error: {}", message))
             },
         }
     }
@@ -360,12 +361,12 @@ impl DatabaseServiceProvider {
     }
 
     /// Create a database pool using this provider's configuration
-    pub async fn create_pool(&self) -> Result<Arc<Pool<Postgres>>, HttpError> {
+    pub async fn create_pool(&self) -> Result<Arc<Pool<Postgres>>, ModelError> {
         create_database_pool_with_config(&self.database_url, &self.config).await
     }
 
     /// Create a managed database pool with statistics and health monitoring
-    pub async fn create_managed_pool(&self) -> Result<ManagedPool, HttpError> {
+    pub async fn create_managed_pool(&self) -> Result<ManagedPool, ModelError> {
         let pool = self.create_pool().await?;
         Ok(ManagedPool::new(pool, self.config.clone()))
     }
@@ -409,7 +410,7 @@ impl ServiceProvider for DatabaseServiceProvider {
 }
 
 /// Helper function to create a database pool directly with default configuration
-pub async fn create_database_pool(database_url: &str) -> Result<Arc<Pool<Postgres>>, HttpError> {
+pub async fn create_database_pool(database_url: &str) -> Result<Arc<Pool<Postgres>>, ModelError> {
     create_database_pool_with_config(database_url, &PoolConfig::default()).await
 }
 
@@ -417,7 +418,7 @@ pub async fn create_database_pool(database_url: &str) -> Result<Arc<Pool<Postgre
 pub async fn create_database_pool_with_config(
     database_url: &str,
     config: &PoolConfig
-) -> Result<Arc<Pool<Postgres>>, HttpError> {
+) -> Result<Arc<Pool<Postgres>>, ModelError> {
     tracing::debug!("Creating database pool with config: max={}, min={}, timeout={}s, idle_timeout={:?}s, max_lifetime={:?}s, test_before_acquire={}", 
         config.max_connections, config.min_connections, config.acquire_timeout,
         config.idle_timeout, config.max_lifetime, config.test_before_acquire);
@@ -442,7 +443,7 @@ pub async fn create_database_pool_with_config(
         .await
         .map_err(|e| {
             tracing::error!("Failed to create database pool: {}", e);
-            HttpError::database_error(format!("Failed to create database pool: {}", e))
+            ModelError::Connection(format!("Failed to create database pool: {}", e))
         })?;
     
     tracing::info!("✅ Database pool created successfully with {} max connections", config.max_connections);
@@ -527,7 +528,7 @@ pub async fn get_named_database_pool(
 }
 
 /// Create a pool registry with a default database pool
-pub async fn create_default_pool_registry(database_url: &str) -> Result<PoolRegistry, HttpError> {
+pub async fn create_default_pool_registry(database_url: &str) -> Result<PoolRegistry, ModelError> {
     let mut registry = PoolRegistry::new();
     
     let provider = DatabaseServiceProvider::new(database_url.to_string());
@@ -542,7 +543,7 @@ pub async fn create_default_pool_registry(database_url: &str) -> Result<PoolRegi
 /// Create a pool registry with custom configuration
 pub async fn create_custom_pool_registry(
     pools: Vec<(String, String, PoolConfig)>
-) -> Result<PoolRegistry, HttpError> {
+) -> Result<PoolRegistry, ModelError> {
     let mut registry = PoolRegistry::new();
     
     for (name, database_url, config) in pools {
@@ -726,11 +727,11 @@ mod tests {
     }
 
     #[test]
-    fn test_pool_error_http_conversion() {
+    fn test_pool_error_model_conversion() {
         let pool_error = PoolError::PoolExhausted { max_connections: 5 };
-        let http_error: HttpError = pool_error.into();
+        let model_error: ModelError = pool_error.into();
         
-        // Verify it converts to HttpError (the exact error message format may vary)
-        assert!(format!("{:?}", http_error).contains("DatabaseError"));
+        // Verify it converts to ModelError
+        assert!(matches!(model_error, ModelError::Connection(_)));
     }
 }

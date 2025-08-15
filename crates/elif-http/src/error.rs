@@ -322,32 +322,6 @@ impl From<serde_json::Error> for HttpError {
     }
 }
 
-// Convert from sqlx errors
-impl From<sqlx::Error> for HttpError {
-    fn from(err: sqlx::Error) -> Self {
-        match err {
-            sqlx::Error::RowNotFound => HttpError::NotFound { 
-                resource: "Resource not found in database".to_string() 
-            },
-            sqlx::Error::Database(db_err) => {
-                // Check for common database constraint violations
-                let err_msg = db_err.message();
-                if err_msg.contains("unique constraint") || err_msg.contains("duplicate key") {
-                    HttpError::Conflict { 
-                        message: "Resource already exists".to_string() 
-                    }
-                } else {
-                    HttpError::DatabaseError { 
-                        message: format!("Database error: {}", err_msg) 
-                    }
-                }
-            },
-            _ => HttpError::DatabaseError { 
-                message: format!("Database operation failed: {}", err) 
-            },
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {

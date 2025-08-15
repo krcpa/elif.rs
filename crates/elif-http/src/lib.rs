@@ -21,7 +21,6 @@ pub mod response;
 pub mod json;
 pub mod middleware;
 pub mod controller;
-pub mod database;
 pub mod handler;
 pub mod logging;
 
@@ -63,8 +62,6 @@ pub use logging::{
 // Re-export controller types
 pub use controller::{Controller, BaseController, QueryParams, PaginationMeta};
 
-// Re-export database types
-pub use database::{DatabaseServiceProvider, create_database_pool, get_database_pool, get_named_database_pool};
 
 // Re-export handler types
 pub use handler::{ElifHandler, elif_handler};

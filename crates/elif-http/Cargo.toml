@@ -38,8 +38,6 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 log = "0.4"
 
-# Database
-sqlx = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"

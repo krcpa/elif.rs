@@ -569,7 +569,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
- "sqlx",
  "thiserror 1.0.69",
  "tokio",
  "tokio-test",
@@ -601,7 +600,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "thiserror 1.0.69",
  "tokio",
+ "tracing",
  "uuid",
 ]
 

@@ -10,6 +10,7 @@
 pub mod model;
 pub mod query;
 pub mod error;
+pub mod database;
 
 #[cfg(test)]
 mod tests;
@@ -18,6 +19,7 @@ mod tests;
 pub use model::*;
 pub use query::*;
 pub use error::*;
+pub use database::*;
 
 // Derive macro re-exports (when implemented in future)
 // pub use elif_orm_derive::*;
