@@ -119,15 +119,17 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
     where
         Self: Sized,
     {
-        let query: QueryBuilder<Self> = QueryBuilder::new()
-            .select("*")
-            .from(Self::table_name())
-            .where_eq(Self::primary_key_name(), id.to_string());
+        let sql = format!(
+            "SELECT * FROM {} WHERE {} = $1",
+            Self::table_name(),
+            Self::primary_key_name()
+        );
 
-        let sql = query.to_sql();
         let row = sqlx::query(&sql)
+            .bind(id.to_string())
             .fetch_optional(pool)
-            .await?;
+            .await
+            .map_err(|e| ModelError::Database(format!("Failed to find {}: {}", Self::table_name(), e)))?;
 
         match row {
             Some(row) => {
@@ -143,12 +145,12 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
     where
         Self: Sized,
     {
-        Self::find(pool, id)
+        Self::find(pool, id.clone())
             .await?
-            .ok_or_else(|| ModelError::NotFound(Self::table_name().to_string()))
+            .ok_or_else(|| ModelError::NotFound(format!("{}({})", Self::table_name(), id)))
     }
 
-    /// Create a new model instance in the database (placeholder implementation)
+    /// Create a new model instance in the database with field-based insertion
     async fn create(pool: &Pool<Postgres>, mut model: Self) -> ModelResult<Self>
     where
         Self: Sized,
@@ -160,19 +162,49 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
             model.set_updated_at(now);
         }
 
-        // TODO: Build INSERT query dynamically based on model fields
-        // For now, this is a placeholder - real implementation will use derive macro
-        // to generate field-specific SQL
+        // Get field-value pairs from the model
+        let fields = model.to_fields();
         
-        let insert_sql = format!("INSERT INTO {} DEFAULT VALUES RETURNING *", Self::table_name());
-        let row = sqlx::query(&insert_sql)
+        if fields.is_empty() {
+            // Fallback to DEFAULT VALUES if no fields
+            let insert_sql = format!("INSERT INTO {} DEFAULT VALUES RETURNING *", Self::table_name());
+            let row = sqlx::query(&insert_sql)
+                .fetch_one(pool)
+                .await
+                .map_err(|e| ModelError::Database(format!("Failed to create {}: {}", Self::table_name(), e)))?;
+            
+            return Self::from_row(&row);
+        }
+
+        // Build dynamic INSERT query with actual field values
+        let field_names: Vec<String> = fields.keys().cloned().collect();
+        let field_placeholders: Vec<String> = (1..=field_names.len()).map(|i| format!("${}", i)).collect();
+        
+        let insert_sql = format!(
+            "INSERT INTO {} ({}) VALUES ({}) RETURNING *",
+            Self::table_name(),
+            field_names.join(", "),
+            field_placeholders.join(", ")
+        );
+        
+        let mut query = sqlx::query(&insert_sql);
+        
+        // Bind values in the same order as field_names
+        for field_name in &field_names {
+            if let Some(value) = fields.get(field_name) {
+                query = Self::bind_json_value(query, value)?;
+            }
+        }
+        
+        let row = query
             .fetch_one(pool)
-            .await?;
+            .await
+            .map_err(|e| ModelError::Database(format!("Failed to create {}: {}", Self::table_name(), e)))?;
 
         Self::from_row(&row)
     }
 
-    /// Update this model instance in the database
+    /// Update this model instance in the database with field-based updates
     async fn update(&mut self, pool: &Pool<Postgres>) -> ModelResult<()> {
         if let Some(pk) = self.primary_key() {
             // Set updated_at timestamp if enabled
@@ -180,18 +212,65 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
                 self.set_updated_at(Utc::now());
             }
 
-            // TODO: Build UPDATE query dynamically based on changed fields
-            // For now, this is a placeholder
+            // Get field-value pairs from the model
+            let fields = self.to_fields();
+            
+            if fields.is_empty() {
+                // Fallback to just updating timestamp
+                let update_sql = format!(
+                    "UPDATE {} SET updated_at = NOW() WHERE {} = $1",
+                    Self::table_name(),
+                    Self::primary_key_name()
+                );
+                
+                sqlx::query(&update_sql)
+                    .bind(pk.to_string())
+                    .execute(pool)
+                    .await
+                    .map_err(|e| ModelError::Database(format!("Failed to update {}: {}", Self::table_name(), e)))?;
+                
+                return Ok(());
+            }
+
+            // Build dynamic UPDATE query with actual field values
+            // Filter out primary key from updates
+            let pk_name = Self::primary_key_name();
+            let update_fields: Vec<String> = fields.keys()
+                .filter(|&field| field != pk_name)
+                .enumerate()
+                .map(|(i, field)| format!("{} = ${}", field, i + 1))
+                .collect();
+                
+            if update_fields.is_empty() {
+                // No fields to update
+                return Ok(());
+            }
+            
             let update_sql = format!(
-                "UPDATE {} SET updated_at = NOW() WHERE {} = $1",
+                "UPDATE {} SET {} WHERE {} = ${}",
                 Self::table_name(),
-                Self::primary_key_name()
+                update_fields.join(", "),
+                pk_name,
+                update_fields.len() + 1
             );
             
-            sqlx::query(&update_sql)
-                .bind(pk.to_string())
-                .execute(pool)
-                .await?;
+            let mut query = sqlx::query(&update_sql);
+            
+            // Bind update values (excluding primary key)
+            for field_name in fields.keys() {
+                if field_name != pk_name {
+                    if let Some(value) = fields.get(field_name) {
+                        query = Self::bind_json_value(query, value)?;
+                    }
+                }
+            }
+            
+            // Bind primary key for WHERE clause
+            query = query.bind(pk.to_string());
+            
+            query.execute(pool)
+                .await
+                .map_err(|e| ModelError::Database(format!("Failed to update {}: {}", Self::table_name(), e)))?;
 
             Ok(())
         } else {
@@ -213,7 +292,8 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
                 sqlx::query(&soft_delete_sql)
                     .bind(pk.to_string())
                     .execute(pool)
-                    .await?;
+                    .await
+                    .map_err(|e| ModelError::Database(format!("Failed to soft delete {}: {}", Self::table_name(), e)))?;
             } else {
                 // Hard delete - remove from database
                 let delete_sql = format!(
@@ -225,12 +305,35 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
                 sqlx::query(&delete_sql)
                     .bind(pk.to_string())
                     .execute(pool)
-                    .await?;
+                    .await
+                    .map_err(|e| ModelError::Database(format!("Failed to delete {}: {}", Self::table_name(), e)))?;
             }
             
             Ok(())
         } else {
             Err(ModelError::MissingPrimaryKey)
+        }
+    }
+
+    /// Helper method to bind JSON values to SQL queries
+    fn bind_json_value<'a>(mut query: sqlx::query::Query<'a, Postgres, sqlx::postgres::PgArguments>, value: &serde_json::Value) -> ModelResult<sqlx::query::Query<'a, Postgres, sqlx::postgres::PgArguments>> {
+        match value {
+            serde_json::Value::Null => Ok(query.bind(None::<String>)),
+            serde_json::Value::Bool(b) => Ok(query.bind(*b)),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Ok(query.bind(i))
+                } else if let Some(f) = n.as_f64() {
+                    Ok(query.bind(f))
+                } else {
+                    Ok(query.bind(n.to_string()))
+                }
+            }
+            serde_json::Value::String(s) => Ok(query.bind(s.clone())),
+            serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
+                // For complex JSON types, bind as JSONB
+                Ok(query.bind(sqlx::types::Json(value.clone())))
+            }
         }
     }
     // <<<ELIF:END agent-editable:model_crud_operations>>>
@@ -252,17 +355,21 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
         }
     }
 
-    /// Get all records for this model
+    /// Get all records for this model with proper SQL execution
     async fn all(pool: &Pool<Postgres>) -> ModelResult<Vec<Self>>
     where
         Self: Sized,
     {
-        let query = Self::query().select("*");
-        let sql = query.to_sql();
+        let sql = if Self::uses_soft_deletes() {
+            format!("SELECT * FROM {} WHERE deleted_at IS NULL", Self::table_name())
+        } else {
+            format!("SELECT * FROM {}", Self::table_name())
+        };
         
         let rows = sqlx::query(&sql)
             .fetch_all(pool)
-            .await?;
+            .await
+            .map_err(|e| ModelError::Database(format!("Failed to fetch all from {}: {}", Self::table_name(), e)))?;
 
         let mut models = Vec::new();
         for row in rows {
@@ -272,20 +379,80 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
         Ok(models)
     }
 
-    /// Count all records for this model
+    /// Count all records for this model with proper SQL execution
     async fn count(pool: &Pool<Postgres>) -> ModelResult<i64>
     where
         Self: Sized,
     {
-        let query = Self::query().select("COUNT(*)");
-        let sql = query.to_sql();
+        let sql = if Self::uses_soft_deletes() {
+            format!("SELECT COUNT(*) FROM {} WHERE deleted_at IS NULL", Self::table_name())
+        } else {
+            format!("SELECT COUNT(*) FROM {}", Self::table_name())
+        };
         
         let row = sqlx::query(&sql)
             .fetch_one(pool)
-            .await?;
+            .await
+            .map_err(|e| ModelError::Database(format!("Failed to count {}: {}", Self::table_name(), e)))?;
 
-        let count: i64 = row.try_get(0)?;
+        let count: i64 = row.try_get(0)
+            .map_err(|e| ModelError::Database(format!("Failed to extract count: {}", e)))?;
         Ok(count)
+    }
+
+    /// Find models by a specific field value with proper parameter binding
+    async fn where_field<V>(pool: &Pool<Postgres>, field: &str, value: V) -> ModelResult<Vec<Self>>
+    where
+        Self: Sized,
+        V: Send + Sync + 'static,
+        for<'q> V: sqlx::Encode<'q, Postgres> + sqlx::Type<Postgres>,
+    {
+        let sql = if Self::uses_soft_deletes() {
+            format!("SELECT * FROM {} WHERE {} = $1 AND deleted_at IS NULL", Self::table_name(), field)
+        } else {
+            format!("SELECT * FROM {} WHERE {} = $1", Self::table_name(), field)
+        };
+        
+        let rows = sqlx::query(&sql)
+            .bind(value)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| ModelError::Database(format!("Failed to query {} by {}: {}", Self::table_name(), field, e)))?;
+
+        let mut models = Vec::new();
+        for row in rows {
+            models.push(Self::from_row(&row)?);
+        }
+        
+        Ok(models)
+    }
+
+    /// Find the first model by a specific field value
+    async fn first_where<V>(pool: &Pool<Postgres>, field: &str, value: V) -> ModelResult<Option<Self>>
+    where
+        Self: Sized,
+        V: Send + Sync + 'static,
+        for<'q> V: sqlx::Encode<'q, Postgres> + sqlx::Type<Postgres>,
+    {
+        let sql = if Self::uses_soft_deletes() {
+            format!("SELECT * FROM {} WHERE {} = $1 AND deleted_at IS NULL LIMIT 1", Self::table_name(), field)
+        } else {
+            format!("SELECT * FROM {} WHERE {} = $1 LIMIT 1", Self::table_name(), field)
+        };
+        
+        let row = sqlx::query(&sql)
+            .bind(value)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| ModelError::Database(format!("Failed to find first {} by {}: {}", Self::table_name(), field, e)))?;
+
+        match row {
+            Some(row) => {
+                let model = Self::from_row(&row)?;
+                Ok(Some(model))
+            }
+            None => Ok(None),
+        }
     }
     // <<<ELIF:END agent-editable:model_query_methods>>>
 

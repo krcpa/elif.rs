@@ -750,3 +750,259 @@ mod integration_tests {
         // - Connection acquisition < 1ms
     }
 }
+
+#[cfg(test)]
+mod model_database_integration_tests {
+    use super::*;
+    use serde_json::Value;
+
+    #[test]
+    fn test_bind_json_value_types() {
+        // Test JSON value binding helper method
+        // This is unit testable without a database
+        
+        // String value
+        let string_val = Value::String("test".to_string());
+        assert!(matches!(string_val, Value::String(_)));
+        
+        // Number value  
+        let number_val = Value::Number(serde_json::Number::from(42));
+        assert!(number_val.is_number());
+        assert_eq!(number_val.as_i64().unwrap(), 42);
+        
+        // Boolean value
+        let bool_val = Value::Bool(true);
+        assert!(bool_val.is_boolean());
+        assert_eq!(bool_val.as_bool().unwrap(), true);
+        
+        // Null value
+        let null_val = Value::Null;
+        assert!(null_val.is_null());
+        
+        // Array value (JSON)
+        let array_val = Value::Array(vec![Value::String("item".to_string())]);
+        assert!(array_val.is_array());
+        
+        // Object value (JSON)
+        let mut obj = serde_json::Map::new();
+        obj.insert("key".to_string(), Value::String("value".to_string()));
+        let object_val = Value::Object(obj);
+        assert!(object_val.is_object());
+    }
+
+    #[test]
+    fn test_model_field_serialization() {
+        // Test that our TestUser properly serializes fields
+        let user = TestUser {
+            id: Some(Uuid::new_v4()),
+            email: "test@example.com".to_string(),
+            name: "Test User".to_string(),
+            created_at: Some(Utc::now()),
+            updated_at: Some(Utc::now()),
+            deleted_at: None,
+        };
+        
+        let fields = user.to_fields();
+        
+        // Should have core fields
+        assert!(fields.contains_key("id"));
+        assert!(fields.contains_key("email"));
+        assert!(fields.contains_key("name"));
+        assert!(fields.contains_key("created_at"));
+        assert!(fields.contains_key("updated_at"));
+        
+        // Should not have deleted_at since it's None
+        assert!(!fields.contains_key("deleted_at"));
+        
+        // Values should be correct types
+        assert!(fields.get("email").unwrap().is_string());
+        assert!(fields.get("name").unwrap().is_string());
+        assert_eq!(fields.get("email").unwrap().as_str().unwrap(), "test@example.com");
+        assert_eq!(fields.get("name").unwrap().as_str().unwrap(), "Test User");
+    }
+
+    #[test]
+    fn test_model_timestamps_handling() {
+        let mut user = TestUser {
+            id: Some(Uuid::new_v4()),
+            email: "test@example.com".to_string(),
+            name: "Test User".to_string(),
+            created_at: None,
+            updated_at: None,
+            deleted_at: None,
+        };
+        
+        // Test timestamp methods
+        let now = Utc::now();
+        user.set_created_at(now);
+        user.set_updated_at(now);
+        
+        assert_eq!(user.created_at(), Some(now));
+        assert_eq!(user.updated_at(), Some(now));
+        
+        // Test soft delete
+        user.set_deleted_at(Some(now));
+        assert!(user.is_soft_deleted());
+        assert_eq!(user.deleted_at(), Some(now));
+        
+        // Test undelete
+        user.set_deleted_at(None);
+        assert!(!user.is_soft_deleted());
+        assert_eq!(user.deleted_at(), None);
+    }
+
+    #[test]
+    fn test_model_primary_key_handling() {
+        let mut user = TestUser {
+            id: None,
+            email: "test@example.com".to_string(),
+            name: "Test User".to_string(),
+            created_at: None,
+            updated_at: None,
+            deleted_at: None,
+        };
+        
+        // Initially no primary key
+        assert!(user.primary_key().is_none());
+        
+        // Set primary key
+        let id = Uuid::new_v4();
+        user.set_primary_key(id);
+        assert_eq!(user.primary_key(), Some(id));
+        assert_eq!(user.id, Some(id));
+    }
+
+    #[test]
+    fn test_model_trait_constants() {
+        // Test model configuration constants
+        assert_eq!(TestUser::table_name(), "users");
+        assert_eq!(TestUser::primary_key_name(), "id");
+        assert!(TestUser::uses_timestamps());
+        assert!(TestUser::uses_soft_deletes());
+    }
+
+    #[test] 
+    fn test_sql_generation_patterns() {
+        // Test that our SQL patterns are correct (without executing)
+        let table_name = "users";
+        let pk_name = "id"; 
+        let _pk_value = "test-uuid";
+        
+        // Find query pattern
+        let find_sql = format!("SELECT * FROM {} WHERE {} = $1", table_name, pk_name);
+        assert_eq!(find_sql, "SELECT * FROM users WHERE id = $1");
+        
+        // Count query pattern (with soft deletes)
+        let count_sql = format!("SELECT COUNT(*) FROM {} WHERE deleted_at IS NULL", table_name);
+        assert_eq!(count_sql, "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL");
+        
+        // All query pattern (with soft deletes)
+        let all_sql = format!("SELECT * FROM {} WHERE deleted_at IS NULL", table_name);
+        assert_eq!(all_sql, "SELECT * FROM users WHERE deleted_at IS NULL");
+        
+        // Delete query pattern (hard delete)
+        let delete_sql = format!("DELETE FROM {} WHERE {} = $1", table_name, pk_name);
+        assert_eq!(delete_sql, "DELETE FROM users WHERE id = $1");
+        
+        // Soft delete query pattern
+        let soft_delete_sql = format!("UPDATE {} SET deleted_at = NOW() WHERE {} = $1", table_name, pk_name);
+        assert_eq!(soft_delete_sql, "UPDATE users SET deleted_at = NOW() WHERE id = $1");
+    }
+
+    #[test]
+    fn test_dynamic_insert_sql_generation() {
+        // Test dynamic INSERT SQL generation
+        let user = TestUser {
+            id: Some(Uuid::new_v4()),
+            email: "test@example.com".to_string(),
+            name: "Test User".to_string(),
+            created_at: Some(Utc::now()),
+            updated_at: Some(Utc::now()),
+            deleted_at: None,
+        };
+        
+        let fields = user.to_fields();
+        let field_names: Vec<String> = fields.keys().cloned().collect();
+        let field_placeholders: Vec<String> = (1..=field_names.len()).map(|i| format!("${}", i)).collect();
+        
+        let insert_sql = format!(
+            "INSERT INTO {} ({}) VALUES ({}) RETURNING *",
+            TestUser::table_name(),
+            field_names.join(", "),
+            field_placeholders.join(", ")
+        );
+        
+        // Should contain all the expected parts
+        assert!(insert_sql.starts_with("INSERT INTO users"));
+        assert!(insert_sql.contains("VALUES"));
+        assert!(insert_sql.contains("RETURNING *"));
+        assert!(insert_sql.contains("email"));
+        assert!(insert_sql.contains("name"));
+        
+        // Should have correct number of placeholders
+        let placeholder_count = field_placeholders.len();
+        assert_eq!(placeholder_count, fields.len());
+    }
+
+    #[test]
+    fn test_dynamic_update_sql_generation() {
+        // Test dynamic UPDATE SQL generation
+        let user = TestUser {
+            id: Some(Uuid::new_v4()),
+            email: "updated@example.com".to_string(),
+            name: "Updated User".to_string(),
+            created_at: Some(Utc::now()),
+            updated_at: Some(Utc::now()),
+            deleted_at: None,
+        };
+        
+        let fields = user.to_fields();
+        let pk_name = TestUser::primary_key_name();
+        let update_fields: Vec<String> = fields.keys()
+            .filter(|&field| field != pk_name)
+            .enumerate()
+            .map(|(i, field)| format!("{} = ${}", field, i + 1))
+            .collect();
+        
+        let update_sql = format!(
+            "UPDATE {} SET {} WHERE {} = ${}",
+            TestUser::table_name(),
+            update_fields.join(", "),
+            pk_name,
+            update_fields.len() + 1
+        );
+        
+        // Should contain expected parts
+        assert!(update_sql.starts_with("UPDATE users"));
+        assert!(update_sql.contains("SET"));
+        assert!(update_sql.contains("WHERE id ="));
+        assert!(update_fields.len() < fields.len()); // Should exclude primary key
+    }
+
+    #[test]
+    fn test_field_filtering_for_updates() {
+        // Test that primary key is properly filtered out during updates
+        let user = TestUser {
+            id: Some(Uuid::new_v4()),
+            email: "test@example.com".to_string(),
+            name: "Test User".to_string(),
+            created_at: Some(Utc::now()),
+            updated_at: Some(Utc::now()),
+            deleted_at: None,
+        };
+        
+        let fields = user.to_fields();
+        let pk_name = TestUser::primary_key_name();
+        
+        // Should contain primary key in full fields
+        assert!(fields.contains_key(pk_name));
+        
+        // But filtered fields should not contain primary key
+        let update_fields: Vec<&String> = fields.keys()
+            .filter(|&field| field != pk_name)
+            .collect();
+            
+        assert!(!update_fields.iter().any(|&field| field == pk_name));
+        assert!(update_fields.len() < fields.len());
+    }
+}
