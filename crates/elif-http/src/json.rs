@@ -11,7 +11,7 @@ use axum::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::ops::{Deref, DerefMut};
 use crate::error::{HttpError, HttpResult};
-use crate::response::ElifResponse;
+use crate::response::{ElifResponse, IntoElifResponse};
 
 /// Enhanced JSON extractor with better error handling
 #[derive(Debug)]
@@ -62,6 +62,19 @@ where
         match Json::<T>::from_request(req, state).await {
             Ok(Json(data)) => Ok(ElifJson(data)),
             Err(rejection) => Err(JsonError::from_axum_json_rejection(rejection)),
+        }
+    }
+}
+
+/// ElifJson to ElifResponse implementation
+impl<T> IntoElifResponse for ElifJson<T>
+where
+    T: Serialize,
+{
+    fn into_elif_response(self) -> ElifResponse {
+        match ElifResponse::ok().json(&self.0) {
+            Ok(response) => response,
+            Err(_) => ElifResponse::internal_server_error().text("JSON serialization failed"),
         }
     }
 }

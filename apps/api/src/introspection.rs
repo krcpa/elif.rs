@@ -1,4 +1,4 @@
-use elif_http::{ElifRouter, ElifJson, JsonResponse};
+use elif_http::{ElifRouter, ElifJson, ElifRequest, HttpResult};
 use elif_introspect::MapGenerator;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -11,29 +11,29 @@ pub fn router() -> ElifRouter {
         .get("/_health", health_handler)
 }
 
-async fn map_handler() -> ElifJson<Value> {
+async fn map_handler(_req: ElifRequest) -> HttpResult<ElifJson<Value>> {
     let project_root = PathBuf::from("../../");
     let generator = MapGenerator::new(project_root);
     
     match generator.generate() {
-        Ok(map) => ElifJson(serde_json::to_value(map).unwrap_or_default()),
-        Err(_) => ElifJson(serde_json::json!({
+        Ok(map) => Ok(ElifJson(serde_json::to_value(map).unwrap_or_default())),
+        Err(_) => Ok(ElifJson(serde_json::json!({
             "routes": [],
             "models": [],
             "specs": []
-        }))
+        })))
     }
 }
 
-async fn openapi_handler() -> ElifJson<Value> {
-    ElifJson(create_openapi_spec())
+async fn openapi_handler(_req: ElifRequest) -> HttpResult<ElifJson<Value>> {
+    Ok(ElifJson(create_openapi_spec()))
 }
 
-async fn health_handler() -> ElifJson<Value> {
-    ElifJson(serde_json::json!({
+async fn health_handler(_req: ElifRequest) -> HttpResult<ElifJson<Value>> {
+    Ok(ElifJson(serde_json::json!({
         "status": "ok",
         "timestamp": chrono::Utc::now().to_rfc3339()
-    }))
+    })))
 }
 
 #[derive(OpenApi)]

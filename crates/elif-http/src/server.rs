@@ -72,12 +72,12 @@ impl Server {
     /// # Example
     /// 
     /// ```rust,no_run
-    /// use elif_http::{Server, ElifRouter, HttpConfig};
+    /// use elif_http::{Server, ElifRouter, HttpConfig, ElifRequest, HttpResult};
     /// use elif_core::{Container, container::test_implementations::*};
     /// use std::sync::Arc;
     /// 
-    /// # async fn get_users() -> &'static str { "users" }
-    /// # async fn create_user() -> &'static str { "created" }
+    /// # async fn get_users(_req: ElifRequest) -> HttpResult<&'static str> { Ok("users") }
+    /// # async fn create_user(_req: ElifRequest) -> HttpResult<&'static str> { Ok("created") }
     /// 
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let config = Arc::new(create_test_config());
@@ -206,11 +206,11 @@ impl Server {
         // Create health check handler with captured context
         let health_container = container.clone();
         let health_config = config.clone();
-        let health_handler = move || {
+        let health_handler = move |_req: crate::request::ElifRequest| {
             let container = health_container.clone();
             let config = health_config.clone();
             async move {
-                health_check(container, config).await
+                Ok(crate::response::ElifResponse::ok().json(&health_check(container, config).await.0)?)
             }
         };
 

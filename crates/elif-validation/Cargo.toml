@@ -23,7 +23,3 @@ thiserror = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true }
 tokio-test = "0.4"
-
-[[example]]
-name = "validation_demo"
-path = "examples/validation_demo.rs"

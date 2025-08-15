@@ -1,6 +1,10 @@
 //! Core routing functionality
 
 use super::{HttpMethod, RouteInfo, RouteRegistry, params::{ParamExtractor, ParamType}};
+use crate::handler::{ElifHandler, elif_handler};
+use crate::request::ElifRequest;
+use crate::response::{ElifResponse, IntoElifResponse};
+use crate::error::HttpResult;
 use axum::{
     Router as AxumRouter,
     routing::{get, post, put, delete, patch},
@@ -9,6 +13,7 @@ use axum::{
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::future::Future;
 
 /// Main router for the elif.rs framework
 #[derive(Debug)]
@@ -80,58 +85,64 @@ where
             .collect()
     }
 
-    /// Add a GET route
-    pub fn get<H, T>(mut self, path: &str, handler: H) -> Self
+    /// Add a GET route with elif handler
+    pub fn get<F, Fut, R>(mut self, path: &str, handler: F) -> Self
     where
-        H: Handler<T, S>,
-        T: 'static,
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
     {
         self.register_route(HttpMethod::GET, path, None);
-        self.axum_router = self.axum_router.route(path, get(handler));
+        let method_router = get(elif_handler(handler));
+        self.axum_router = self.axum_router.route(path, method_router);
         self
     }
 
-    /// Add a POST route
-    pub fn post<H, T>(mut self, path: &str, handler: H) -> Self
+    /// Add a POST route with elif handler
+    pub fn post<F, Fut, R>(mut self, path: &str, handler: F) -> Self
     where
-        H: Handler<T, S>,
-        T: 'static,
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
     {
         self.register_route(HttpMethod::POST, path, None);
-        self.axum_router = self.axum_router.route(path, post(handler));
+        self.axum_router = self.axum_router.route(path, post(elif_handler(handler)));
         self
     }
 
-    /// Add a PUT route
-    pub fn put<H, T>(mut self, path: &str, handler: H) -> Self
+    /// Add a PUT route with elif handler
+    pub fn put<F, Fut, R>(mut self, path: &str, handler: F) -> Self
     where
-        H: Handler<T, S>,
-        T: 'static,
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
     {
         self.register_route(HttpMethod::PUT, path, None);
-        self.axum_router = self.axum_router.route(path, put(handler));
+        self.axum_router = self.axum_router.route(path, put(elif_handler(handler)));
         self
     }
 
-    /// Add a DELETE route
-    pub fn delete<H, T>(mut self, path: &str, handler: H) -> Self
+    /// Add a DELETE route with elif handler
+    pub fn delete<F, Fut, R>(mut self, path: &str, handler: F) -> Self
     where
-        H: Handler<T, S>,
-        T: 'static,
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
     {
         self.register_route(HttpMethod::DELETE, path, None);
-        self.axum_router = self.axum_router.route(path, delete(handler));
+        self.axum_router = self.axum_router.route(path, delete(elif_handler(handler)));
         self
     }
 
-    /// Add a PATCH route
-    pub fn patch<H, T>(mut self, path: &str, handler: H) -> Self
+    /// Add a PATCH route with elif handler
+    pub fn patch<F, Fut, R>(mut self, path: &str, handler: F) -> Self
     where
-        H: Handler<T, S>,
-        T: 'static,
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
     {
         self.register_route(HttpMethod::PATCH, path, None);
-        self.axum_router = self.axum_router.route(path, patch(handler));
+        self.axum_router = self.axum_router.route(path, patch(elif_handler(handler)));
         self
     }
 
@@ -272,18 +283,20 @@ impl Route {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::response::Html;
+    use crate::request::ElifRequest;
+    use crate::response::ElifResponse;
+    use crate::error::HttpResult;
 
-    async fn handler() -> Html<&'static str> {
-        Html("<h1>Hello, World!</h1>")
+    async fn elif_handler(_req: ElifRequest) -> HttpResult<ElifResponse> {
+        Ok(ElifResponse::ok().text("Hello, World!"))
     }
 
     #[test]
     fn test_router_creation() {
         let router = Router::<()>::new()
-            .get("/", handler)
-            .post("/users", handler)
-            .get("/users/{id}", handler);
+            .get("/", elif_handler)
+            .post("/users", elif_handler)
+            .get("/users/{id}", elif_handler);
         
         let registry = router.registry();
         let reg = registry.lock().unwrap();
@@ -299,7 +312,7 @@ mod tests {
 
     #[test]
     fn test_url_generation() {
-        let mut router = Router::<()>::new().get("/users/{id}/posts/{slug}", handler);
+        let mut router = Router::<()>::new().get("/users/{id}/posts/{slug}", elif_handler);
         
         // Manually add a named route to registry for testing
         {

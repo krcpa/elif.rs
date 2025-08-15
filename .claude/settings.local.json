@@ -37,7 +37,8 @@
       "Bash(grep:*)",
       "Bash(rustc --version)",
       "Bash(gh issue edit:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(RUST_BACKTRACE=1 cargo test test_comprehensive_cors_preflight_handling -p elif-security -- --nocapture)"
     ],
     "deny": []
   }

@@ -22,6 +22,7 @@ pub mod json;
 pub mod middleware;
 pub mod controller;
 pub mod database;
+pub mod handler;
 
 // Main server API - NestJS-like experience
 pub use server::Server;
@@ -56,6 +57,9 @@ pub use controller::{Controller, BaseController, QueryParams, PaginationMeta};
 
 // Re-export database types
 pub use database::{DatabaseServiceProvider, create_database_pool, get_database_pool, get_named_database_pool};
+
+// Re-export handler types
+pub use handler::{ElifHandler, elif_handler};
 
 // Framework-native types - Use these instead of raw Axum types
 // Note: Use Router from routing module, not axum::Router

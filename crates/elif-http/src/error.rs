@@ -8,6 +8,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
+use crate::response::{ElifResponse, IntoElifResponse};
 
 /// Result type for HTTP operations
 pub type HttpResult<T> = Result<T, HttpError>;
@@ -221,6 +222,28 @@ impl HttpError {
             HttpError::Unauthorized => "UNAUTHORIZED_ACCESS",
             HttpError::Forbidden { .. } => "ACCESS_FORBIDDEN",
         }
+    }
+}
+
+// Implement IntoElifResponse for HttpError
+impl IntoElifResponse for HttpError {
+    fn into_elif_response(self) -> ElifResponse {
+        let body = json!({
+            "error": {
+                "code": self.error_code(),
+                "message": self.to_string(),
+                "hint": match &self {
+                    HttpError::RequestTooLarge { .. } => Some("Reduce request payload size"),
+                    HttpError::RequestTimeout => Some("Retry the request"),
+                    HttpError::BadRequest { .. } => Some("Check request format and parameters"),
+                    HttpError::HealthCheckFailed { .. } => Some("Server may be starting up or experiencing issues"),
+                    _ => None,
+                }
+            }
+        });
+
+        ElifResponse::with_status(self.status_code())
+            .json_value(body)
     }
 }
 

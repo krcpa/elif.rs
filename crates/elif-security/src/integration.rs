@@ -4,6 +4,7 @@
 //! MiddlewarePipeline, ensuring consistent usage and proper ordering.
 
 use elif_http::middleware::MiddlewarePipeline;
+use http::StatusCode;
 use crate::{
     middleware::{cors::CorsMiddleware, csrf::CsrfMiddleware, rate_limit::RateLimitMiddleware},
     config::{CorsConfig, CsrfConfig, RateLimitConfig},
@@ -322,12 +323,20 @@ mod tests {
             .unwrap();
         
         let result = pipeline.process_request(request).await;
-        assert!(result.is_ok());
         
-        // Verify CORS headers are present in response
-        if let Ok(response) = result {
-            let headers = response.headers();
-            assert!(headers.contains_key("access-control-allow-origin"));
+        // For preflight requests, CORS middleware should return early with proper response
+        // This is expected behavior - it returns Err(response) to short-circuit the pipeline
+        match result {
+            Err(response) => {
+                // Verify it's a successful preflight response (204 No Content)
+                assert_eq!(response.status(), StatusCode::NO_CONTENT);
+                
+                // Verify CORS headers are present in response
+                let headers = response.headers();
+                assert!(headers.contains_key("access-control-allow-origin"));
+                assert!(headers.contains_key("access-control-allow-methods"));
+            }
+            Ok(_) => panic!("Expected CORS middleware to handle preflight request and return early"),
         }
     }
 

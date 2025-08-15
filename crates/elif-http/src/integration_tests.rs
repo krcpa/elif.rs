@@ -8,8 +8,8 @@
 mod tests {
     use super::*;
     use crate::{
-        HttpConfig, Server, ElifRouter, ElifResponse, ElifRequest,
-        response::ElifStatusCode as StatusCode,
+        HttpConfig, HttpResult, HttpError, Server, ElifRouter, ElifResponse, ElifRequest,
+        response::ElifStatusCode, response::ElifStatusCode as StatusCode,
     };
     use elif_core::{
         Container,
@@ -48,7 +48,7 @@ mod tests {
     }
 
     // Pure framework handler - no external framework knowledge
-    async fn get_users() -> ElifResponse {
+    async fn get_users(_req: ElifRequest) -> HttpResult<ElifResponse> {
         let users = vec![
             TestUser {
                 id: 1,
@@ -62,32 +62,32 @@ mod tests {
             },
         ];
 
-        match ElifResponse::ok().json(&users) {
+        Ok(match ElifResponse::ok().json(&users) {
             Ok(resp) => resp,
             Err(_) => ElifResponse::internal_server_error()
                 .text("Failed to serialize users"),
-        }
+        })
     }
 
     // Pure framework handler with query parameters
-    async fn create_user() -> ElifResponse {
+    async fn create_user(_req: ElifRequest) -> HttpResult<ElifResponse> {
         let user = TestUser {
             id: 3,
             name: "Charlie".to_string(),
             email: "charlie@example.com".to_string(),
         };
 
-        match ElifResponse::created().json(&user) {
+        Ok(match ElifResponse::created().json(&user) {
             Ok(resp) => resp,
             Err(_) => ElifResponse::internal_server_error()
                 .text("Failed to create user"),
-        }
+        })
     }
 
     // Pure framework error handler
-    async fn error_handler() -> ElifResponse {
-        ElifResponse::bad_request()
-            .text("This is an intentional error for testing")
+    async fn error_handler(_req: ElifRequest) -> HttpResult<ElifResponse> {
+        Ok(ElifResponse::bad_request()
+            .text("This is an intentional error for testing"))
     }
 
     #[test]
@@ -213,11 +213,11 @@ mod tests {
 
         // 1. Router creation and route registration
         let _router: ElifRouter<()> = ElifRouter::new()
-            .get("/", || async { ElifResponse::ok().text("Hello World") })
-            .post("/data", || async { 
-                ElifResponse::created().json(&json!({"created": true})).unwrap_or_else(|_| 
+            .get("/", |_| async { Ok(ElifResponse::ok().text("Hello World")) })
+            .post("/data", |_| async { 
+                Ok(ElifResponse::created().json(&json!({"created": true})).unwrap_or_else(|_| 
                     ElifResponse::internal_server_error().text("Error")
-                ) 
+                ))
             });
 
         // 2. Response building with all common patterns
@@ -265,9 +265,9 @@ mod tests {
 
         // Routing
         let _router: ElifRouter<()> = ElifRouter::new()
-            .get("/api/health", || async {
-                ElifResponse::ok().json(&json!({"status": "healthy"}))
-                    .unwrap_or_else(|_| ElifResponse::internal_server_error().text("Error"))
+            .get("/api/health", |_| async {
+                Ok(ElifResponse::ok().json(&json!({"status": "healthy"}))
+                    .unwrap_or_else(|_| ElifResponse::internal_server_error().text("Error")))
             });
 
         // Response building

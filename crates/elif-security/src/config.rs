@@ -65,6 +65,7 @@ impl Default for CorsConfig {
         allowed_headers.insert("content-type".to_string());
         allowed_headers.insert("authorization".to_string());
         allowed_headers.insert("x-requested-with".to_string());
+        allowed_headers.insert("x-csrf-token".to_string()); // Support for CSRF protection
         
         Self {
             allowed_origins: None, // Allow all by default (not recommended for production)

@@ -236,24 +236,30 @@ impl ElifResponse {
 
 /// Helper trait for converting types to ElifResponse
 pub trait IntoElifResponse {
-    fn into_elif_response(self) -> HttpResult<ElifResponse>;
+    fn into_elif_response(self) -> ElifResponse;
 }
 
 impl IntoElifResponse for String {
-    fn into_elif_response(self) -> HttpResult<ElifResponse> {
-        Ok(ElifResponse::ok().text(self))
+    fn into_elif_response(self) -> ElifResponse {
+        ElifResponse::ok().text(self)
     }
 }
 
 impl IntoElifResponse for &str {
-    fn into_elif_response(self) -> HttpResult<ElifResponse> {
-        Ok(ElifResponse::ok().text(self))
+    fn into_elif_response(self) -> ElifResponse {
+        ElifResponse::ok().text(self)
     }
 }
 
 impl IntoElifResponse for StatusCode {
-    fn into_elif_response(self) -> HttpResult<ElifResponse> {
-        Ok(ElifResponse::with_status(self))
+    fn into_elif_response(self) -> ElifResponse {
+        ElifResponse::with_status(self)
+    }
+}
+
+impl IntoElifResponse for ElifResponse {
+    fn into_elif_response(self) -> ElifResponse {
+        self
     }
 }
 
