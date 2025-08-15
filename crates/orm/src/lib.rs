@@ -11,15 +11,20 @@ pub mod model;
 pub mod query;
 pub mod error;
 pub mod database;
+pub mod transaction;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod transaction_tests;
 
 // Re-export core traits and types
 pub use model::*;
 pub use query::*;
 pub use error::*;
 pub use database::*;
+pub use transaction::*;
 
 // Derive macro re-exports (when implemented in future)
 // pub use elif_orm_derive::*;

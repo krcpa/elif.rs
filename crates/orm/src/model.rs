@@ -347,6 +347,19 @@ pub trait ModelExtensions: Model {
             Err(ModelError::Validation("Cannot save new model without primary key support from derive macro".to_string()))
         }
     }
+
+    // <<<ELIF:BEGIN agent-editable:transaction_methods>>>
+    // Transaction-scoped operations (placeholders for future implementation)
+    
+    /// Placeholder for transaction-scoped model operations
+    /// Will be fully implemented when derive macros are available
+    fn supports_transactions() -> bool
+    where
+        Self: Sized,
+    {
+        true // Basic transaction support is available via the transaction module
+    }
+    // <<<ELIF:END agent-editable:transaction_methods>>>
 }
 
 // Implement ModelExtensions for all types that implement Model
