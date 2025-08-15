@@ -578,6 +578,7 @@ dependencies = [
  "chrono",
  "elif-core",
  "hyper",
+ "log",
  "serde",
  "serde_json",
  "serde_urlencoded",

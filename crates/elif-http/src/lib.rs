@@ -12,6 +12,7 @@
 // pub mod server;
 // pub mod simple_server;
 pub mod minimal_server;
+pub mod server_with_middleware;
 // pub mod stateful_server;
 pub mod simple_stateful_server;
 pub mod config;
@@ -21,10 +22,12 @@ pub mod routing;
 pub mod request;
 pub mod response;
 pub mod json;
+pub mod middleware;
 
 // pub use server::{HttpServer, HttpServerBuilder};
 // pub use simple_server::SimpleHttpServer;
 pub use minimal_server::MinimalHttpServer;
+pub use server_with_middleware::MiddlewareHttpServer;
 // pub use stateful_server::{StatefulHttpServer, StatefulHttpServerBuilder, AppState};
 pub use simple_stateful_server::SimpleStatefulHttpServer;
 pub use config::HttpConfig;
@@ -42,6 +45,13 @@ pub use routing::{
 pub use request::{ElifRequest, RequestExtractor};
 pub use response::{ElifResponse, ResponseBody, IntoElifResponse};
 pub use json::{ElifJson, JsonError, JsonResponse, ValidationErrors, ApiResponse};
+
+// Re-export middleware types
+pub use middleware::{
+    Middleware, MiddlewarePipeline, ErrorHandlingMiddleware,
+    logging::LoggingMiddleware,
+    timing::{TimingMiddleware, RequestStartTime, format_duration},
+};
 
 // Re-export commonly used types
 pub use axum::{

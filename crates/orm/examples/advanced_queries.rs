@@ -66,7 +66,7 @@ impl Model for User {
         })
     }
 
-    fn to_insert_values(&self) -> Vec<(&'static str, Box<dyn sqlx::postgres::PgHasArrayType + Send + Sync>)> {
+    fn to_insert_values(&self) -> Vec<(&'static str, String)> {
         // This would be implemented with actual values in a real scenario
         vec![]
     }
@@ -96,7 +96,7 @@ impl Model for Post {
         })
     }
 
-    fn to_insert_values(&self) -> Vec<(&'static str, Box<dyn sqlx::postgres::PgHasArrayType + Send + Sync>)> {
+    fn to_insert_values(&self) -> Vec<(&'static str, String)> {
         vec![]
     }
 }
@@ -122,7 +122,7 @@ impl Model for Comment {
         })
     }
 
-    fn to_insert_values(&self) -> Vec<(&'static str, Box<dyn sqlx::postgres::PgHasArrayType + Send + Sync>)> {
+    fn to_insert_values(&self) -> Vec<(&'static str, String)> {
         vec![]
     }
 }
@@ -414,7 +414,7 @@ async fn advanced_filtering_demo(pool: &Pool<Postgres>) -> Result<(), Box<dyn st
                 ELSE 'normal'
             END as popularity_tier
         "#)
-        .where_clause("view_count IS NOT NULL")
+        .where_raw("view_count IS NOT NULL")
         .order_by("view_count DESC")
         .limit(20)
         .execute_raw(pool)
@@ -436,6 +436,7 @@ async fn advanced_filtering_demo(pool: &Pool<Postgres>) -> Result<(), Box<dyn st
 }
 
 /// Main function demonstrating all query types
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 Advanced ORM Queries Demo");
     println!("============================");
