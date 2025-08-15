@@ -6,7 +6,8 @@ use sqlx::{Pool, Postgres, Row};
 use crate::error::ModelResult;
 use crate::model::Model;
 use crate::query::QueryBuilder;
-use crate::relationships::eager_loading::{EagerLoader, RelationshipConstraintBuilder};
+use crate::relationships::eager_loading::EagerLoader;
+use crate::relationships::constraints::RelationshipConstraintBuilder;
 
 /// Extension trait for QueryBuilder to add eager loading support
 pub trait QueryBuilderWithMethods<M> {

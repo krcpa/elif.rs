@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests {
     use crate::relationships::eager_loading::*;
+    use crate::relationships::constraints::RelationshipConstraintBuilder;
     use crate::query::QueryBuilderWithMethods;
     
     // Simple test model

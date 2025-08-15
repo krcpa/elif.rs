@@ -13,6 +13,9 @@ pub mod metadata;
 pub mod types;
 pub mod registry;
 
+// Phase 6.2.3: Constraint System 
+pub mod constraints;
+
 #[cfg(test)]
 pub mod eager_loading_tests;
 
@@ -29,3 +32,6 @@ pub use cache::*;
 pub use metadata::*;
 pub use types::*;
 pub use registry::*;
+
+// Re-export constraint system types
+pub use constraints::*;

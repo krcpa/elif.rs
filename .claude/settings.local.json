@@ -41,7 +41,8 @@
       "Bash(RUST_BACKTRACE=1 cargo test test_comprehensive_cors_preflight_handling -p elif-security -- --nocapture)",
       "Bash(RUST_BACKTRACE=1 cargo check --package elif-http --message-format=short)",
       "Bash(gh label:*)",
-      "Bash(gh issue reopen:*)"
+      "Bash(gh issue reopen:*)",
+      "Bash(mv:*)"
     ],
     "deny": []
   }
