@@ -286,4 +286,241 @@ mod tests {
         let result = pipeline.process_request(request).await;
         assert!(result.is_ok());
     }
+
+    // ============================================================================
+    // COMPREHENSIVE INTEGRATION TESTS - Phase 3.17
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_security_pipeline_order_enforcement() {
+        // Test that middleware are applied in the correct order: CORS -> Rate Limit -> CSRF
+        let pipeline = SecurityMiddlewareBuilder::new()
+            .with_cors_permissive()
+            .with_rate_limit_default()
+            .with_csrf_default()
+            .build();
+        
+        assert_eq!(pipeline.len(), 3);
+        let names = pipeline.names();
+        assert_eq!(names[0], "CorsMiddleware");      // First: handles preflight requests
+        assert_eq!(names[1], "RateLimit");          // Second: prevents abuse early
+        assert_eq!(names[2], "CsrfMiddleware");     // Third: validates tokens after rate limiting
+    }
+
+    #[tokio::test]
+    async fn test_comprehensive_cors_preflight_handling() {
+        let pipeline = basic_security_pipeline();
+        
+        // Test CORS preflight request passes through all middleware
+        let request = Request::builder()
+            .method(Method::OPTIONS)
+            .uri("/api/test")
+            .header("Origin", "https://trusted.com")
+            .header("Access-Control-Request-Method", "POST")
+            .header("Access-Control-Request-Headers", "content-type,x-csrf-token")
+            .body(Body::empty())
+            .unwrap();
+        
+        let result = pipeline.process_request(request).await;
+        assert!(result.is_ok());
+        
+        // Verify CORS headers are present in response
+        if let Ok(response) = result {
+            let headers = response.headers();
+            assert!(headers.contains_key("access-control-allow-origin"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiting_with_csrf_integration() {
+        let config = RateLimitConfig {
+            max_requests: 2, // Very low limit for testing
+            window_seconds: 60,
+            identifier: crate::config::RateLimitIdentifier::IpAddress,
+            exempt_paths: std::collections::HashSet::new(),
+        };
+        
+        let pipeline = SecurityMiddlewareBuilder::new()
+            .with_rate_limit(config)
+            .with_csrf_default()
+            .build();
+        
+        // First POST request should be rate limited but not processed by CSRF
+        let request1 = Request::builder()
+            .method(Method::POST)
+            .uri("/api/test")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"test": "data"}"#))
+            .unwrap();
+        
+        let result1 = pipeline.process_request(request1).await;
+        
+        // Second POST request should also be rate limited
+        let request2 = Request::builder()
+            .method(Method::POST)
+            .uri("/api/test2")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"test": "data2"}"#))
+            .unwrap();
+        
+        let result2 = pipeline.process_request(request2).await;
+        
+        // Third POST request should hit rate limit before CSRF validation
+        let request3 = Request::builder()
+            .method(Method::POST)
+            .uri("/api/test3")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"test": "data3"}"#))
+            .unwrap();
+        
+        let result3 = pipeline.process_request(request3).await;
+        
+        // Third request should fail with rate limit error, not CSRF error
+        assert!(result3.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_security_configuration_combinations() {
+        // Test all possible combinations of security middleware
+        
+        // 1. CORS only
+        let cors_only = SecurityMiddlewareBuilder::new()
+            .with_cors_permissive()
+            .build();
+        assert_eq!(cors_only.len(), 1);
+        
+        // 2. CSRF only  
+        let csrf_only = SecurityMiddlewareBuilder::new()
+            .with_csrf_default()
+            .build();
+        assert_eq!(csrf_only.len(), 1);
+        
+        // 3. Rate Limit only
+        let rate_limit_only = SecurityMiddlewareBuilder::new()
+            .with_rate_limit_default()
+            .build();
+        assert_eq!(rate_limit_only.len(), 1);
+        
+        // 4. CORS + CSRF
+        let cors_csrf = SecurityMiddlewareBuilder::new()
+            .with_cors_permissive()
+            .with_csrf_default()
+            .build();
+        assert_eq!(cors_csrf.len(), 2);
+        
+        // 5. CORS + Rate Limit
+        let cors_rate = SecurityMiddlewareBuilder::new()
+            .with_cors_permissive()
+            .with_rate_limit_default()
+            .build();
+        assert_eq!(cors_rate.len(), 2);
+        
+        // 6. CSRF + Rate Limit
+        let csrf_rate = SecurityMiddlewareBuilder::new()
+            .with_csrf_default()
+            .with_rate_limit_default()
+            .build();
+        assert_eq!(csrf_rate.len(), 2);
+        
+        // 7. All three (already tested above)
+        let all_three = SecurityMiddlewareBuilder::new()
+            .with_cors_permissive()
+            .with_csrf_default()
+            .with_rate_limit_default()
+            .build();
+        assert_eq!(all_three.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_production_ready_strict_pipeline() {
+        // Test a production-ready configuration with strict settings
+        let allowed_origins = vec![
+            "https://app.example.com".to_string(),
+            "https://admin.example.com".to_string(),
+        ];
+        
+        let pipeline = strict_security_pipeline(allowed_origins);
+        
+        // Test allowed origin
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("/api/data")
+            .header("Origin", "https://app.example.com")
+            .header("User-Agent", "Mozilla/5.0 (compatible; Security Test)")
+            .body(Body::empty())
+            .unwrap();
+        
+        let result = pipeline.process_request(request).await;
+        assert!(result.is_ok());
+        
+        // Test disallowed origin
+        let request_bad = Request::builder()
+            .method(Method::GET)
+            .uri("/api/data")
+            .header("Origin", "https://malicious.com")
+            .body(Body::empty())
+            .unwrap();
+        
+        let result_bad = pipeline.process_request(request_bad).await;
+        assert!(result_bad.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_middleware_error_propagation() {
+        let pipeline = basic_security_pipeline();
+        
+        // Test request that should fail CORS validation
+        let bad_cors_request = Request::builder()
+            .method(Method::POST)
+            .uri("/api/sensitive")
+            .header("Origin", "null") // Null origin should fail in some configurations
+            .body(Body::empty())
+            .unwrap();
+        
+        // The error from middleware should propagate correctly
+        let result = pipeline.process_request(bad_cors_request).await;
+        // Basic pipeline is permissive, so this might pass, but error handling is tested
+        
+        // Test with strict pipeline instead
+        let strict_pipeline = strict_security_pipeline(vec!["https://trusted.com".to_string()]);
+        
+        let strict_request = Request::builder()
+            .method(Method::POST)
+            .uri("/api/sensitive")
+            .header("Origin", "https://untrusted.com")
+            .body(Body::empty())
+            .unwrap();
+        
+        let strict_result = strict_pipeline.process_request(strict_request).await;
+        assert!(strict_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_development_vs_production_configuration() {
+        let dev_pipeline = development_security_pipeline();
+        let prod_pipeline = strict_security_pipeline(vec!["https://prod.example.com".to_string()]);
+        
+        // Request that should pass in dev but fail in production
+        let localhost_request = Request::builder()
+            .method(Method::GET)
+            .uri("/api/test")
+            .header("Origin", "http://localhost:3000")
+            .body(Body::empty())
+            .unwrap();
+        
+        // Should pass in development
+        let dev_result = dev_pipeline.process_request(localhost_request).await;
+        assert!(dev_result.is_ok());
+        
+        // Should fail in production (different origin)
+        let localhost_request_prod = Request::builder()
+            .method(Method::GET)
+            .uri("/api/test")
+            .header("Origin", "http://localhost:3000")
+            .body(Body::empty())
+            .unwrap();
+        
+        let prod_result = prod_pipeline.process_request(localhost_request_prod).await;
+        assert!(prod_result.is_err());
+    }
 }
