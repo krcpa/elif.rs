@@ -118,18 +118,38 @@ elif-security = "0.1.0"    # Security middleware (CORS implemented)
 
 ### 🌐 **Basic Web Applications**
 ```rust
-use elif_http::*;
-use axum::{routing::get, Router};
+use elif_core::{Container, container::test_implementations::*};
+use elif_http::{Server, HttpConfig, ElifRouter, ElifResponse};
+use std::sync::Arc;
 
-async fn hello() -> &'static str {
-    "Hello from elif.rs!"
+async fn hello() -> ElifResponse {
+    ElifResponse::text("Hello from elif.rs - Pure Framework!")
 }
 
-// Basic HTTP server (works)
-let app = Router::new()
-    .route("/", get(hello));
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create container with DI services
+    let config = Arc::new(create_test_config());
+    let database = Arc::new(TestDatabase::new()) as Arc<dyn elif_core::DatabaseConnection>;
     
-// Run on localhost:3000
+    let container = Container::builder()
+        .config(config)
+        .database(database)
+        .build()?
+        .into();
+
+    // Create router using framework abstractions
+    let router = ElifRouter::new()
+        .get("/", hello);
+    
+    // Create and configure server
+    let mut server = Server::with_container(container, HttpConfig::default())?;
+    server.use_router(router);
+    
+    // Start server - framework abstractions only
+    server.listen("0.0.0.0:3000").await?;
+    Ok(())
+}
 ```
 
 ### 📊 **Database Operations**
@@ -157,16 +177,34 @@ let users = User::query()
 
 ### 🛡️ **CORS Security**  
 ```rust
+use elif_core::{Container, container::test_implementations::*};
+use elif_http::{Server, HttpConfig, ElifRouter, ElifResponse};
 use elif_security::CorsMiddleware;
+use std::sync::Arc;
 
-// CORS protection (works)
-let cors = CorsMiddleware::new(CorsConfig::default())
-    .allow_origin("https://localhost:3000")
-    .allow_methods(vec![Method::GET, Method::POST]);
+async fn get_data() -> ElifResponse {
+    ElifResponse::json(serde_json::json!({"data": "secure endpoint"}))
+}
 
-let app = Router::new()
-    .route("/api/data", get(get_data))
-    .layer(CorsLayer::new(cors.config));
+// Framework-native CORS setup (works)
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let container = Container::builder()
+        .config(Arc::new(create_test_config()))
+        .database(Arc::new(TestDatabase::new()) as Arc<dyn elif_core::DatabaseConnection>)
+        .build()?
+        .into();
+
+    let router = ElifRouter::new()
+        .get("/api/data", get_data);
+    
+    let mut server = Server::with_container(container, HttpConfig::default())?;
+    server.use_router(router);
+    server.use_middleware(CorsMiddleware::permissive()); // Framework middleware
+    
+    server.listen("0.0.0.0:3000").await?;
+    Ok(())
+}
 ```
 
 ### 🏗️ **Dependency Injection**

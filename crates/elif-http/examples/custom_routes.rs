@@ -1,14 +1,13 @@
-//! Example: NestJS-like HTTP server with custom routes
+//! Example: Framework-native HTTP server with custom routes
 //!
-//! This example shows how to add custom routes using the clean Server API
-//! that completely abstracts Axum complexity away from users.
+//! This example shows how to add custom routes using pure framework abstractions
+//! without exposing any underlying web framework implementation details.
 
 use elif_core::{Container, container::test_implementations::*};
-use elif_http::{Server, HttpConfig, ElifRouter};
-use axum::{
-    routing::{get, post},
-    response::Json,
-    extract::Query,
+use elif_http::{
+    Server, HttpConfig, ElifRouter, 
+    ElifRequest, ElifResponse, ElifQuery,
+    StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -44,55 +43,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("🚀 Starting HTTP server with custom routes...");
     println!("📊 Available endpoints:");
-    println!("  GET  /health  - Health check");
+    println!("  GET  /health  - Health check (built-in)");
     println!("  GET  /users   - List users");
     println!("  POST /users   - Create user");
     println!("  GET  /api/v1/status - API status");
+    println!("🔧 Framework: Pure Elif.rs abstractions (no direct web framework usage)");
     
-    // Create custom routes using framework router
+    // Create custom routes using framework router - pure abstractions
     let router = ElifRouter::new()
         .get("/users", list_users)
         .post("/users", create_user)
         .get("/api/v1/status", api_status);
     
-    // Create and configure server - NestJS-like experience
+    // Create and configure server - framework-native experience
     let mut server = Server::with_container(container, http_config)?;
     server.use_router(router);
     
-    // Start server - clean and simple
+    // Start server - framework abstractions only
     server.listen("0.0.0.0:3000").await?;
 
     Ok(())
 }
 
-// Clean handler functions - no Axum complexity exposed to users
-async fn list_users(Query(params): Query<UserQuery>) -> Json<serde_json::Value> {
+// Clean handler functions using pure framework abstractions
+async fn list_users(params: UserQuery) -> ElifResponse {
     let users = vec![
         User { id: 1, name: "Alice".to_string(), age: 30 },
         User { id: 2, name: "Bob".to_string(), age: 25 },
     ];
     
-    Json(json!({
+    ElifResponse::json(json!({
         "users": users,
         "query": params,
-        "framework": "Elif.rs - NestJS-like experience"
-    }))
+        "framework": "Elif.rs - Pure framework abstractions",
+        "note": "No underlying web framework types exposed"
+    })).with_status(StatusCode::OK)
 }
 
-async fn create_user() -> Json<serde_json::Value> {
-    Json(json!({
+async fn create_user() -> ElifResponse {
+    ElifResponse::json(json!({
         "message": "User creation endpoint",
-        "note": "This would normally parse request body and create user",
-        "framework": "Clean API abstraction"
-    }))
+        "note": "Framework-native handler with no external dependencies",
+        "framework": "Pure Elif.rs abstractions"
+    })).with_status(StatusCode::CREATED)
 }
 
-async fn api_status() -> Json<serde_json::Value> {
-    Json(json!({
+async fn api_status() -> ElifResponse {
+    ElifResponse::json(json!({
         "api_version": "v1",
         "status": "operational",
         "framework": "Elif.rs",
-        "underlying": "Axum (completely hidden)",
-        "experience": "NestJS-like"
-    }))
+        "architecture": "Pure framework abstractions",
+        "experience": "Framework-native development"
+    })).with_status(StatusCode::OK)
 }

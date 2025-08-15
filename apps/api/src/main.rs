@@ -1,38 +1,52 @@
 mod routes;
 mod introspection;
 
-use axum::{
-    http::{header::CONTENT_TYPE, Method},
-    Router,
-};
-use tower_http::cors::{Any, CorsLayer};
-use tracing_subscriber;
+use elif_core::{Container, container::test_implementations::*};
+use elif_http::{Server, HttpConfig, ElifRouter};
+use elif_security::CorsMiddleware;
+use std::sync::Arc;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    let app = create_app();
-
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
-        .await
-        .unwrap();
+    // Create container with DI services
+    let config = Arc::new(create_test_config());
+    let database = Arc::new(TestDatabase::new()) as Arc<dyn elif_core::DatabaseConnection>;
     
+    let container = Container::builder()
+        .config(config)
+        .database(database)
+        .build()?
+        .into();
+
+    // Create HTTP configuration
+    let mut http_config = HttpConfig::default();
+    http_config.port = 8080;
+
+    // Create application router with framework abstractions
+    let router = create_app_router();
+    
+    // Create and configure server using framework
+    let mut server = Server::with_container(container, http_config)?;
+    server.use_router(router);
+    
+    // Add CORS middleware using framework middleware
+    server.use_middleware(CorsMiddleware::permissive());
+
     println!("🚀 Server running on http://0.0.0.0:8080");
     println!("📖 OpenAPI docs at http://0.0.0.0:8080/_ui");
     println!("🗺️  Project map at http://0.0.0.0:8080/_map.json");
+    println!("🔧 Framework: Pure Elif.rs abstractions");
 
-    axum::serve(listener, app).await.unwrap();
+    // Start server using framework
+    server.listen("0.0.0.0:8080").await?;
+    
+    Ok(())
 }
 
-fn create_app() -> Router {
-    let cors = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
-        .allow_headers([CONTENT_TYPE])
-        .allow_origin(Any);
-
-    Router::new()
-        .merge(introspection::router())
-        .merge(routes::router())
-        .layer(cors)
+fn create_app_router() -> ElifRouter {
+    ElifRouter::new()
+        .merge(introspection::framework_router())
+        .merge(routes::framework_router())
 }

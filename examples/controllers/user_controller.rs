@@ -1,14 +1,9 @@
 //! User Controller Example - Full CRUD operations with validation and error handling
 //! 
-//! Demonstrates how to implement a controller using the elif-http Controller trait
+//! Demonstrates how to implement a controller using the elif-http framework
 //! with custom validation, error handling, and business logic.
 
 use std::sync::Arc;
-use axum::{
-    extract::{State, Path, Query},
-    response::Json,
-    http::StatusCode,
-};
 use serde_json::Value;
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
@@ -16,9 +11,10 @@ use uuid::Uuid;
 use elif_core::Container;
 use elif_http::{
     Controller, BaseController, PaginationParams,
-    HttpResult, HttpError, ApiResponse
+    HttpResult, HttpError, ApiResponse,
+    ElifRequest, ElifResponse, ElifJson, ElifPath, ElifQuery,
+    StatusCode,
 };
-use axum::response::{Json, IntoResponse, Response};
 
 use super::user_model::{User, CreateUserRequest, UpdateUserRequest};
 
@@ -43,9 +39,9 @@ impl UserController {
     /// Custom method: Get active users only
     pub async fn active_users(
         &self,
-        State(container): State<Arc<Container>>,
-        Query(params): Query<PaginationParams>,
-    ) -> HttpResult<Response> {
+        container: Arc<Container>,
+        params: PaginationParams,
+    ) -> HttpResult<ElifResponse> {
         let pool = self.get_pool(&container).await?;
         
         // Use the ORM query builder for custom filtering
@@ -59,15 +55,15 @@ impl UserController {
             .map_err(|e| HttpError::database_error(&e.to_string()))?;
 
         let api_response = ApiResponse::success(users);
-        Ok((StatusCode::OK, Json(api_response)).into_response())
+        Ok(ElifResponse::json(api_response).with_status(StatusCode::OK))
     }
 
     /// Custom method: Search users by name or email
     pub async fn search(
         &self,
-        State(container): State<Arc<Container>>,
-        Query(query): Query<SearchParams>,
-    ) -> HttpResult<Response> {
+        container: Arc<Container>,
+        query: SearchParams,
+    ) -> HttpResult<ElifResponse> {
         let pool = self.get_pool(&container).await?;
         
         let search_term = query.q.unwrap_or_default();
@@ -85,14 +81,14 @@ impl UserController {
             .map_err(|e| HttpError::database_error(&e.to_string()))?;
 
         let api_response = ApiResponse::success(users);
-        Ok((StatusCode::OK, Json(api_response)).into_response())
+        Ok(ElifResponse::json(api_response).with_status(StatusCode::OK))
     }
 
     /// Custom method: Get user statistics
     pub async fn statistics(
         &self,
-        State(container): State<Arc<Container>>,
-    ) -> HttpResult<Response> {
+        container: Arc<Container>,
+    ) -> HttpResult<ElifResponse> {
         let pool = self.get_pool(&container).await?;
         
         let total_count = User::count(&pool)
@@ -113,12 +109,11 @@ impl UserController {
         };
 
         let api_response = ApiResponse::success(stats);
-        Ok((StatusCode::OK, Json(api_response)).into_response())
+        Ok(ElifResponse::json(api_response).with_status(StatusCode::OK))
     }
 }
 
 /// Implement the Controller trait for UserController
-#[axum::async_trait]
 impl Controller<User> for UserController {
     async fn get_pool(&self, container: &Container) -> HttpResult<Arc<Pool<Postgres>>> {
         self.base.get_pool(container).await
@@ -127,9 +122,9 @@ impl Controller<User> for UserController {
     /// Override create method with validation
     async fn create(
         &self,
-        State(container): State<Arc<Container>>,
-        Json(create_request): Json<CreateUserRequest>,
-    ) -> HttpResult<Response> {
+        container: Arc<Container>,
+        create_request: CreateUserRequest,
+    ) -> HttpResult<ElifResponse> {
         let pool = self.get_pool(&container).await?;
         
         // Convert DTO to model
@@ -157,16 +152,16 @@ impl Controller<User> for UserController {
             .map_err(|e| HttpError::database_error(&e.to_string()))?;
 
         let api_response = ApiResponse::success(created_user);
-        Ok((StatusCode::CREATED, Json(api_response)).into_response())
+        Ok(ElifResponse::json(api_response).with_status(StatusCode::CREATED))
     }
 
     /// Override update method with validation and partial updates
     async fn update(
         &self,
-        State(container): State<Arc<Container>>,
-        Path(id): Path<Uuid>,
-        Json(update_request): Json<UpdateUserRequest>,
-    ) -> HttpResult<Response> {
+        container: Arc<Container>,
+        id: Uuid,
+        update_request: UpdateUserRequest,
+    ) -> HttpResult<ElifResponse> {
         let pool = self.get_pool(&container).await?;
         
         // Find existing user
@@ -202,7 +197,7 @@ impl Controller<User> for UserController {
             .map_err(|e| HttpError::database_error(&e.to_string()))?;
 
         let api_response = ApiResponse::success(user);
-        Ok((StatusCode::OK, Json(api_response)).into_response())
+        Ok(ElifResponse::json(api_response).with_status(StatusCode::OK))
     }
 }
 
@@ -220,69 +215,69 @@ pub struct UserStats {
     pub inactive_users: i64,
 }
 
-/// Route setup helper for UserController
-pub fn setup_user_routes(router: axum::Router<Arc<Container>>) -> axum::Router<Arc<Container>> {
+/// Route setup helper for UserController using framework router
+pub fn setup_user_routes(router: elif_http::ElifRouter) -> elif_http::ElifRouter {
     let user_controller = Arc::new(UserController::new());
 
     router
         // Standard CRUD routes
-        .route("/users", axum::routing::get({
+        .get("/users", {
             let controller = Arc::clone(&user_controller);
-            move |state, query| {
+            move |container, query| {
                 let controller = Arc::clone(&controller);
-                async move { controller.index(state, query).await }
+                async move { controller.index(container, query).await }
             }
-        }))
-        .route("/users", axum::routing::post({
+        })
+        .post("/users", {
             let controller = Arc::clone(&user_controller);
-            move |state, json| {
+            move |container, json| {
                 let controller = Arc::clone(&controller);
-                async move { controller.create(state, json).await }
+                async move { controller.create(container, json).await }
             }
-        }))
-        .route("/users/:id", axum::routing::get({
+        })
+        .get("/users/:id", {
             let controller = Arc::clone(&user_controller);
-            move |state, path| {
+            move |container, id| {
                 let controller = Arc::clone(&controller);
-                async move { controller.show(state, path).await }
+                async move { controller.show(container, id).await }
             }
-        }))
-        .route("/users/:id", axum::routing::put({
+        })
+        .put("/users/:id", {
             let controller = Arc::clone(&user_controller);
-            move |state, path, json| {
+            move |container, id, json| {
                 let controller = Arc::clone(&controller);
-                async move { controller.update(state, path, json).await }
+                async move { controller.update(container, id, json).await }
             }
-        }))
-        .route("/users/:id", axum::routing::delete({
+        })
+        .delete("/users/:id", {
             let controller = Arc::clone(&user_controller);
-            move |state, path| {
+            move |container, id| {
                 let controller = Arc::clone(&controller);
-                async move { controller.destroy(state, path).await }
+                async move { controller.destroy(container, id).await }
             }
-        }))
+        })
         // Custom routes
-        .route("/users/active", axum::routing::get({
+        .get("/users/active", {
             let controller = Arc::clone(&user_controller);
-            move |state, query| {
+            move |container, query| {
                 let controller = Arc::clone(&controller);
-                async move { controller.active_users(state, query).await }
+                async move { controller.active_users(container, query).await }
             }
-        }))
-        .route("/users/search", axum::routing::get({
+        })
+        .get("/users/search", {
             let controller = Arc::clone(&user_controller);
-            move |state, query| {
+            move |container, query| {
                 let controller = Arc::clone(&controller);
-                async move { controller.search(state, query).await }
+                async move { controller.search(container, query).await }
             }
-        }))
-        .route("/users/statistics", axum::routing::get({
+        })
+        .get("/users/statistics", {
             let controller = Arc::clone(&user_controller);
-            move |state| {
+            move |container| {
                 let controller = Arc::clone(&controller);
-                async move { controller.statistics(state).await }
+                async move { controller.statistics(container).await }
             }
-        }))
+        })
 }
 
 #[cfg(test)]

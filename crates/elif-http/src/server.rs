@@ -20,14 +20,20 @@ use tracing::{info, warn};
 /// 
 /// ```rust,no_run
 /// use elif_http::{Server, HttpConfig};
-/// use elif_core::Container;
+/// use elif_core::{Container, container::test_implementations::*};
+/// use std::sync::Arc;
 /// 
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let container = Container::new();
-///     let config = HttpConfig::default();
+///     let config = Arc::new(create_test_config());
+///     let database = Arc::new(TestDatabase::new()) as Arc<dyn elif_core::DatabaseConnection>;
 ///     
-///     let server = Server::new(container, config)?;
+///     let container = Container::builder()
+///         .config(config)
+///         .database(database)
+///         .build()?;
+///         
+///     let server = Server::new(container, HttpConfig::default())?;
 ///     server.listen("0.0.0.0:3000").await?;
 ///     
 ///     Ok(())
@@ -66,15 +72,31 @@ impl Server {
     /// # Example
     /// 
     /// ```rust,no_run
-    /// use elif_http::{Server, ElifRouter};
+    /// use elif_http::{Server, ElifRouter, HttpConfig};
+    /// use elif_core::{Container, container::test_implementations::*};
+    /// use std::sync::Arc;
     /// 
-    /// let mut server = Server::new(container, config)?;
+    /// # async fn get_users() -> &'static str { "users" }
+    /// # async fn create_user() -> &'static str { "created" }
+    /// 
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = Arc::new(create_test_config());
+    /// let database = Arc::new(TestDatabase::new()) as Arc<dyn elif_core::DatabaseConnection>;
+    /// 
+    /// let container = Container::builder()
+    ///     .config(config)
+    ///     .database(database)
+    ///     .build()?;
+    ///     
+    /// let mut server = Server::new(container, HttpConfig::default())?;
     /// 
     /// let router = ElifRouter::new()
     ///     .get("/users", get_users)
     ///     .post("/users", create_user);
     /// 
     /// server.use_router(router);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn use_router(&mut self, router: ElifRouter) -> &mut Self {
         self.router = Some(router);
@@ -86,10 +108,29 @@ impl Server {
     /// # Example
     /// 
     /// ```rust,no_run
-    /// use elif_http::{Server, LoggingMiddleware};
+    /// use elif_http::{Server, HttpConfig};
+    /// use elif_core::{Container, container::test_implementations::*};
+    /// use std::sync::Arc;
     /// 
-    /// let mut server = Server::new(container, config)?;
+    /// # struct LoggingMiddleware;
+    /// # impl LoggingMiddleware { 
+    /// #     fn default() -> Self { LoggingMiddleware } 
+    /// # }
+    /// # impl elif_http::Middleware for LoggingMiddleware {}
+    /// 
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = Arc::new(create_test_config());
+    /// let database = Arc::new(TestDatabase::new()) as Arc<dyn elif_core::DatabaseConnection>;
+    /// 
+    /// let container = Container::builder()
+    ///     .config(config)
+    ///     .database(database)
+    ///     .build()?;
+    ///     
+    /// let mut server = Server::new(container, HttpConfig::default())?;
     /// server.use_middleware(LoggingMiddleware::default());
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn use_middleware<M>(&mut self, middleware: M) -> &mut Self 
     where 
@@ -104,7 +145,24 @@ impl Server {
     /// # Example
     /// 
     /// ```rust,no_run
+    /// # use elif_http::{Server, HttpConfig};
+    /// # use elif_core::{Container, container::test_implementations::*};
+    /// # use std::sync::Arc;
+    /// # 
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// #     let config = Arc::new(create_test_config());
+    /// #     let database = Arc::new(TestDatabase::new()) as Arc<dyn elif_core::DatabaseConnection>;
+    /// #     
+    /// #     let container = Container::builder()
+    /// #         .config(config)
+    /// #         .database(database)
+    /// #         .build()?;
+    /// #         
+    /// #     let server = Server::new(container, HttpConfig::default())?;
     /// server.listen("0.0.0.0:3000").await?;
+    /// #     Ok(())
+    /// # }
     /// ```
     pub async fn listen<A: Into<String>>(self, addr: A) -> HttpResult<()> {
         let addr_str = addr.into();

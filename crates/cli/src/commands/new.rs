@@ -64,9 +64,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# Framework dependencies (pure abstractions)
 elif-core = {{ path = "../../Code/elif/crates/core" }}
+elif-http = {{ path = "../../Code/elif/crates/http" }}
 elif-orm = {{ path = "../../Code/elif/crates/orm" }}
-axum = "0.7"
+elif-security = {{ path = "../../Code/elif/crates/security" }}
+
+# Application dependencies
 tokio = {{ version = "1.0", features = ["full"] }}
 serde = {{ version = "1.0", features = ["derive"] }}
 serde_json = "1.0"
@@ -74,9 +78,9 @@ uuid = {{ version = "1.0", features = ["v4", "serde"] }}
 tracing = "0.1"
 tracing-subscriber = "0.3"
 sqlx = {{ version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono"] }}
-tower = "0.4"
-tower-http = {{ version = "0.5", features = ["cors"] }}
 chrono = {{ version = "0.4", features = ["serde"] }}
+
+# Note: No direct web framework dependencies - use framework abstractions only
 "#, name);
     
     fs::write(app_dir.join("Cargo.toml"), cargo_toml)?;
@@ -175,52 +179,63 @@ mod middleware;
 mod models;
 mod routes;
 
-use axum::{
-    extract::Query,
-    http::{header::CONTENT_TYPE, Method, StatusCode},
-    response::Json,
-    routing::get,
-    Router,
-};
+use elif_core::{Container, container::test_implementations::*};
+use elif_http::{Server, HttpConfig, ElifRouter, ElifResponse, HttpResult, StatusCode};
+use elif_security::CorsMiddleware;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use tower_http::cors::{Any, CorsLayer};
+use std::sync::Arc;
 use tracing_subscriber;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     
-    let app = create_app();
+    // Create container with DI services
+    let config = Arc::new(create_test_config());
+    let database = Arc::new(TestDatabase::new()) as Arc<dyn elif_core::DatabaseConnection>;
     
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
-        .await
-        .unwrap();
+    let container = Container::builder()
+        .config(config)
+        .database(database)
+        .build()?
+        .into();
+
+    // Create HTTP configuration
+    let http_config = HttpConfig::default();
+    
+    // Create application router
+    let router = create_app_router();
+    
+    // Create and configure server using framework
+    let mut server = Server::with_container(container, http_config)?;
+    server.use_router(router);
+    
+    // Add CORS middleware using framework middleware
+    server.use_middleware(CorsMiddleware::permissive());
     
     println!("🚀 Server running on http://0.0.0.0:3000");
     println!("📖 Add routes with: elif route add GET /path controller_name");
     println!("🔍 Introspection: /_map.json, /_openapi.json, /_health");
+    println!("🔧 Framework: Pure Elif.rs abstractions");
     
-    axum::serve(listener, app).await.unwrap();
+    // Start server using framework
+    server.listen("0.0.0.0:3000").await?;
+    
+    Ok(())
 }
 
-fn create_app() -> Router {
-    let cors = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_headers([CONTENT_TYPE])
-        .allow_origin(Any);
-    
-    Router::new()
-        .merge(routes::router())
-        // Introspection endpoints
-        .route("/_map.json", get(introspection_map))
-        .route("/_openapi.json", get(introspection_openapi))
-        .route("/_health", get(health_check))
-        .layer(cors)
+fn create_app_router() -> ElifRouter {
+    ElifRouter::new()
+        .merge(routes::framework_router())
+        // Introspection endpoints using framework types
+        .get("/_map.json", introspection_map)
+        .get("/_openapi.json", introspection_openapi)
+        .get("/_health", health_check)
 }
 
 // <<<ELIF:BEGIN agent-editable:introspection_map>>>
-async fn introspection_map() -> Result<Json<Value>, StatusCode> {
+async fn introspection_map() -> HttpResult<ElifResponse> {
     // TODO: Implement dynamic route discovery
     let map = json!({
         "routes": [
@@ -244,22 +259,23 @@ async fn introspection_map() -> Result<Json<Value>, StatusCode> {
             }
         ],
         "models": [],
-        "resources": []
+        "resources": [],
+        "framework": "Elif.rs - Pure abstractions"
     });
     
-    Ok(Json(map))
+    Ok(ElifResponse::json(map).with_status(StatusCode::OK))
 }
 // <<<ELIF:END agent-editable:introspection_map>>>
 
 // <<<ELIF:BEGIN agent-editable:introspection_openapi>>>
-async fn introspection_openapi() -> Result<Json<Value>, StatusCode> {
+async fn introspection_openapi() -> HttpResult<ElifResponse> {
     // TODO: Generate OpenAPI spec from routes
     let openapi = json!({
         "openapi": "3.0.0",
         "info": {
             "title": "elif.rs API",
             "version": "0.1.0",
-            "description": "Generated with elif.rs framework"
+            "description": "Generated with elif.rs framework - Pure abstractions"
         },
         "servers": [
             {
@@ -292,28 +308,29 @@ async fn introspection_openapi() -> Result<Json<Value>, StatusCode> {
         }
     });
     
-    Ok(Json(openapi))
+    Ok(ElifResponse::json(openapi).with_status(StatusCode::OK))
 }
 // <<<ELIF:END agent-editable:introspection_openapi>>>
 
-async fn health_check(_query: Query<HashMap<String, String>>) -> Json<Value> {
-    Json(json!({
+async fn health_check() -> ElifResponse {
+    ElifResponse::json(json!({
         "status": "healthy",
         "timestamp": chrono::Utc::now().to_rfc3339(),
-        "version": "0.1.0"
-    }))
+        "version": "0.1.0",
+        "framework": "Elif.rs - Pure abstractions"
+    })).with_status(StatusCode::OK)
 }
 "#;
     
     fs::write(app_dir.join("src/main.rs"), main_rs)?;
     
     // src/routes/mod.rs
-    let routes_mod = r#"use axum::Router;
+    let routes_mod = r#"use elif_http::ElifRouter;
 
-pub fn router() -> Router {
-    Router::new()
+pub fn framework_router() -> ElifRouter {
+    ElifRouter::new()
         // Routes will be added here by `elif route add` command
-        // Example: .route("/hello", get(crate::controllers::hello_controller))
+        // Example: .get("/hello", crate::controllers::hello_controller)
 }
 "#;
     
