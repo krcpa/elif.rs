@@ -1,8 +1,8 @@
 [package]
 name = "elifrs"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
-description = "LLM-friendly Rust web framework CLI - AI agent-optimized development tools"
+description = "LLM-friendly Rust web framework CLI with migration system - AI agent-optimized development tools"
 license = "MIT"
 authors = ["krcpa <krcpa@users.noreply.github.com>"]
 repository = "https://github.com/krcpa/elif.rs"
@@ -20,7 +20,7 @@ path = "src/main.rs"
 elif-core = { version = "0.2.0", path = "../core" }
 elif-codegen = { version = "0.3.0", path = "../codegen" }
 elif-introspect = { version = "0.2.0", path = "../introspect" }
-elif-orm = { version = "0.3.0", path = "../orm" }
+elif-orm = { version = "0.4.0", path = "../orm" }
 clap = { workspace = true }
 serde_yaml = { workspace = true }
 serde_json = { workspace = true }
