@@ -1,6 +1,6 @@
 [package]
 name = "elif-security"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Security middleware and utilities for the elif.rs web framework"
 license = "MIT"
