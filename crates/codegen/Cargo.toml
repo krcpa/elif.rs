@@ -1,6 +1,6 @@
 [package]
 name = "elif-codegen"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Code generation utilities for the elif.rs web framework"
 license = "MIT"

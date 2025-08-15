@@ -1,6 +1,6 @@
 [package]
 name = "elifrs"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "LLM-friendly Rust web framework CLI - AI agent-optimized development tools"
 license = "MIT"
@@ -18,7 +18,7 @@ path = "src/main.rs"
 
 [dependencies]
 elif-core = { version = "0.2.0", path = "../core" }
-elif-codegen = { version = "0.2.0", path = "../codegen" }
+elif-codegen = { version = "0.3.0", path = "../codegen" }
 elif-introspect = { version = "0.2.0", path = "../introspect" }
 clap = { workspace = true }
 serde_yaml = { workspace = true }
