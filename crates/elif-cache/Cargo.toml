@@ -39,6 +39,7 @@ redis = { version = "0.23", features = ["tokio-comp", "connection-manager"], opt
 
 # Configuration
 elif-core = { path = "../core" }
+service-builder = "0.3.0"
 
 # HTTP integration
 elif-http = { path = "../elif-http", optional = true }

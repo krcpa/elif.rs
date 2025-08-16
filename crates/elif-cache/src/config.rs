@@ -2,116 +2,89 @@
 
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
+use service_builder::builder;
 
 /// Cache configuration for all backends
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[builder]
 pub struct CacheConfig {
     /// Default TTL for cache entries
+    #[builder(getter, default = "Some(Duration::from_secs(3600))")]
     pub default_ttl: Option<Duration>,
     
     /// Maximum number of entries (for memory backend)
+    #[builder(getter, default = "Some(10_000)")]
     pub max_entries: Option<usize>,
     
     /// Memory limit in bytes (for memory backend)
+    #[builder(getter, default = "Some(100 * 1024 * 1024)")]
     pub max_memory: Option<usize>,
     
     /// Connection timeout
+    #[builder(default = "Duration::from_secs(5)")]
     pub connection_timeout: Duration,
     
     /// Operation timeout
+    #[builder(default = "Duration::from_secs(1)")]
     pub operation_timeout: Duration,
     
     /// Enable compression for large values
+    #[builder(default)]
     pub compression: bool,
     
     /// Compression threshold (compress values larger than this)
+    #[builder(default = "1024")]
     pub compression_threshold: usize,
 }
 
 impl Default for CacheConfig {
     fn default() -> Self {
-        Self {
-            default_ttl: Some(Duration::from_secs(3600)), // 1 hour
-            max_entries: Some(10_000),
-            max_memory: Some(100 * 1024 * 1024), // 100MB
-            connection_timeout: Duration::from_secs(5),
-            operation_timeout: Duration::from_secs(1),
-            compression: false,
-            compression_threshold: 1024, // 1KB
-        }
+        // Use the builder with defaults to ensure consistency
+        CacheConfig::builder()
+            .default_ttl(Some(Duration::from_secs(3600))) // 1 hour
+            .max_entries(Some(10_000))
+            .max_memory(Some(100 * 1024 * 1024)) // 100MB
+            .build()
+            .unwrap()
     }
 }
 
-impl CacheConfig {
-    pub fn builder() -> CacheConfigBuilder {
-        CacheConfigBuilder::default()
-    }
-}
-
-/// Cache configuration builder
-#[derive(Debug, Default)]
-pub struct CacheConfigBuilder {
-    config: CacheConfig,
-}
-
+// Add convenience methods to the generated builder
 impl CacheConfigBuilder {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn default_ttl_duration(self, ttl: Duration) -> Self {
+        self.default_ttl(Some(ttl))
     }
     
-    pub fn default_ttl(mut self, ttl: Duration) -> Self {
-        self.config.default_ttl = Some(ttl);
-        self
+    pub fn no_default_ttl(self) -> Self {
+        self.default_ttl(None)
     }
     
-    pub fn no_default_ttl(mut self) -> Self {
-        self.config.default_ttl = None;
-        self
+    pub fn max_entries_limit(self, max: usize) -> Self {
+        self.max_entries(Some(max))
     }
     
-    pub fn max_entries(mut self, max: usize) -> Self {
-        self.config.max_entries = Some(max);
-        self
+    pub fn unlimited_entries(self) -> Self {
+        self.max_entries(None)
     }
     
-    pub fn unlimited_entries(mut self) -> Self {
-        self.config.max_entries = None;
-        self
+    pub fn max_memory_bytes(self, bytes: usize) -> Self {
+        self.max_memory(Some(bytes))
     }
     
-    pub fn max_memory(mut self, bytes: usize) -> Self {
-        self.config.max_memory = Some(bytes);
-        self
+    pub fn unlimited_memory(self) -> Self {
+        self.max_memory(None)
     }
     
-    pub fn unlimited_memory(mut self) -> Self {
-        self.config.max_memory = None;
-        self
+    pub fn enable_compression(self, threshold: usize) -> Self {
+        self.compression(true).compression_threshold(threshold)
     }
     
-    pub fn connection_timeout(mut self, timeout: Duration) -> Self {
-        self.config.connection_timeout = timeout;
-        self
+    pub fn disable_compression(self) -> Self {
+        self.compression(false)
     }
     
-    pub fn operation_timeout(mut self, timeout: Duration) -> Self {
-        self.config.operation_timeout = timeout;
-        self
-    }
-    
-    pub fn enable_compression(mut self, threshold: usize) -> Self {
-        self.config.compression = true;
-        self.config.compression_threshold = threshold;
-        self
-    }
-    
-    pub fn disable_compression(mut self) -> Self {
-        self.config.compression = false;
-        self
-    }
-    
-    pub fn build(self) -> CacheConfig {
-        self.config
+    pub fn build_config(self) -> CacheConfig {
+        self.build_with_defaults().unwrap()
     }
 }
 
@@ -130,10 +103,10 @@ mod tests {
     #[test]
     fn test_config_builder() {
         let config = CacheConfig::builder()
-            .default_ttl(Duration::from_secs(7200))
-            .max_entries(5000)
+            .default_ttl_duration(Duration::from_secs(7200))
+            .max_entries_limit(5000)
             .enable_compression(2048)
-            .build();
+            .build_config();
             
         assert_eq!(config.default_ttl, Some(Duration::from_secs(7200)));
         assert_eq!(config.max_entries, Some(5000));
