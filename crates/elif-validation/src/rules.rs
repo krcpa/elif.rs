@@ -1,12 +1,13 @@
 //! Validation rules builder and composition system
 
-use crate::error::{ValidationError, ValidationErrors, ValidationResult};
+use crate::error::{ValidationErrors, ValidationResult};
 use crate::traits::{ValidateField, ValidateRequest, ValidationRule};
 use crate::validators::*;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
+use service_builder::builder;
 
 /// Collection of validation rules for a specific field or request
 #[derive(Clone)]
@@ -164,22 +165,102 @@ impl ValidateRequest for Rules {
     }
 }
 
+/// Configuration for Rules builder - contains the accumulated rules
+#[derive(Clone)]
+#[builder]
+pub struct RulesBuilderConfig {
+    #[builder(default)]
+    pub field_rules: HashMap<String, Vec<Arc<dyn ValidationRule>>>,
+    
+    #[builder(default)]
+    pub request_rules: Vec<Arc<dyn ValidationRule>>,
+}
+
+impl std::fmt::Debug for RulesBuilderConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RulesBuilderConfig")
+            .field("field_rules_count", &self.field_rules.len())
+            .field("request_rules_count", &self.request_rules.len())
+            .finish()
+    }
+}
+
+impl RulesBuilderConfig {
+    /// Build a Rules from the builder config
+    pub fn build_rules(self) -> Rules {
+        Rules {
+            field_rules: self.field_rules,
+            request_rules: self.request_rules,
+        }
+    }
+}
+
+// Add convenience methods to the generated builder
+impl RulesBuilderConfigBuilder {
+    /// Add a validation rule for a specific field
+    pub fn field_rule<R>(self, field: impl Into<String>, rule: R) -> Self
+    where
+        R: ValidationRule + 'static,
+    {
+        let field = field.into();
+        let mut field_rules = self.field_rules.clone().unwrap_or_default();
+        field_rules
+            .entry(field)
+            .or_insert_with(Vec::new)
+            .push(Arc::new(rule));
+        self.field_rules(field_rules)
+    }
+    
+    /// Add multiple validation rules for a specific field
+    pub fn field_rules_vec<R>(self, field: impl Into<String>, rules: Vec<R>) -> Self
+    where
+        R: ValidationRule + 'static,
+    {
+        let field = field.into();
+        let rule_arcs: Vec<Arc<dyn ValidationRule>> = rules
+            .into_iter()
+            .map(|r| Arc::new(r) as Arc<dyn ValidationRule>)
+            .collect();
+        
+        let mut field_rules = self.field_rules.clone().unwrap_or_default();
+        field_rules
+            .entry(field)
+            .or_insert_with(Vec::new)
+            .extend(rule_arcs);
+        self.field_rules(field_rules)
+    }
+    
+    /// Add a request-level validation rule
+    pub fn request_rule<R>(self, rule: R) -> Self
+    where
+        R: ValidationRule + 'static,
+    {
+        let mut request_rules = self.request_rules.clone().unwrap_or_default();
+        request_rules.push(Arc::new(rule));
+        self.request_rules(request_rules)
+    }
+    
+    pub fn build_config(self) -> RulesBuilderConfig {
+        self.build_with_defaults().unwrap()
+    }
+}
+
 /// Builder for creating common validation rule combinations
 pub struct RulesBuilder {
-    rules: Rules,
+    builder_config: RulesBuilderConfigBuilder,
 }
 
 impl RulesBuilder {
     /// Create a new rules builder
     pub fn new() -> Self {
         Self {
-            rules: Rules::new(),
+            builder_config: RulesBuilderConfig::builder(),
         }
     }
 
     /// Build and return the rules
     pub fn build(self) -> Rules {
-        self.rules
+        self.builder_config.build_config().build_rules()
     }
 
     /// Add validation rules for a required string field
@@ -192,7 +273,7 @@ impl RulesBuilder {
         let field = field.into();
         
         // Add required validator
-        self.rules = self.rules.field(field.clone(), RequiredValidator::new());
+        self.builder_config = self.builder_config.field_rule(field.clone(), RequiredValidator::new());
         
         // Add length validator if constraints are specified
         if min_length.is_some() || max_length.is_some() {
@@ -203,7 +284,7 @@ impl RulesBuilder {
             if let Some(max) = max_length {
                 length_validator = length_validator.max(max);
             }
-            self.rules = self.rules.field(field, length_validator);
+            self.builder_config = self.builder_config.field_rule(field, length_validator);
         }
         
         self
@@ -213,9 +294,9 @@ impl RulesBuilder {
     pub fn required_email(mut self, field: impl Into<String>) -> Self {
         let field = field.into();
         
-        self.rules = self.rules
-            .field(field.clone(), RequiredValidator::new())
-            .field(field, EmailValidator::new());
+        self.builder_config = self.builder_config
+            .field_rule(field.clone(), RequiredValidator::new())
+            .field_rule(field, EmailValidator::new());
         
         self
     }
@@ -225,7 +306,7 @@ impl RulesBuilder {
         let field = field.into();
         
         // Only add email validation - no required validation
-        self.rules = self.rules.field(field, EmailValidator::new());
+        self.builder_config = self.builder_config.field_rule(field, EmailValidator::new());
         
         self
     }
@@ -239,7 +320,7 @@ impl RulesBuilder {
     ) -> Self {
         let field = field.into();
         
-        self.rules = self.rules.field(field.clone(), RequiredValidator::new());
+        self.builder_config = self.builder_config.field_rule(field.clone(), RequiredValidator::new());
         
         let mut numeric_validator = NumericValidator::new();
         if let Some(min_val) = min {
@@ -249,7 +330,7 @@ impl RulesBuilder {
             numeric_validator = numeric_validator.max(max_val);
         }
         
-        self.rules = self.rules.field(field, numeric_validator);
+        self.builder_config = self.builder_config.field_rule(field, numeric_validator);
         
         self
     }
@@ -263,7 +344,7 @@ impl RulesBuilder {
     ) -> Self {
         let field = field.into();
         
-        self.rules = self.rules.field(field.clone(), RequiredValidator::new());
+        self.builder_config = self.builder_config.field_rule(field.clone(), RequiredValidator::new());
         
         let mut numeric_validator = NumericValidator::new().integer_only(true);
         if let Some(min_val) = min {
@@ -273,7 +354,7 @@ impl RulesBuilder {
             numeric_validator = numeric_validator.max(max_val);
         }
         
-        self.rules = self.rules.field(field, numeric_validator);
+        self.builder_config = self.builder_config.field_rule(field, numeric_validator);
         
         self
     }
@@ -283,7 +364,7 @@ impl RulesBuilder {
         let field = field.into();
         
         if let Ok(pattern_validator) = PatternValidator::new(pattern) {
-            self.rules = self.rules.field(field, pattern_validator);
+            self.builder_config = self.builder_config.field_rule(field, pattern_validator);
         }
         
         self
@@ -298,7 +379,7 @@ impl RulesBuilder {
             allowed_values
         );
         
-        self.rules = self.rules.field(field, custom_validator);
+        self.builder_config = self.builder_config.field_rule(field, custom_validator);
         
         self
     }
@@ -308,7 +389,7 @@ impl RulesBuilder {
     where
         R: ValidationRule + 'static,
     {
-        self.rules = self.rules.field(field, rule);
+        self.builder_config = self.builder_config.field_rule(field, rule);
         self
     }
 
@@ -317,7 +398,7 @@ impl RulesBuilder {
     where
         R: ValidationRule + 'static,
     {
-        self.rules = self.rules.request(rule);
+        self.builder_config = self.builder_config.request_rule(rule);
         self
     }
 }
@@ -331,6 +412,7 @@ impl Default for RulesBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::ValidationError;
     use crate::traits::Validate;
 
     #[tokio::test]
