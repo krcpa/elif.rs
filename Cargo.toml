@@ -12,6 +12,7 @@ members = [
     "crates/elif-testing",
     "crates/elif-openapi",
     "crates/elif-openapi-derive",
+    "crates/elif-cache",
 ]
 resolver = "2"
 
