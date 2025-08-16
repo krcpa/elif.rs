@@ -1,4 +1,5 @@
 mod commands;
+mod generators;
 
 use clap::{Parser, Subcommand};
 use elif_core::ElifError;
@@ -43,6 +44,12 @@ enum Commands {
     Resource {
         #[command(subcommand)]
         resource_command: ResourceCommands,
+    },
+    
+    /// Advanced code generation (make: commands)
+    Make {
+        #[command(subcommand)]
+        make_command: MakeCommands,
     },
     
     /// Check project for errors and lint
@@ -195,6 +202,96 @@ enum AuthProvider {
     Both,
 }
 
+#[derive(Subcommand)]
+enum MakeCommands {
+    /// Generate a complete resource with model, controller, migration, tests, and policies
+    Resource {
+        /// Resource name (e.g., Post, User, Product)
+        name: String,
+        
+        /// Fields in format name:type,name:type (e.g., title:string,content:text,user_id:integer)
+        #[arg(long)]
+        fields: String,
+        
+        /// Relationships in format name:type (e.g., user:belongs_to,comments:has_many)
+        #[arg(long)]
+        relationships: Option<String>,
+        
+        /// Generate API endpoints
+        #[arg(long)]
+        api: bool,
+        
+        /// Generate comprehensive tests
+        #[arg(long)]
+        tests: bool,
+        
+        /// Generate authorization policy
+        #[arg(long)]
+        policy: bool,
+        
+        /// Generate request validation classes
+        #[arg(long)]
+        requests: bool,
+        
+        /// Generate API resource classes  
+        #[arg(long)]
+        resources: bool,
+        
+        /// Include authentication middleware
+        #[arg(long)]
+        auth: bool,
+        
+        /// Enable soft deletes
+        #[arg(long)]
+        soft_delete: bool,
+    },
+    
+    /// Generate authentication system
+    Auth {
+        /// Use JWT authentication
+        #[arg(long)]
+        jwt: bool,
+        
+        /// Use session authentication
+        #[arg(long)]
+        session: bool,
+        
+        /// Include MFA support
+        #[arg(long)]
+        mfa: bool,
+        
+        /// Include password reset functionality
+        #[arg(long)]
+        password_reset: bool,
+        
+        /// Include user registration
+        #[arg(long)]
+        registration: bool,
+        
+        /// Include RBAC support
+        #[arg(long)]
+        rbac: bool,
+    },
+    
+    /// Generate API with OpenAPI documentation
+    Api {
+        /// API version (e.g., v1, v2)
+        version: String,
+        
+        /// Resources to include (comma-separated)
+        #[arg(long)]
+        resources: String,
+        
+        /// Generate OpenAPI specification
+        #[arg(long)]
+        openapi: bool,
+        
+        /// Enable API versioning
+        #[arg(long)]
+        versioning: bool,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<(), ElifError> {
     let cli = Cli::parse();
@@ -272,6 +369,53 @@ async fn main() -> Result<(), ElifError> {
                 }
                 AuthCommands::Scaffold { registration, reset_password } => {
                     auth::scaffold(registration, reset_password).await?;
+                }
+            }
+        }
+        Commands::Make { make_command } => {
+            match make_command {
+                MakeCommands::Resource { 
+                    name, 
+                    fields, 
+                    relationships,
+                    api,
+                    tests,
+                    policy,
+                    requests,
+                    resources,
+                    auth,
+                    soft_delete,
+                } => {
+                    make::resource(
+                        &name,
+                        &fields,
+                        relationships.as_deref(),
+                        api,
+                        tests,
+                        policy,
+                        requests,
+                        resources,
+                        auth,
+                        soft_delete,
+                    ).await?;
+                }
+                MakeCommands::Auth {
+                    jwt,
+                    session,
+                    mfa,
+                    password_reset,
+                    registration,
+                    rbac,
+                } => {
+                    make::auth(jwt, session, mfa, password_reset, registration, rbac).await?;
+                }
+                MakeCommands::Api {
+                    version,
+                    resources,
+                    openapi,
+                    versioning,
+                } => {
+                    make::api(&version, &resources, openapi, versioning).await?;
                 }
             }
         }

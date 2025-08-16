@@ -1,6 +1,6 @@
 [package]
 name = "elifrs"
-version = "0.5.2"
+version = "0.6.0"
 edition = "2021"
 description = "LLM-friendly Rust web framework CLI with migration system - AI agent-optimized development tools"
 license = "MIT"
@@ -29,6 +29,7 @@ tokio = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
 hex = { workspace = true }
+handlebars = "4.4"
 
 [dev-dependencies]
 tempfile = "3.8"
