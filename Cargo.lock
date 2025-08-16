@@ -749,6 +749,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "elif-testing"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "chrono",
+ "elif-core",
+ "elif-http",
+ "elif-orm",
+ "hyper",
+ "rand 0.8.5",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tower 0.4.13",
+ "tower-http",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "elif-validation"
 version = "0.1.0"
 dependencies = [

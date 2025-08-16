@@ -1,0 +1,54 @@
+[package]
+name = "elif-testing"
+version = "0.1.0"
+edition = "2021"
+authors = ["elif.rs contributors"]
+description = "Comprehensive testing framework and utilities for elif.rs applications"
+repository = "https://github.com/krcpa/elif.rs"
+license = "MIT OR Apache-2.0"
+keywords = ["web", "framework", "testing", "rust", "orm"]
+categories = ["web-programming", "development-tools::testing"]
+
+[dependencies]
+# Core framework dependencies
+elif-core = { path = "../core" }
+elif-http = { path = "../elif-http" }
+elif-orm = { path = "../orm" }
+
+# HTTP and async runtime
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+hyper = { workspace = true }
+tokio = { workspace = true }
+
+# Database
+sqlx = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Testing utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
+
+# Development and testing
+tokio-test = "0.4"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[features]
+default = ["database", "http", "factories", "assertions"]
+database = []
+http = []
+factories = []
+assertions = []
+performance = []

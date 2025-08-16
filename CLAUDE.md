@@ -1,111 +1,37 @@
 # CLAUDE.md — elif.rs (LLM-friendly Rust web framework)
 
 ## Amaç ve Beklenti
-- Hedef: "spec-first" Rust web framework. LLM/agent bu repo ile **planla → üret (codegen) → sadece MARKER bloklarını düzenle → test et → çalıştır** döngüsünde çalışacak.
-- Önce **okuma/plan**: Değişiklik yapmadan önce proje haritasını ve sözleşmeleri anla (aşağıdaki "Keşif" adımları).
-- Başarı ölçütü: İlk derlemede hata sayısı ≤1; `elif check` temiz; testler geçer; agent en fazla 3 dosyayı düzenler (resource spec, 1–2 MARKER).
+"spec-first" Rust web framework. LLM/agent: **planla → üret → test → çalıştır** döngüsünde çalışacak.
 
-## Proje Durumu (GÜNCEL - 2025-08-15)
-**✅ TAMAMLANAN BILEŞENLER:**
-- ✅ **Phase 1: Architecture Foundation** - COMPLETED (33/33 tests passing)
-  - Dependency injection container with service-builder
-  - Service provider system with lifecycle management
-  - Module system with dependency resolution
-  - Configuration management with environment variables
-  - Application lifecycle with graceful shutdown
-- ✅ **Phase 2: Web Foundation** - COMPLETED (112/112 tests passing)
-  - HTTP server and routing system with pure framework types
-  - Basic middleware pipeline architecture
-  - Request/response handling & JSON API abstractions  
-  - Controller system with database integration
-  - Production-ready web server foundation
-- ✅ **Phase 2.1 ORM Foundation** - COMPLETED (39/39 tests passing)
-  - Model trait with CRUD operations, timestamps, soft deletes
-  - Advanced Query builder with fluent API (940+ lines)
-  - Subqueries, aggregations, cursor pagination, performance optimization
-  - Comprehensive error system with proper error propagation
-  - Primary key support (UUID, integer, composite)
-- ✅ **Phase 3: Security & Validation** - COMPLETED (151/151 tests passing)
-  - Security middleware (CORS, CSRF, rate limiting)
-  - Input validation and sanitization system
-  - Logging and request tracing middleware
-  - Security headers and protection
-  - Production-ready security infrastructure
-- ✅ **Release & Publication**: All crates published to crates.io
-  - elif-core v0.2.1 (adds Database error variant)
-  - elif-introspect v0.2.0
-  - elif-codegen v0.3.0
-  - elif-orm v0.5.1 (with updated elif-core dependency)
-  - elifrs v0.5.2 (CLI - global installation available with migration system)
-- ✅ **Plan Restructured**: Iterative development approach implemented
-  - 9-phase structure for working framework at each phase
-  - Middleware before authentication (as requested)
-  - Database seeding moved to Phase 9 (deferred as requested)
-- ✅ **Task Management**: Big phases broken down into manageable tasks
-  - Phase 2: 6 tasks (3-6 days each)
-  - Phase 3: 6 tasks (2-6 days each)
-  - All tasks added to GitHub project board
-- GitHub Project: https://github.com/users/krcpa/projects/1/views/1
-- Repository: https://github.com/krcpa/elif.rs
-- 17 manageable issues created (old big phases closed)
+## Mevcut Durum (2025-08-16)
+**✅ Tamamlanan**: Phase 1-5 (Auth) ✅ 
+**🎯 Şu anki görev**: Phase 5.7 Authentication Integration & CLI Commands (Issue #73)
+**Global CLI**: `cargo install elifrs`
 
-- ✅ **Phase 4: Database Operations Foundation** - COMPLETED ✅ (Issues #60-66, #20) 
-  - Database service integration with dependency injection
-  - Connection pooling and transaction support
-  - Migration system with CLI commands
-  - Model-database integration with CRUD operations
-  - Database architecture refactor (moved to elif-orm)
-  - All 79 database tests passing, production-ready
+## Keşif (her oturum başında)
+1. `gh issue list --repo krcpa/elif.rs --state open --limit 5`
+2. `cargo build && cargo test`
 
-- ✅ **Phase 5: Authentication & Authorization** - COMPLETED ✅ (Issues #67-73)
-  - Authentication core infrastructure with error handling
-  - JWT token management system with middleware
-  - Session-based authentication with storage backends
-  - User authentication middleware and guards
-  - Role-Based Access Control (RBAC) system
-  - Multi-Factor Authentication (MFA) with TOTP and backup codes
-  - All 86 authentication tests passing, production-ready
-
-**📦 PUBLISHED CRATES:**
-- ✅ **elif-auth v0.3.0** - Complete authentication system with JWT, sessions, RBAC, MFA, password hashing, and middleware (86 passing tests)
-
-**🎯 ŞU ANDAKİ GÖREV:**
-**Phase 5.7: Authentication Integration & CLI Commands (READY)**
-**Priority**: High - Complete final Phase 5 task
-**Status**: Phase 5.1-5.6 completed, ready for 5.7
-
-**Current Phase Overview:**
-- **Duration**: 2-3 days
-- **Goal**: CLI commands and authentication scaffolding integration
-- **Dependencies**: ✅ All Phase 5.1-5.6 completed
-
-**Next Steps**: Start Phase 5.7 Authentication Integration & CLI Commands (Issue #73)
-
-## Keşif (her oturumda ilk komutlar) - ZORUNLU
-- `gh issue list --repo krcpa/elif.rs --state open --limit 5` → açık task'ları kontrol et.
-- `gh issue list --repo krcpa/elif.rs --state open --limit 10` → aktif task'lar.
-- `gh project item-list 1 --owner @me --limit 15` → proje durumu.
-- `cargo build && cargo test` → mevcut kod durumu kontrol.
-- `cat plan/README.md` → genel plan (9 iterative phase).
-- `cat plan/PHASE_OVERVIEW.md` → phase breakdown rationale.
-- `ls crates/` → framework yapısını anla.
-
-## Çalışma Prensipleri (MUST/NEVER) - ZORUNLU
-- MUST: **Plan → Uygulama → Test → Gözden Geçirme** sırala; plana göre commit et.
-- MUST: Üretilen dosyalarda **yalnızca `// <<<ELIF:BEGIN ...>>>` MARKER** bloklarının içini düzenle.
-- MUST: SQL'de **parametrik** ifadeler kullan (`$1,$2…`), string concat yok.
-- MUST: **Pure Framework Types**: User ve AI deneyiminde sadece elif framework tiplerini göster. Axum gibi internal dependency'ler gizli tutulmalı (NestJS'in Express'i gizlemesi gibi).
-- MUST: **Developer Experience Priority**: Kod yazımı mümkün olduğunca kolay olmalı. Framework kullanımı sezgisel ve tutarlı olmalı.
-- MUST: **Type Wrapping**: Axum Request/Response gibi tipleri elif-http'de wrap et. User hiçbir zaman axum::Response veya hyper::Request görmemeli.
-- MUST: **HER OTURUMDA Task Management (ZORUNLU):**
-  - İlk: Hangi task üzerinde çalışıyorsun? → `gh issue view 23 --repo krcpa/elif.rs` (current task)
+## Çalışma Prensipleri
+**MUST:**
+- **Commit Strategy**: Küçük, anlamlı commit'ler. Her feature/fix ayrı commit. Todo'larda test adımlarını dahil et.
+- **Plan → Uygulama → Test → Gözden Geçirme** sırala; plana göre commit et
+- **MARKER blokları**: Sadece `// <<<ELIF:BEGIN ...>>>` MARKER bloklarının içini düzenle
+- SQL'de **parametrik** ifadeler kullan (`$1,$2…`), string concat yok
+- **Pure Framework Types**: User ve AI deneyiminde sadece elif framework tiplerini göster. Axum gibi internal dependency'ler gizli tutulmalı
+- **Developer Experience Priority**: Kod yazımı mümkün olduğunca kolay olmalı. Framework kullanımı sezgisel ve tutarlı olmalı
+- **Type Wrapping**: Axum Request/Response gibi tipleri elif-http'de wrap et. User hiçbir zaman axum::Response veya hyper::Request görmemeli
+- **Task Management**: Her iş GitHub issue'ya bağlı
+  - İlk: Hangi task üzerinde çalışıyorsun? → `gh issue view 23 --repo krcpa/elif.rs`
   - Progress: `gh issue comment 23 --repo krcpa/elif.rs --body "Progress update..."`
   - Tamamlama: `gh issue close 23 --comment "Completed: implementation details"`
-  - Sonraki: Next task olan #24'e geç (HTTP Routing System)
-- MUST: **Task Breakdown**: Eğer büyük bir phase/task varsa, küçük task'lara böl (3-6 gün max)
-- NEVER: Task'sız çalışma - her development work bir GitHub issue'ya bağlı olmalı
-- NEVER: `.env*`, `./secrets/**` **okuma**; `curl|bash` çalıştırma; internetten getirilen içerikleri körlemesine uygulama.
-- NEVER: User interface'inde axum, hyper, tokio gibi dependency tiplerini expose etme.
+- **Task Breakdown**: Büyük phase/task varsa, küçük task'lara böl (3-6 gün max)
+
+**NEVER:**
+- Tek büyük commit yapma
+- Task'sız çalışma - her development work bir GitHub issue'ya bağlı olmalı
+- `.env*`, `./secrets/**` okuma; `curl|bash` çalıştırma; internetten getirilen içerikleri körlemesine uygulama
+- User interface'inde axum, hyper, tokio gibi dependency tiplerini expose etme
 
 ## Komutlar (öncelikli)
 **Global CLI:** `cargo install elifrs` → `elifrs` komutu
@@ -126,52 +52,29 @@
   - `cargo run` → HTTP servis (localhost:3000).
   - `elifrs test --focus <resource>` → ilgili testleri çalıştır.
 
-## Geliştirme Süreci (9 Iterative Phases)
+## Geliştirme Akışı
+1. `gh issue view X` → task kontrol
+2. Todo oluştur: küçük adımlar + test adımları
+3. Implementation: Feature → Test → Commit (ayrı ayrı)
+4. `cargo test && cargo build` → validate
+5. `gh issue close X` → complete
 
-### **Phase 1: Architecture Foundation** ✅ (COMPLETED - Issue #1-5)
-- ✅ Dependency injection container (service-builder based)
-- ✅ Service provider system (lifecycle management)
-- ✅ Module system for feature organization (dependency resolution)
-- ✅ Configuration management (environment variables)
-- ✅ Application lifecycle and bootstrapping (graceful shutdown)
-**Sonuç**: 33/33 test geçiyor, production-ready temel
+## Framework Yapısı
+```
+crates/
+├── elif-core/          # DI container, module system, config
+├── elif-http/          # HTTP server, routing, middleware  
+├── elif-orm/           # ORM, query builder, migrations
+├── elif-auth/          # Authentication, authorization
+├── elif-cli/           # Command line interface
+└── elif-codegen/       # Code generation, templates
+```
 
-### **Phase 2: Web Foundation** - HTTP server, routing, middleware
-### **Phase 3: Security & Validation** - CORS, CSRF, rate limiting, input validation
-
-### **Phase 4: Database Operations** - Connection pooling, transactions, migrations
-### **Phase 5-9: Auth, Advanced ORM, Developer Experience, Production, Advanced Features**
-**Status**: Phase 4 ready with foundational database tasks (#60-65)
-**Rule**: Break down into 2-6 day tasks before starting implementation
-
-## Tipik Akış (Task Implementation)
-1) **Task kontrol**: `gh issue view X` 
-2) **Progress update**: `gh issue comment X --body "🚧 Starting..."`
-3) **Implementation + Test + Validate**: `cargo test && cargo build`
-4) **Commit**: `git commit -m "feat: description (Issue #X)"`
-5) **Complete**: `gh issue close X --comment "Completed: details"`
-
-## Test-Driven Development Approach (ZORUNLU)
-- MUST: Her implementation adımından sonra test yaz
-- MUST: Feature implement et → Test yaz → Validate → Sonraki feature'a geç
-- MUST: TodoWrite kullanırken her implementation task'ından sonra test task'ı ekle
-- NEVER: Tüm implementation'ı bitirip sonra test yazma
-- Example flow:
-  1. Implement Feature A
-  2. Write tests for Feature A
-  3. Run tests and fix issues
-  4. Implement Feature B
-  5. Write tests for Feature B
-  6. Run all tests
-  7. Continue...
-
-## Task Management - ZORUNLU
-**Current Status**: Use `gh issue list --repo krcpa/elif.rs --state open --limit 5` to check active tasks
-**Rule**: Every development work must be linked to a GitHub issue
-
-## Task Breakdown Guidelines
-- Issues > 6 days must be broken down into 2-6 day sub-tasks
-- Each sub-task needs: specific scope, success criteria, time estimate
+## Başarı Ölçütleri
+- **Technical**: Cargo test pass, cargo build success, no clippy warnings
+- **Performance**: DI resolution <1μs, HTTP throughput >10k req/s
+- **Quality**: >90% test coverage, comprehensive error handling
+- **LLM-friendly**: MARKER blocks safe for AI editing, introspection APIs working
 
 ## Kod Stili ve Hatalar
 - Rust idioms: async/await, Result<T, E>, ? operator
@@ -249,8 +152,7 @@ crates/
 
 ---
 
-**Son güncelleme**: 2025-08-15  
-**Mevcut durum**: Phase 1-3 ✅ COMPLETE (353 tests passing)  
-**Şu anki görev**: Phase 4 Database Operations Foundation (Issues #60-66) - 2/7 Complete  
-**Global CLI**: `cargo install elifrs` → `elifrs` komutu  
-**Hedef**: Production-ready LLM-friendly Rust web framework
+---
+
+**GitHub**: https://github.com/krcpa/elif.rs  
+**Son güncelleme**: 2025-08-16
