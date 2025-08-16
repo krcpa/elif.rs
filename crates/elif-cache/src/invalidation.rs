@@ -208,10 +208,10 @@ impl<B: CacheBackend> MemoryInvalidationManager<B> {
     async fn find_tagged_keys(&self, tags: &[&str]) -> CacheResult<Vec<CacheKey>> {
         let entries = self.entries.read().await;
         let mut matching_keys = Vec::new();
-        let tag_set: HashSet<String> = tags.iter().map(|s| s.to_string()).collect();
+        let tag_set: HashSet<&str> = tags.iter().copied().collect();
         
         for (key, entry) in entries.iter() {
-            if entry.tags.iter().any(|tag| tag_set.contains(tag)) {
+            if entry.tags.iter().any(|tag| tag_set.contains(tag.as_str())) {
                 matching_keys.push(key.clone());
             }
         }
@@ -237,10 +237,10 @@ impl<B: CacheBackend> MemoryInvalidationManager<B> {
     async fn find_dependent_keys(&self, dependency_keys: &[&str]) -> CacheResult<Vec<CacheKey>> {
         let entries = self.entries.read().await;
         let mut dependent_keys = Vec::new();
-        let dep_set: HashSet<String> = dependency_keys.iter().map(|s| s.to_string()).collect();
+        let dep_set: HashSet<&str> = dependency_keys.iter().copied().collect();
         
         for (key, entry) in entries.iter() {
-            if entry.dependencies.iter().any(|dep| dep_set.contains(dep)) {
+            if entry.dependencies.iter().any(|dep| dep_set.contains(dep.as_str())) {
                 dependent_keys.push(key.clone());
             }
         }
