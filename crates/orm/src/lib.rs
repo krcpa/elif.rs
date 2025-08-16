@@ -17,6 +17,7 @@ pub mod migration_runner;
 pub mod relationships;
 pub mod security;
 pub mod loading;
+pub mod backends;
 
 #[cfg(test)]
 mod tests;
@@ -44,6 +45,7 @@ pub use migration::*;
 pub use migration_runner::*;
 pub use relationships::*;
 pub use security::*;
+pub use backends::*;
 
 // Derive macro re-exports (when implemented in future)
 // pub use elif_orm_derive::*;

@@ -5,13 +5,15 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use sqlx::{Pool, Postgres, Row};
 use uuid::Uuid;
+use sqlx::{Pool, Postgres, Row};
 
 use crate::error::{ModelError, ModelResult};
 use crate::query::QueryBuilder;
+use crate::backends::{DatabasePool, DatabaseRow, DatabaseValue};
 
 /// Primary key types supported by the ORM
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -468,10 +470,110 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
     where
         Self: Sized;
 
+    /// Create a model instance from a database row (abstracted version)
+    /// This will replace from_row in the future
+    fn from_database_row(row: &dyn DatabaseRow) -> ModelResult<Self>
+    where
+        Self: Sized,
+    {
+        // Default implementation that can be overridden
+        // For now, this requires concrete implementation by each model
+        Err(ModelError::Serialization("from_database_row not implemented for this model - still using legacy from_row".to_string()))
+    }
+
     /// Convert model to field-value pairs for database operations
     /// This will be automatically implemented by the derive macro
     fn to_fields(&self) -> HashMap<String, serde_json::Value>;
 }
+
+/// Trait for database-abstracted model operations
+/// This trait provides methods that use the database abstraction layer
+/// instead of hardcoded PostgreSQL types
+pub trait ModelAbstracted: Model {
+    /// Find a model by its primary key using database abstraction
+    async fn find_abstracted(pool: &Arc<dyn DatabasePool>, id: Self::PrimaryKey) -> ModelResult<Option<Self>>
+    where
+        Self: Sized,
+    {
+        let sql = format!(
+            "SELECT * FROM {} WHERE {} = $1",
+            Self::table_name(),
+            Self::primary_key_name()
+        );
+        let params = vec![DatabaseValue::String(id.to_string())];
+
+        let row = pool.fetch_optional(&sql, &params)
+            .await
+            .map_err(|e| ModelError::Database(format!("Failed to find {}: {}", Self::table_name(), e)))?;
+
+        match row {
+            Some(row) => {
+                let model = Self::from_database_row(row.as_ref())?;
+                Ok(Some(model))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Find all models using database abstraction
+    async fn all_abstracted(pool: &Arc<dyn DatabasePool>) -> ModelResult<Vec<Self>>
+    where
+        Self: Sized,
+    {
+        let sql = if Self::uses_soft_deletes() {
+            format!("SELECT * FROM {} WHERE deleted_at IS NULL", Self::table_name())
+        } else {
+            format!("SELECT * FROM {}", Self::table_name())
+        };
+        let params = vec![];
+
+        let rows = pool.fetch_all(&sql, &params)
+            .await
+            .map_err(|e| ModelError::Database(format!("Failed to fetch {}: {}", Self::table_name(), e)))?;
+
+        let mut models = Vec::new();
+        for row in rows {
+            let model = Self::from_database_row(row.as_ref())?;
+            models.push(model);
+        }
+
+        Ok(models)
+    }
+
+    /// Count models using database abstraction
+    async fn count_abstracted(pool: &Arc<dyn DatabasePool>) -> ModelResult<i64>
+    where
+        Self: Sized,
+    {
+        let sql = if Self::uses_soft_deletes() {
+            format!("SELECT COUNT(*) FROM {} WHERE deleted_at IS NULL", Self::table_name())
+        } else {
+            format!("SELECT COUNT(*) FROM {}", Self::table_name())
+        };
+        let params = vec![];
+
+        let row = pool.fetch_optional(&sql, &params)
+            .await
+            .map_err(|e| ModelError::Database(format!("Failed to count {}: {}", Self::table_name(), e)))?;
+
+        match row {
+            Some(row) => {
+                let count_value = row.get_by_index(0)
+                    .map_err(|e| ModelError::Database(format!("Failed to get count value: {}", e)))?;
+                
+                match count_value {
+                    DatabaseValue::Int64(count) => Ok(count),
+                    DatabaseValue::Int32(count) => Ok(count as i64),
+                    _ => Err(ModelError::Database("Invalid count value type".to_string())),
+                }
+            }
+            None => Ok(0),
+        }
+    }
+}
+
+// Implement ModelAbstracted for all types that implement Model
+impl<T: Model> ModelAbstracted for T {}
 
 // <<<ELIF:BEGIN agent-editable:model_extensions>>>
 /// Extension trait for models with additional utility methods
