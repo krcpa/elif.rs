@@ -360,7 +360,14 @@ impl CacheBackend for RedisBackend {
                     Some(prefix) => {
                         // Delete only keys with our prefix
                         let pattern = format!("{}*", prefix);
-                        let keys: Vec<String> = conn.keys(pattern).await?;
+                        let mut iter: redis::AsyncIter<String> = conn.scan_match(pattern).await?;
+                        let mut keys_to_delete = Vec::new();
+                        while let Some(key) = iter.next_item().await {
+                            keys_to_delete.push(key);
+                        }
+                        if !keys_to_delete.is_empty() {
+                            conn.del::<Vec<String>, ()>(keys_to_delete).await?;
+                        }
                         if !keys.is_empty() {
                             conn.del::<Vec<String>, ()>(keys).await?;
                         }
