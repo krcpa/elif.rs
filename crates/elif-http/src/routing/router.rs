@@ -284,7 +284,7 @@ impl RouteBuilderConfigBuilder {
     }
     
     pub fn build_config(self) -> RouteBuilderConfig {
-        self.build_with_defaults().unwrap()
+        self.build_with_defaults().expect("Building RouteBuilderConfig should not fail as all fields have defaults")
     }
 }
 
