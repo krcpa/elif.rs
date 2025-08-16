@@ -815,6 +815,7 @@ dependencies = [
  "dashmap",
  "elif-core 0.3.0",
  "elif-http 0.5.1",
+ "futures",
  "hex",
  "parking_lot",
  "rand 0.8.5",
@@ -827,6 +828,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tracing",
+ "wildmatch",
 ]
 
 [[package]]
@@ -4190,6 +4192,12 @@ dependencies = [
  "wasite",
  "web-sys",
 ]
+
+[[package]]
+name = "wildmatch"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68ce1ab1f8c62655ebe1350f589c61e505cf94d385bc6a12899442d9081e71fd"
 
 [[package]]
 name = "winapi"

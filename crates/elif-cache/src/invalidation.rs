@@ -5,13 +5,16 @@
 
 use crate::{CacheBackend, CacheError, CacheResult, CacheKey, CacheTag};
 use async_trait::async_trait;
+use futures::future::join_all;
 use regex::Regex;
+use wildmatch::WildMatch;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::RwLock;
+use tracing;
 
 /// Pattern matching strategy for cache key invalidation
 #[derive(Debug, Clone)]
@@ -33,7 +36,8 @@ impl PatternStrategy {
     pub fn matches(&self, key: &str) -> CacheResult<bool> {
         match self {
             PatternStrategy::Wildcard(pattern) => {
-                Ok(wildcard_match(pattern, key))
+                let matcher = WildMatch::new(pattern);
+                Ok(matcher.matches(key))
             }
             PatternStrategy::Regex(pattern) => {
                 let regex = Regex::new(pattern)
@@ -53,52 +57,6 @@ impl PatternStrategy {
     }
 }
 
-/// Simple wildcard pattern matching
-fn wildcard_match(pattern: &str, text: &str) -> bool {
-    let pattern_chars: Vec<char> = pattern.chars().collect();
-    let text_chars: Vec<char> = text.chars().collect();
-    
-    fn match_recursive(
-        pattern: &[char], 
-        text: &[char], 
-        p_idx: usize, 
-        t_idx: usize
-    ) -> bool {
-        if p_idx == pattern.len() {
-            return t_idx == text.len();
-        }
-        
-        match pattern[p_idx] {
-            '*' => {
-                // Try matching zero or more characters
-                for i in t_idx..=text.len() {
-                    if match_recursive(pattern, text, p_idx + 1, i) {
-                        return true;
-                    }
-                }
-                false
-            }
-            '?' => {
-                // Match exactly one character
-                if t_idx < text.len() {
-                    match_recursive(pattern, text, p_idx + 1, t_idx + 1)
-                } else {
-                    false
-                }
-            }
-            c => {
-                // Match exact character
-                if t_idx < text.len() && text[t_idx] == c {
-                    match_recursive(pattern, text, p_idx + 1, t_idx + 1)
-                } else {
-                    false
-                }
-            }
-        }
-    }
-    
-    match_recursive(&pattern_chars, &text_chars, 0, 0)
-}
 
 /// Time-based invalidation policies
 #[derive(Debug, Clone)]
@@ -291,28 +249,51 @@ impl<B: CacheBackend> MemoryInvalidationManager<B> {
     }
     
     /// Actually invalidate the given keys from cache and tracking
+    /// Uses parallel execution for better performance with network backends like Redis
     async fn execute_invalidation(&self, keys: Vec<CacheKey>) -> CacheResult<Vec<CacheKey>> {
         if keys.is_empty() {
             return Ok(Vec::new());
         }
-        
+
+        // Parallelize backend forget operations for better performance
+        let forget_futures = keys.iter().map(|k| self.backend.forget(k));
+        let results = join_all(forget_futures).await;
+
+        // Collect successfully invalidated keys and handle any errors gracefully
         let mut invalidated_keys = Vec::new();
+        let mut failed_keys = Vec::new();
         
-        // Remove from cache backend
-        for key in &keys {
-            if self.backend.forget(key).await? {
-                invalidated_keys.push(key.clone());
+        for (i, result) in results.into_iter().enumerate() {
+            match result {
+                Ok(was_removed) => {
+                    if was_removed {
+                        invalidated_keys.push(keys[i].clone());
+                    }
+                }
+                Err(_) => {
+                    failed_keys.push(keys[i].clone());
+                }
             }
         }
-        
-        // Remove from tracking
+
+        // Always remove from tracking, even if backend removal failed
+        // This prevents inconsistent state where tracking believes keys exist but backend doesn't
         {
             let mut entries = self.entries.write().await;
             for key in &keys {
                 entries.remove(key);
             }
         }
-        
+
+        // If there were backend failures, log them but don't fail the entire operation
+        if !failed_keys.is_empty() {
+            tracing::warn!(
+                "Failed to invalidate {} keys from backend: {:?}", 
+                failed_keys.len(), 
+                failed_keys
+            );
+        }
+
         Ok(invalidated_keys)
     }
 }
@@ -404,19 +385,25 @@ mod tests {
     
     #[tokio::test]
     async fn test_wildcard_match() {
-        assert!(wildcard_match("*", "anything"));
-        assert!(wildcard_match("user:*", "user:123"));
-        assert!(wildcard_match("user:*", "user:"));
-        assert!(!wildcard_match("user:*", "post:123"));
+        // Test using PatternStrategy::Wildcard which now uses wildmatch
+        let wildcard_all = PatternStrategy::Wildcard("*".to_string());
+        assert!(wildcard_all.matches("anything").unwrap());
         
-        assert!(wildcard_match("user:?", "user:1"));
-        assert!(!wildcard_match("user:?", "user:12"));
-        assert!(!wildcard_match("user:?", "user:"));
+        let user_wildcard = PatternStrategy::Wildcard("user:*".to_string());
+        assert!(user_wildcard.matches("user:123").unwrap());
+        assert!(user_wildcard.matches("user:").unwrap());
+        assert!(!user_wildcard.matches("post:123").unwrap());
         
-        assert!(wildcard_match("*temp*", "temporary"));
-        assert!(wildcard_match("*temp*", "temp"));
-        assert!(wildcard_match("*temp*", "something_temp_else"));
-        assert!(!wildcard_match("*temp*", "permanent"));
+        let user_question = PatternStrategy::Wildcard("user:?".to_string());
+        assert!(user_question.matches("user:1").unwrap());
+        assert!(!user_question.matches("user:12").unwrap());
+        assert!(!user_question.matches("user:").unwrap());
+        
+        let temp_wildcard = PatternStrategy::Wildcard("*temp*".to_string());
+        assert!(temp_wildcard.matches("temporary").unwrap());
+        assert!(temp_wildcard.matches("temp").unwrap());
+        assert!(temp_wildcard.matches("something_temp_else").unwrap());
+        assert!(!temp_wildcard.matches("permanent").unwrap());
     }
     
     #[tokio::test]
@@ -582,5 +569,40 @@ mod tests {
         assert_eq!(backend.get("temp1").await.unwrap(), None);
         assert_eq!(backend.get("temp2").await.unwrap(), None);
         assert_eq!(backend.get("permanent").await.unwrap(), Some(b"permanent_data".to_vec()));
+    }
+    
+    #[tokio::test]
+    async fn test_parallel_invalidation_performance() {
+        let backend = Arc::new(MemoryBackend::new(CacheConfig::default()));
+        let manager = MemoryInvalidationManager::new(backend.clone());
+        
+        // Put a large number of entries
+        for i in 0..100 {
+            backend.put(&format!("batch_key_{}", i), b"data".to_vec(), None).await.unwrap();
+            
+            let mut entry = InvalidatableEntry::new(format!("batch_key_{}", i));
+            entry.add_tag("batch".to_string());
+            manager.register_entry(entry).await.unwrap();
+        }
+        
+        // Test parallel invalidation with pattern
+        let start_time = std::time::Instant::now();
+        let invalidated = manager
+            .invalidate_pattern(PatternStrategy::Wildcard("batch_key_*".to_string()))
+            .await
+            .unwrap();
+        let duration = start_time.elapsed();
+        
+        // All keys should be invalidated
+        assert_eq!(invalidated.len(), 100);
+        
+        // Parallel execution should be reasonably fast (this is a rough check)
+        // In practice, with network backends like Redis, the performance improvement would be more significant
+        assert!(duration.as_millis() < 1000, "Parallel invalidation took too long: {:?}", duration);
+        
+        // Verify all keys are gone
+        for i in 0..100 {
+            assert_eq!(backend.get(&format!("batch_key_{}", i)).await.unwrap(), None);
+        }
     }
 }
