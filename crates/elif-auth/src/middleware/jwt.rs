@@ -7,6 +7,7 @@ use crate::{
     traits::UserContext,
     AuthError, AuthResult,
 };
+use service_builder::builder;
 
 /// JWT middleware for extracting and validating JWT tokens from HTTP requests
 pub struct JwtMiddleware<User> {
@@ -135,10 +136,78 @@ impl<User> JwtMiddleware<User> {
     }
 }
 
-/// Builder for JWT middleware configuration
+/// Configuration for JWT middleware builder
+#[derive(Debug, Clone)]
+#[builder]
+pub struct JwtMiddlewareBuilderConfig {
+    #[builder(default = "String::from(\"Authorization\")")]
+    pub header_name: String,
+    
+    #[builder(default = "String::from(\"Bearer \")")]
+    pub token_prefix: String,
+    
+    #[builder(default = "vec![String::from(\"/health\"), String::from(\"/metrics\")]")]
+    pub skip_paths: Vec<String>,
+    
+    #[builder(default)]
+    pub optional: bool,
+}
+
+impl JwtMiddlewareBuilderConfig {
+    /// Build a JwtMiddlewareConfig from the builder config
+    pub fn build_config(self) -> JwtMiddlewareConfig {
+        JwtMiddlewareConfig {
+            header_name: self.header_name,
+            token_prefix: self.token_prefix,
+            skip_paths: self.skip_paths,
+            optional: self.optional,
+        }
+    }
+}
+
+// Add convenience methods to the generated builder
+impl JwtMiddlewareBuilderConfigBuilder {
+    /// Set the authorization header name
+    pub fn header_name_str<S: Into<String>>(self, name: S) -> Self {
+        self.header_name(name.into())
+    }
+    
+    /// Set the token prefix
+    pub fn token_prefix_str<S: Into<String>>(self, prefix: S) -> Self {
+        self.token_prefix(prefix.into())
+    }
+    
+    /// Add a path to skip authentication
+    pub fn skip_path<S: Into<String>>(self, path: S) -> Self {
+        let mut paths = self.skip_paths.clone().unwrap_or_else(|| vec![String::from("/health"), String::from("/metrics")]);
+        paths.push(path.into());
+        self.skip_paths(paths)
+    }
+    
+    /// Set multiple paths to skip authentication
+    pub fn skip_paths_vec(self, paths: Vec<String>) -> Self {
+        self.skip_paths(paths)
+    }
+    
+    /// Make authentication optional
+    pub fn make_optional(self) -> Self {
+        self.optional(true)
+    }
+    
+    /// Make authentication required (default)
+    pub fn make_required(self) -> Self {
+        self.optional(false)
+    }
+    
+    pub fn build_config(self) -> JwtMiddlewareBuilderConfig {
+        self.build_with_defaults().unwrap()
+    }
+}
+
+/// Builder for JWT middleware
 pub struct JwtMiddlewareBuilder<User> {
     provider: Option<JwtProvider<User>>,
-    config: JwtMiddlewareConfig,
+    builder_config: JwtMiddlewareBuilderConfigBuilder,
 }
 
 impl<User> JwtMiddlewareBuilder<User> {
@@ -146,7 +215,7 @@ impl<User> JwtMiddlewareBuilder<User> {
     pub fn new() -> Self {
         Self {
             provider: None,
-            config: JwtMiddlewareConfig::default(),
+            builder_config: JwtMiddlewareBuilderConfig::builder(),
         }
     }
     
@@ -158,37 +227,37 @@ impl<User> JwtMiddlewareBuilder<User> {
     
     /// Set the authorization header name
     pub fn header_name<S: Into<String>>(mut self, name: S) -> Self {
-        self.config.header_name = name.into();
+        self.builder_config = self.builder_config.header_name_str(name);
         self
     }
     
     /// Set the token prefix
     pub fn token_prefix<S: Into<String>>(mut self, prefix: S) -> Self {
-        self.config.token_prefix = prefix.into();
+        self.builder_config = self.builder_config.token_prefix_str(prefix);
         self
     }
     
     /// Add a path to skip authentication
     pub fn skip_path<S: Into<String>>(mut self, path: S) -> Self {
-        self.config.skip_paths.push(path.into());
+        self.builder_config = self.builder_config.skip_path(path);
         self
     }
     
     /// Set multiple paths to skip authentication
     pub fn skip_paths(mut self, paths: Vec<String>) -> Self {
-        self.config.skip_paths = paths;
+        self.builder_config = self.builder_config.skip_paths_vec(paths);
         self
     }
     
     /// Make authentication optional
     pub fn optional(mut self) -> Self {
-        self.config.optional = true;
+        self.builder_config = self.builder_config.make_optional();
         self
     }
     
     /// Make authentication required (default)
     pub fn required(mut self) -> Self {
-        self.config.optional = false;
+        self.builder_config = self.builder_config.make_required();
         self
     }
     
@@ -198,7 +267,8 @@ impl<User> JwtMiddlewareBuilder<User> {
             AuthError::configuration_error("JWT provider is required")
         })?;
         
-        Ok(JwtMiddleware::with_config(provider, self.config))
+        let config = self.builder_config.build_config().build_config();
+        Ok(JwtMiddleware::with_config(provider, config))
     }
 }
 
