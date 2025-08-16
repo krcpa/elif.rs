@@ -1,0 +1,40 @@
+/* Swagger UI CSS */
+/* This is a placeholder for the actual Swagger UI CSS */
+/* In a real implementation, this would contain the full Swagger UI styles */
+
+.swagger-ui {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #3b4151;
+}
+
+.swagger-ui .information-container {
+    background: #fff;
+    border-bottom: 1px solid #d3d3d3;
+    padding: 20px;
+}
+
+.swagger-ui .info h1 {
+    font-size: 36px;
+    margin: 0 0 10px 0;
+    color: #3b4151;
+}
+
+.swagger-ui .operations-container {
+    padding: 20px;
+    background: #fafafa;
+    min-height: 400px;
+}
+
+.swagger-ui .operations-container p {
+    font-size: 16px;
+    margin: 10px 0;
+}
+
+/* Basic responsive design */
+@media (max-width: 768px) {
+    .swagger-ui .info h1 {
+        font-size: 24px;
+    }
+}

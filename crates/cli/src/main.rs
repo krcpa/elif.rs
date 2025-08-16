@@ -183,8 +183,34 @@ enum ResourceCommands {
 
 #[derive(Subcommand)]
 enum OpenApiCommands {
-    /// Export OpenAPI spec
-    Export,
+    /// Generate OpenAPI specification from project
+    Generate {
+        /// Output file path
+        #[arg(long, short)]
+        output: Option<String>,
+        
+        /// Output format (json, yaml)
+        #[arg(long, short)]
+        format: Option<String>,
+    },
+    
+    /// Export OpenAPI spec to different formats
+    Export {
+        /// Export format (postman, insomnia)
+        #[arg(long, short)]
+        format: String,
+        
+        /// Output file path
+        #[arg(long, short)]
+        output: String,
+    },
+    
+    /// Serve interactive Swagger UI documentation
+    Serve {
+        /// Port to serve on
+        #[arg(long, short, default_value = "8080")]
+        port: u16,
+    },
 }
 
 #[derive(Subcommand)]
@@ -468,8 +494,14 @@ async fn main() -> Result<(), ElifError> {
         }
         Commands::Openapi { openapi_command } => {
             match openapi_command {
-                OpenApiCommands::Export => {
-                    openapi::export().await?;
+                OpenApiCommands::Generate { output, format } => {
+                    openapi::generate(output, format).await?;
+                }
+                OpenApiCommands::Export { format, output } => {
+                    openapi::export(format, output).await?;
+                }
+                OpenApiCommands::Serve { port } => {
+                    openapi::serve(Some(port)).await?;
                 }
             }
         }
