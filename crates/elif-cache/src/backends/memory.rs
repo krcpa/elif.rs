@@ -1,6 +1,6 @@
 //! In-memory cache backend with LRU eviction
 
-use crate::{CacheBackend, CacheConfig, CacheError, CacheResult, CacheStats};
+use crate::{CacheBackend, CacheConfig, CacheResult, CacheStats};
 use async_trait::async_trait;
 use dashmap::DashMap;
 use parking_lot::{RwLock, Mutex};
@@ -172,15 +172,25 @@ impl MemoryBackend {
             .collect();
         
         for key in expired_keys {
-            self.entries.remove(&key);
-            self.lru.remove(&key);
+            if let Some((_, removed_entry)) = self.entries.remove(&key) {
+                self.lru.remove(&key);
+                let mut stats = self.stats.lock();
+                stats.total_keys = stats.total_keys.saturating_sub(1);
+                stats.memory_usage = stats.memory_usage.saturating_sub(removed_entry.size() as u64);
+            }
         }
         
         // Then, evict LRU entries if still over limits
         while self.should_evict() {
             if let Some(lru_key) = self.lru.least_recently_used() {
-                self.entries.remove(&lru_key);
-                self.lru.remove(&lru_key);
+                if let Some((_, removed_entry)) = self.entries.remove(&lru_key) {
+                    self.lru.remove(&lru_key);
+                    let mut stats = self.stats.lock();
+                    stats.total_keys = stats.total_keys.saturating_sub(1);
+                    stats.memory_usage = stats.memory_usage.saturating_sub(removed_entry.size() as u64);
+                } else {
+                    break;
+                }
             } else {
                 break;
             }
@@ -203,8 +213,12 @@ impl MemoryBackend {
             .collect();
         
         for key in expired_keys {
-            self.entries.remove(&key);
-            self.lru.remove(&key);
+            if let Some((_, removed_entry)) = self.entries.remove(&key) {
+                self.lru.remove(&key);
+                let mut stats = self.stats.lock();
+                stats.total_keys = stats.total_keys.saturating_sub(1);
+                stats.memory_usage = stats.memory_usage.saturating_sub(removed_entry.size() as u64);
+            }
         }
     }
 }
@@ -219,13 +233,20 @@ impl CacheBackend for MemoryBackend {
         
         if let Some(entry) = self.entries.get(key) {
             if entry.is_expired() {
-                // Remove expired entry
+                // Get entry size before dropping
+                let entry_size = entry.size() as u64;
                 drop(entry);
-                self.entries.remove(key);
-                self.lru.remove(key);
                 
-                // Update stats
-                self.stats.lock().misses += 1;
+                // Remove expired entry
+                if self.entries.remove(key).is_some() {
+                    self.lru.remove(key);
+                    
+                    // Update stats
+                    let mut stats = self.stats.lock();
+                    stats.misses += 1;
+                    stats.total_keys = stats.total_keys.saturating_sub(1);
+                    stats.memory_usage = stats.memory_usage.saturating_sub(entry_size);
+                }
                 
                 return Ok(None);
             }
@@ -253,16 +274,20 @@ impl CacheBackend for MemoryBackend {
         }
         
         let entry = CacheEntry::new(value, ttl);
+        let entry_size = entry.size() as u64;
         
         // Insert or update entry
-        if self.entries.insert(key.to_string(), entry).is_none() {
-            // New entry, update total count
-            let mut stats = self.stats.lock();
-            stats.total_keys += 1;
-            stats.memory_usage = self.memory_usage() as u64;
+        let old_entry = self.entries.insert(key.to_string(), entry);
+        
+        let mut stats = self.stats.lock();
+        if let Some(old_entry) = old_entry {
+            // Existing entry - update memory usage with size difference
+            let old_size = old_entry.size() as u64;
+            stats.memory_usage = stats.memory_usage.saturating_sub(old_size) + entry_size;
         } else {
-            // Update memory usage for existing entry
-            self.stats.lock().memory_usage = self.memory_usage() as u64;
+            // New entry - increment total count and memory usage
+            stats.total_keys += 1;
+            stats.memory_usage += entry_size;
         }
         
         // Update LRU
@@ -272,31 +297,35 @@ impl CacheBackend for MemoryBackend {
     }
     
     async fn forget(&self, key: &str) -> CacheResult<bool> {
-        let removed = self.entries.remove(key).is_some();
-        
-        if removed {
+        if let Some((_, removed_entry)) = self.entries.remove(key) {
             self.lru.remove(key);
             
-            // Update stats
+            // Update stats efficiently
             let mut stats = self.stats.lock();
             stats.total_keys = stats.total_keys.saturating_sub(1);
-            stats.memory_usage = self.memory_usage() as u64;
+            stats.memory_usage = stats.memory_usage.saturating_sub(removed_entry.size() as u64);
+            
+            Ok(true)
+        } else {
+            Ok(false)
         }
-        
-        Ok(removed)
     }
     
     async fn exists(&self, key: &str) -> CacheResult<bool> {
         if let Some(entry) = self.entries.get(key) {
             if entry.is_expired() {
-                // Clean up expired entry
+                // Get entry size before dropping
+                let entry_size = entry.size() as u64;
                 drop(entry);
-                self.entries.remove(key);
-                self.lru.remove(key);
                 
-                let mut stats = self.stats.lock();
-                stats.total_keys = stats.total_keys.saturating_sub(1);
-                stats.memory_usage = self.memory_usage() as u64;
+                // Clean up expired entry
+                if self.entries.remove(key).is_some() {
+                    self.lru.remove(key);
+                    
+                    let mut stats = self.stats.lock();
+                    stats.total_keys = stats.total_keys.saturating_sub(1);
+                    stats.memory_usage = stats.memory_usage.saturating_sub(entry_size);
+                }
                 
                 return Ok(false);
             }
@@ -340,13 +369,7 @@ impl CacheBackend for MemoryBackend {
     }
     
     async fn stats(&self) -> CacheResult<CacheStats> {
-        let stats = self.stats.lock();
-        Ok(CacheStats {
-            hits: stats.hits,
-            misses: stats.misses,
-            total_keys: self.entries.len() as u64,
-            memory_usage: self.memory_usage() as u64,
-        })
+        Ok(self.stats.lock().clone())
     }
 }
 
