@@ -423,7 +423,7 @@ impl ProjectDiscovery {
         Ok(models)
     }
 
-    /// Analyze a model file
+    /// Analyze a model file using AST parsing
     fn analyze_model_file(&self, path: &Path) -> OpenApiResult<Option<ModelInfo>> {
         let content = fs::read_to_string(path)
             .map_err(|e| OpenApiError::route_discovery_error(
@@ -436,129 +436,123 @@ impl ProjectDiscovery {
             .unwrap_or("Unknown")
             .to_string();
 
-        // Extract struct definition
-        if let Some(model) = self.extract_struct_from_content(&content, &model_name)? {
+        // Parse the Rust source code into an AST
+        let ast = syn::parse_file(&content)
+            .map_err(|e| OpenApiError::route_discovery_error(
+                format!("Failed to parse model file {}: {}", path.display(), e)
+            ))?;
+
+        // Extract struct definition using AST
+        if let Some(model) = self.extract_struct_from_ast(&ast, &model_name)? {
             return Ok(Some(model));
         }
 
         Ok(None)
     }
 
-    /// Extract struct definition from content
-    fn extract_struct_from_content(&self, content: &str, model_name: &str) -> OpenApiResult<Option<ModelInfo>> {
-        let lines: Vec<&str> = content.lines().collect();
-        let mut model_info: Option<ModelInfo> = None;
-
-        for i in 0..lines.len() {
-            let line = lines[i].trim();
-            
-            // Look for struct definition
-            if line.starts_with("pub struct") || line.starts_with("struct") {
-                let struct_name = self.extract_struct_name(line);
+    /// Extract struct definition from AST
+    fn extract_struct_from_ast(&self, ast: &syn::File, model_name: &str) -> OpenApiResult<Option<ModelInfo>> {
+        // Walk the AST to find struct definitions
+        for item in &ast.items {
+            if let syn::Item::Struct(item_struct) = item {
+                let struct_name = item_struct.ident.to_string();
+                
+                // Check if this is the struct we're looking for (case-insensitive)
                 if struct_name.to_lowercase() == model_name.to_lowercase() {
-                    let derives = self.extract_derives(&lines, i);
-                    let doc = self.extract_documentation_from_lines(&lines, i);
-                    let fields = self.extract_struct_fields(&lines, i)?;
+                    // Extract derive attributes
+                    let derives = self.extract_derives_from_attrs(&item_struct.attrs);
+                    
+                    // Extract documentation
+                    let doc = self.extract_documentation_ast(&item_struct.attrs);
+                    
+                    // Extract fields
+                    let fields = self.extract_struct_fields_from_ast(&item_struct.fields)?;
 
-                    model_info = Some(ModelInfo {
+                    return Ok(Some(ModelInfo {
                         name: struct_name,
                         fields,
                         documentation: doc,
                         derives,
-                    });
-                    break;
+                    }));
                 }
             }
         }
 
-        Ok(model_info)
+        Ok(None)
     }
 
-    /// Extract struct name from definition line
-    fn extract_struct_name(&self, line: &str) -> String {
-        line.split_whitespace()
-            .find(|word| !word.starts_with('#') && *word != "pub" && *word != "struct")
-            .unwrap_or("Unknown")
-            .trim_end_matches('{')
-            .to_string()
-    }
-
-    /// Extract derive attributes
-    fn extract_derives(&self, lines: &[&str], struct_index: usize) -> Vec<String> {
+    /// Extract derive attributes from struct attributes using AST
+    fn extract_derives_from_attrs(&self, attrs: &[syn::Attribute]) -> Vec<String> {
         let mut derives = Vec::new();
 
-        // Look backwards for derive attributes
-        for i in (0..struct_index).rev() {
-            let line = lines[i].trim();
-            if line.starts_with("#[derive(") {
-                let derive_content = line
-                    .trim_start_matches("#[derive(")
-                    .trim_end_matches(")]");
-                derives.extend(
-                    derive_content
-                        .split(',')
-                        .map(|d| d.trim().to_string())
-                );
-            } else if !line.is_empty() && !line.starts_with("#") && !line.starts_with("//") {
-                break;
+        for attr in attrs {
+            if attr.path().is_ident("derive") {
+                if let syn::Meta::List(meta_list) = &attr.meta {
+                    let derive_tokens = meta_list.tokens.to_string();
+                    // Parse comma-separated derive tokens
+                    derives.extend(
+                        derive_tokens
+                            .split(',')
+                            .map(|d| d.trim().to_string())
+                            .filter(|d| !d.is_empty())
+                    );
+                }
             }
         }
 
         derives
     }
 
-    /// Extract struct fields
-    fn extract_struct_fields(&self, lines: &[&str], struct_index: usize) -> OpenApiResult<Vec<ModelField>> {
-        let mut fields = Vec::new();
-        let mut in_struct = false;
+    /// Extract struct fields from AST Fields
+    fn extract_struct_fields_from_ast(&self, fields: &syn::Fields) -> OpenApiResult<Vec<ModelField>> {
+        let mut model_fields = Vec::new();
 
-        for i in struct_index..lines.len() {
-            let line = lines[i].trim();
-            
-            if line.contains('{') {
-                in_struct = true;
-                continue;
-            }
-            
-            if line == "}" {
-                break;
-            }
-            
-            if in_struct && !line.is_empty() && !line.starts_with("//") {
-                if let Some(field) = self.parse_struct_field(line) {
-                    fields.push(field);
+        match fields {
+            syn::Fields::Named(fields_named) => {
+                for field in &fields_named.named {
+                    if let Some(field_name) = &field.ident {
+                        let field_name = field_name.to_string();
+                        let field_type = self.type_to_string(&field.ty);
+                        let optional = field_type.starts_with("Option<") || field_type.contains("Option <");
+                        
+                        // Extract field documentation
+                        let documentation = self.extract_documentation_ast(&field.attrs);
+
+                        model_fields.push(ModelField {
+                            name: field_name,
+                            field_type,
+                            documentation,
+                            optional,
+                        });
+                    }
                 }
             }
+            syn::Fields::Unnamed(fields_unnamed) => {
+                // Handle tuple structs
+                for (index, field) in fields_unnamed.unnamed.iter().enumerate() {
+                    let field_name = format!("field_{}", index);
+                    let field_type = self.type_to_string(&field.ty);
+                    let optional = field_type.starts_with("Option<") || field_type.contains("Option <");
+                    
+                    // Extract field documentation  
+                    let documentation = self.extract_documentation_ast(&field.attrs);
+
+                    model_fields.push(ModelField {
+                        name: field_name,
+                        field_type,
+                        documentation,
+                        optional,
+                    });
+                }
+            }
+            syn::Fields::Unit => {
+                // Unit structs have no fields
+            }
         }
 
-        Ok(fields)
+        Ok(model_fields)
     }
 
-    /// Parse a struct field line
-    fn parse_struct_field(&self, line: &str) -> Option<ModelField> {
-        let line = line.trim().trim_end_matches(',');
-        
-        // Skip attributes and visibility modifiers
-        if line.starts_with('#') || line.starts_with("pub") {
-            return None;
-        }
-
-        let parts: Vec<&str> = line.split(':').collect();
-        if parts.len() != 2 {
-            return None;
-        }
-
-        let name = parts[0].trim().to_string();
-        let field_type = parts[1].trim().to_string();
-        let optional = field_type.starts_with("Option<");
-
-        Some(ModelField {
-            name,
-            field_type,
-            documentation: None,
-            optional,
-        })
-    }
 
     /// Extract value from simple TOML content
     fn extract_toml_value(&self, content: &str, key: &str) -> Option<String> {
@@ -622,27 +616,39 @@ mod tests {
     }
 
     #[test]
-    fn test_struct_name_extraction() {
+    fn test_ast_based_struct_parsing() {
         let discovery = ProjectDiscovery::new(".");
         
-        assert_eq!(discovery.extract_struct_name("pub struct User {"), "User");
-        assert_eq!(discovery.extract_struct_name("struct Post"), "Post");
-        assert_eq!(discovery.extract_struct_name("pub struct Comment<'a> {"), "Comment<'a>");
-    }
+        let test_code = r#"
+            #[derive(Debug, Clone, Serialize)]
+            /// A test user model
+            pub struct User {
+                /// User ID
+                pub id: i32,
+                /// User email address
+                pub email: Option<String>,
+                pub name: String,
+            }
+        "#;
 
-    #[test]
-    fn test_struct_field_parsing() {
-        let discovery = ProjectDiscovery::new(".");
+        let ast = syn::parse_file(test_code).unwrap();
+        let model = discovery.extract_struct_from_ast(&ast, "user").unwrap().unwrap();
         
-        let field1 = discovery.parse_struct_field("id: i32,").unwrap();
-        assert_eq!(field1.name, "id");
-        assert_eq!(field1.field_type, "i32");
-        assert!(!field1.optional);
-
-        let field2 = discovery.parse_struct_field("email: Option<String>,").unwrap();
-        assert_eq!(field2.name, "email");
-        assert_eq!(field2.field_type, "Option<String>");
-        assert!(field2.optional);
+        assert_eq!(model.name, "User");
+        assert_eq!(model.fields.len(), 3);
+        assert!(model.derives.contains(&"Debug".to_string()));
+        assert!(model.derives.contains(&"Clone".to_string()));
+        assert!(model.derives.contains(&"Serialize".to_string()));
+        assert!(model.documentation.is_some());
+        
+        // Check fields
+        let id_field = model.fields.iter().find(|f| f.name == "id").unwrap();
+        assert_eq!(id_field.field_type, "i32");
+        assert!(!id_field.optional);
+        
+        let email_field = model.fields.iter().find(|f| f.name == "email").unwrap();
+        assert_eq!(email_field.field_type, "Option < String >");
+        assert!(email_field.optional);
     }
 
     #[test]
