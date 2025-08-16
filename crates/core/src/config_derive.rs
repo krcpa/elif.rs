@@ -60,7 +60,7 @@ impl<T> ConfigBuilderConfigBuilder<T> {
     }
     
     pub fn build_config(self) -> ConfigBuilderConfig<T> {
-        self.build_with_defaults().unwrap()
+        self.build_with_defaults().expect("Building ConfigBuilderConfig should not fail as all fields have defaults")
     }
 }
 
