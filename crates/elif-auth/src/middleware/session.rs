@@ -9,6 +9,11 @@ use crate::{
 };
 use service_builder::builder;
 
+// Default values for session middleware configuration
+const DEFAULT_COOKIE_NAME: &str = "session_id";
+const DEFAULT_COOKIE_PATH: &str = "/";
+const DEFAULT_SKIP_PATHS: &[&str] = &["/health", "/metrics"];
+
 /// Session middleware configuration
 #[derive(Debug, Clone)]
 pub struct SessionMiddlewareConfig {
@@ -61,14 +66,14 @@ impl std::fmt::Display for CookieSameSite {
 impl Default for SessionMiddlewareConfig {
     fn default() -> Self {
         Self {
-            cookie_name: "session_id".to_string(),
+            cookie_name: DEFAULT_COOKIE_NAME.to_string(),
             cookie_domain: None,
-            cookie_path: "/".to_string(),
+            cookie_path: DEFAULT_COOKIE_PATH.to_string(),
             cookie_http_only: true,
             cookie_secure: false, // Set to true in production
             cookie_same_site: CookieSameSite::Lax,
             require_csrf: true,
-            skip_paths: vec!["/health".to_string(), "/metrics".to_string()],
+            skip_paths: DEFAULT_SKIP_PATHS.iter().map(|s| s.to_string()).collect(),
             optional: false,
         }
     }
@@ -282,13 +287,13 @@ where
 #[derive(Debug, Clone)]
 #[builder]
 pub struct SessionMiddlewareBuilderConfig {
-    #[builder(default = "String::from(\"session_id\")")]
+    #[builder(default = "DEFAULT_COOKIE_NAME.to_string()")]
     pub cookie_name: String,
     
     #[builder(optional)]
     pub cookie_domain: Option<String>,
     
-    #[builder(default = "String::from(\"/\")")]
+    #[builder(default = "DEFAULT_COOKIE_PATH.to_string()")]
     pub cookie_path: String,
     
     #[builder(default = "true")]
@@ -303,7 +308,7 @@ pub struct SessionMiddlewareBuilderConfig {
     #[builder(default = "true")]
     pub require_csrf: bool,
     
-    #[builder(default = "vec![String::from(\"/health\"), String::from(\"/metrics\")]")]
+    #[builder(default = "DEFAULT_SKIP_PATHS.iter().map(|s| s.to_string()).collect()")]
     pub skip_paths: Vec<String>,
     
     #[builder(default)]
@@ -356,7 +361,7 @@ impl SessionMiddlewareBuilderConfigBuilder {
     
     /// Add a path to skip
     pub fn skip_path<S: Into<String>>(self, path: S) -> Self {
-        let mut paths = self.skip_paths.clone().unwrap_or_else(|| vec![String::from("/health"), String::from("/metrics")]);
+        let mut paths = self.skip_paths.clone().unwrap_or_else(|| DEFAULT_SKIP_PATHS.iter().map(|s| s.to_string()).collect());
         paths.push(path.into());
         self.skip_paths(paths)
     }

@@ -9,6 +9,11 @@ use crate::{
 };
 use service_builder::builder;
 
+// Default values for JWT middleware configuration
+const DEFAULT_HEADER_NAME: &str = "Authorization";
+const DEFAULT_TOKEN_PREFIX: &str = "Bearer ";
+const DEFAULT_SKIP_PATHS: &[&str] = &["/health", "/metrics"];
+
 /// JWT middleware for extracting and validating JWT tokens from HTTP requests
 pub struct JwtMiddleware<User> {
     /// JWT provider for token operations
@@ -37,9 +42,9 @@ pub struct JwtMiddlewareConfig {
 impl Default for JwtMiddlewareConfig {
     fn default() -> Self {
         Self {
-            header_name: "Authorization".to_string(),
-            token_prefix: "Bearer ".to_string(),
-            skip_paths: vec!["/health".to_string(), "/metrics".to_string()],
+            header_name: DEFAULT_HEADER_NAME.to_string(),
+            token_prefix: DEFAULT_TOKEN_PREFIX.to_string(),
+            skip_paths: DEFAULT_SKIP_PATHS.iter().map(|s| s.to_string()).collect(),
             optional: false,
         }
     }
@@ -140,13 +145,13 @@ impl<User> JwtMiddleware<User> {
 #[derive(Debug, Clone)]
 #[builder]
 pub struct JwtMiddlewareBuilderConfig {
-    #[builder(default = "String::from(\"Authorization\")")]
+    #[builder(default = "DEFAULT_HEADER_NAME.to_string()")]
     pub header_name: String,
     
-    #[builder(default = "String::from(\"Bearer \")")]
+    #[builder(default = "DEFAULT_TOKEN_PREFIX.to_string()")]
     pub token_prefix: String,
     
-    #[builder(default = "vec![String::from(\"/health\"), String::from(\"/metrics\")]")]
+    #[builder(default = "DEFAULT_SKIP_PATHS.iter().map(|s| s.to_string()).collect()")]
     pub skip_paths: Vec<String>,
     
     #[builder(default)]
@@ -179,7 +184,7 @@ impl JwtMiddlewareBuilderConfigBuilder {
     
     /// Add a path to skip authentication
     pub fn skip_path<S: Into<String>>(self, path: S) -> Self {
-        let mut paths = self.skip_paths.clone().unwrap_or_else(|| vec![String::from("/health"), String::from("/metrics")]);
+        let mut paths = self.skip_paths.clone().unwrap_or_else(|| DEFAULT_SKIP_PATHS.iter().map(|s| s.to_string()).collect());
         paths.push(path.into());
         self.skip_paths(paths)
     }
