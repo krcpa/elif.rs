@@ -128,7 +128,6 @@ impl OpenApiUtils {
 
     /// Check if a schema is referenced anywhere in the spec using proper recursive traversal
     fn is_schema_referenced(spec: &OpenApiSpec, reference: &str) -> bool {
-        use crate::specification::*;
 
         // Check in paths and operations
         for path_item in spec.paths.values() {
@@ -648,5 +647,282 @@ mod tests {
         
         // Should have warning about no paths
         assert!(warnings.iter().any(|w| w.message.contains("No paths defined")));
+    }
+
+    #[test]
+    fn test_schema_reference_detection_accurate() {
+        use crate::specification::*;
+
+        // Create a spec with schemas and verify accurate detection
+        let mut spec = OpenApiSpec::new("Test API", "1.0.0");
+        
+        // Add a User schema
+        let user_schema = Schema {
+            schema_type: Some("object".to_string()),
+            properties: {
+                let mut props = HashMap::new();
+                props.insert("id".to_string(), Schema {
+                    schema_type: Some("integer".to_string()),
+                    ..Default::default()
+                });
+                props.insert("name".to_string(), Schema {
+                    schema_type: Some("string".to_string()),
+                    ..Default::default()
+                });
+                props
+            },
+            required: vec!["id".to_string(), "name".to_string()],
+            ..Default::default()
+        };
+
+        // Add an Address schema that references User
+        let address_schema = Schema {
+            schema_type: Some("object".to_string()),
+            properties: {
+                let mut props = HashMap::new();
+                props.insert("street".to_string(), Schema {
+                    schema_type: Some("string".to_string()),
+                    ..Default::default()
+                });
+                props.insert("owner".to_string(), Schema {
+                    reference: Some("#/components/schemas/User".to_string()),
+                    ..Default::default()
+                });
+                props
+            },
+            ..Default::default()
+        };
+
+        // Add an unused schema for testing
+        let unused_schema = Schema {
+            schema_type: Some("object".to_string()),
+            properties: {
+                let mut props = HashMap::new();
+                props.insert("value".to_string(), Schema {
+                    schema_type: Some("string".to_string()),
+                    ..Default::default()
+                });
+                props
+            },
+            ..Default::default()
+        };
+
+        // Set up components
+        let mut components = Components::default();
+        components.schemas.insert("User".to_string(), user_schema);
+        components.schemas.insert("Address".to_string(), address_schema);
+        components.schemas.insert("UnusedSchema".to_string(), unused_schema);
+        spec.components = Some(components);
+
+        // Test reference detection
+        assert!(OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/User"));
+        assert!(!OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/UnusedSchema"));
+        assert!(!OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/NonExistent"));
+    }
+
+    #[test] 
+    fn test_schema_reference_false_positive_prevention() {
+        use crate::specification::*;
+
+        // Create a spec where schema reference appears in description but not as actual reference
+        let mut spec = OpenApiSpec::new("Test API", "1.0.0");
+
+        // Add a schema with reference string in description (should NOT be detected as reference)
+        let user_schema = Schema {
+            schema_type: Some("object".to_string()),
+            description: Some("This schema represents a user. See also #/components/schemas/User for details.".to_string()),
+            properties: {
+                let mut props = HashMap::new();
+                props.insert("name".to_string(), Schema {
+                    schema_type: Some("string".to_string()),
+                    ..Default::default()
+                });
+                props
+            },
+            ..Default::default()
+        };
+
+        // Add an example with schema reference in the example value
+        let example_schema = Schema {
+            schema_type: Some("string".to_string()),
+            example: Some(serde_json::Value::String("#/components/schemas/User".to_string())),
+            ..Default::default()
+        };
+
+        let mut components = Components::default();
+        components.schemas.insert("User".to_string(), user_schema);
+        components.schemas.insert("Example".to_string(), example_schema);
+        spec.components = Some(components);
+
+        // The old string-based approach would incorrectly detect these as references
+        // The new approach should correctly identify that User is not actually referenced
+        assert!(!OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/User"));
+        assert!(!OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/Example"));
+    }
+
+    #[test]
+    fn test_schema_reference_in_operations() {
+        use crate::specification::*;
+
+        let mut spec = OpenApiSpec::new("Test API", "1.0.0");
+
+        // Create a schema
+        let user_schema = Schema {
+            schema_type: Some("object".to_string()),
+            ..Default::default()
+        };
+
+        // Create an operation that uses the schema in request body
+        let request_body = RequestBody {
+            description: Some("User data".to_string()),
+            content: {
+                let mut content = HashMap::new();
+                content.insert("application/json".to_string(), MediaType {
+                    schema: Some(Schema {
+                        reference: Some("#/components/schemas/User".to_string()),
+                        ..Default::default()
+                    }),
+                    example: None,
+                    examples: HashMap::new(),
+                });
+                content
+            },
+            required: Some(true),
+        };
+
+        let operation = Operation {
+            request_body: Some(request_body),
+            responses: {
+                let mut responses = HashMap::new();
+                responses.insert("200".to_string(), Response {
+                    description: "Success".to_string(),
+                    content: {
+                        let mut content = HashMap::new();
+                        content.insert("application/json".to_string(), MediaType {
+                            schema: Some(Schema {
+                                reference: Some("#/components/schemas/User".to_string()),
+                                ..Default::default()
+                            }),
+                            example: None,
+                            examples: HashMap::new(),
+                        });
+                        content
+                    },
+                    headers: HashMap::new(),
+                    links: HashMap::new(),
+                });
+                responses
+            },
+            ..Default::default()
+        };
+
+        let path_item = PathItem {
+            post: Some(operation),
+            ..Default::default()
+        };
+
+        spec.paths.insert("/users".to_string(), path_item);
+
+        let mut components = Components::default();
+        components.schemas.insert("User".to_string(), user_schema);
+        spec.components = Some(components);
+
+        // User schema should be detected as referenced in the operation
+        assert!(OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/User"));
+    }
+
+    #[test]
+    fn test_schema_reference_in_nested_schemas() {
+        use crate::specification::*;
+
+        let mut spec = OpenApiSpec::new("Test API", "1.0.0");
+
+        // Create deeply nested schema structure
+        let user_schema = Schema {
+            schema_type: Some("object".to_string()),
+            ..Default::default()
+        };
+
+        let profile_schema = Schema {
+            schema_type: Some("object".to_string()),
+            properties: {
+                let mut props = HashMap::new();
+                props.insert("user".to_string(), Schema {
+                    reference: Some("#/components/schemas/User".to_string()),
+                    ..Default::default()
+                });
+                props
+            },
+            ..Default::default()
+        };
+
+        let response_schema = Schema {
+            schema_type: Some("object".to_string()),
+            properties: {
+                let mut props = HashMap::new();
+                props.insert("data".to_string(), Schema {
+                    schema_type: Some("array".to_string()),
+                    items: Some(Box::new(Schema {
+                        reference: Some("#/components/schemas/Profile".to_string()),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                });
+                props
+            },
+            ..Default::default()
+        };
+
+        let mut components = Components::default();
+        components.schemas.insert("User".to_string(), user_schema);
+        components.schemas.insert("Profile".to_string(), profile_schema);
+        components.schemas.insert("Response".to_string(), response_schema);
+        spec.components = Some(components);
+
+        // Both User and Profile should be detected as referenced
+        assert!(OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/User"));
+        assert!(OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/Profile"));
+    }
+
+    #[test]
+    fn test_schema_reference_in_composition() {
+        use crate::specification::*;
+
+        let mut spec = OpenApiSpec::new("Test API", "1.0.0");
+
+        let base_schema = Schema {
+            schema_type: Some("object".to_string()),
+            ..Default::default()
+        };
+
+        let extended_schema = Schema {
+            all_of: vec![
+                Schema {
+                    reference: Some("#/components/schemas/Base".to_string()),
+                    ..Default::default()
+                },
+                Schema {
+                    schema_type: Some("object".to_string()),
+                    properties: {
+                        let mut props = HashMap::new();
+                        props.insert("extra".to_string(), Schema {
+                            schema_type: Some("string".to_string()),
+                            ..Default::default()
+                        });
+                        props
+                    },
+                    ..Default::default()
+                }
+            ],
+            ..Default::default()
+        };
+
+        let mut components = Components::default();
+        components.schemas.insert("Base".to_string(), base_schema);
+        components.schemas.insert("Extended".to_string(), extended_schema);
+        spec.components = Some(components);
+
+        // Base schema should be detected as referenced in allOf composition
+        assert!(OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/Base"));
     }
 }
