@@ -29,7 +29,7 @@ tower-http = { version = "0.5", features = ["cors", "fs"] }
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
-elif-openapi-derive = { path = "../elif-openapi-derive" }
+elif-openapi-derive = "0.1.0"
 
 # Type reflection and inspection
 inventory = "0.3"
