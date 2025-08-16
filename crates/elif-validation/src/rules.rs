@@ -203,12 +203,15 @@ impl RulesBuilderConfigBuilder {
         R: ValidationRule + 'static,
     {
         let field = field.into();
-        let mut field_rules = self.field_rules.clone().unwrap_or_default();
+        let mut field_rules = self.field_rules.unwrap_or_default();
         field_rules
             .entry(field)
             .or_insert_with(Vec::new)
             .push(Arc::new(rule));
-        self.field_rules(field_rules)
+        RulesBuilderConfigBuilder {
+            field_rules: Some(field_rules),
+            request_rules: self.request_rules,
+        }
     }
     
     /// Add multiple validation rules for a specific field
@@ -222,12 +225,15 @@ impl RulesBuilderConfigBuilder {
             .map(|r| Arc::new(r) as Arc<dyn ValidationRule>)
             .collect();
         
-        let mut field_rules = self.field_rules.clone().unwrap_or_default();
+        let mut field_rules = self.field_rules.unwrap_or_default();
         field_rules
             .entry(field)
             .or_insert_with(Vec::new)
             .extend(rule_arcs);
-        self.field_rules(field_rules)
+        RulesBuilderConfigBuilder {
+            field_rules: Some(field_rules),
+            request_rules: self.request_rules,
+        }
     }
     
     /// Add a request-level validation rule
@@ -235,9 +241,12 @@ impl RulesBuilderConfigBuilder {
     where
         R: ValidationRule + 'static,
     {
-        let mut request_rules = self.request_rules.clone().unwrap_or_default();
+        let mut request_rules = self.request_rules.unwrap_or_default();
         request_rules.push(Arc::new(rule));
-        self.request_rules(request_rules)
+        RulesBuilderConfigBuilder {
+            field_rules: self.field_rules,
+            request_rules: Some(request_rules),
+        }
     }
     
     pub fn build_config(self) -> RulesBuilderConfig {
