@@ -1,6 +1,6 @@
 [package]
 name = "elif-testing"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["elif.rs contributors"]
 description = "Comprehensive testing framework and utilities for elif.rs applications"
@@ -11,9 +11,9 @@ categories = ["web-programming", "development-tools::testing"]
 
 [dependencies]
 # Core framework dependencies
-elif-core = { path = "../core" }
-elif-http = { path = "../elif-http" }
-elif-orm = { path = "../orm" }
+elif-core = "0.3.0"
+elif-http = "0.5.0"
+elif-orm = "0.6.0"
 
 # HTTP and async runtime
 axum = { workspace = true }
