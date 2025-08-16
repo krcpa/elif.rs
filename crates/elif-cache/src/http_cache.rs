@@ -3,6 +3,9 @@
 //! This module provides HTTP response caching utilities that can be used
 //! with the elif-http framework. Applications can use these helpers to 
 //! implement response caching in their handlers.
+//!
+//! Note: These are helper utilities, not middleware. Applications must 
+//! explicitly call these methods in their handlers.
 
 use crate::{Cache, CacheBackend};
 use std::{

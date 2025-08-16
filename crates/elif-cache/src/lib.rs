@@ -9,7 +9,7 @@
 //! - **TTL support**: Time-based cache expiration
 //! - **Async-first**: Built for modern async Rust applications
 //! - **Type-safe**: Generic cache operations with serialization support
-//! - **HTTP integration**: Response caching middleware for web applications
+//! - **HTTP integration**: Response caching utilities for web applications
 //! 
 //! ## Quick Start
 //! 
@@ -47,7 +47,7 @@ pub mod config;
 pub mod tagging;
 
 #[cfg(feature = "http-cache")]
-pub mod middleware;
+pub mod http_cache;
 
 pub use backends::*;
 pub use config::*;
