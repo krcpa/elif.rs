@@ -1,5 +1,7 @@
 mod commands;
 mod generators;
+mod command_system;
+mod interactive;
 
 use clap::{Parser, Subcommand};
 use elif_core::ElifError;
@@ -85,6 +87,50 @@ enum Commands {
     Auth {
         #[command(subcommand)]
         auth_command: AuthCommands,
+    },
+    
+    /// Start development server with hot reload
+    Serve {
+        /// Port to bind the server to
+        #[arg(long, short, default_value = "3000")]
+        port: u16,
+        
+        /// Host to bind the server to
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        
+        /// Enable hot reload for development
+        #[arg(long)]
+        hot_reload: bool,
+        
+        /// Watch additional directories for changes
+        #[arg(long)]
+        watch: Vec<std::path::PathBuf>,
+        
+        /// Exclude patterns from watching
+        #[arg(long)]
+        exclude: Vec<String>,
+        
+        /// Environment to run in
+        #[arg(long, short, default_value = "development")]
+        env: String,
+    },
+    
+    /// Queue management commands
+    Queue {
+        #[command(subcommand)]
+        queue_command: QueueCommands,
+    },
+    
+    /// Interactive project setup wizard
+    Setup {
+        /// Skip interactive mode and use defaults
+        #[arg(long)]
+        non_interactive: bool,
+        
+        /// Show verbose output during setup
+        #[arg(long, short)]
+        verbose: bool,
     },
 }
 
@@ -200,6 +246,90 @@ enum AuthProvider {
     Jwt,
     Session,
     Both,
+}
+
+#[derive(Subcommand)]
+enum QueueCommands {
+    /// Process background jobs from queues
+    Work {
+        /// Queue names to process (comma-separated)
+        #[arg(long, short, default_value = "default")]
+        queue: String,
+        
+        /// Maximum number of jobs to process
+        #[arg(long, short)]
+        max_jobs: Option<u32>,
+        
+        /// Timeout in seconds for each job
+        #[arg(long, short, default_value = "60")]
+        timeout: u64,
+        
+        /// Sleep time between checks (in milliseconds)
+        #[arg(long, default_value = "1000")]
+        sleep: u64,
+        
+        /// Number of worker processes
+        #[arg(long, short, default_value = "1")]
+        workers: u8,
+        
+        /// Stop after this many seconds
+        #[arg(long)]
+        stop_when_empty: bool,
+        
+        /// Show verbose output
+        #[arg(long, short)]
+        verbose: bool,
+    },
+    
+    /// Show queue status
+    Status {
+        /// Queue names to show status for
+        #[arg(long, short)]
+        queue: Option<String>,
+        
+        /// Show detailed job information
+        #[arg(long, short)]
+        detailed: bool,
+        
+        /// Refresh interval in seconds (0 for no refresh)
+        #[arg(long, short, default_value = "0")]
+        refresh: u64,
+    },
+    
+    /// Execute scheduled commands and cron jobs
+    Schedule {
+        /// Run only jobs scheduled for specific time
+        #[arg(long)]
+        time: Option<String>,
+        
+        /// Run jobs for specific frequency (minutely, hourly, daily, weekly, monthly)
+        #[arg(long)]
+        frequency: Option<String>,
+        
+        /// Run specific scheduled job by name
+        #[arg(long)]
+        job: Option<String>,
+        
+        /// Dry run - show what would be executed
+        #[arg(long)]
+        dry_run: bool,
+        
+        /// Force run even if not scheduled
+        #[arg(long)]
+        force: bool,
+        
+        /// Show verbose output
+        #[arg(long, short)]
+        verbose: bool,
+        
+        /// Run as daemon (continuous scheduling)
+        #[arg(long, short)]
+        daemon: bool,
+        
+        /// Check interval in seconds when running as daemon
+        #[arg(long, default_value = "60")]
+        check_interval: u64,
+    },
 }
 
 #[derive(Subcommand)]
@@ -418,6 +548,78 @@ async fn main() -> Result<(), ElifError> {
                     make::api(&version, &resources, openapi, versioning).await?;
                 }
             }
+        }
+        Commands::Serve { port, host, hot_reload, watch, exclude, env } => {
+            let args = serve::ServeArgs {
+                port,
+                host,
+                hot_reload,
+                watch,
+                exclude,
+                env,
+            };
+            serve::run(args).await?;
+        }
+        Commands::Queue { queue_command } => {
+            match queue_command {
+                QueueCommands::Work { 
+                    queue, 
+                    max_jobs, 
+                    timeout, 
+                    sleep, 
+                    workers, 
+                    stop_when_empty, 
+                    verbose 
+                } => {
+                    let args = queue::QueueWorkArgs {
+                        queue,
+                        max_jobs,
+                        timeout,
+                        sleep,
+                        workers,
+                        stop_when_empty,
+                        verbose,
+                    };
+                    queue::work(args).await?;
+                }
+                QueueCommands::Status { queue, detailed, refresh } => {
+                    let args = queue::QueueStatusArgs {
+                        queue,
+                        detailed,
+                        refresh,
+                    };
+                    queue::status(args).await?;
+                }
+                QueueCommands::Schedule { 
+                    time, 
+                    frequency, 
+                    job, 
+                    dry_run, 
+                    force, 
+                    verbose, 
+                    daemon, 
+                    check_interval 
+                } => {
+                    let args = queue::ScheduleRunArgs {
+                        time,
+                        frequency,
+                        job,
+                        dry_run,
+                        force,
+                        verbose,
+                        daemon,
+                        check_interval,
+                    };
+                    queue::schedule_run(args).await?;
+                }
+            }
+        }
+        Commands::Setup { non_interactive, verbose } => {
+            let args = interactive_setup::InteractiveSetupArgs {
+                non_interactive,
+                verbose,
+            };
+            interactive_setup::run(args).await?;
         }
     }
     

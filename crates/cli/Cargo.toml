@@ -30,6 +30,8 @@ chrono = { workspace = true }
 rand = { workspace = true }
 hex = { workspace = true }
 handlebars = "4.4"
+async-trait = "0.1"
+thiserror = "1.0"
 
 [dev-dependencies]
 tempfile = "3.8"
