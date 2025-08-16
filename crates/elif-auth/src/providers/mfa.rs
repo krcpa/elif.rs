@@ -261,7 +261,11 @@ impl MfaProvider {
     pub fn get_remaining_backup_codes_count(&self, user_id: Uuid) -> AuthResult<usize> {
         match self.secrets.get(&user_id) {
             Some(secret) => {
-                let remaining = secret.backup_codes.len() - secret.used_backup_codes.len();
+                // Use saturating_sub to avoid potential underflow if used codes exceed total
+                let remaining = secret
+                    .backup_codes
+                    .len()
+                    .saturating_sub(secret.used_backup_codes.len());
                 Ok(remaining)
             }
             None => Ok(0),
@@ -487,7 +491,28 @@ mod tests {
     async fn test_backup_codes_count() {
         let provider = MfaProvider::new().unwrap();
         let user_id = Uuid::new_v4();
-        
+
+        let count = provider.get_remaining_backup_codes_count(user_id);
+        assert!(count.is_ok());
+        assert_eq!(count.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_backup_codes_count_underflow() {
+        let mut provider = MfaProvider::new().unwrap();
+        let user_id = Uuid::new_v4();
+
+        // Simulate corrupted state where used codes exceed total backup codes
+        provider.secrets.insert(user_id, MfaSecret {
+            user_id,
+            secret: "dummy".to_string(),
+            backup_codes: Vec::new(),
+            used_backup_codes: vec!["used".to_string()],
+            setup_completed_at: None,
+            last_verified_at: None,
+            created_at: Utc::now(),
+        });
+
         let count = provider.get_remaining_backup_codes_count(user_id);
         assert!(count.is_ok());
         assert_eq!(count.unwrap(), 0);
