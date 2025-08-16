@@ -5,6 +5,7 @@ use crate::handler::{ElifHandler, elif_handler};
 use crate::request::ElifRequest;
 use crate::response::{ElifResponse, IntoElifResponse};
 use crate::error::HttpResult;
+use service_builder::builder;
 use axum::{
     Router as AxumRouter,
     routing::{get, post, put, delete, patch},
@@ -222,38 +223,120 @@ where
     }
 }
 
-/// Builder for creating routes with additional metadata
-#[derive(Debug, Default)]
-pub struct RouteBuilder {
-    name: Option<String>,
-    param_types: HashMap<String, ParamType>,
-    middleware: Vec<String>, // Placeholder for future middleware support
+/// Configuration for RouteBuilder
+#[derive(Debug, Clone)]
+#[builder]
+pub struct RouteBuilderConfig {
+    #[builder(optional)]
+    pub name: Option<String>,
+    
+    #[builder(default)]
+    pub param_types: HashMap<String, ParamType>,
+    
+    #[builder(default)]
+    pub middleware: Vec<String>, // Placeholder for future middleware support
 }
 
-impl RouteBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Set route name for URL generation
-    pub fn name(mut self, name: &str) -> Self {
-        self.name = Some(name.to_string());
-        self
-    }
-
-    /// Add parameter type specification
-    pub fn param(mut self, name: &str, param_type: ParamType) -> Self {
-        self.param_types.insert(name.to_string(), param_type);
-        self
-    }
-
-    /// Build the route configuration
-    pub fn build(self) -> Route {
+impl RouteBuilderConfig {
+    /// Build a Route from the config
+    pub fn build_route(self) -> Route {
         Route {
             name: self.name,
             param_types: self.param_types,
             middleware: self.middleware,
         }
+    }
+}
+
+// Add convenience methods to the generated builder
+impl RouteBuilderConfigBuilder {
+    /// Add parameter type specification
+    pub fn add_param(self, name: &str, param_type: ParamType) -> Self {
+        let mut param_types_map = self.param_types.unwrap_or_default();
+        param_types_map.insert(name.to_string(), param_type);
+        RouteBuilderConfigBuilder {
+            name: self.name,
+            param_types: Some(param_types_map),
+            middleware: self.middleware,
+        }
+    }
+    
+    /// Add multiple parameter type specifications
+    pub fn add_params(self, params: HashMap<String, ParamType>) -> Self {
+        let mut param_types_map = self.param_types.unwrap_or_default();
+        param_types_map.extend(params);
+        RouteBuilderConfigBuilder {
+            name: self.name,
+            param_types: Some(param_types_map),
+            middleware: self.middleware,
+        }
+    }
+    
+    /// Add middleware
+    pub fn add_middleware(self, middleware: &str) -> Self {
+        let mut middlewares_vec = self.middleware.unwrap_or_default();
+        middlewares_vec.push(middleware.to_string());
+        RouteBuilderConfigBuilder {
+            name: self.name,
+            param_types: self.param_types,
+            middleware: Some(middlewares_vec),
+        }
+    }
+    
+    pub fn build_config(self) -> RouteBuilderConfig {
+        self.build_with_defaults().expect("Building RouteBuilderConfig should not fail as all fields have defaults")
+    }
+}
+
+/// Builder for creating routes with additional metadata
+pub struct RouteBuilder {
+    builder_config: RouteBuilderConfigBuilder,
+}
+
+impl RouteBuilder {
+    pub fn new() -> Self {
+        Self {
+            builder_config: RouteBuilderConfig::builder(),
+        }
+    }
+
+    /// Set route name for URL generation
+    pub fn name(self, name: &str) -> Self {
+        Self {
+            builder_config: self.builder_config.name(Some(name.to_string())),
+        }
+    }
+
+    /// Add parameter type specification
+    pub fn param(self, name: &str, param_type: ParamType) -> Self {
+        Self {
+            builder_config: self.builder_config.add_param(name, param_type),
+        }
+    }
+
+    /// Add multiple parameter type specifications
+    pub fn params(self, params: HashMap<String, ParamType>) -> Self {
+        Self {
+            builder_config: self.builder_config.add_params(params),
+        }
+    }
+
+    /// Add middleware
+    pub fn middleware(self, middleware: &str) -> Self {
+        Self {
+            builder_config: self.builder_config.add_middleware(middleware),
+        }
+    }
+
+    /// Build the route configuration
+    pub fn build(self) -> Route {
+        self.builder_config.build_config().build_route()
+    }
+}
+
+impl Default for RouteBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -267,9 +267,15 @@ impl CsrfMiddlewareConfigBuilder {
     }
     
     pub fn exempt_path<S: Into<String>>(self, path: S) -> Self {
-        let mut paths = self.exempt_paths.clone().unwrap_or_default();
+        let mut paths = self.exempt_paths.unwrap_or_default();
         paths.insert(path.into());
-        self.exempt_paths(paths)
+        CsrfMiddlewareConfigBuilder {
+            token_header: self.token_header,
+            cookie_name: self.cookie_name,
+            token_lifetime: self.token_lifetime,
+            secure_cookie: self.secure_cookie,
+            exempt_paths: Some(paths),
+        }
     }
     
     pub fn exempt_paths_vec<I, S>(self, paths: I) -> Self 
@@ -277,11 +283,17 @@ impl CsrfMiddlewareConfigBuilder {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        let mut exempt_paths = self.exempt_paths.clone().unwrap_or_default();
+        let mut exempt_paths = self.exempt_paths.unwrap_or_default();
         for path in paths {
             exempt_paths.insert(path.into());
         }
-        self.exempt_paths(exempt_paths)
+        CsrfMiddlewareConfigBuilder {
+            token_header: self.token_header,
+            cookie_name: self.cookie_name,
+            token_lifetime: self.token_lifetime,
+            secure_cookie: self.secure_cookie,
+            exempt_paths: Some(exempt_paths),
+        }
     }
     
     pub fn build_config(self) -> CsrfMiddlewareConfig {

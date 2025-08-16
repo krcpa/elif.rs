@@ -1,6 +1,7 @@
 //! Route groups for organizing related routes
 
 use super::{HttpMethod, RouteRegistry, RouteInfo};
+use service_builder::builder;
 use axum::{
     Router as AxumRouter,
     routing::{get, post, put, delete, patch},
@@ -186,33 +187,89 @@ where
     }
 }
 
+/// Configuration for GroupBuilder
+#[derive(Debug, Clone)]
+#[builder]
+pub struct GroupBuilderConfig {
+    pub name: String,
+    
+    #[builder(default)]
+    pub prefix: String,
+    
+    #[builder(default)]
+    pub middleware: Vec<String>,
+}
+
+impl GroupBuilderConfig {
+    /// Build a RouteGroup from the config
+    pub fn build_group<S>(self, registry: Arc<Mutex<RouteRegistry>>) -> RouteGroup<S>
+    where
+        S: Clone + Send + Sync + 'static,
+    {
+        RouteGroup::new(&self.name, &self.prefix, registry)
+    }
+}
+
+// Add convenience methods to the generated builder
+impl GroupBuilderConfigBuilder {
+    /// Add middleware to the group
+    pub fn add_middleware(self, middleware_name: &str) -> Self {
+        let mut middlewares_vec = self.middleware.unwrap_or_default();
+        middlewares_vec.push(middleware_name.to_string());
+        GroupBuilderConfigBuilder {
+            name: self.name,
+            prefix: self.prefix,
+            middleware: Some(middlewares_vec),
+        }
+    }
+    
+    /// Add multiple middlewares
+    pub fn add_middlewares(self, new_middlewares: Vec<String>) -> Self {
+        let mut middlewares_vec = self.middleware.unwrap_or_default();
+        middlewares_vec.extend(new_middlewares);
+        GroupBuilderConfigBuilder {
+            name: self.name,
+            prefix: self.prefix,
+            middleware: Some(middlewares_vec),
+        }
+    }
+    
+    pub fn build_config(self) -> GroupBuilderConfig {
+        self.build_with_defaults().unwrap()
+    }
+}
+
 /// Builder for creating route groups with configuration
-#[derive(Debug)]
 pub struct GroupBuilder {
-    name: String,
-    prefix: String,
-    middleware: Vec<String>,
+    builder_config: GroupBuilderConfigBuilder,
 }
 
 impl GroupBuilder {
     pub fn new(name: &str) -> Self {
         Self {
-            name: name.to_string(),
-            prefix: String::new(),
-            middleware: Vec::new(),
+            builder_config: GroupBuilderConfig::builder().name(name.to_string()),
         }
     }
 
     /// Set the URL prefix for the group
-    pub fn prefix(mut self, prefix: &str) -> Self {
-        self.prefix = prefix.to_string();
-        self
+    pub fn prefix(self, prefix: &str) -> Self {
+        Self {
+            builder_config: self.builder_config.prefix(prefix.to_string()),
+        }
     }
 
     /// Add middleware to the group (placeholder)
-    pub fn middleware(mut self, middleware_name: &str) -> Self {
-        self.middleware.push(middleware_name.to_string());
-        self
+    pub fn middleware(self, middleware_name: &str) -> Self {
+        Self {
+            builder_config: self.builder_config.add_middleware(middleware_name),
+        }
+    }
+
+    /// Add multiple middlewares
+    pub fn middlewares(self, middlewares: Vec<String>) -> Self {
+        Self {
+            builder_config: self.builder_config.add_middlewares(middlewares),
+        }
     }
 
     /// Build the route group
@@ -220,7 +277,7 @@ impl GroupBuilder {
     where
         S: Clone + Send + Sync + 'static,
     {
-        RouteGroup::new(&self.name, &self.prefix, registry)
+        self.builder_config.build_config().build_group(registry)
     }
 }
 

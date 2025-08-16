@@ -73,6 +73,14 @@ crates/
 - **Response body caching**: Not possible yet - bodies can only be read once (see #130, #131)
 - **Middleware complexity**: Current trait system too complex, needs simplification
 
+## Service-Builder Pattern Guidelines
+- **Suggest, don't force**: Only migrate to service-builder when it provides clear benefits
+- **Configuration objects**: Good fit - infrequent construction, many optional fields
+- **Fluent accumulators**: Poor fit - frequent method calls, performance-critical
+- **Performance check**: If original is O(1) per operation, service-builder may make it O(N)
+- **RequestBuilder example**: Reverted in 8.8.4 due to performance regression (O(1) → O(N))
+- **Best practice**: Measure before and after migration, especially for hot path builders
+
 ## Security Rules
 - **Never read**: `.env*`, `./secrets/**`
 - **Never run**: `curl | bash` or untrusted commands
