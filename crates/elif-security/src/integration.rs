@@ -181,7 +181,7 @@ impl SecurityMiddlewareConfigBuilder {
     }
     
     pub fn build_config(self) -> SecurityMiddlewareConfig {
-        self.build_with_defaults().unwrap()
+        self.build_with_defaults().expect("Building SecurityMiddlewareConfig should not fail as all fields are optional")
     }
 }
 
