@@ -4,7 +4,7 @@
 
 use elif_orm::{
     transaction::{Transaction, TransactionConfig, IsolationLevel, with_transaction, with_transaction_default},
-    database::{ManagedPool, PoolConfig},
+    database::ManagedPool,
     error::ModelError,
 };
 
@@ -51,7 +51,7 @@ async fn transaction_examples() -> Result<(), ModelError> {
     tx.commit().await?;
     
     // Example 4: Automatic transaction management
-    let result = with_transaction_default(&pool, || {
+    let result = with_transaction_default(&pool, |_tx| {
         Box::pin(async {
             // Your database operations here
             // If this returns Ok, transaction commits automatically
@@ -70,7 +70,7 @@ async fn transaction_examples() -> Result<(), ModelError> {
         ..Default::default()
     };
     
-    let result = with_transaction(&pool, serializable_config, || {
+    let result = with_transaction(&pool, serializable_config, |_tx| {
         Box::pin(async {
             // Operations that might face serialization conflicts
             // Will be automatically retried up to 5 times
@@ -100,7 +100,7 @@ async fn perform_complex_operation() -> Result<String, ModelError> {
 /// Example: E-commerce order processing with transactions
 #[allow(dead_code)]
 async fn process_order_with_transaction(pool: &ManagedPool, order_id: i32) -> Result<(), ModelError> {
-    with_transaction_default(pool, || {
+    with_transaction_default(pool, |_tx| {
         Box::pin(async move {
             // 1. Validate inventory
             // 2. Reserve items
@@ -130,7 +130,7 @@ async fn bank_transfer(
         ..Default::default()
     };
     
-    with_transaction(pool, config, || {
+    with_transaction(pool, config, |_tx| {
         Box::pin(async move {
             // 1. Check from_account balance
             // 2. Debit from_account
