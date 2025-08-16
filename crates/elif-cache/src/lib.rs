@@ -45,6 +45,8 @@ use thiserror::Error;
 pub mod backends;
 pub mod config;
 pub mod tagging;
+pub mod invalidation;
+pub mod warming;
 
 #[cfg(feature = "http-cache")]
 pub mod http_cache;
@@ -52,6 +54,8 @@ pub mod http_cache;
 pub use backends::*;
 pub use config::*;
 pub use tagging::*;
+pub use invalidation::*;
+pub use warming::*;
 
 /// Cache operation errors
 #[derive(Error, Debug)]
