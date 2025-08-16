@@ -192,9 +192,12 @@ impl EndpointDiscovery {
             .map(|v| v == "true")
             .unwrap_or(false);
 
+        // Construct full path by joining base_path and endpoint path
+        let full_path = self.join_paths(controller.base_path.as_deref(), &endpoint.path);
+
         Ok(RouteMetadata {
             method: endpoint.verb.clone(),
-            path: endpoint.path.clone(),
+            path: full_path,
             summary,
             description,
             operation_id,
@@ -205,6 +208,45 @@ impl EndpointDiscovery {
             security,
             deprecated,
         })
+    }
+
+    /// Robustly join base path and endpoint path to prevent double slashes or missing slashes
+    fn join_paths(&self, base_path: Option<&str>, endpoint_path: &str) -> String {
+        match base_path {
+            Some(base) => {
+                // Ensure base path starts with /
+                let base = if base.starts_with('/') {
+                    base.to_string()
+                } else {
+                    format!("/{}", base)
+                };
+                
+                // Ensure endpoint path starts with /
+                let endpoint = if endpoint_path.starts_with('/') {
+                    endpoint_path.to_string()
+                } else {
+                    format!("/{}", endpoint_path)
+                };
+                
+                // Remove trailing slash from base if present
+                let base = base.trim_end_matches('/');
+                
+                // Combine paths, avoiding double slashes
+                if endpoint == "/" {
+                    base.to_string()
+                } else {
+                    format!("{}{}", base, endpoint)
+                }
+            }
+            None => {
+                // Ensure endpoint path starts with /
+                if endpoint_path.starts_with('/') {
+                    endpoint_path.to_string()
+                } else {
+                    format!("/{}", endpoint_path)
+                }
+            }
+        }
     }
 
     /// Extract path parameters from a path pattern
@@ -451,5 +493,62 @@ mod tests {
         assert_eq!(route.parameters[0].name, "id");
         assert_eq!(route.parameters[0].location, "path");
         assert!(route.parameters[0].required);
+    }
+
+    #[test]
+    fn test_path_joining_robust_logic() {
+        let discovery = EndpointDiscovery::new().unwrap();
+
+        // Test normal case: base with leading slash, endpoint with leading slash
+        assert_eq!(discovery.join_paths(Some("/api/v1"), "/users"), "/api/v1/users");
+        
+        // Test case: base without leading slash, endpoint with leading slash
+        assert_eq!(discovery.join_paths(Some("api/v1"), "/users"), "/api/v1/users");
+        
+        // Test case: base with leading slash, endpoint without leading slash
+        assert_eq!(discovery.join_paths(Some("/api/v1"), "users"), "/api/v1/users");
+        
+        // Test case: base without leading slash, endpoint without leading slash
+        assert_eq!(discovery.join_paths(Some("api/v1"), "users"), "/api/v1/users");
+        
+        // Test case: base with trailing slash, endpoint with leading slash
+        assert_eq!(discovery.join_paths(Some("/api/v1/"), "/users"), "/api/v1/users");
+        
+        // Test case: base with trailing slash, endpoint without leading slash
+        assert_eq!(discovery.join_paths(Some("/api/v1/"), "users"), "/api/v1/users");
+        
+        // Test case: root endpoint path
+        assert_eq!(discovery.join_paths(Some("/api/v1"), "/"), "/api/v1");
+        
+        // Test case: no base path, endpoint with leading slash
+        assert_eq!(discovery.join_paths(None, "/users"), "/users");
+        
+        // Test case: no base path, endpoint without leading slash
+        assert_eq!(discovery.join_paths(None, "users"), "/users");
+        
+        // Test edge cases
+        assert_eq!(discovery.join_paths(Some("/"), "/users"), "/users");
+        assert_eq!(discovery.join_paths(Some("/api"), "/"), "/api");
+        
+        // Test complex paths
+        assert_eq!(discovery.join_paths(Some("/api/v1"), "/users/{id}/posts"), "/api/v1/users/{id}/posts");
+        assert_eq!(discovery.join_paths(Some("api/v1/"), "/users/{id}"), "/api/v1/users/{id}");
+    }
+
+    #[test]
+    fn test_route_metadata_conversion_with_base_path() {
+        let discovery = EndpointDiscovery::new().unwrap();
+        
+        let controller = ControllerInfo::new("Users")
+            .with_base_path("/api/v1");
+        
+        let endpoint = EndpointMetadata::new("show", "GET", "/users/{id}")
+            .with_parameter(EndpointParameter::new("id", "i32", ParameterSource::Path));
+
+        let route = discovery.convert_endpoint_to_route(&controller, &endpoint).unwrap();
+
+        // Verify path joining worked correctly
+        assert_eq!(route.path, "/api/v1/users/{id}");
+        assert_eq!(route.method, "GET");
     }
 }
