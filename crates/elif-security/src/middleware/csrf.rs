@@ -285,7 +285,7 @@ impl CsrfMiddlewareConfigBuilder {
     }
     
     pub fn build_config(self) -> CsrfMiddlewareConfig {
-        self.build_with_defaults().unwrap()
+        self.build_with_defaults().expect("Building CsrfMiddlewareConfig should not fail as all fields have defaults")
     }
     
     pub fn build_middleware(self) -> CsrfMiddleware {
