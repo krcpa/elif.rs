@@ -17,6 +17,7 @@ use elif_http::{
 use sha2::{Sha256, Digest};
 use rand::{thread_rng, Rng};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use service_builder::builder;
 
 pub use crate::config::CsrfConfig;
 use crate::SecurityError;
@@ -49,8 +50,8 @@ impl CsrfMiddleware {
     }
     
     /// Create middleware with builder pattern
-    pub fn builder() -> CsrfMiddlewareBuilder {
-        CsrfMiddlewareBuilder::new()
+    pub fn builder() -> CsrfMiddlewareConfigBuilder {
+        CsrfMiddlewareConfig::builder()
     }
     
     /// Generate a new CSRF token
@@ -226,63 +227,69 @@ impl IntoResponse for SecurityError {
     }
 }
 
-/// Builder for CSRF middleware configuration
-#[derive(Debug)]
-pub struct CsrfMiddlewareBuilder {
-    config: CsrfConfig,
+/// Configuration for CSRF middleware builder  
+#[derive(Debug, Clone)]
+#[builder]
+pub struct CsrfMiddlewareConfig {
+    #[builder(default = "String::from(\"X-CSRF-Token\")")]
+    pub token_header: String,
+    #[builder(default = "String::from(\"_csrf_token\")")]
+    pub cookie_name: String,
+    #[builder(default = "3600")]
+    pub token_lifetime: u64,
+    #[builder(default)]
+    pub secure_cookie: bool,
+    #[builder(default)]
+    pub exempt_paths: std::collections::HashSet<String>,
 }
 
-impl CsrfMiddlewareBuilder {
-    pub fn new() -> Self {
-        Self {
-            config: CsrfConfig::default(),
-        }
+impl CsrfMiddlewareConfig {
+    pub fn build_middleware(self) -> CsrfMiddleware {
+        let config = CsrfConfig {
+            token_header: self.token_header,
+            cookie_name: self.cookie_name,
+            token_lifetime: self.token_lifetime,
+            secure_cookie: self.secure_cookie,
+            exempt_paths: self.exempt_paths,
+        };
+        CsrfMiddleware::new(config)
+    }
+}
+
+// Add convenience methods to the generated builder
+impl CsrfMiddlewareConfigBuilder {
+    pub fn token_header_str<S: Into<String>>(self, header: S) -> Self {
+        self.token_header(header.into())
     }
     
-    pub fn token_header<S: Into<String>>(mut self, header: S) -> Self {
-        self.config.token_header = header.into();
-        self
+    pub fn cookie_name_str<S: Into<String>>(self, name: S) -> Self {
+        self.cookie_name(name.into())
     }
     
-    pub fn cookie_name<S: Into<String>>(mut self, name: S) -> Self {
-        self.config.cookie_name = name.into();
-        self
+    pub fn exempt_path<S: Into<String>>(self, path: S) -> Self {
+        let mut paths = self.exempt_paths.clone().unwrap_or_default();
+        paths.insert(path.into());
+        self.exempt_paths(paths)
     }
     
-    pub fn token_lifetime(mut self, seconds: u64) -> Self {
-        self.config.token_lifetime = seconds;
-        self
-    }
-    
-    pub fn secure_cookie(mut self, secure: bool) -> Self {
-        self.config.secure_cookie = secure;
-        self
-    }
-    
-    pub fn exempt_path<S: Into<String>>(mut self, path: S) -> Self {
-        self.config.exempt_paths.insert(path.into());
-        self
-    }
-    
-    pub fn exempt_paths<I, S>(mut self, paths: I) -> Self 
+    pub fn exempt_paths_vec<I, S>(self, paths: I) -> Self 
     where 
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
+        let mut exempt_paths = self.exempt_paths.clone().unwrap_or_default();
         for path in paths {
-            self.config.exempt_paths.insert(path.into());
+            exempt_paths.insert(path.into());
         }
-        self
+        self.exempt_paths(exempt_paths)
     }
     
-    pub fn build(self) -> CsrfMiddleware {
-        CsrfMiddleware::new(self.config)
+    pub fn build_config(self) -> CsrfMiddlewareConfig {
+        self.build_with_defaults().expect("Building CsrfMiddlewareConfig should not fail as all fields have defaults")
     }
-}
-
-impl Default for CsrfMiddlewareBuilder {
-    fn default() -> Self {
-        Self::new()
+    
+    pub fn build_middleware(self) -> CsrfMiddleware {
+        self.build_config().build_middleware()
     }
 }
 
@@ -379,13 +386,13 @@ mod tests {
     #[tokio::test]
     async fn test_csrf_builder_pattern() {
         let middleware = CsrfMiddleware::builder()
-            .token_header("X-Custom-CSRF-Token")
-            .cookie_name("_custom_csrf")
+            .token_header_str("X-Custom-CSRF-Token")
+            .cookie_name_str("_custom_csrf")
             .token_lifetime(7200)
             .secure_cookie(true)
             .exempt_path("/api/public")
-            .exempt_paths(vec!["/webhook", "/status"])
-            .build();
+            .exempt_paths_vec(vec!["/webhook", "/status"])
+            .build_middleware();
             
         assert_eq!(middleware.config.token_header, "X-Custom-CSRF-Token");
         assert_eq!(middleware.config.cookie_name, "_custom_csrf");
