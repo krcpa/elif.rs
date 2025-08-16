@@ -212,16 +212,25 @@ where
     /// Forget keys by tag
     pub async fn forget_by_tag(&self, tag: &str) -> CacheResult<Vec<String>> {
         let keys = self.registry.get_keys_by_tag(tag).await?;
-        let mut removed_keys = Vec::new();
         
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        // Convert to references for forget_many call
+        let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
+        
+        // Remove from backend using batch operation
+        let removed_count = self.backend.forget_many(&key_refs).await?;
+        
+        // Remove from registry and collect actually removed keys
+        let mut removed_keys = Vec::new();
         for key in keys {
-            // Remove from backend
-            if self.backend.forget(&key).await? {
-                removed_keys.push(key.clone());
-            }
-            
-            // Remove from registry
+            // Always remove from registry, but only add to result if it was in backend
             self.registry.remove_key(&key).await?;
+            if removed_count > 0 {
+                removed_keys.push(key);
+            }
         }
         
         Ok(removed_keys)
@@ -237,15 +246,24 @@ where
             all_keys.extend(keys);
         }
         
-        let mut removed_keys = Vec::new();
+        if all_keys.is_empty() {
+            return Ok(Vec::new());
+        }
         
-        // Remove each key
-        for key in all_keys {
-            if self.backend.forget(&key).await? {
-                removed_keys.push(key.clone());
-            }
-            
+        let keys_vec: Vec<String> = all_keys.into_iter().collect();
+        let key_refs: Vec<&str> = keys_vec.iter().map(|s| s.as_str()).collect();
+        
+        // Remove from backend using batch operation
+        let removed_count = self.backend.forget_many(&key_refs).await?;
+        
+        // Remove from registry and collect actually removed keys
+        let mut removed_keys = Vec::new();
+        for key in keys_vec {
+            // Always remove from registry, but only add to result if it was in backend
             self.registry.remove_key(&key).await?;
+            if removed_count > 0 {
+                removed_keys.push(key);
+            }
         }
         
         Ok(removed_keys)

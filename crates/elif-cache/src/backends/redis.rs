@@ -436,6 +436,35 @@ impl CacheBackend for RedisBackend {
         }
     }
     
+    async fn forget_many(&self, keys: &[&str]) -> CacheResult<usize> {
+        if keys.is_empty() {
+            return Ok(0);
+        }
+        
+        // Format all keys with prefix
+        let formatted_keys: Vec<String> = keys.iter().map(|k| self.format_key(k)).collect();
+        
+        // Use Redis DEL command with multiple keys for efficient batch deletion
+        let result = self
+            .with_connection(|mut conn| async move {
+                conn.del::<Vec<String>, usize>(formatted_keys).await
+            })
+            .await;
+        
+        match result {
+            Ok(removed_count) => {
+                if removed_count > 0 {
+                    debug!("Successfully removed {} keys using batch DEL", removed_count);
+                }
+                Ok(removed_count)
+            }
+            Err(e) => {
+                error!("Redis batch DEL error for {} keys: {}", keys.len(), e);
+                Err(e)
+            }
+        }
+    }
+    
     async fn stats(&self) -> CacheResult<CacheStats> {
         let stats = self.stats.lock().await.clone();
         

@@ -368,6 +368,29 @@ impl CacheBackend for MemoryBackend {
         Ok(())
     }
     
+    async fn forget_many(&self, keys: &[&str]) -> CacheResult<usize> {
+        let mut removed_count = 0;
+        let mut total_freed_memory = 0u64;
+        
+        // Remove entries and track freed memory
+        for key in keys {
+            if let Some((_, removed_entry)) = self.entries.remove(*key) {
+                self.lru.remove(key);
+                total_freed_memory += removed_entry.size() as u64;
+                removed_count += 1;
+            }
+        }
+        
+        // Update stats once for all removals
+        if removed_count > 0 {
+            let mut stats = self.stats.lock();
+            stats.total_keys = stats.total_keys.saturating_sub(removed_count as u64);
+            stats.memory_usage = stats.memory_usage.saturating_sub(total_freed_memory);
+        }
+        
+        Ok(removed_count)
+    }
+    
     async fn stats(&self) -> CacheResult<CacheStats> {
         Ok(self.stats.lock().clone())
     }
@@ -472,6 +495,53 @@ mod tests {
         assert_eq!(stats.hit_ratio(), 0.5);
     }
     
+    #[tokio::test]
+    async fn test_memory_backend_forget_many() {
+        let backend = MemoryBackend::new(CacheConfig::default());
+        
+        // Add test data
+        backend.put("key1", b"value1".to_vec(), None).await.unwrap();
+        backend.put("key2", b"value2".to_vec(), None).await.unwrap();
+        backend.put("key3", b"value3".to_vec(), None).await.unwrap();
+        backend.put("key4", b"value4".to_vec(), None).await.unwrap();
+        
+        // Verify all keys exist
+        assert!(backend.exists("key1").await.unwrap());
+        assert!(backend.exists("key2").await.unwrap());
+        assert!(backend.exists("key3").await.unwrap());
+        assert!(backend.exists("key4").await.unwrap());
+        
+        // Get initial stats
+        let initial_stats = backend.stats().await.unwrap();
+        assert_eq!(initial_stats.total_keys, 4);
+        
+        // Remove multiple keys at once
+        let keys_to_remove = ["key1", "key2", "key3"];
+        let removed_count = backend.forget_many(&keys_to_remove).await.unwrap();
+        assert_eq!(removed_count, 3);
+        
+        // Verify keys were removed
+        assert!(!backend.exists("key1").await.unwrap());
+        assert!(!backend.exists("key2").await.unwrap());
+        assert!(!backend.exists("key3").await.unwrap());
+        assert!(backend.exists("key4").await.unwrap());
+        
+        // Check stats were updated correctly
+        let final_stats = backend.stats().await.unwrap();
+        assert_eq!(final_stats.total_keys, 1);
+        assert!(final_stats.memory_usage < initial_stats.memory_usage);
+        
+        // Test removing non-existent keys
+        let nonexistent_keys = ["nonexistent1", "nonexistent2"];
+        let removed_count = backend.forget_many(&nonexistent_keys).await.unwrap();
+        assert_eq!(removed_count, 0);
+        
+        // Test empty key array
+        let empty_keys: Vec<&str> = vec![];
+        let removed_count = backend.forget_many(&empty_keys).await.unwrap();
+        assert_eq!(removed_count, 0);
+    }
+
     #[tokio::test]
     async fn test_memory_backend_flush() {
         let backend = MemoryBackend::new(CacheConfig::default());

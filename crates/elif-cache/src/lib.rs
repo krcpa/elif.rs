@@ -119,6 +119,17 @@ pub trait CacheBackend: Send + Sync {
         Ok(())
     }
     
+    /// Remove multiple values from the cache (optional optimization)
+    async fn forget_many(&self, keys: &[&str]) -> CacheResult<usize> {
+        let mut removed_count = 0;
+        for key in keys {
+            if self.forget(key).await? {
+                removed_count += 1;
+            }
+        }
+        Ok(removed_count)
+    }
+    
     /// Get cache statistics (if supported)
     async fn stats(&self) -> CacheResult<CacheStats> {
         Ok(CacheStats::default())
