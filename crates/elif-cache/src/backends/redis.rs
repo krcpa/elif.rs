@@ -397,12 +397,43 @@ impl CacheBackend for RedisBackend {
             return Ok(());
         }
         
-        // Redis doesn't have a native MSET with different TTLs, so we use a pipeline
-        for (key, value, ttl) in entries {
-            self.put(key, value.clone(), *ttl).await?;
-        }
+        // Prepare all keys and values before the pipeline to avoid borrowing issues
+        let prepared_entries: Vec<(String, Vec<u8>, Option<Duration>)> = entries
+            .iter()
+            .map(|(key, value, ttl)| {
+                let formatted_key = self.format_key(key);
+                let compressed_value = self.maybe_compress(value);
+                (formatted_key, compressed_value, *ttl)
+            })
+            .collect();
         
-        Ok(())
+        // Use Redis pipeline to batch all SET commands into a single network operation
+        let result = self
+            .with_connection(|mut conn| async move {
+                let mut pipe = redis::pipe();
+                
+                for (formatted_key, compressed_value, ttl) in prepared_entries {
+                    if let Some(duration) = ttl {
+                        pipe.set_ex(formatted_key, compressed_value, duration.as_secs());
+                    } else {
+                        pipe.set(formatted_key, compressed_value);
+                    }
+                }
+                
+                pipe.query_async::<_, ()>(&mut conn).await
+            })
+            .await;
+        
+        match result {
+            Ok(()) => {
+                debug!("Successfully cached {} keys using pipeline", entries.len());
+                Ok(())
+            }
+            Err(e) => {
+                error!("Redis pipeline PUT_MANY error for {} keys: {}", entries.len(), e);
+                Err(e)
+            }
+        }
     }
     
     async fn stats(&self) -> CacheResult<CacheStats> {
