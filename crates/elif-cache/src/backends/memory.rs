@@ -83,16 +83,16 @@ impl LruTracker {
     fn access(&self, key: &str) {
         let mut cache = self.cache.write();
         
-        // If key doesn't exist, insert it. If it does exist, this updates its position.
-        cache.put(key.to_string(), ());
-        
-        // Expand capacity if needed to prevent eviction of cache entries
-        // when we're only tracking LRU order, not limiting actual cache size
-        if cache.len() >= cache.cap().get() {
+        // If the key is not in the cache and the cache is full, resize it first to avoid eviction
+        if cache.peek(key).is_none() && cache.len() == cache.cap().get() {
             let new_capacity = NonZeroUsize::new(cache.cap().get() * 2)
                 .expect("doubled capacity should be non-zero");
             cache.resize(new_capacity);
         }
+        
+        // Now, this put will not cause an eviction of an existing item
+        // If key doesn't exist, it's inserted. If it exists, its position is updated.
+        cache.put(key.to_string(), ());
     }
     
     /// Remove a key from the tracker
@@ -563,5 +563,39 @@ mod tests {
         let stats = backend.stats().await.unwrap();
         assert_eq!(stats.total_keys, 0);
         assert_eq!(stats.memory_usage, 0);
+    }
+
+    #[tokio::test]
+    async fn test_lru_tracker_consistency() {
+        // Create a backend that starts with small LRU capacity to test edge case
+        let backend = MemoryBackend::new(CacheConfig::default());
+        
+        // Fill the LRU tracker to its initial capacity (1000 items)
+        // This tests that the LRU tracker properly resizes without evicting tracked items
+        for i in 0..1200 {
+            let key = format!("consistency_test_{}", i);
+            let value = format!("value_{}", i).into_bytes();
+            backend.put(&key, value, None).await.unwrap();
+        }
+        
+        // All items should still be accessible (no premature LRU eviction)
+        for i in 0..1200 {
+            let key = format!("consistency_test_{}", i);
+            assert!(backend.exists(&key).await.unwrap(), 
+                   "Key {} should exist but was not found", key);
+        }
+        
+        // Access some items to change LRU order
+        for i in (0..100).rev() {
+            let key = format!("consistency_test_{}", i);
+            backend.get(&key).await.unwrap();
+        }
+        
+        // Verify LRU tracking is still consistent - all items should still be accessible
+        for i in 0..1200 {
+            let key = format!("consistency_test_{}", i);
+            assert!(backend.exists(&key).await.unwrap(), 
+                   "Key {} should still exist after LRU access", key);
+        }
     }
 }

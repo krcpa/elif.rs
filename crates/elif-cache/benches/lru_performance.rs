@@ -21,16 +21,16 @@ async fn benchmark_lru_operations(backend: &MemoryBackend, num_operations: usize
 fn bench_lru_performance(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     
-    // Create backend with limited capacity to trigger LRU eviction
-    let config = CacheConfig::builder()
-        .max_entries_limit(1000) // Limited capacity
-        .build_config();
-    let backend = MemoryBackend::new(config);
-    
     let mut group = c.benchmark_group("lru_tracker");
     
     // Benchmark different scales
     for &size in &[100, 500, 1000, 2000] {
+        // Create a fresh backend for each size to ensure benchmark isolation
+        let config = CacheConfig::builder()
+            .max_entries_limit(1000) // Limited capacity
+            .build_config();
+        let backend = MemoryBackend::new(config);
+        
         group.bench_with_input(
             format!("operations_{}", size),
             &size,
