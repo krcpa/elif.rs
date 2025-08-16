@@ -16,6 +16,7 @@ readme = "README.md"
 # Framework dependencies
 elif-core = { path = "../core", version = "0.3.0" }
 elif-orm = { path = "../orm", version = "0.6.0" }
+service-builder = "0.3.0"
 
 # Database
 sqlx = { workspace = true }
