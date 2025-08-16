@@ -217,18 +217,16 @@ where
             return Ok(Vec::new());
         }
         
-        // Convert to references for forget_many call
-        let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
-        
-        // Remove from backend using batch operation
-        let removed_count = self.backend.forget_many(&key_refs).await?;
-        
-        // Remove from registry and collect actually removed keys
+        // Remove keys individually to track which ones were actually removed
         let mut removed_keys = Vec::new();
         for key in keys {
-            // Always remove from registry, but only add to result if it was in backend
+            // Check if this specific key was removed
+            let was_removed = self.backend.forget(&key).await?;
+            
+            // Always remove from registry
             self.registry.remove_key(&key).await?;
-            if removed_count > 0 {
+            
+            if was_removed {
                 removed_keys.push(key);
             }
         }
@@ -250,18 +248,16 @@ where
             return Ok(Vec::new());
         }
         
-        let keys_vec: Vec<String> = all_keys.into_iter().collect();
-        let key_refs: Vec<&str> = keys_vec.iter().map(|s| s.as_str()).collect();
-        
-        // Remove from backend using batch operation
-        let removed_count = self.backend.forget_many(&key_refs).await?;
-        
-        // Remove from registry and collect actually removed keys
+        // Remove keys individually to track which ones were actually removed
         let mut removed_keys = Vec::new();
-        for key in keys_vec {
-            // Always remove from registry, but only add to result if it was in backend
+        for key in all_keys {
+            // Check if this specific key was removed
+            let was_removed = self.backend.forget(&key).await?;
+            
+            // Always remove from registry
             self.registry.remove_key(&key).await?;
-            if removed_count > 0 {
+            
+            if was_removed {
                 removed_keys.push(key);
             }
         }
@@ -593,5 +589,29 @@ mod tests {
         
         assert_eq!(result3, "result_2");
         assert_eq!(call_count, 2);
+    }
+    
+    #[tokio::test]
+    async fn test_forget_by_tag_selective_removal() {
+        let backend = MemoryBackend::new(CacheConfig::default());
+        let registry = MemoryTagRegistry::new();
+        let cache = TaggedCache::new(backend, registry);
+        
+        // Put some data with same tags
+        cache.put_with_tags("key1", b"data1".to_vec(), Some(Duration::from_secs(60)), &["tag1"]).await.unwrap();
+        cache.put_with_tags("key2", b"data2".to_vec(), Some(Duration::from_secs(60)), &["tag1"]).await.unwrap();
+        cache.put_with_tags("key3", b"data3".to_vec(), Some(Duration::from_secs(60)), &["tag1"]).await.unwrap();
+        
+        // Manually remove one key from backend only (not registry)
+        cache.backend.forget("key2").await.unwrap();
+        
+        // Now forget by tag - should only report keys that were actually in backend
+        let removed = cache.forget_by_tag("tag1").await.unwrap();
+        
+        // Should report key1 and key3 as removed (key2 was already gone)
+        assert_eq!(removed.len(), 2);
+        assert!(removed.contains(&"key1".to_string()));
+        assert!(removed.contains(&"key3".to_string()));
+        assert!(!removed.contains(&"key2".to_string()));
     }
 }
