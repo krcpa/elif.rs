@@ -5,7 +5,7 @@
 //! These tests help ensure the framework can defend against common web vulnerabilities.
 
 use elif_security::{
-    SecurityMiddlewareBuilder, basic_security_pipeline, strict_security_pipeline,
+    SecurityMiddlewareConfig, basic_security_pipeline, strict_security_pipeline,
     CorsConfig, RateLimitConfig, config::RateLimitIdentifier,
 };
 use axum::{
@@ -70,8 +70,9 @@ async fn test_cors_origin_header_spoofing_attack() {
 
 #[tokio::test]
 async fn test_csrf_token_manipulation_attacks() {
-    let pipeline = SecurityMiddlewareBuilder::new()
+    let pipeline = SecurityMiddlewareConfig::builder()
         .with_csrf_default()
+        .build_config()
         .build();
     
     // Attack scenarios: Various CSRF token manipulation attempts
@@ -134,8 +135,9 @@ async fn test_rate_limiting_bypass_attempts() {
         exempt_paths: HashSet::new(),
     };
     
-    let pipeline = SecurityMiddlewareBuilder::new()
-        .with_rate_limit(config)
+    let pipeline = SecurityMiddlewareConfig::builder()
+        .rate_limit_config(Some(config))
+        .build_config()
         .build();
     
     // Simulate rapid requests from same IP (attack scenario)
@@ -176,8 +178,9 @@ async fn test_distributed_rate_limiting_attack() {
         exempt_paths: HashSet::new(),
     };
     
-    let pipeline = SecurityMiddlewareBuilder::new()
-        .with_rate_limit(config)
+    let pipeline = SecurityMiddlewareConfig::builder()
+        .rate_limit_config(Some(config))
+        .build_config()
         .build();
     
     // Attack scenario: Attacker tries to bypass rate limiting by changing IP headers
@@ -407,8 +410,9 @@ async fn test_security_configuration_edge_cases() {
         ..CorsConfig::default()
     };
     
-    let empty_pipeline = SecurityMiddlewareBuilder::new()
-        .with_cors(empty_cors)
+    let empty_pipeline = SecurityMiddlewareConfig::builder()
+        .cors_config(Some(empty_cors))
+        .build_config()
         .build();
     
     let cors_request = Request::builder()
@@ -429,8 +433,9 @@ async fn test_security_configuration_edge_cases() {
         exempt_paths: HashSet::new(),
     };
     
-    let zero_rate_pipeline = SecurityMiddlewareBuilder::new()
-        .with_rate_limit(zero_rate_config)
+    let zero_rate_pipeline = SecurityMiddlewareConfig::builder()
+        .rate_limit_config(Some(zero_rate_config))
+        .build_config()
         .build();
     
     let rate_request = Request::builder()

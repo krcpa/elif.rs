@@ -10,12 +10,13 @@ pub mod integration;
 // Re-export main types
 pub use config::*;
 pub use middleware::cors::{CorsMiddleware, CorsConfig};
-pub use middleware::csrf::{CsrfMiddleware, CsrfConfig};
+pub use middleware::csrf::{CsrfMiddleware, CsrfConfig, CsrfMiddlewareConfig, CsrfMiddlewareConfigBuilder};
 pub use middleware::rate_limit::{RateLimitMiddleware, RateLimitConfig, RateLimitIdentifier};
 pub use middleware::sanitization::{SanitizationMiddleware, SanitizationConfig};
 pub use middleware::security_headers::{SecurityHeadersMiddleware, SecurityHeadersConfig};
 pub use integration::{
-    SecurityMiddlewareBuilder, 
+    SecurityMiddlewareConfig, 
+    SecurityMiddlewareConfigBuilder,
     basic_security_pipeline, 
     strict_security_pipeline, 
     development_security_pipeline

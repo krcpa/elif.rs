@@ -1067,6 +1067,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "service-builder 0.3.0",
  "sha2",
  "thiserror 1.0.69",
  "time",

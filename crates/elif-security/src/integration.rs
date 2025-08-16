@@ -5,6 +5,7 @@
 
 use elif_http::middleware::MiddlewarePipeline;
 use http::StatusCode;
+use service_builder::builder;
 use crate::{
     middleware::{
         cors::CorsMiddleware, 
@@ -16,160 +17,23 @@ use crate::{
     config::{CorsConfig, CsrfConfig, RateLimitConfig, SanitizationConfig, SecurityHeadersConfig},
 };
 
-/// Security middleware suite builder that helps configure and integrate
-/// all security middleware with the framework's MiddlewarePipeline
-#[derive(Debug, Default)]
-pub struct SecurityMiddlewareBuilder {
-    cors_config: Option<CorsConfig>,
-    csrf_config: Option<CsrfConfig>,
-    rate_limit_config: Option<RateLimitConfig>,
-    sanitization_config: Option<SanitizationConfig>,
-    security_headers_config: Option<SecurityHeadersConfig>,
+/// Security middleware configuration
+#[derive(Debug, Clone)]
+#[builder]
+pub struct SecurityMiddlewareConfig {
+    #[builder(optional)]
+    pub cors_config: Option<CorsConfig>,
+    #[builder(optional)]
+    pub csrf_config: Option<CsrfConfig>,
+    #[builder(optional)]
+    pub rate_limit_config: Option<RateLimitConfig>,
+    #[builder(optional)]
+    pub sanitization_config: Option<SanitizationConfig>,
+    #[builder(optional)]
+    pub security_headers_config: Option<SecurityHeadersConfig>,
 }
 
-impl SecurityMiddlewareBuilder {
-    /// Create a new security middleware builder
-    pub fn new() -> Self {
-        Self::default()
-    }
-    
-    /// Add CORS middleware with configuration
-    pub fn with_cors(mut self, config: CorsConfig) -> Self {
-        self.cors_config = Some(config);
-        self
-    }
-    
-    /// Add CORS middleware with permissive settings (not recommended for production)
-    pub fn with_cors_permissive(mut self) -> Self {
-        self.cors_config = Some(CorsConfig::default());
-        self
-    }
-    
-    /// Add CSRF middleware with configuration
-    pub fn with_csrf(mut self, config: CsrfConfig) -> Self {
-        self.csrf_config = Some(config);
-        self
-    }
-    
-    /// Add CSRF middleware with default configuration
-    pub fn with_csrf_default(mut self) -> Self {
-        self.csrf_config = Some(CsrfConfig::default());
-        self
-    }
-    
-    /// Add rate limiting middleware with configuration
-    pub fn with_rate_limit(mut self, config: RateLimitConfig) -> Self {
-        self.rate_limit_config = Some(config);
-        self
-    }
-    
-    /// Add rate limiting middleware with default configuration (100 req/min by IP)
-    pub fn with_rate_limit_default(mut self) -> Self {
-        self.rate_limit_config = Some(RateLimitConfig::default());
-        self
-    }
-    
-    /// Add rate limiting middleware with strict configuration (10 req/min by IP)
-    pub fn with_rate_limit_strict(mut self) -> Self {
-        self.rate_limit_config = Some(RateLimitConfig {
-            max_requests: 10,
-            window_seconds: 60,
-            identifier: crate::config::RateLimitIdentifier::IpAddress,
-            exempt_paths: std::collections::HashSet::new(),
-        });
-        self
-    }
-    
-    /// Add request sanitization middleware with configuration
-    pub fn with_sanitization(mut self, config: SanitizationConfig) -> Self {
-        self.sanitization_config = Some(config);
-        self
-    }
-    
-    /// Add request sanitization middleware with strict configuration
-    pub fn with_sanitization_strict(mut self) -> Self {
-        self.sanitization_config = Some(SanitizationConfig {
-            enable_xss_protection: true,
-            enable_sql_injection_protection: true,
-            enable_path_traversal_protection: true,
-            enable_script_tag_removal: true,
-            enable_html_encoding: true,
-            max_request_size: Some(1024 * 1024), // 1MB
-            ..SanitizationConfig::default()
-        });
-        self
-    }
-    
-    /// Add request sanitization middleware with permissive configuration
-    pub fn with_sanitization_permissive(mut self) -> Self {
-        self.sanitization_config = Some(SanitizationConfig {
-            enable_xss_protection: true,
-            enable_sql_injection_protection: false,
-            enable_path_traversal_protection: true,
-            enable_script_tag_removal: true,
-            enable_html_encoding: false,
-            max_request_size: Some(10 * 1024 * 1024), // 10MB
-            ..SanitizationConfig::default()
-        });
-        self
-    }
-    
-    /// Add security headers middleware with configuration
-    pub fn with_security_headers(mut self, config: SecurityHeadersConfig) -> Self {
-        self.security_headers_config = Some(config);
-        self
-    }
-    
-    /// Add security headers middleware with strict production configuration
-    pub fn with_security_headers_strict(mut self) -> Self {
-        use std::collections::HashMap;
-        
-        self.security_headers_config = Some(SecurityHeadersConfig {
-            content_security_policy: Some(
-                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'"
-                .to_string()
-            ),
-            strict_transport_security: Some("max-age=63072000; includeSubDomains; preload".to_string()),
-            x_frame_options: Some("DENY".to_string()),
-            x_content_type_options: Some("nosniff".to_string()),
-            x_xss_protection: Some("1; mode=block".to_string()),
-            referrer_policy: Some("strict-origin-when-cross-origin".to_string()),
-            permissions_policy: Some("camera=(), microphone=(), geolocation=(), interest-cohort=()".to_string()),
-            cross_origin_embedder_policy: Some("require-corp".to_string()),
-            cross_origin_opener_policy: Some("same-origin".to_string()),
-            cross_origin_resource_policy: Some("same-origin".to_string()),
-            custom_headers: HashMap::new(),
-            remove_server_header: true,
-            remove_x_powered_by: true,
-        });
-        self
-    }
-    
-    /// Add security headers middleware with development-friendly configuration
-    pub fn with_security_headers_development(mut self) -> Self {
-        use std::collections::HashMap;
-        
-        self.security_headers_config = Some(SecurityHeadersConfig {
-            content_security_policy: Some(
-                "default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: http: https:"
-                .to_string()
-            ),
-            strict_transport_security: Some("max-age=31536000".to_string()),
-            x_frame_options: Some("SAMEORIGIN".to_string()),
-            x_content_type_options: Some("nosniff".to_string()),
-            x_xss_protection: Some("1; mode=block".to_string()),
-            referrer_policy: Some("origin-when-cross-origin".to_string()),
-            permissions_policy: Some("camera=(), microphone=(), geolocation=()".to_string()),
-            cross_origin_embedder_policy: None,
-            cross_origin_opener_policy: Some("same-origin-allow-popups".to_string()),
-            cross_origin_resource_policy: Some("cross-origin".to_string()),
-            custom_headers: HashMap::new(),
-            remove_server_header: false,
-            remove_x_powered_by: true,
-        });
-        self
-    }
-    
+impl SecurityMiddlewareConfig {
     /// Build the security middleware pipeline
     /// 
     /// The middleware are added in the following order for optimal security:
@@ -215,16 +79,123 @@ impl SecurityMiddlewareBuilder {
     }
 }
 
+// Add convenience methods to the generated builder
+impl SecurityMiddlewareConfigBuilder {
+    /// Add CORS middleware with permissive settings (not recommended for production)
+    pub fn with_cors_permissive(self) -> Self {
+        self.cors_config(Some(CorsConfig::default()))
+    }
+    
+    /// Add CSRF middleware with default configuration
+    pub fn with_csrf_default(self) -> Self {
+        self.csrf_config(Some(CsrfConfig::default()))
+    }
+    
+    /// Add rate limiting middleware with default configuration (100 req/min by IP)
+    pub fn with_rate_limit_default(self) -> Self {
+        self.rate_limit_config(Some(RateLimitConfig::default()))
+    }
+    
+    /// Add rate limiting middleware with strict configuration (10 req/min by IP)
+    pub fn with_rate_limit_strict(self) -> Self {
+        self.rate_limit_config(Some(RateLimitConfig {
+            max_requests: 10,
+            window_seconds: 60,
+            identifier: crate::config::RateLimitIdentifier::IpAddress,
+            exempt_paths: std::collections::HashSet::new(),
+        }))
+    }
+    
+    /// Add request sanitization middleware with strict configuration
+    pub fn with_sanitization_strict(self) -> Self {
+        self.sanitization_config(Some(SanitizationConfig {
+            enable_xss_protection: true,
+            enable_sql_injection_protection: true,
+            enable_path_traversal_protection: true,
+            enable_script_tag_removal: true,
+            enable_html_encoding: true,
+            max_request_size: Some(1024 * 1024), // 1MB
+            ..SanitizationConfig::default()
+        }))
+    }
+    
+    /// Add request sanitization middleware with permissive configuration
+    pub fn with_sanitization_permissive(self) -> Self {
+        self.sanitization_config(Some(SanitizationConfig {
+            enable_xss_protection: true,
+            enable_sql_injection_protection: false,
+            enable_path_traversal_protection: true,
+            enable_script_tag_removal: true,
+            enable_html_encoding: false,
+            max_request_size: Some(10 * 1024 * 1024), // 10MB
+            ..SanitizationConfig::default()
+        }))
+    }
+    
+    /// Add security headers middleware with strict production configuration
+    pub fn with_security_headers_strict(self) -> Self {
+        use std::collections::HashMap;
+        
+        self.security_headers_config(Some(SecurityHeadersConfig {
+            content_security_policy: Some(
+                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'"
+                .to_string()
+            ),
+            strict_transport_security: Some("max-age=63072000; includeSubDomains; preload".to_string()),
+            x_frame_options: Some("DENY".to_string()),
+            x_content_type_options: Some("nosniff".to_string()),
+            x_xss_protection: Some("1; mode=block".to_string()),
+            referrer_policy: Some("strict-origin-when-cross-origin".to_string()),
+            permissions_policy: Some("camera=(), microphone=(), geolocation=(), interest-cohort=()".to_string()),
+            cross_origin_embedder_policy: Some("require-corp".to_string()),
+            cross_origin_opener_policy: Some("same-origin".to_string()),
+            cross_origin_resource_policy: Some("same-origin".to_string()),
+            custom_headers: HashMap::new(),
+            remove_server_header: true,
+            remove_x_powered_by: true,
+        }))
+    }
+    
+    /// Add security headers middleware with development-friendly configuration
+    pub fn with_security_headers_development(self) -> Self {
+        use std::collections::HashMap;
+        
+        self.security_headers_config(Some(SecurityHeadersConfig {
+            content_security_policy: Some(
+                "default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: http: https:"
+                .to_string()
+            ),
+            strict_transport_security: Some("max-age=31536000".to_string()),
+            x_frame_options: Some("SAMEORIGIN".to_string()),
+            x_content_type_options: Some("nosniff".to_string()),
+            x_xss_protection: Some("1; mode=block".to_string()),
+            referrer_policy: Some("origin-when-cross-origin".to_string()),
+            permissions_policy: Some("camera=(), microphone=(), geolocation=()".to_string()),
+            cross_origin_embedder_policy: None,
+            cross_origin_opener_policy: Some("same-origin-allow-popups".to_string()),
+            cross_origin_resource_policy: Some("cross-origin".to_string()),
+            custom_headers: HashMap::new(),
+            remove_server_header: false,
+            remove_x_powered_by: true,
+        }))
+    }
+    
+    pub fn build_config(self) -> SecurityMiddlewareConfig {
+        self.build_with_defaults().unwrap()
+    }
+}
+
 /// Quick setup functions for common security configurations
 
 /// Create a basic security pipeline with permissive CORS, moderate rate limiting, basic sanitization, and default CSRF
 pub fn basic_security_pipeline() -> MiddlewarePipeline {
-    SecurityMiddlewareBuilder::new()
+    SecurityMiddlewareConfig::builder()
         .with_cors_permissive()
         .with_security_headers_development()
         .with_rate_limit_default()
         .with_sanitization_permissive()
         .with_csrf_default()
+        .build_config()
         .build()
 }
 
@@ -252,12 +223,13 @@ pub fn strict_security_pipeline(allowed_origins: Vec<String>) -> MiddlewarePipel
         exempt_paths: std::collections::HashSet::new(),
     };
     
-    SecurityMiddlewareBuilder::new()
-        .with_cors(cors_config)
+    SecurityMiddlewareConfig::builder()
+        .cors_config(Some(cors_config))
         .with_security_headers_strict()
-        .with_rate_limit(rate_limit_config)
+        .rate_limit_config(Some(rate_limit_config))
         .with_sanitization_strict()
-        .with_csrf(csrf_config)
+        .csrf_config(Some(csrf_config))
+        .build_config()
         .build()
 }
 
@@ -282,12 +254,13 @@ pub fn development_security_pipeline() -> MiddlewarePipeline {
         exempt_paths: std::collections::HashSet::new(),
     };
     
-    SecurityMiddlewareBuilder::new()
-        .with_cors(cors_config)
+    SecurityMiddlewareConfig::builder()
+        .cors_config(Some(cors_config))
         .with_security_headers_development()
-        .with_rate_limit(rate_limit_config)
+        .rate_limit_config(Some(rate_limit_config))
         .with_sanitization_permissive()
-        .with_csrf(csrf_config)
+        .csrf_config(Some(csrf_config))
+        .build_config()
         .build()
 }
 
@@ -310,9 +283,10 @@ mod tests {
         let cors_config = CorsConfig::default();
         let csrf_config = CsrfConfig::default();
         
-        let pipeline = SecurityMiddlewareBuilder::new()
-            .with_cors(cors_config)
-            .with_csrf(csrf_config)
+        let pipeline = SecurityMiddlewareConfig::builder()
+            .cors_config(Some(cors_config))
+            .csrf_config(Some(csrf_config))
+            .build_config()
             .build();
         
         assert_eq!(pipeline.len(), 2);
@@ -322,8 +296,9 @@ mod tests {
     
     #[tokio::test]
     async fn test_cors_only_pipeline() {
-        let pipeline = SecurityMiddlewareBuilder::new()
+        let pipeline = SecurityMiddlewareConfig::builder()
             .with_cors_permissive()
+            .build_config()
             .build();
         
         assert_eq!(pipeline.len(), 1);
@@ -332,8 +307,9 @@ mod tests {
     
     #[tokio::test]
     async fn test_csrf_only_pipeline() {
-        let pipeline = SecurityMiddlewareBuilder::new()
+        let pipeline = SecurityMiddlewareConfig::builder()
             .with_csrf_default()
+            .build_config()
             .build();
         
         assert_eq!(pipeline.len(), 1);
@@ -413,10 +389,11 @@ mod tests {
     #[tokio::test]
     async fn test_security_pipeline_order_enforcement() {
         // Test that middleware are applied in the correct order: CORS -> Rate Limit -> CSRF
-        let pipeline = SecurityMiddlewareBuilder::new()
+        let pipeline = SecurityMiddlewareConfig::builder()
             .with_cors_permissive()
             .with_rate_limit_default()
             .with_csrf_default()
+            .build_config()
             .build();
         
         assert_eq!(pipeline.len(), 3);
@@ -467,9 +444,10 @@ mod tests {
             exempt_paths: std::collections::HashSet::new(),
         };
         
-        let pipeline = SecurityMiddlewareBuilder::new()
-            .with_rate_limit(config)
+        let pipeline = SecurityMiddlewareConfig::builder()
+            .rate_limit_config(Some(config))
             .with_csrf_default()
+            .build_config()
             .build();
         
         // First POST request should be rate limited but not processed by CSRF
@@ -511,49 +489,56 @@ mod tests {
         // Test all possible combinations of security middleware
         
         // 1. CORS only
-        let cors_only = SecurityMiddlewareBuilder::new()
+        let cors_only = SecurityMiddlewareConfig::builder()
             .with_cors_permissive()
+            .build_config()
             .build();
         assert_eq!(cors_only.len(), 1);
         
         // 2. CSRF only  
-        let csrf_only = SecurityMiddlewareBuilder::new()
+        let csrf_only = SecurityMiddlewareConfig::builder()
             .with_csrf_default()
+            .build_config()
             .build();
         assert_eq!(csrf_only.len(), 1);
         
         // 3. Rate Limit only
-        let rate_limit_only = SecurityMiddlewareBuilder::new()
+        let rate_limit_only = SecurityMiddlewareConfig::builder()
             .with_rate_limit_default()
+            .build_config()
             .build();
         assert_eq!(rate_limit_only.len(), 1);
         
         // 4. CORS + CSRF
-        let cors_csrf = SecurityMiddlewareBuilder::new()
+        let cors_csrf = SecurityMiddlewareConfig::builder()
             .with_cors_permissive()
             .with_csrf_default()
+            .build_config()
             .build();
         assert_eq!(cors_csrf.len(), 2);
         
         // 5. CORS + Rate Limit
-        let cors_rate = SecurityMiddlewareBuilder::new()
+        let cors_rate = SecurityMiddlewareConfig::builder()
             .with_cors_permissive()
             .with_rate_limit_default()
+            .build_config()
             .build();
         assert_eq!(cors_rate.len(), 2);
         
         // 6. CSRF + Rate Limit
-        let csrf_rate = SecurityMiddlewareBuilder::new()
+        let csrf_rate = SecurityMiddlewareConfig::builder()
             .with_csrf_default()
             .with_rate_limit_default()
+            .build_config()
             .build();
         assert_eq!(csrf_rate.len(), 2);
         
         // 7. All three (already tested above)
-        let all_three = SecurityMiddlewareBuilder::new()
+        let all_three = SecurityMiddlewareConfig::builder()
             .with_cors_permissive()
             .with_csrf_default()
             .with_rate_limit_default()
+            .build_config()
             .build();
         assert_eq!(all_three.len(), 3);
     }
