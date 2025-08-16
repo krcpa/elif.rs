@@ -126,12 +126,210 @@ impl OpenApiUtils {
         Ok(warnings)
     }
 
-    /// Check if a schema is referenced anywhere in the spec
+    /// Check if a schema is referenced anywhere in the spec using proper recursive traversal
     fn is_schema_referenced(spec: &OpenApiSpec, reference: &str) -> bool {
-        // This is a simplified check - in reality, you'd need to recursively
-        // check all schemas, operations, etc.
-        let spec_json = serde_json::to_string(spec).unwrap_or_default();
-        spec_json.contains(reference)
+        use crate::specification::*;
+
+        // Check in paths and operations
+        for path_item in spec.paths.values() {
+            if Self::is_schema_in_path_item(path_item, reference) {
+                return true;
+            }
+        }
+
+        // Check in components
+        if let Some(components) = &spec.components {
+            // Check in schema definitions themselves (for nested references)
+            for schema in components.schemas.values() {
+                if Self::is_schema_in_schema(schema, reference) {
+                    return true;
+                }
+            }
+
+            // Check in responses
+            for response in components.responses.values() {
+                if Self::is_schema_in_response(response, reference) {
+                    return true;
+                }
+            }
+
+            // Check in request bodies
+            for request_body in components.request_bodies.values() {
+                if Self::is_schema_in_request_body(request_body, reference) {
+                    return true;
+                }
+            }
+
+            // Check in parameters
+            for parameter in components.parameters.values() {
+                if Self::is_schema_in_parameter(parameter, reference) {
+                    return true;
+                }
+            }
+
+            // Check in headers
+            for header in components.headers.values() {
+                if Self::is_schema_in_header(header, reference) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Check if schema is referenced in a path item
+    fn is_schema_in_path_item(path_item: &crate::specification::PathItem, reference: &str) -> bool {
+        let operations = vec![
+            &path_item.get, &path_item.post, &path_item.put, &path_item.delete,
+            &path_item.patch, &path_item.options, &path_item.head, &path_item.trace,
+        ];
+
+        for operation_opt in operations {
+            if let Some(operation) = operation_opt {
+                if Self::is_schema_in_operation(operation, reference) {
+                    return true;
+                }
+            }
+        }
+
+        // Check path-level parameters
+        for parameter in &path_item.parameters {
+            if Self::is_schema_in_parameter(parameter, reference) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Check if schema is referenced in an operation
+    fn is_schema_in_operation(operation: &crate::specification::Operation, reference: &str) -> bool {
+        // Check parameters
+        for parameter in &operation.parameters {
+            if Self::is_schema_in_parameter(parameter, reference) {
+                return true;
+            }
+        }
+
+        // Check request body
+        if let Some(request_body) = &operation.request_body {
+            if Self::is_schema_in_request_body(request_body, reference) {
+                return true;
+            }
+        }
+
+        // Check responses
+        for response in operation.responses.values() {
+            if Self::is_schema_in_response(response, reference) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Check if schema is referenced in a parameter
+    fn is_schema_in_parameter(parameter: &crate::specification::Parameter, reference: &str) -> bool {
+        if let Some(schema) = &parameter.schema {
+            Self::is_schema_in_schema(schema, reference)
+        } else {
+            false
+        }
+    }
+
+    /// Check if schema is referenced in a request body
+    fn is_schema_in_request_body(request_body: &crate::specification::RequestBody, reference: &str) -> bool {
+        for media_type in request_body.content.values() {
+            if let Some(schema) = &media_type.schema {
+                if Self::is_schema_in_schema(schema, reference) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if schema is referenced in a response
+    fn is_schema_in_response(response: &crate::specification::Response, reference: &str) -> bool {
+        // Check response content
+        for media_type in response.content.values() {
+            if let Some(schema) = &media_type.schema {
+                if Self::is_schema_in_schema(schema, reference) {
+                    return true;
+                }
+            }
+        }
+
+        // Check response headers
+        for header in response.headers.values() {
+            if Self::is_schema_in_header(header, reference) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Check if schema is referenced in a header
+    fn is_schema_in_header(header: &crate::specification::Header, reference: &str) -> bool {
+        if let Some(schema) = &header.schema {
+            Self::is_schema_in_schema(schema, reference)
+        } else {
+            false
+        }
+    }
+
+    /// Check if schema is referenced within another schema (recursive)
+    fn is_schema_in_schema(schema: &crate::specification::Schema, reference: &str) -> bool {
+        // Check direct reference
+        if let Some(ref_str) = &schema.reference {
+            if ref_str == reference {
+                return true;
+            }
+        }
+
+        // Check properties (for object schemas)
+        for property_schema in schema.properties.values() {
+            if Self::is_schema_in_schema(property_schema, reference) {
+                return true;
+            }
+        }
+
+        // Check additional properties
+        if let Some(additional_properties) = &schema.additional_properties {
+            if Self::is_schema_in_schema(additional_properties, reference) {
+                return true;
+            }
+        }
+
+        // Check items (for array schemas)
+        if let Some(items_schema) = &schema.items {
+            if Self::is_schema_in_schema(items_schema, reference) {
+                return true;
+            }
+        }
+
+        // Check composition schemas (allOf, anyOf, oneOf)
+        for composed_schema in &schema.all_of {
+            if Self::is_schema_in_schema(composed_schema, reference) {
+                return true;
+            }
+        }
+
+        for composed_schema in &schema.any_of {
+            if Self::is_schema_in_schema(composed_schema, reference) {
+                return true;
+            }
+        }
+
+        for composed_schema in &schema.one_of {
+            if Self::is_schema_in_schema(composed_schema, reference) {
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Save OpenAPI specification to file
