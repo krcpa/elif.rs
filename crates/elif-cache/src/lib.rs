@@ -51,6 +51,9 @@ pub mod warming;
 #[cfg(feature = "http-cache")]
 pub mod http_cache;
 
+#[cfg(feature = "http-cache")]
+pub mod middleware;
+
 pub use backends::*;
 pub use config::*;
 pub use tagging::*;
