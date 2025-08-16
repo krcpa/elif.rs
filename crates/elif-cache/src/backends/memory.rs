@@ -3,9 +3,10 @@
 use crate::{CacheBackend, CacheConfig, CacheResult, CacheStats};
 use async_trait::async_trait;
 use dashmap::DashMap;
+use lru::LruCache;
 use parking_lot::{RwLock, Mutex};
 use std::{
-    collections::VecDeque,
+    num::NonZeroUsize,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -62,57 +63,56 @@ impl CacheEntry {
     }
 }
 
-/// LRU eviction policy implementation
-#[derive(Debug)]
+/// High-performance LRU tracker with O(1) operations using the lru crate
+/// Much safer and more reliable than manual implementation
 struct LruTracker {
-    access_order: RwLock<VecDeque<String>>,
-    key_positions: DashMap<String, usize>,
+    cache: RwLock<LruCache<String, ()>>,
 }
 
 impl LruTracker {
     fn new() -> Self {
+        // Start with a reasonable default capacity, will resize as needed
+        let capacity = NonZeroUsize::new(1000).expect("1000 is non-zero");
         Self {
-            access_order: RwLock::new(VecDeque::new()),
-            key_positions: DashMap::new(),
+            cache: RwLock::new(LruCache::new(capacity)),
         }
     }
     
+    /// Access a key, moving it to the front (most recently used)
+    /// O(1) time complexity
     fn access(&self, key: &str) {
-        let mut access_order = self.access_order.write();
+        let mut cache = self.cache.write();
         
-        // Remove from current position if exists
-        if let Some(pos) = self.key_positions.get(key).map(|p| *p) {
-            access_order.remove(pos);
-            // Update positions of keys after the removed one
-            for (i, k) in access_order.iter().enumerate().skip(pos) {
-                self.key_positions.insert(k.clone(), i);
-            }
+        // If the key is not in the cache and the cache is full, resize it first to avoid eviction
+        if cache.peek(key).is_none() && cache.len() == cache.cap().get() {
+            let new_capacity = NonZeroUsize::new(cache.cap().get() * 2)
+                .expect("doubled capacity should be non-zero");
+            cache.resize(new_capacity);
         }
         
-        // Add to front (most recently used)
-        access_order.push_front(key.to_string());
-        self.key_positions.insert(key.to_string(), 0);
-        
-        // Update positions of other keys
-        for (i, k) in access_order.iter().enumerate().skip(1) {
-            self.key_positions.insert(k.clone(), i);
-        }
+        // Now, this put will not cause an eviction of an existing item
+        // If key doesn't exist, it's inserted. If it exists, its position is updated.
+        cache.put(key.to_string(), ());
     }
     
+    /// Remove a key from the tracker
+    /// O(1) time complexity  
     fn remove(&self, key: &str) {
-        let mut access_order = self.access_order.write();
-        
-        if let Some(pos) = self.key_positions.remove(key).map(|(_, p)| p) {
-            access_order.remove(pos);
-            // Update positions of keys after the removed one
-            for (i, k) in access_order.iter().enumerate().skip(pos) {
-                self.key_positions.insert(k.clone(), i);
-            }
-        }
+        let mut cache = self.cache.write();
+        cache.pop(key);
     }
     
+    /// Get the least recently used key
+    /// O(1) time complexity
     fn least_recently_used(&self) -> Option<String> {
-        self.access_order.read().back().cloned()
+        let cache = self.cache.read();
+        cache.iter().next_back().map(|(key, _)| key.clone())
+    }
+    
+    /// Clear all entries from the tracker
+    fn clear(&self) {
+        let mut cache = self.cache.write();
+        cache.clear();
     }
 }
 
@@ -339,8 +339,7 @@ impl CacheBackend for MemoryBackend {
         self.entries.clear();
         
         // Reset LRU tracker
-        self.lru.access_order.write().clear();
-        self.lru.key_positions.clear();
+        self.lru.clear();
         
         // Reset stats
         let mut stats = self.stats.lock();
@@ -564,5 +563,39 @@ mod tests {
         let stats = backend.stats().await.unwrap();
         assert_eq!(stats.total_keys, 0);
         assert_eq!(stats.memory_usage, 0);
+    }
+
+    #[tokio::test]
+    async fn test_lru_tracker_consistency() {
+        // Create a backend that starts with small LRU capacity to test edge case
+        let backend = MemoryBackend::new(CacheConfig::default());
+        
+        // Fill the LRU tracker to its initial capacity (1000 items)
+        // This tests that the LRU tracker properly resizes without evicting tracked items
+        for i in 0..1200 {
+            let key = format!("consistency_test_{}", i);
+            let value = format!("value_{}", i).into_bytes();
+            backend.put(&key, value, None).await.unwrap();
+        }
+        
+        // All items should still be accessible (no premature LRU eviction)
+        for i in 0..1200 {
+            let key = format!("consistency_test_{}", i);
+            assert!(backend.exists(&key).await.unwrap(), 
+                   "Key {} should exist but was not found", key);
+        }
+        
+        // Access some items to change LRU order
+        for i in (0..100).rev() {
+            let key = format!("consistency_test_{}", i);
+            backend.get(&key).await.unwrap();
+        }
+        
+        // Verify LRU tracking is still consistent - all items should still be accessible
+        for i in 0..1200 {
+            let key = format!("consistency_test_{}", i);
+            assert!(backend.exists(&key).await.unwrap(), 
+                   "Key {} should still exist after LRU access", key);
+        }
     }
 }
