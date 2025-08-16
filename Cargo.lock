@@ -794,6 +794,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
+ "service-builder 0.3.0",
  "sqlx",
  "thiserror 1.0.69",
  "tokio",

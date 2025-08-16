@@ -7,6 +7,12 @@ use crate::{
     traits::{Authenticatable, SessionStorage, UserContext},
     AuthError, AuthResult,
 };
+use service_builder::builder;
+
+// Default values for session middleware configuration
+const DEFAULT_COOKIE_NAME: &str = "session_id";
+const DEFAULT_COOKIE_PATH: &str = "/";
+const DEFAULT_SKIP_PATHS: &[&str] = &["/health", "/metrics"];
 
 /// Session middleware configuration
 #[derive(Debug, Clone)]
@@ -60,14 +66,14 @@ impl std::fmt::Display for CookieSameSite {
 impl Default for SessionMiddlewareConfig {
     fn default() -> Self {
         Self {
-            cookie_name: "session_id".to_string(),
+            cookie_name: DEFAULT_COOKIE_NAME.to_string(),
             cookie_domain: None,
-            cookie_path: "/".to_string(),
+            cookie_path: DEFAULT_COOKIE_PATH.to_string(),
             cookie_http_only: true,
             cookie_secure: false, // Set to true in production
             cookie_same_site: CookieSameSite::Lax,
             require_csrf: true,
-            skip_paths: vec!["/health".to_string(), "/metrics".to_string()],
+            skip_paths: DEFAULT_SKIP_PATHS.iter().map(|s| s.to_string()).collect(),
             optional: false,
         }
     }
@@ -277,6 +283,107 @@ where
     }
 }
 
+/// Configuration for Session middleware builder
+#[derive(Debug, Clone)]
+#[builder]
+pub struct SessionMiddlewareBuilderConfig {
+    #[builder(default = "DEFAULT_COOKIE_NAME.to_string()")]
+    pub cookie_name: String,
+    
+    #[builder(optional)]
+    pub cookie_domain: Option<String>,
+    
+    #[builder(default = "DEFAULT_COOKIE_PATH.to_string()")]
+    pub cookie_path: String,
+    
+    #[builder(default = "true")]
+    pub cookie_http_only: bool,
+    
+    #[builder(default)]
+    pub cookie_secure: bool,
+    
+    #[builder(default = "CookieSameSite::Lax")]
+    pub cookie_same_site: CookieSameSite,
+    
+    #[builder(default = "true")]
+    pub require_csrf: bool,
+    
+    #[builder(default = "DEFAULT_SKIP_PATHS.iter().map(|s| s.to_string()).collect()")]
+    pub skip_paths: Vec<String>,
+    
+    #[builder(default)]
+    pub optional: bool,
+}
+
+impl SessionMiddlewareBuilderConfig {
+    /// Build a SessionMiddlewareConfig from the builder config
+    pub fn build_config(self) -> SessionMiddlewareConfig {
+        SessionMiddlewareConfig {
+            cookie_name: self.cookie_name,
+            cookie_domain: self.cookie_domain,
+            cookie_path: self.cookie_path,
+            cookie_http_only: self.cookie_http_only,
+            cookie_secure: self.cookie_secure,
+            cookie_same_site: self.cookie_same_site,
+            require_csrf: self.require_csrf,
+            skip_paths: self.skip_paths,
+            optional: self.optional,
+        }
+    }
+}
+
+// Add convenience methods to the generated builder
+impl SessionMiddlewareBuilderConfigBuilder {
+    /// Set cookie name
+    pub fn cookie_name_str(self, name: impl Into<String>) -> Self {
+        self.cookie_name(name.into())
+    }
+    
+    /// Set cookie domain
+    pub fn cookie_domain_str(self, domain: impl Into<String>) -> Self {
+        self.cookie_domain(Some(domain.into()))
+    }
+    
+    /// Set cookie path
+    pub fn cookie_path_str(self, path: impl Into<String>) -> Self {
+        self.cookie_path(path.into())
+    }
+    
+    /// Make authentication optional
+    pub fn make_optional(self) -> Self {
+        self.optional(true)
+    }
+    
+    /// Skip authentication for specific paths
+    pub fn skip_paths_vec(self, paths: Vec<String>) -> Self {
+        self.skip_paths(paths)
+    }
+    
+    /// Add a path to skip
+    pub fn skip_path<S: Into<String>>(self, path: S) -> Self {
+        let mut paths = self.skip_paths.clone().unwrap_or_else(|| DEFAULT_SKIP_PATHS.iter().map(|s| s.to_string()).collect());
+        paths.push(path.into());
+        self.skip_paths(paths)
+    }
+    
+    /// Use production configuration
+    pub fn production_config(self) -> Self {
+        self.cookie_secure(true)
+            .cookie_same_site(CookieSameSite::Strict)
+            .require_csrf(true)
+    }
+    
+    /// Use development configuration
+    pub fn development_config(self) -> Self {
+        self.cookie_secure(false)
+            .require_csrf(false)
+    }
+    
+    pub fn build_config(self) -> SessionMiddlewareBuilderConfig {
+        self.build_with_defaults().unwrap()
+    }
+}
+
 /// Builder for session middleware
 pub struct SessionMiddlewareBuilder<S, U>
 where
@@ -284,7 +391,7 @@ where
     U: Authenticatable,
 {
     provider: Option<SessionProvider<S, U>>,
-    config: SessionMiddlewareConfig,
+    builder_config: SessionMiddlewareBuilderConfigBuilder,
 }
 
 impl<S, U> SessionMiddlewareBuilder<S, U>
@@ -296,7 +403,7 @@ where
     pub fn new() -> Self {
         Self {
             provider: None,
-            config: SessionMiddlewareConfig::default(),
+            builder_config: SessionMiddlewareBuilderConfig::builder(),
         }
     }
     
@@ -308,37 +415,37 @@ where
     
     /// Set cookie name
     pub fn cookie_name(mut self, name: impl Into<String>) -> Self {
-        self.config.cookie_name = name.into();
+        self.builder_config = self.builder_config.cookie_name_str(name);
         self
     }
     
     /// Make authentication optional
     pub fn optional(mut self) -> Self {
-        self.config.optional = true;
+        self.builder_config = self.builder_config.make_optional();
         self
     }
     
     /// Skip authentication for specific paths
     pub fn skip_paths(mut self, paths: Vec<String>) -> Self {
-        self.config.skip_paths = paths;
+        self.builder_config = self.builder_config.skip_paths_vec(paths);
         self
     }
     
     /// Add a path to skip
     pub fn skip_path(mut self, path: impl Into<String>) -> Self {
-        self.config.skip_paths.push(path.into());
+        self.builder_config = self.builder_config.skip_path(path);
         self
     }
     
     /// Use production configuration
     pub fn production(mut self) -> Self {
-        self.config = SessionMiddlewareConfig::production();
+        self.builder_config = self.builder_config.production_config();
         self
     }
     
     /// Use development configuration
     pub fn development(mut self) -> Self {
-        self.config = SessionMiddlewareConfig::development();
+        self.builder_config = self.builder_config.development_config();
         self
     }
     
@@ -350,7 +457,8 @@ where
         let provider = self.provider
             .ok_or_else(|| AuthError::generic_error("Session provider is required"))?;
         
-        Ok(SessionMiddleware::new(provider, self.config))
+        let config = self.builder_config.build_config().build_config();
+        Ok(SessionMiddleware::new(provider, config))
     }
 }
 
