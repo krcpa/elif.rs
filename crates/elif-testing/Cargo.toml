@@ -11,9 +11,9 @@ categories = ["web-programming", "development-tools::testing"]
 
 [dependencies]
 # Core framework dependencies
-elif-core = { path = "../core" }
-elif-http = { path = "../elif-http" }
-elif-orm = { path = "../orm" }
+elif-core = { path = "../core", version = "0.3.0" }
+elif-http = { path = "../elif-http", version = "0.5.1" }
+elif-orm = { path = "../orm", version = "0.6.0" }
 
 # HTTP and async runtime
 axum = { workspace = true }

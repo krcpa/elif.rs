@@ -10,9 +10,9 @@ categories = ["web-programming", "development-tools"]
 
 [dependencies]
 # Core elif dependencies
-elif-core = "0.3.0"
-elif-http = "0.5.0"
-elif-orm = "0.6.0"
+elif-core = { path = "../core", version = "0.3.0" }
+elif-http = { path = "../elif-http", version = "0.5.1" }
+elif-orm = { path = "../orm", version = "0.6.0" }
 
 # Serialization and JSON processing
 serde = { version = "1.0", features = ["derive"] }
