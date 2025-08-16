@@ -612,7 +612,7 @@ dependencies = [
 
 [[package]]
 name = "elif-auth"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "argon2",
@@ -639,7 +639,7 @@ dependencies = [
 
 [[package]]
 name = "elif-codegen"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "elif-core",
@@ -652,7 +652,7 @@ dependencies = [
 
 [[package]]
 name = "elif-core"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -670,7 +670,7 @@ dependencies = [
 
 [[package]]
 name = "elif-http"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "axum",
  "chrono",
@@ -694,7 +694,7 @@ dependencies = [
 
 [[package]]
 name = "elif-introspect"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "elif-core",
@@ -704,7 +704,7 @@ dependencies = [
 
 [[package]]
 name = "elif-orm"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -719,12 +719,13 @@ dependencies = [
  "tokio",
  "tokio-postgres",
  "tracing",
+ "url",
  "uuid",
 ]
 
 [[package]]
 name = "elif-security"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -764,7 +765,7 @@ dependencies = [
 
 [[package]]
 name = "elifrs"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "chrono",

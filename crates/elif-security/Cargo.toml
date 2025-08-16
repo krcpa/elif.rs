@@ -1,6 +1,6 @@
 [package]
 name = "elif-security"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 description = "Security middleware and utilities for the elif.rs web framework"
 license = "MIT"
@@ -13,8 +13,8 @@ categories = ["web-programming", "authentication"]
 
 [dependencies]
 # Core framework dependencies
-elif-core = { version = "0.2.0", path = "../core" }
-elif-http = { version = "0.5.0", path = "../elif-http" }
+elif-core = { version = "0.3.0", path = "../core" }
+elif-http = { version = "0.5.1", path = "../elif-http" }
 
 # HTTP and async
 axum = "0.7"

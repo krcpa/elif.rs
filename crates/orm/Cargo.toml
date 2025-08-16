@@ -1,6 +1,6 @@
 [package]
 name = "elif-orm"
-version = "0.5.2"
+version = "0.6.0"
 edition = "2021"
 description = "Production-ready ORM with migrations, database services, connection pooling, and query builder"
 license = "MIT"
@@ -12,7 +12,7 @@ keywords = ["orm", "database", "web", "framework", "sql"]
 categories = ["web-programming", "database"]
 
 [dependencies]
-elif-core = { version = "0.2.1", path = "../core" }
+elif-core = { version = "0.3.0", path = "../core" }
 sqlx = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -1,6 +1,6 @@
 [package]
 name = "elif-introspect"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Project introspection and analysis tools for the elif.rs web framework"
 license = "MIT"
@@ -12,7 +12,7 @@ keywords = ["introspection", "analysis", "web", "framework", "ai"]
 categories = ["web-programming", "development-tools"]
 
 [dependencies]
-elif-core = { version = "0.2.0", path = "../core" }
+elif-core = { version = "0.3.0", path = "../core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }

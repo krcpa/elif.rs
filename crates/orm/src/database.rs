@@ -1,20 +1,23 @@
 //! Database Integration - Service providers for database connectivity
 //! 
-//! Provides service providers for PostgreSQL connection pooling and ORM integration
-//! with the DI container system.
+//! Provides service providers for database connection pooling and ORM integration
+//! with the DI container system using database abstractions.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicU64, Ordering};
-use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 use elif_core::{ServiceProvider, Container, ContainerBuilder};
 use crate::error::ModelError;
+use crate::backends::{
+    DatabasePool as DatabasePoolTrait, DatabaseBackend, DatabaseBackendRegistry,
+    DatabasePoolConfig, DatabasePoolStats, DatabaseBackendType
+};
 
 /// Database connection pool error types
 #[derive(Debug, thiserror::Error)]
 pub enum PoolError {
     #[error("Connection acquisition failed: {0}")]
-    AcquisitionFailed(#[from] sqlx::Error),
+    AcquisitionFailed(String),
     
     #[error("Pool is closed")]
     PoolClosed,
@@ -36,8 +39,8 @@ pub enum PoolError {
 impl From<PoolError> for ModelError {
     fn from(err: PoolError) -> Self {
         match err {
-            PoolError::AcquisitionFailed(sqlx_err) => {
-                ModelError::Connection(format!("Database connection failed: {}", sqlx_err))
+            PoolError::AcquisitionFailed(err_msg) => {
+                ModelError::Connection(format!("Database connection failed: {}", err_msg))
             },
             PoolError::PoolClosed => {
                 ModelError::Connection("Database pool is closed".to_string())
@@ -58,36 +61,16 @@ impl From<PoolError> for ModelError {
     }
 }
 
-/// Connection pool configuration
-#[derive(Debug, Clone)]
-pub struct PoolConfig {
-    pub max_connections: u32,
-    pub min_connections: u32,
-    pub acquire_timeout: u64,
-    pub idle_timeout: Option<u64>,
-    pub max_lifetime: Option<u64>,
-    pub test_before_acquire: bool,
-}
+/// Legacy alias for DatabasePoolConfig for backward compatibility
+pub type PoolConfig = DatabasePoolConfig;
 
-impl Default for PoolConfig {
-    fn default() -> Self {
-        Self {
-            max_connections: 10,
-            min_connections: 1,
-            acquire_timeout: 30,
-            idle_timeout: Some(600), // 10 minutes
-            max_lifetime: Some(1800), // 30 minutes
-            test_before_acquire: true,
-        }
-    }
-}
+/// Legacy alias for DatabasePoolStats for backward compatibility
+pub type PoolStats = DatabasePoolStats;
 
-/// Connection pool statistics
+/// Extended pool statistics with additional metrics
 #[derive(Debug, Clone)]
-pub struct PoolStats {
-    pub total_connections: u32,
-    pub idle_connections: u32,
-    pub active_connections: u32,
+pub struct ExtendedPoolStats {
+    pub pool_stats: DatabasePoolStats,
     pub acquire_count: u64,
     pub acquire_errors: u64,
     pub created_at: Instant,
@@ -109,15 +92,15 @@ pub struct PoolHealthReport {
 
 /// Managed connection pool wrapper with statistics and health monitoring
 pub struct ManagedPool {
-    pool: Arc<Pool<Postgres>>,
-    config: PoolConfig,
+    pool: Arc<dyn DatabasePoolTrait>,
+    config: DatabasePoolConfig,
     acquire_count: AtomicU64,
     acquire_errors: AtomicU64,
     created_at: Instant,
 }
 
 impl ManagedPool {
-    pub fn new(pool: Arc<Pool<Postgres>>, config: PoolConfig) -> Self {
+    pub fn new(pool: Arc<dyn DatabasePoolTrait>, config: DatabasePoolConfig) -> Self {
         Self {
             pool,
             config,
@@ -128,157 +111,103 @@ impl ManagedPool {
     }
 
     /// Get the underlying pool
-    pub fn pool(&self) -> &Pool<Postgres> {
-        &self.pool
+    pub fn pool(&self) -> &dyn DatabasePoolTrait {
+        &*self.pool
     }
 
     /// Acquire a connection from the pool with statistics tracking and enhanced error handling
-    pub async fn acquire(&self) -> Result<sqlx::pool::PoolConnection<Postgres>, PoolError> {
-        if self.pool.is_closed() {
-            return Err(PoolError::PoolClosed);
-        }
-
+    pub async fn acquire(&self) -> Result<Box<dyn crate::backends::DatabaseConnection>, PoolError> {
         self.acquire_count.fetch_add(1, Ordering::Relaxed);
         
         match self.pool.acquire().await {
             Ok(conn) => {
+                let stats = self.pool.stats();
                 tracing::debug!("Database connection acquired successfully (total: {}, idle: {})", 
-                    self.pool.size(), self.pool.num_idle());
+                    stats.total_connections, stats.idle_connections);
                 Ok(conn)
             },
             Err(e) => {
                 self.acquire_errors.fetch_add(1, Ordering::Relaxed);
-                let pool_error = self.classify_error(e);
+                let pool_error = PoolError::AcquisitionFailed(e.to_string());
                 tracing::error!("Failed to acquire database connection: {}", pool_error);
                 Err(pool_error)
             }
         }
     }
 
-    /// Try to acquire a connection from the pool immediately (non-blocking)
-    pub fn try_acquire(&self) -> Result<Option<sqlx::pool::PoolConnection<Postgres>>, PoolError> {
-        if self.pool.is_closed() {
-            return Err(PoolError::PoolClosed);
-        }
-
-        self.acquire_count.fetch_add(1, Ordering::Relaxed);
-        
-        match self.pool.try_acquire() {
-            Some(conn) => {
-                tracing::debug!("Database connection acquired immediately");
-                Ok(Some(conn))
-            },
-            None => {
-                // Check if pool is exhausted
-                if self.pool.size() >= self.config.max_connections {
-                    let active = self.pool.size().saturating_sub(self.pool.num_idle() as u32);
-                    tracing::warn!("Database pool exhausted: {}/{} connections in use", 
-                        active, self.config.max_connections);
-                    Err(PoolError::PoolExhausted { max_connections: self.config.max_connections })
-                } else {
-                    tracing::debug!("No database connections available immediately (size: {}, idle: {})", 
-                        self.pool.size(), self.pool.num_idle());
-                    Ok(None)
-                }
-            },
-        }
+    /// Execute a query directly with the pool
+    pub async fn execute(&self, sql: &str, params: &[crate::backends::DatabaseValue]) -> Result<u64, PoolError> {
+        self.pool.execute(sql, params).await
+            .map_err(|e| PoolError::AcquisitionFailed(e.to_string()))
     }
 
     /// Begin a database transaction with statistics tracking
-    pub async fn begin(&self) -> Result<sqlx::Transaction<'_, Postgres>, PoolError> {
-        if self.pool.is_closed() {
-            return Err(PoolError::PoolClosed);
-        }
-
+    pub async fn begin_transaction(&self) -> Result<Box<dyn crate::backends::DatabaseTransaction>, PoolError> {
         self.acquire_count.fetch_add(1, Ordering::Relaxed);
         
-        match self.pool.begin().await {
+        match self.pool.begin_transaction().await {
             Ok(tx) => {
                 tracing::debug!("Database transaction started successfully");
                 Ok(tx)
             },
             Err(e) => {
                 self.acquire_errors.fetch_add(1, Ordering::Relaxed);
-                let pool_error = self.classify_error(e);
+                let pool_error = PoolError::AcquisitionFailed(e.to_string());
                 tracing::error!("Failed to begin database transaction: {}", pool_error);
                 Err(pool_error)
             }
         }
     }
 
-    /// Classify sqlx errors into pool-specific errors
-    fn classify_error(&self, error: sqlx::Error) -> PoolError {
-        match &error {
-            sqlx::Error::PoolTimedOut => {
-                PoolError::ConnectionTimeout { timeout: self.config.acquire_timeout }
-            },
-            sqlx::Error::PoolClosed => {
-                PoolError::PoolClosed
-            },
-            _ => {
-                PoolError::AcquisitionFailed(error)
-            }
-        }
-    }
-
-    /// Get current pool statistics
-    pub fn stats(&self) -> PoolStats {
-        let total = self.pool.size() as u32;
-        let idle = self.pool.num_idle() as u32;
-        let active = if total >= idle { total - idle } else { 0 };
-        
-        PoolStats {
-            total_connections: total,
-            idle_connections: idle,
-            active_connections: active,
+    /// Get pool statistics with extended metrics
+    pub fn extended_stats(&self) -> ExtendedPoolStats {
+        ExtendedPoolStats {
+            pool_stats: self.pool.stats(),
             acquire_count: self.acquire_count.load(Ordering::Relaxed),
             acquire_errors: self.acquire_errors.load(Ordering::Relaxed),
             created_at: self.created_at,
         }
     }
 
+    /// Get current pool statistics (legacy method for backward compatibility)
+    pub fn stats(&self) -> DatabasePoolStats {
+        self.pool.stats()
+    }
+
     /// Check pool health with comprehensive error reporting
     pub async fn health_check(&self) -> Result<Duration, PoolError> {
-        if self.pool.is_closed() {
-            return Err(PoolError::PoolClosed);
+        match self.pool.health_check().await {
+            Ok(duration) => {
+                tracing::debug!("Database health check passed in {:?}", duration);
+                Ok(duration)
+            },
+            Err(e) => {
+                let pool_error = PoolError::HealthCheckFailed { 
+                    reason: e.to_string() 
+                };
+                tracing::error!("Database health check failed: {}", pool_error);
+                Err(pool_error)
+            }
         }
-
-        let start = Instant::now();
-        
-        // Try to acquire a connection for the health check
-        let mut conn = self.pool.acquire().await
-            .map_err(|e| PoolError::HealthCheckFailed { 
-                reason: format!("Could not acquire connection: {}", e) 
-            })?;
-        
-        // Execute a simple query to verify the connection works
-        sqlx::query("SELECT 1 as health_check").execute(&mut *conn).await
-            .map_err(|e| PoolError::HealthCheckFailed { 
-                reason: format!("Health check query failed: {}", e) 
-            })?;
-        
-        let duration = start.elapsed();
-        tracing::debug!("Database health check passed in {:?}", duration);
-        Ok(duration)
     }
 
     /// Check pool health and log detailed statistics
     pub async fn detailed_health_check(&self) -> Result<PoolHealthReport, PoolError> {
         let start = Instant::now();
-        let _initial_stats = self.stats();
+        let initial_stats = self.extended_stats();
         
         // Perform the actual health check
         let check_duration = self.health_check().await?;
         
         // Get updated statistics 
-        let final_stats = self.stats();
+        let final_stats = self.extended_stats();
         
         let report = PoolHealthReport {
             check_duration,
             total_check_time: start.elapsed(),
-            pool_size: final_stats.total_connections,
-            idle_connections: final_stats.idle_connections,
-            active_connections: final_stats.active_connections,
+            pool_size: final_stats.pool_stats.total_connections,
+            idle_connections: final_stats.pool_stats.idle_connections,
+            active_connections: final_stats.pool_stats.active_connections,
             total_acquires: final_stats.acquire_count,
             total_errors: final_stats.acquire_errors,
             error_rate: if final_stats.acquire_count > 0 {
@@ -294,33 +223,47 @@ impl ManagedPool {
     }
 
     /// Get connection pool configuration
-    pub fn config(&self) -> &PoolConfig {
+    pub fn config(&self) -> &DatabasePoolConfig {
         &self.config
     }
 
     /// Close the connection pool
-    pub async fn close(&self) {
-        self.pool.close().await;
+    pub async fn close(&self) -> Result<(), PoolError> {
+        self.pool.close().await
+            .map_err(|e| PoolError::ConfigurationError { message: e.to_string() })
     }
 }
 
-/// Database service provider for PostgreSQL connection pool
+/// Database service provider for connection pool
 pub struct DatabaseServiceProvider {
     database_url: String,
-    config: PoolConfig,
+    config: DatabasePoolConfig,
     service_name: String,
+    backend_registry: Arc<DatabaseBackendRegistry>,
 }
 
 impl DatabaseServiceProvider {
     pub fn new(database_url: String) -> Self {
+        let mut registry = DatabaseBackendRegistry::new();
+        registry.register(
+            DatabaseBackendType::PostgreSQL,
+            Arc::new(crate::backends::PostgresBackend::new())
+        );
+        
         Self {
             database_url,
-            config: PoolConfig::default(),
+            config: DatabasePoolConfig::default(),
             service_name: "database_pool".to_string(),
+            backend_registry: Arc::new(registry),
         }
     }
+    
+    pub fn with_registry(mut self, registry: Arc<DatabaseBackendRegistry>) -> Self {
+        self.backend_registry = registry;
+        self
+    }
 
-    pub fn with_config(mut self, config: PoolConfig) -> Self {
+    pub fn with_config(mut self, config: DatabasePoolConfig) -> Self {
         self.config = config;
         self
     }
@@ -336,17 +279,17 @@ impl DatabaseServiceProvider {
     }
 
     pub fn with_acquire_timeout(mut self, timeout_seconds: u64) -> Self {
-        self.config.acquire_timeout = timeout_seconds;
+        self.config.acquire_timeout_seconds = timeout_seconds;
         self
     }
 
     pub fn with_idle_timeout(mut self, timeout_seconds: Option<u64>) -> Self {
-        self.config.idle_timeout = timeout_seconds;
+        self.config.idle_timeout_seconds = timeout_seconds;
         self
     }
 
     pub fn with_max_lifetime(mut self, lifetime_seconds: Option<u64>) -> Self {
-        self.config.max_lifetime = lifetime_seconds;
+        self.config.max_lifetime_seconds = lifetime_seconds;
         self
     }
 
@@ -361,8 +304,10 @@ impl DatabaseServiceProvider {
     }
 
     /// Create a database pool using this provider's configuration
-    pub async fn create_pool(&self) -> Result<Arc<Pool<Postgres>>, ModelError> {
-        create_database_pool_with_config(&self.database_url, &self.config).await
+    pub async fn create_pool(&self) -> Result<Arc<dyn DatabasePoolTrait>, ModelError> {
+        self.backend_registry.create_pool(&self.database_url, self.config.clone())
+            .await
+            .map_err(|e| ModelError::Connection(e.to_string()))
     }
 
     /// Create a managed database pool with statistics and health monitoring
@@ -382,7 +327,7 @@ impl DatabaseServiceProvider {
     }
 
     /// Get the pool configuration
-    pub fn config(&self) -> &PoolConfig {
+    pub fn config(&self) -> &DatabasePoolConfig {
         &self.config
     }
 }
@@ -403,43 +348,33 @@ impl ServiceProvider for DatabaseServiceProvider {
     fn boot(&self, _container: &Container) -> Result<(), elif_core::ProviderError> {
         tracing::info!("✅ Database service provider booted successfully");
         tracing::debug!("Database pool configuration: max_connections={}, min_connections={}, acquire_timeout={}s, idle_timeout={:?}s, max_lifetime={:?}s, test_before_acquire={}", 
-            self.config.max_connections, self.config.min_connections, self.config.acquire_timeout,
-            self.config.idle_timeout, self.config.max_lifetime, self.config.test_before_acquire);
+            self.config.max_connections, self.config.min_connections, self.config.acquire_timeout_seconds,
+            self.config.idle_timeout_seconds, self.config.max_lifetime_seconds, self.config.test_before_acquire);
         Ok(())
     }
 }
 
 /// Helper function to create a database pool directly with default configuration
-pub async fn create_database_pool(database_url: &str) -> Result<Arc<Pool<Postgres>>, ModelError> {
-    create_database_pool_with_config(database_url, &PoolConfig::default()).await
+pub async fn create_database_pool(database_url: &str) -> Result<Arc<dyn DatabasePoolTrait>, ModelError> {
+    create_database_pool_with_config(database_url, &DatabasePoolConfig::default()).await
 }
 
 /// Helper function to create a database pool with custom configuration
 pub async fn create_database_pool_with_config(
     database_url: &str,
-    config: &PoolConfig
-) -> Result<Arc<Pool<Postgres>>, ModelError> {
+    config: &DatabasePoolConfig
+) -> Result<Arc<dyn DatabasePoolTrait>, ModelError> {
     tracing::debug!("Creating database pool with config: max={}, min={}, timeout={}s, idle_timeout={:?}s, max_lifetime={:?}s, test_before_acquire={}", 
-        config.max_connections, config.min_connections, config.acquire_timeout,
-        config.idle_timeout, config.max_lifetime, config.test_before_acquire);
+        config.max_connections, config.min_connections, config.acquire_timeout_seconds,
+        config.idle_timeout_seconds, config.max_lifetime_seconds, config.test_before_acquire);
     
-    let mut options = PgPoolOptions::new()
-        .max_connections(config.max_connections)
-        .min_connections(config.min_connections)
-        .acquire_timeout(Duration::from_secs(config.acquire_timeout))
-        .test_before_acquire(config.test_before_acquire);
-
-    // Set idle timeout if specified
-    if let Some(idle_timeout) = config.idle_timeout {
-        options = options.idle_timeout(Duration::from_secs(idle_timeout));
-    }
-
-    // Set max lifetime if specified
-    if let Some(max_lifetime) = config.max_lifetime {
-        options = options.max_lifetime(Duration::from_secs(max_lifetime));
-    }
+    let mut registry = DatabaseBackendRegistry::new();
+    registry.register(
+        DatabaseBackendType::PostgreSQL,
+        Arc::new(crate::backends::PostgresBackend::new())
+    );
     
-    let pool = options.connect(database_url)
+    let pool = registry.create_pool(database_url, config.clone())
         .await
         .map_err(|e| {
             tracing::error!("Failed to create database pool: {}", e);
@@ -447,7 +382,7 @@ pub async fn create_database_pool_with_config(
         })?;
     
     tracing::info!("✅ Database pool created successfully with {} max connections", config.max_connections);
-    Ok(Arc::new(pool))
+    Ok(pool)
 }
 
 /// Database pool registry for DI container integration
@@ -487,7 +422,7 @@ impl PoolRegistry {
     }
 
     /// Get pool statistics for all registered pools
-    pub fn get_all_stats(&self) -> std::collections::HashMap<String, PoolStats> {
+    pub fn get_all_stats(&self) -> std::collections::HashMap<String, DatabasePoolStats> {
         self.pools
             .iter()
             .map(|(name, pool)| (name.clone(), pool.stats()))
@@ -514,7 +449,7 @@ impl Default for PoolRegistry {
 }
 
 /// Helper function to get database pool from container (for future implementation)
-pub async fn get_database_pool(_container: &Container) -> Result<Arc<Pool<Postgres>>, String> {
+pub async fn get_database_pool(_container: &Container) -> Result<Arc<dyn DatabasePoolTrait>, String> {
     // For now, return an error since the container doesn't have service registry yet
     // In future phases, this will integrate with the DI container to retrieve registered pools
     Err("Database pool not yet integrated with current Container implementation - use PoolRegistry for now".to_string())
@@ -524,7 +459,7 @@ pub async fn get_database_pool(_container: &Container) -> Result<Arc<Pool<Postgr
 pub async fn get_named_database_pool(
     _container: &Container, 
     service_name: &str
-) -> Result<Arc<Pool<Postgres>>, String> {
+) -> Result<Arc<dyn DatabasePoolTrait>, String> {
     // For now, return an error since the container doesn't have service registry yet
     // In future phases, this will integrate with the DI container to retrieve registered pools by name
     Err(format!("Database pool '{}' not yet integrated with current Container implementation - use PoolRegistry for now", service_name))
@@ -545,7 +480,7 @@ pub async fn create_default_pool_registry(database_url: &str) -> Result<PoolRegi
 
 /// Create a pool registry with custom configuration
 pub async fn create_custom_pool_registry(
-    pools: Vec<(String, String, PoolConfig)>
+    pools: Vec<(String, String, DatabasePoolConfig)>
 ) -> Result<PoolRegistry, ModelError> {
     let mut registry = PoolRegistry::new();
     
@@ -567,12 +502,12 @@ mod tests {
 
     #[test]
     fn test_pool_config_defaults() {
-        let config = PoolConfig::default();
+        let config = DatabasePoolConfig::default();
         assert_eq!(config.max_connections, 10);
         assert_eq!(config.min_connections, 1);
-        assert_eq!(config.acquire_timeout, 30);
-        assert_eq!(config.idle_timeout, Some(600));
-        assert_eq!(config.max_lifetime, Some(1800));
+        assert_eq!(config.acquire_timeout_seconds, 30);
+        assert_eq!(config.idle_timeout_seconds, Some(600));
+        assert_eq!(config.max_lifetime_seconds, Some(1800));
         assert!(config.test_before_acquire);
     }
 
@@ -582,7 +517,7 @@ mod tests {
         assert_eq!(provider.database_url(), "postgresql://test");
         assert_eq!(provider.config().max_connections, 10);
         assert_eq!(provider.config().min_connections, 1);
-        assert_eq!(provider.config().acquire_timeout, 30);
+        assert_eq!(provider.config().acquire_timeout_seconds, 30);
         assert_eq!(provider.service_name(), "database_pool");
     }
 
@@ -599,9 +534,9 @@ mod tests {
 
         assert_eq!(provider.config().max_connections, 20);
         assert_eq!(provider.config().min_connections, 5);
-        assert_eq!(provider.config().acquire_timeout, 60);
-        assert_eq!(provider.config().idle_timeout, Some(300));
-        assert_eq!(provider.config().max_lifetime, Some(900));
+        assert_eq!(provider.config().acquire_timeout_seconds, 60);
+        assert_eq!(provider.config().idle_timeout_seconds, Some(300));
+        assert_eq!(provider.config().max_lifetime_seconds, Some(900));
         assert!(!provider.config().test_before_acquire);
         assert_eq!(provider.service_name(), "custom_db");
     }
@@ -627,9 +562,9 @@ mod tests {
         
         assert_eq!(provider.config().max_connections, 10);
         assert_eq!(provider.config().min_connections, 1);
-        assert_eq!(provider.config().acquire_timeout, 30);
-        assert_eq!(provider.config().idle_timeout, Some(600));
-        assert_eq!(provider.config().max_lifetime, Some(1800));
+        assert_eq!(provider.config().acquire_timeout_seconds, 30);
+        assert_eq!(provider.config().idle_timeout_seconds, Some(600));
+        assert_eq!(provider.config().max_lifetime_seconds, Some(1800));
         assert!(provider.config().test_before_acquire);
         assert_eq!(provider.service_name(), "database_pool");
     }
@@ -646,9 +581,9 @@ mod tests {
 
         assert_eq!(provider.config().max_connections, 50);
         assert_eq!(provider.config().min_connections, 10);
-        assert_eq!(provider.config().acquire_timeout, 120);
-        assert_eq!(provider.config().idle_timeout, None);
-        assert_eq!(provider.config().max_lifetime, Some(3600));
+        assert_eq!(provider.config().acquire_timeout_seconds, 120);
+        assert_eq!(provider.config().idle_timeout_seconds, None);
+        assert_eq!(provider.config().max_lifetime_seconds, Some(3600));
         assert_eq!(provider.service_name(), "production_db");
         assert_eq!(provider.database_url(), "postgresql://test");
     }
@@ -658,40 +593,40 @@ mod tests {
         let config = PoolConfig::default();
         assert_eq!(config.max_connections, 10);
         assert_eq!(config.min_connections, 1);
-        assert_eq!(config.acquire_timeout, 30);
-        assert_eq!(config.idle_timeout, Some(600));
-        assert_eq!(config.max_lifetime, Some(1800));
+        assert_eq!(config.acquire_timeout_seconds, 30);
+        assert_eq!(config.idle_timeout_seconds, Some(600));
+        assert_eq!(config.max_lifetime_seconds, Some(1800));
         assert!(config.test_before_acquire);
     }
 
     #[test] 
     fn test_managed_pool_config_access() {
-        let config = PoolConfig {
+        let config = DatabasePoolConfig {
             max_connections: 5,
             min_connections: 2,
-            acquire_timeout: 60,
-            idle_timeout: None,
-            max_lifetime: Some(3600),
+            acquire_timeout_seconds: 60,
+            idle_timeout_seconds: None,
+            max_lifetime_seconds: Some(3600),
             test_before_acquire: false,
         };
         
         // Verify the config values
         assert_eq!(config.max_connections, 5);
         assert_eq!(config.min_connections, 2);
-        assert_eq!(config.acquire_timeout, 60);
-        assert_eq!(config.idle_timeout, None);
-        assert_eq!(config.max_lifetime, Some(3600));
+        assert_eq!(config.acquire_timeout_seconds, 60);
+        assert_eq!(config.idle_timeout_seconds, None);
+        assert_eq!(config.max_lifetime_seconds, Some(3600));
         assert!(!config.test_before_acquire);
     }
 
     #[test]
     fn test_pool_config_builder() {
-        let config = PoolConfig {
+        let config = DatabasePoolConfig {
             max_connections: 20,
             min_connections: 2,
-            acquire_timeout: 45,
-            idle_timeout: Some(300),
-            max_lifetime: Some(1200),
+            acquire_timeout_seconds: 45,
+            idle_timeout_seconds: Some(300),
+            max_lifetime_seconds: Some(1200),
             test_before_acquire: false,
         };
         
@@ -700,9 +635,9 @@ mod tests {
         
         assert_eq!(provider.config().max_connections, 20);
         assert_eq!(provider.config().min_connections, 2);
-        assert_eq!(provider.config().acquire_timeout, 45);
-        assert_eq!(provider.config().idle_timeout, Some(300));
-        assert_eq!(provider.config().max_lifetime, Some(1200));
+        assert_eq!(provider.config().acquire_timeout_seconds, 45);
+        assert_eq!(provider.config().idle_timeout_seconds, Some(300));
+        assert_eq!(provider.config().max_lifetime_seconds, Some(1200));
         assert!(!provider.config().test_before_acquire);
     }
 

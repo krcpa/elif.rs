@@ -3,10 +3,10 @@
 //! Provides high-level transaction management with automatic cleanup,
 //! scoped operations, and comprehensive error handling.
 
-use sqlx::{Postgres, Transaction as SqlxTransaction};
 use tracing::{debug, warn};
 use crate::error::{ModelError, ModelResult};
 use crate::database::ManagedPool;
+use crate::backends::DatabaseTransaction;
 
 /// Transaction isolation levels supported by PostgreSQL
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,7 +59,7 @@ impl Default for TransactionConfig {
 
 /// High-level transaction wrapper with automatic cleanup and enhanced functionality
 pub struct Transaction {
-    inner: Option<SqlxTransaction<'static, Postgres>>,
+    inner: Option<Box<dyn DatabaseTransaction>>,
     config: TransactionConfig,
     committed: bool,
 }
@@ -69,14 +69,13 @@ impl Transaction {
     pub async fn begin(pool: &ManagedPool, config: TransactionConfig) -> Result<Transaction, ModelError> {
         debug!("Beginning transaction with config: {:?}", config);
         
-        let mut tx = pool.begin().await
+        let mut tx = pool.begin_transaction().await
             .map_err(|e| ModelError::Transaction(format!("Failed to begin transaction: {}", e)))?;
         
         // Set isolation level if specified
         if let Some(isolation_level) = config.isolation_level {
             let sql = format!("SET TRANSACTION ISOLATION LEVEL {}", isolation_level.as_sql());
-            sqlx::query(&sql)
-                .execute(&mut *tx)
+            tx.execute(&sql, &[])
                 .await
                 .map_err(|e| ModelError::Transaction(format!("Failed to set isolation level: {}", e)))?;
             debug!("Transaction isolation level set to: {:?}", isolation_level);
@@ -84,20 +83,14 @@ impl Transaction {
         
         // Set read-only mode if specified
         if config.read_only {
-            sqlx::query("SET TRANSACTION READ ONLY")
-                .execute(&mut *tx)
+            tx.execute("SET TRANSACTION READ ONLY", &[])
                 .await
                 .map_err(|e| ModelError::Transaction(format!("Failed to set read-only mode: {}", e)))?;
             debug!("Transaction set to read-only mode");
         }
         
-        // SAFETY: We need to transmute the lifetime to 'static for storage
-        // This is safe because the Transaction struct manages the lifetime
-        // and ensures the transaction is properly cleaned up
-        let tx_static = unsafe { std::mem::transmute(tx) };
-        
         Ok(Transaction {
-            inner: Some(tx_static),
+            inner: Some(tx),
             config,
             committed: false,
         })
@@ -127,32 +120,67 @@ impl Transaction {
         Self::begin(pool, config).await
     }
     
-    /// Get a mutable reference to the underlying sqlx transaction
+    /// Check if transaction is still active
+    pub fn is_active(&self) -> bool {
+        self.inner.is_some() && !self.committed
+    }
+    
+    /// Get a mutable reference to the underlying database transaction
     /// 
     /// # Safety
     /// This method provides direct access to the underlying transaction.
     /// Care should be taken not to commit or rollback the transaction directly
     /// as this will invalidate the Transaction wrapper.
-    pub fn as_mut(&mut self) -> Option<&mut SqlxTransaction<'static, Postgres>> {
+    pub fn as_mut(&mut self) -> Option<&mut Box<dyn DatabaseTransaction>> {
         self.inner.as_mut()
     }
     
-    /// Get an immutable reference to the underlying sqlx transaction
-    pub fn as_ref(&self) -> Option<&SqlxTransaction<'static, Postgres>> {
+    /// Get an immutable reference to the underlying database transaction
+    pub fn as_ref(&self) -> Option<&Box<dyn DatabaseTransaction>> {
         self.inner.as_ref()
+    }
+    
+    /// Execute a query within this transaction
+    pub async fn execute(&mut self, sql: &str, params: &[crate::backends::DatabaseValue]) -> Result<u64, ModelError> {
+        if let Some(tx) = &mut self.inner {
+            tx.execute(sql, params).await
+                .map_err(|e| ModelError::Transaction(format!("Transaction query failed: {}", e)))
+        } else {
+            Err(ModelError::Transaction("Transaction has been consumed".to_string()))
+        }
+    }
+    
+    /// Fetch all rows from a query within this transaction
+    pub async fn fetch_all(&mut self, sql: &str, params: &[crate::backends::DatabaseValue]) -> Result<Vec<Box<dyn crate::backends::DatabaseRow>>, ModelError> {
+        if let Some(tx) = &mut self.inner {
+            tx.fetch_all(sql, params).await
+                .map_err(|e| ModelError::Transaction(format!("Transaction query failed: {}", e)))
+        } else {
+            Err(ModelError::Transaction("Transaction has been consumed".to_string()))
+        }
+    }
+    
+    /// Fetch optional single row from a query within this transaction
+    pub async fn fetch_optional(&mut self, sql: &str, params: &[crate::backends::DatabaseValue]) -> Result<Option<Box<dyn crate::backends::DatabaseRow>>, ModelError> {
+        if let Some(tx) = &mut self.inner {
+            tx.fetch_optional(sql, params).await
+                .map_err(|e| ModelError::Transaction(format!("Transaction query failed: {}", e)))
+        } else {
+            Err(ModelError::Transaction("Transaction has been consumed".to_string()))
+        }
     }
     
     /// Execute a closure within the transaction scope with a borrowed transaction
     /// 
     /// This is a safe way to execute database operations within a transaction.
     /// The closure receives access to execute queries against the transaction.
-    pub async fn execute<F, Fut, R>(&mut self, f: F) -> Result<R, ModelError>
+    pub async fn execute_with<F, Fut, R>(&mut self, f: F) -> Result<R, ModelError>
     where
-        F: FnOnce() -> Fut,
+        F: FnOnce(&mut Self) -> Fut,
         Fut: std::future::Future<Output = Result<R, ModelError>>,
     {
         if self.inner.is_some() {
-            f().await
+            f(self).await
         } else {
             Err(ModelError::Transaction("Transaction has been consumed".to_string()))
         }
@@ -164,7 +192,6 @@ impl Transaction {
             debug!("Committing transaction");
             tx.commit().await
                 .map_err(|e| ModelError::Transaction(format!("Failed to commit transaction: {}", e)))?;
-            self.committed = true;
             debug!("Transaction committed successfully");
             Ok(())
         } else {
@@ -188,11 +215,6 @@ impl Transaction {
     /// Check if the transaction has been committed
     pub fn is_committed(&self) -> bool {
         self.committed
-    }
-    
-    /// Check if the transaction is still active (not committed or rolled back)
-    pub fn is_active(&self) -> bool {
-        self.inner.is_some()
     }
     
     /// Get the transaction configuration
@@ -227,7 +249,7 @@ pub async fn with_transaction<F, Fut, R>(
     f: F,
 ) -> Result<R, ModelError>
 where
-    F: Fn() -> Fut,
+    F: Fn(&mut Transaction) -> Fut,
     Fut: std::future::Future<Output = Result<R, ModelError>>,
 {
     let mut attempts = 0;
@@ -239,7 +261,7 @@ where
         
         let mut tx = Transaction::begin(pool, config.clone()).await?;
         
-        match tx.execute(&f).await {
+        match f(&mut tx).await {
             Ok(result) => {
                 tx.commit().await?;
                 return Ok(result);
@@ -269,7 +291,7 @@ pub async fn with_transaction_default<F, Fut, R>(
     f: F,
 ) -> Result<R, ModelError>
 where
-    F: Fn() -> Fut,
+    F: Fn(&mut Transaction) -> Fut,
     Fut: std::future::Future<Output = Result<R, ModelError>>,
 {
     with_transaction(pool, TransactionConfig::default(), f).await
