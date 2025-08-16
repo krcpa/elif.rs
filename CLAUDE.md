@@ -99,10 +99,11 @@ crates/
 - **GitHub Projesi**: https://github.com/users/krcpa/projects/1/views/1
 - **Repository**: https://github.com/krcpa/elif.rs
 - **Issue oluşturma**: `gh issue create --title "..." --body "..." --label "phase-1,enhancement"`
+- **Backlog sistemi**: Phase 11'den sonra yeni tasklar `BACKLOG: ...` olarak issue title'ına eklenecek ve `backlog` label'ı ile etiketlenecek
 - **Issue kapama**: `gh issue close #N --comment "Completed: implementation details"`
 - **Proje durumu**: `gh project item-list 1 --owner @me`
-- **Otomatik proje ekleme**: `phase-1`, `phase-2`, `phase-3`, `phase-4`, `phase-5`, `phase-6` etiketli issue/PR'lar otomatik olarak projeye eklenir
-- **Otomatik öncelik**: Phase 1-3 → High, Phase 4-5 → Medium, Phase 6 → Low
+- **Otomatik proje ekleme**: `phase-1`, `phase-2`, `phase-3`, `phase-4`, `phase-5`, `phase-6`, `backlog` etiketli issue/PR'lar otomatik olarak projeye eklenir
+- **Otomatik öncelik**: Phase 1-3 → High, Phase 4-5 → Medium, Phase 6 → Low, Backlog → Low
 
 ### GitHub Project Status
 - Start: `gh project item-edit --project-id 1 --id PVTI_xxx --field-id Status --single-select-option-id "In Progress"`

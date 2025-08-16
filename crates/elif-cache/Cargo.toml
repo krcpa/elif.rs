@@ -42,12 +42,13 @@ elif-core = { path = "../core" }
 
 # HTTP integration
 elif-http = { path = "../elif-http", optional = true }
+axum = { version = "0.7", optional = true }
 
 [features]
 default = ["memory"]
 memory = []
 redis-backend = ["redis"]
-http-cache = ["elif-http"]
+http-cache = ["elif-http", "axum"]
 all = ["memory", "redis-backend", "http-cache"]
 
 [dev-dependencies]
