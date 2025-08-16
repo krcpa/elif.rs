@@ -1,19 +1,100 @@
 use crate::app_config::{AppConfigTrait, ConfigError, ConfigSource};
 use std::collections::HashMap;
+use service_builder::builder;
+
+/// Configuration for ConfigBuilder - contains configuration fields and metadata
+#[derive(Clone)]
+#[builder]
+pub struct ConfigBuilderConfig<T> {
+    #[builder(default)]
+    pub fields: Vec<ConfigField>,
+    
+    #[builder(optional)]
+    pub name: Option<String>,
+    
+    #[builder(default)]
+    pub _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> std::fmt::Debug for ConfigBuilderConfig<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConfigBuilderConfig")
+            .field("fields_count", &self.fields.len())
+            .field("name", &self.name)
+            .finish()
+    }
+}
+
+impl<T> ConfigBuilderConfig<T> {
+    /// Build a ConfigSchema from this config
+    pub fn build_schema(self) -> ConfigSchema {
+        ConfigSchema {
+            name: self.name.unwrap_or_else(|| "DefaultConfig".to_string()),
+            fields: self.fields,
+        }
+    }
+}
+
+// Add convenience methods to the generated builder
+impl<T> ConfigBuilderConfigBuilder<T> {
+    /// Add a configuration field
+    pub fn add_field(self, field: ConfigField) -> Self {
+        let mut fields = self.fields.clone().unwrap_or_default();
+        fields.push(field);
+        self.fields(fields)
+    }
+    
+    /// Add multiple configuration fields
+    pub fn add_fields(self, new_fields: Vec<ConfigField>) -> Self {
+        let mut fields = self.fields.clone().unwrap_or_default();
+        fields.extend(new_fields);
+        self.fields(fields)
+    }
+    
+    pub fn build_config(self) -> ConfigBuilderConfig<T> {
+        self.build_with_defaults().unwrap()
+    }
+}
 
 /// Attribute-based configuration builder for creating configuration structs
 /// 
 /// This provides a simplified approach to configuration without proc macros,
 /// using builder pattern and attribute-like methods.
 pub struct ConfigBuilder<T> {
-    _phantom: std::marker::PhantomData<T>,
+    builder_config: ConfigBuilderConfigBuilder<T>,
 }
 
 impl<T> ConfigBuilder<T> {
     pub fn new() -> Self {
         Self {
-            _phantom: std::marker::PhantomData,
+            builder_config: ConfigBuilderConfig::builder(),
         }
+    }
+    
+    /// Set the name of the configuration
+    pub fn name(self, name: impl Into<String>) -> Self {
+        Self {
+            builder_config: self.builder_config.name(Some(name.into())),
+        }
+    }
+    
+    /// Add a configuration field
+    pub fn field(self, field: ConfigField) -> Self {
+        Self {
+            builder_config: self.builder_config.add_field(field),
+        }
+    }
+    
+    /// Add multiple configuration fields
+    pub fn fields(self, fields: Vec<ConfigField>) -> Self {
+        Self {
+            builder_config: self.builder_config.add_fields(fields),
+        }
+    }
+    
+    /// Build the configuration schema
+    pub fn build(self) -> ConfigSchema {
+        self.builder_config.build_config().build_schema()
     }
 }
 
@@ -195,7 +276,8 @@ pub struct DatabaseConfig {
 impl DatabaseConfig {
     /// Create configuration schema for DatabaseConfig
     pub fn schema() -> ConfigSchema {
-        ConfigSchema::new("DatabaseConfig")
+        ConfigBuilder::<DatabaseConfig>::new()
+            .name("DatabaseConfig")
             .field(
                 ConfigField::new("host")
                     .env("DB_HOST")
@@ -259,6 +341,7 @@ impl DatabaseConfig {
                         }
                     })
             )
+            .build()
     }
 }
 
