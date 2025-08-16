@@ -11,6 +11,7 @@ use crate::{
 };
 use std::fs;
 use std::path::{Path, PathBuf};
+use toml;
 
 /// Project discovery service for analyzing elif.rs projects
 pub struct ProjectDiscovery {
@@ -89,7 +90,7 @@ impl ProjectDiscovery {
         })
     }
 
-    /// Discover project metadata from Cargo.toml
+    /// Discover project metadata from Cargo.toml using proper TOML parsing
     fn discover_project_metadata(&self) -> OpenApiResult<ProjectMetadata> {
         let cargo_toml_path = self.project_root.join("Cargo.toml");
         
@@ -107,19 +108,42 @@ impl ProjectDiscovery {
                 format!("Failed to read Cargo.toml: {}", e)
             ))?;
 
-        // Simple TOML parsing (in a real implementation, use a TOML parser)
-        let name = self.extract_toml_value(&cargo_content, "name")
-            .unwrap_or_else(|| "Unknown".to_string());
-        let version = self.extract_toml_value(&cargo_content, "version")
-            .unwrap_or_else(|| "1.0.0".to_string());
-        let description = self.extract_toml_value(&cargo_content, "description");
-        
-        // Extract authors (simplified)
-        let authors = if let Some(authors_str) = self.extract_toml_value(&cargo_content, "authors") {
-            vec![authors_str]
-        } else {
-            Vec::new()
-        };
+        // Parse TOML properly using toml crate
+        let toml_value: toml::Value = cargo_content.parse()
+            .map_err(|e| OpenApiError::route_discovery_error(
+                format!("Failed to parse Cargo.toml: {}", e)
+            ))?;
+
+        // Extract package information from [package] table
+        let package = toml_value.get("package")
+            .ok_or_else(|| OpenApiError::route_discovery_error(
+                "No [package] section found in Cargo.toml".to_string()
+            ))?;
+
+        let name = package.get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown")
+            .to_string();
+            
+        let version = package.get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("1.0.0")
+            .to_string();
+            
+        let description = package.get("description")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        // Extract authors array
+        let authors = package.get("authors")
+            .and_then(|v| v.as_array())
+            .map(|authors_array| {
+                authors_array.iter()
+                    .filter_map(|author| author.as_str())
+                    .map(|s| s.to_string())
+                    .collect()
+            })
+            .unwrap_or_else(Vec::new);
 
         Ok(ProjectMetadata {
             name,
@@ -554,19 +578,6 @@ impl ProjectDiscovery {
     }
 
 
-    /// Extract value from simple TOML content
-    fn extract_toml_value(&self, content: &str, key: &str) -> Option<String> {
-        for line in content.lines() {
-            let line = line.trim();
-            if line.starts_with(&format!("{} =", key)) {
-                return line
-                    .split('=')
-                    .nth(1)
-                    .map(|v| v.trim().trim_matches('"').to_string());
-            }
-        }
-        None
-    }
 
     /// Bridge function for old line-based documentation extraction (used by model parsing)
     /// TODO: Replace with AST-based model parsing
@@ -652,17 +663,108 @@ mod tests {
     }
 
     #[test]
-    fn test_toml_value_extraction() {
-        let discovery = ProjectDiscovery::new(".");
-        let content = r#"
-name = "test-project"
-version = "1.0.0"
-description = "A test project"
+    fn test_robust_toml_parsing() {
+        // Test with realistic Cargo.toml content including comments, tables, and various TOML features
+        let temp_dir = TempDir::new().unwrap();
+        let cargo_toml_path = temp_dir.path().join("Cargo.toml");
+        
+        let complex_toml_content = r#"
+# This is a comment
+[package]
+name = "test-project"  # Inline comment
+version = "1.2.3"
+description = "A test project with complex TOML structure"
+authors = ["John Doe <john@example.com>", "Jane Smith <jane@example.com>"]
+
+# Some other sections that should not interfere
+[dependencies]
+serde = "1.0"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+# Another comment
+[features]
+default = []
         "#;
 
-        assert_eq!(discovery.extract_toml_value(content, "name"), Some("test-project".to_string()));
-        assert_eq!(discovery.extract_toml_value(content, "version"), Some("1.0.0".to_string()));
-        assert_eq!(discovery.extract_toml_value(content, "description"), Some("A test project".to_string()));
-        assert_eq!(discovery.extract_toml_value(content, "missing"), None);
+        fs::write(&cargo_toml_path, complex_toml_content).unwrap();
+
+        let discovery = ProjectDiscovery::new(temp_dir.path());
+        let metadata = discovery.discover_project_metadata().unwrap();
+
+        assert_eq!(metadata.name, "test-project");
+        assert_eq!(metadata.version, "1.2.3");
+        assert_eq!(metadata.description, Some("A test project with complex TOML structure".to_string()));
+        assert_eq!(metadata.authors.len(), 2);
+        assert!(metadata.authors.contains(&"John Doe <john@example.com>".to_string()));
+        assert!(metadata.authors.contains(&"Jane Smith <jane@example.com>".to_string()));
+    }
+
+    #[test]
+    fn test_toml_parsing_with_missing_package_section() {
+        let temp_dir = TempDir::new().unwrap();
+        let cargo_toml_path = temp_dir.path().join("Cargo.toml");
+        
+        let invalid_toml_content = r#"
+# No package section
+[dependencies]
+serde = "1.0"
+        "#;
+
+        fs::write(&cargo_toml_path, invalid_toml_content).unwrap();
+
+        let discovery = ProjectDiscovery::new(temp_dir.path());
+        let result = discovery.discover_project_metadata();
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No [package] section found"));
+    }
+
+    #[test]
+    fn test_toml_parsing_with_minimal_package() {
+        let temp_dir = TempDir::new().unwrap();
+        let cargo_toml_path = temp_dir.path().join("Cargo.toml");
+        
+        let minimal_toml_content = r#"
+[package]
+name = "minimal-project"
+version = "0.1.0"
+        "#;
+
+        fs::write(&cargo_toml_path, minimal_toml_content).unwrap();
+
+        let discovery = ProjectDiscovery::new(temp_dir.path());
+        let metadata = discovery.discover_project_metadata().unwrap();
+
+        assert_eq!(metadata.name, "minimal-project");
+        assert_eq!(metadata.version, "0.1.0");
+        assert_eq!(metadata.description, None);
+        assert!(metadata.authors.is_empty());
+    }
+
+    #[test]
+    fn test_toml_parsing_with_different_key_ordering() {
+        let temp_dir = TempDir::new().unwrap();
+        let cargo_toml_path = temp_dir.path().join("Cargo.toml");
+        
+        // Test with different key ordering than typical
+        let reordered_toml_content = r#"
+[package]
+authors = ["Author One"]
+description = "Description first"
+name = "reordered-project"
+version = "2.0.0"
+        "#;
+
+        fs::write(&cargo_toml_path, reordered_toml_content).unwrap();
+
+        let discovery = ProjectDiscovery::new(temp_dir.path());
+        let metadata = discovery.discover_project_metadata().unwrap();
+
+        assert_eq!(metadata.name, "reordered-project");
+        assert_eq!(metadata.version, "2.0.0");
+        assert_eq!(metadata.description, Some("Description first".to_string()));
+        assert_eq!(metadata.authors, vec!["Author One".to_string()]);
     }
 }
