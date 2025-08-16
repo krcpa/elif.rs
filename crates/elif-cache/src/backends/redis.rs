@@ -2,7 +2,7 @@
 
 use crate::{CacheBackend, CacheConfig, CacheError, CacheResult, CacheStats};
 use async_trait::async_trait;
-use redis::{AsyncCommands, Client, Connection};
+use redis::{aio::ConnectionManager, AsyncCommands, Client};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -105,26 +105,27 @@ impl RedisConfigBuilder {
     }
 }
 
-/// Redis connection manager
-struct RedisConnectionManager {
-    client: Client,
-    connections: Arc<Mutex<Vec<redis::aio::Connection>>>,
+
+/// Redis cache backend
+pub struct RedisBackend {
+    connection_manager: ConnectionManager,
     config: RedisConfig,
+    stats: Arc<Mutex<CacheStats>>,
 }
 
-impl RedisConnectionManager {
-    async fn new(config: RedisConfig) -> Result<Self, CacheError> {
+impl RedisBackend {
+    /// Create a new Redis backend with the given configuration
+    pub async fn new(config: RedisConfig) -> CacheResult<Self> {
         let client = Client::open(config.url.as_str())
             .map_err(|e| CacheError::Backend(format!("Failed to create Redis client: {}", e)))?;
         
-        // Test connection
-        let mut test_conn = client
-            .get_async_connection()
+        let connection_manager = ConnectionManager::new(client)
             .await
-            .map_err(|e| CacheError::Backend(format!("Failed to connect to Redis: {}", e)))?;
+            .map_err(|e| CacheError::Backend(format!("Failed to create connection manager: {}", e)))?;
         
-        // Ping to verify connection
-        let _: String = test_conn
+        // Test connection with a ping
+        let mut conn = connection_manager.clone();
+        let _: String = conn
             .ping()
             .await
             .map_err(|e| CacheError::Backend(format!("Redis ping failed: {}", e)))?;
@@ -132,55 +133,8 @@ impl RedisConnectionManager {
         debug!("Redis connection established successfully");
         
         Ok(Self {
-            client,
-            connections: Arc::new(Mutex::new(vec![])),
-            config,
-        })
-    }
-    
-    async fn get_connection(&self) -> Result<redis::aio::Connection, CacheError> {
-        // Try to reuse an existing connection
-        {
-            let mut connections = self.connections.lock().await;
-            if let Some(conn) = connections.pop() {
-                return Ok(conn);
-            }
-        }
-        
-        // Create a new connection
-        let conn = tokio::time::timeout(
-            self.config.connection_timeout,
-            self.client.get_async_connection(),
-        )
-        .await
-        .map_err(|_| CacheError::Timeout)?
-        .map_err(|e| CacheError::Backend(format!("Failed to get Redis connection: {}", e)))?;
-        
-        Ok(conn)
-    }
-    
-    async fn return_connection(&self, conn: redis::aio::Connection) {
-        let mut connections = self.connections.lock().await;
-        if connections.len() < self.config.pool_size as usize {
-            connections.push(conn);
-        }
-        // If pool is full, just drop the connection
-    }
-}
-
-/// Redis cache backend
-pub struct RedisBackend {
-    connection_manager: RedisConnectionManager,
-    stats: Arc<Mutex<CacheStats>>,
-}
-
-impl RedisBackend {
-    /// Create a new Redis backend with the given configuration
-    pub async fn new(config: RedisConfig) -> CacheResult<Self> {
-        let connection_manager = RedisConnectionManager::new(config).await?;
-        
-        Ok(Self {
             connection_manager,
+            config,
             stats: Arc::new(Mutex::new(CacheStats::default())),
         })
     }
@@ -196,38 +150,35 @@ impl RedisBackend {
     
     /// Format key with optional prefix
     fn format_key(&self, key: &str) -> String {
-        match &self.connection_manager.config.key_prefix {
+        match &self.config.key_prefix {
             Some(prefix) => format!("{}{}", prefix, key),
             None => key.to_string(),
         }
     }
     
-    /// Execute a Redis command with timeout and connection management
+    /// Execute a Redis command with timeout
     async fn with_connection<F, Fut, R>(&self, operation: F) -> CacheResult<R>
     where
-        F: FnOnce(redis::aio::Connection) -> Fut,
-        Fut: std::future::Future<Output = (redis::RedisResult<R>, redis::aio::Connection)>,
+        F: FnOnce(ConnectionManager) -> Fut,
+        Fut: std::future::Future<Output = redis::RedisResult<R>>,
         R: Send + 'static,
     {
-        let conn = self.connection_manager.get_connection().await?;
+        let conn = self.connection_manager.clone();
         
-        let (redis_result, conn) = tokio::time::timeout(
-            self.connection_manager.config.command_timeout,
+        let redis_result = tokio::time::timeout(
+            self.config.command_timeout,
             operation(conn),
         )
         .await
         .map_err(|_| CacheError::Timeout)?;
-        
-        // Return connection to pool
-        self.connection_manager.return_connection(conn).await;
         
         redis_result.map_err(|e| CacheError::Backend(format!("Redis operation failed: {}", e)))
     }
     
     /// Compress data if enabled and above threshold
     fn maybe_compress(&self, data: &[u8]) -> Vec<u8> {
-        if self.connection_manager.config.compression 
-            && data.len() > self.connection_manager.config.compression_threshold 
+        if self.config.compression 
+            && data.len() > self.config.compression_threshold 
         {
             // Simple compression using gzip would go here
             // For now, just return the original data
@@ -250,8 +201,7 @@ impl CacheBackend for RedisBackend {
         
         let result = self
             .with_connection(|mut conn| async move {
-                let result = conn.get::<String, Option<Vec<u8>>>(formatted_key).await;
-                (result, conn)
+                conn.get::<String, Option<Vec<u8>>>(formatted_key).await
             })
             .await;
         
@@ -283,15 +233,14 @@ impl CacheBackend for RedisBackend {
         
         let result = self
             .with_connection(|mut conn| async move {
-                let result = match ttl {
+                match ttl {
                     Some(ttl) => {
                         conn.set_ex::<String, Vec<u8>, ()>(formatted_key, compressed_value, ttl.as_secs()).await
                     }
                     None => {
                         conn.set::<String, Vec<u8>, ()>(formatted_key, compressed_value).await
                     }
-                };
-                (result, conn)
+                }
             })
             .await;
         
@@ -312,8 +261,7 @@ impl CacheBackend for RedisBackend {
         
         let result = self
             .with_connection(|mut conn| async move {
-                let result = conn.del::<String, i32>(formatted_key).await;
-                (result, conn)
+                conn.del::<String, i32>(formatted_key).await
             })
             .await;
         
@@ -337,8 +285,7 @@ impl CacheBackend for RedisBackend {
         
         let result = self
             .with_connection(|mut conn| async move {
-                let result = conn.exists::<String, bool>(formatted_key).await;
-                (result, conn)
+                conn.exists::<String, bool>(formatted_key).await
             })
             .await;
         
@@ -352,11 +299,11 @@ impl CacheBackend for RedisBackend {
     }
     
     async fn flush(&self) -> CacheResult<()> {
-        let prefix = self.connection_manager.config.key_prefix.clone();
+        let prefix = self.config.key_prefix.clone();
         
         let result = self
             .with_connection(|mut conn| async move {
-                let result = match prefix {
+                match prefix {
                     Some(prefix) => {
                         // Delete only keys with our prefix
                         let pattern = format!("{}*", prefix);
@@ -378,8 +325,7 @@ impl CacheBackend for RedisBackend {
                         warn!("Flushing entire Redis database - no prefix configured");
                         conn.flushdb().await
                     }
-                };
-                (result, conn)
+                }
             })
             .await;
         
@@ -407,8 +353,7 @@ impl CacheBackend for RedisBackend {
         
         let result = self
             .with_connection(|mut conn| async move {
-                let result = conn.mget::<Vec<String>, Vec<Option<Vec<u8>>>>(formatted_keys).await;
-                (result, conn)
+                conn.mget::<Vec<String>, Vec<Option<Vec<u8>>>>(formatted_keys).await
             })
             .await;
         
@@ -466,8 +411,7 @@ impl CacheBackend for RedisBackend {
         // Try to get additional stats from Redis INFO command
         let redis_info = self
             .with_connection(|mut conn| async move {
-                let result = conn.info::<String>("memory").await;
-                (result, conn)
+                conn.info::<String>("memory").await
             })
             .await;
         
