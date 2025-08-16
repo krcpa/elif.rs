@@ -10,6 +10,8 @@ members = [
     "crates/elif-validation",
     "crates/elif-auth",
     "crates/elif-testing",
+    "crates/elif-openapi",
+    "crates/elif-openapi-derive",
 ]
 resolver = "2"
 

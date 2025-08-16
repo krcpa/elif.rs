@@ -42,7 +42,11 @@
       "Bash(RUST_BACKTRACE=1 cargo check --package elif-http --message-format=short)",
       "Bash(gh label:*)",
       "Bash(gh issue reopen:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh api:*)"
     ],
     "deny": []
   }
