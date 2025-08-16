@@ -105,20 +105,30 @@ fn generate_struct_schema_impl(type_name: &str, fields: &Fields) -> Result<proc_
                     <#field_type as ::elif_openapi::OpenApiSchema>::openapi_schema()
                 })
             } else {
-                // Multiple field tuple - use array of schemas
-                let field_schemas: Vec<_> = unnamed_fields.unnamed.iter()
-                    .map(|field| {
-                        let field_type = &field.ty;
-                        quote! { <#field_type as ::elif_openapi::OpenApiSchema>::openapi_schema() }
-                    })
+                // Multiple field tuple - use array with descriptive text
+                // OpenAPI 3.0 does not have good tuple support (OpenAPI 3.1 introduced prefixItems)
+                let type_descriptions: Vec<String> = unnamed_fields.unnamed.iter()
+                    .map(|field| quote::quote!(#field.ty).to_string())
                     .collect();
+                
+                let field_count = unnamed_fields.unnamed.len();
+                
+                let description = format!(
+                    "A tuple with {} fields in fixed order: ({}). Note: OpenAPI 3.0 cannot precisely represent tuple types - this is a generic array representation.",
+                    field_count,
+                    type_descriptions.join(", ")
+                );
 
                 Ok(quote! {
                     ::elif_openapi::specification::Schema {
                         schema_type: Some("array".to_string()),
                         title: Some(#type_name.to_string()),
+                        description: Some(#description.to_string()),
+                        // For OpenAPI 3.0, we use a generic array representation
+                        // OpenAPI 3.1 would use prefixItems for proper tuple support
+                        // Note: minItems/maxItems constraints are not available in this Schema implementation
                         items: Some(Box::new(::elif_openapi::specification::Schema {
-                            one_of: vec![#(#field_schemas),*],
+                            description: Some("Tuple element (type varies by position)".to_string()),
                             ..Default::default()
                         })),
                         ..Default::default()

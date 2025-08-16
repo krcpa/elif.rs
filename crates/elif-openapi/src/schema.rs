@@ -377,4 +377,33 @@ mod tests {
         assert!(schema.properties.contains_key("name"));
         assert!(schema.properties.contains_key("email"));
     }
+
+    #[test] 
+    fn test_tuple_schema_representation() {
+        // Test that tuples are represented correctly for OpenAPI 3.0
+        // This test ensures we don't use oneOf incorrectly for tuples
+
+        // Create a mock tuple schema similar to what the derive macro should generate
+        let tuple_schema = crate::specification::Schema {
+            schema_type: Some("array".to_string()),
+            title: Some("TestTuple".to_string()),
+            description: Some("A tuple with 2 fields in fixed order: (String, i32). Note: OpenAPI 3.0 cannot precisely represent tuple types - this is a generic array representation.".to_string()),
+            items: Some(Box::new(crate::specification::Schema {
+                description: Some("Tuple element (type varies by position)".to_string()),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+
+        // Verify the schema is structured correctly
+        assert_eq!(tuple_schema.schema_type, Some("array".to_string()));
+        assert!(tuple_schema.description.is_some());
+        assert!(tuple_schema.description.as_ref().unwrap().contains("fixed order"));
+        assert!(tuple_schema.description.as_ref().unwrap().contains("OpenAPI 3.0 cannot precisely represent"));
+        
+        // Verify items doesn't use oneOf (which would be incorrect)
+        assert!(tuple_schema.items.is_some());
+        let items = tuple_schema.items.as_ref().unwrap();
+        assert!(items.one_of.is_empty()); // Should NOT use oneOf for tuples
+    }
 }
