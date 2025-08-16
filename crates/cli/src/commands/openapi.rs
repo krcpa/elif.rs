@@ -1,8 +1,8 @@
 use elif_core::ElifError;
 use elif_openapi::{
     OpenApiGenerator, OpenApiConfig,
-    discovery::ProjectDiscovery,
-    generator::RouteMetadata,
+    discovery::{ProjectDiscovery, ProjectStructure},
+    generator::{RouteMetadata, ParameterInfo},
     utils::{OpenApiUtils, OutputFormat},
 };
 use std::path::Path;
@@ -29,22 +29,7 @@ pub async fn generate(output_path: Option<String>, format: Option<String>) -> Re
     let mut generator = OpenApiGenerator::new(config);
     
     // Convert discovered routes to OpenAPI routes
-    // For now, create a simple demo route since we don't have full route discovery yet
-    let routes = vec![
-        RouteMetadata {
-            method: "GET".to_string(),
-            path: "/health".to_string(),
-            summary: Some("Health check endpoint".to_string()),
-            description: Some("Returns the health status of the API".to_string()),
-            operation_id: Some("healthCheck".to_string()),
-            tags: vec!["Health".to_string()],
-            request_schema: None,
-            response_schemas: std::collections::HashMap::new(),
-            parameters: Vec::new(),
-            security: Vec::new(),
-            deprecated: false,
-        }
-    ];
+    let routes = convert_discovered_routes_to_metadata(&project_structure)?;
     
     println!("⚙️  Generating OpenAPI specification...");
     let spec = generator.generate(&routes)
@@ -184,4 +169,74 @@ pub async fn serve(port: Option<u16>) -> Result<(), ElifError> {
     println!("💡 Open target/_swagger.html in your browser to view the API documentation");
     
     Ok(())
+}
+
+/// Convert discovered project structure to RouteMetadata for OpenAPI generation
+fn convert_discovered_routes_to_metadata(project_structure: &ProjectStructure) -> Result<Vec<RouteMetadata>, ElifError> {
+    let mut routes = Vec::new();
+    
+    // Always include a health check route as a fallback
+    routes.push(RouteMetadata {
+        method: "GET".to_string(),
+        path: "/health".to_string(),
+        summary: Some("Health check endpoint".to_string()),
+        description: Some("Returns the health status of the API".to_string()),
+        operation_id: Some("healthCheck".to_string()),
+        tags: vec!["Health".to_string()],
+        request_schema: None,
+        response_schemas: std::collections::HashMap::new(),
+        parameters: Vec::new(),
+        security: Vec::new(),
+        deprecated: false,
+    });
+    
+    // Convert discovered controllers to routes
+    for controller in &project_structure.controllers {
+        let controller_tag = controller.name.clone();
+        
+        for endpoint in &controller.endpoints {
+            let full_path = if let Some(base_path) = &controller.base_path {
+                format!("{}{}", base_path, endpoint.path)
+            } else {
+                endpoint.path.clone()
+            };
+            
+            // Convert endpoint parameters to OpenAPI parameters
+            let parameters = endpoint.parameters.iter().map(|param| {
+                ParameterInfo {
+                    name: param.name.clone(),
+                    param_type: param.param_type.clone(),
+                    location: match param.source {
+                        elif_openapi::endpoints::ParameterSource::Path => "path".to_string(),
+                        elif_openapi::endpoints::ParameterSource::Query => "query".to_string(),
+                        elif_openapi::endpoints::ParameterSource::Header => "header".to_string(),
+                        elif_openapi::endpoints::ParameterSource::Body => "body".to_string(),
+                        elif_openapi::endpoints::ParameterSource::Cookie => "cookie".to_string(),
+                    },
+                    required: !param.optional,
+                    description: param.documentation.clone(),
+                    example: None, // Could be enhanced later
+                }
+            }).collect();
+            
+            routes.push(RouteMetadata {
+                method: endpoint.verb.clone(),
+                path: full_path,
+                summary: Some(format!("{} - {}", controller.name, endpoint.method)),
+                description: endpoint.documentation.clone(),
+                operation_id: Some(format!("{}_{}", 
+                    controller.name.to_lowercase().replace(' ', "_"),
+                    endpoint.method.to_lowercase().replace(' ', "_")
+                )),
+                tags: vec![controller_tag.clone()],
+                request_schema: None, // Could be enhanced by analyzing endpoint.return_type
+                response_schemas: std::collections::HashMap::new(), // Could be enhanced later
+                parameters,
+                security: Vec::new(), // Could be enhanced by analyzing controller.attributes
+                deprecated: false,
+            });
+        }
+    }
+    
+    Ok(routes)
 }

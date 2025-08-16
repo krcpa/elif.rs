@@ -191,17 +191,20 @@ impl ProjectDiscovery {
         Ok(Some(controller))
     }
 
-    /// Extract endpoints from controller file content
+    /// Extract endpoints from controller file content using AST parsing
     fn extract_endpoints_from_content(&self, content: &str) -> OpenApiResult<Vec<EndpointMetadata>> {
-        let mut endpoints = Vec::new();
-        let lines: Vec<&str> = content.lines().collect();
+        // Parse the Rust source code into an AST
+        let ast = syn::parse_file(content)
+            .map_err(|e| OpenApiError::route_discovery_error(
+                format!("Failed to parse Rust file: {}", e)
+            ))?;
 
-        for i in 0..lines.len() {
-            let line = lines[i].trim();
-            
-            // Look for route attributes
-            if line.starts_with("#[") && line.contains("route(") {
-                if let Some(endpoint) = self.parse_route_attribute(line, &lines, i)? {
+        let mut endpoints = Vec::new();
+
+        // Walk the AST to find functions with route attributes
+        for item in &ast.items {
+            if let syn::Item::Fn(func) = item {
+                if let Some(endpoint) = self.extract_endpoint_from_function(func)? {
                     endpoints.push(endpoint);
                 }
             }
@@ -210,109 +213,184 @@ impl ProjectDiscovery {
         Ok(endpoints)
     }
 
-    /// Parse route attribute and following function
-    fn parse_route_attribute(
-        &self,
-        route_line: &str,
-        lines: &[&str],
-        line_index: usize,
-    ) -> OpenApiResult<Option<EndpointMetadata>> {
-        // Extract method and path from route attribute
-        // Example: #[route(GET, "/users/{id}")]
-        let route_parts: Vec<&str> = route_line
-            .trim_start_matches("#[route(")
-            .trim_end_matches(")]")
-            .split(',')
-            .map(|s| s.trim().trim_matches('"'))
-            .collect();
-
-        if route_parts.len() != 2 {
-            return Ok(None);
-        }
-
-        let verb = route_parts[0].to_uppercase();
-        let path = route_parts[1].to_string();
-
-        // Find the function definition after the route attribute
-        for j in (line_index + 1)..lines.len() {
-            let func_line = lines[j].trim();
-            if func_line.starts_with("pub") && func_line.contains("fn ") {
-                // Extract function name
-                let fn_start = func_line.find("fn ").unwrap() + 3;
-                let fn_end = func_line[fn_start..]
-                    .find('(')
-                    .map(|pos| fn_start + pos)
-                    .unwrap_or(func_line.len());
-                let function_name = func_line[fn_start..fn_end].trim().to_string();
-
-                // Create endpoint metadata
-                let mut endpoint = EndpointMetadata::new(&function_name, &verb, &path);
-
-                // Extract parameters from function signature
-                let params = self.extract_function_parameters(&func_line)?;
-                for param in params {
-                    endpoint = endpoint.with_parameter(param);
-                }
-
-                // Extract documentation from comments above
-                let doc = self.extract_documentation(lines, line_index);
-                if let Some(doc) = doc {
-                    endpoint = endpoint.with_documentation(&doc);
-                }
-
-                return Ok(Some(endpoint));
+    /// Extract endpoint from a function using AST analysis
+    fn extract_endpoint_from_function(&self, func: &syn::ItemFn) -> OpenApiResult<Option<EndpointMetadata>> {
+        // Look for route attributes
+        let mut route_info = None;
+        
+        for attr in &func.attrs {
+            if let Some((verb, path)) = self.parse_route_attribute_ast(attr)? {
+                route_info = Some((verb, path));
+                break;
             }
         }
 
-        Ok(None)
+        let Some((verb, path)) = route_info else {
+            return Ok(None);
+        };
+
+        // Get function name
+        let function_name = func.sig.ident.to_string();
+
+        // Create endpoint metadata
+        let mut endpoint = EndpointMetadata::new(&function_name, &verb, &path);
+
+        // Extract parameters from function signature
+        let params = self.extract_function_parameters_ast(&func.sig)?;
+        for param in params {
+            endpoint = endpoint.with_parameter(param);
+        }
+
+        // Extract documentation from function attributes
+        let doc = self.extract_documentation_ast(&func.attrs);
+        if let Some(doc) = doc {
+            endpoint = endpoint.with_documentation(&doc);
+        }
+
+        // Extract return type information
+        if let syn::ReturnType::Type(_, ty) = &func.sig.output {
+            endpoint.return_type = Some(self.type_to_string(ty));
+        }
+
+        Ok(Some(endpoint))
     }
 
-    /// Extract function parameters for OpenAPI
-    fn extract_function_parameters(&self, func_line: &str) -> OpenApiResult<Vec<EndpointParameter>> {
+    /// Parse route attribute using AST
+    fn parse_route_attribute_ast(&self, attr: &syn::Attribute) -> OpenApiResult<Option<(String, String)>> {
+        // Check if this is a route attribute
+        let path_segments: Vec<String> = attr.path().segments.iter()
+            .map(|seg| seg.ident.to_string())
+            .collect();
+
+        // Look for route-like attributes (route, get, post, put, delete, etc.)
+        if path_segments.len() != 1 {
+            return Ok(None);
+        }
+
+        let attr_name = &path_segments[0];
+        let (verb, path) = match attr_name.as_str() {
+            "route" => {
+                // Parse #[route(GET, "/path")] or #[route(method = "GET", path = "/path")]
+                self.parse_route_macro(attr)?
+            }
+            "get" => ("GET".to_string(), self.parse_simple_route_macro(attr)?),
+            "post" => ("POST".to_string(), self.parse_simple_route_macro(attr)?),
+            "put" => ("PUT".to_string(), self.parse_simple_route_macro(attr)?),
+            "delete" => ("DELETE".to_string(), self.parse_simple_route_macro(attr)?),
+            "patch" => ("PATCH".to_string(), self.parse_simple_route_macro(attr)?),
+            "head" => ("HEAD".to_string(), self.parse_simple_route_macro(attr)?),
+            "options" => ("OPTIONS".to_string(), self.parse_simple_route_macro(attr)?),
+            _ => return Ok(None),
+        };
+
+        Ok(Some((verb, path)))
+    }
+
+    /// Parse route macro like #[route(GET, "/path")]
+    fn parse_route_macro(&self, attr: &syn::Attribute) -> OpenApiResult<(String, String)> {
+        match &attr.meta {
+            syn::Meta::List(meta_list) => {
+                let tokens = &meta_list.tokens;
+                let token_str = tokens.to_string();
+                
+                // Simple parsing for now - can be enhanced
+                let parts: Vec<&str> = token_str.split(',').map(|s| s.trim()).collect();
+                if parts.len() >= 2 {
+                    let verb = parts[0].trim_matches('"').to_uppercase();
+                    let path = parts[1].trim_matches('"').to_string();
+                    Ok((verb, path))
+                } else {
+                    Err(OpenApiError::route_discovery_error("Invalid route attribute format".to_string()))
+                }
+            }
+            _ => Err(OpenApiError::route_discovery_error("Expected route attribute with arguments".to_string())),
+        }
+    }
+
+    /// Parse simple route macro like #[get("/path")]
+    fn parse_simple_route_macro(&self, attr: &syn::Attribute) -> OpenApiResult<String> {
+        match &attr.meta {
+            syn::Meta::List(meta_list) => {
+                let tokens = &meta_list.tokens;
+                let path = tokens.to_string().trim_matches('"').to_string();
+                Ok(path)
+            }
+            _ => Err(OpenApiError::route_discovery_error("Expected route attribute with path".to_string())),
+        }
+    }
+
+    /// Extract function parameters using AST analysis
+    fn extract_function_parameters_ast(&self, sig: &syn::Signature) -> OpenApiResult<Vec<EndpointParameter>> {
         let mut parameters = Vec::new();
 
-        // Simple parameter extraction (in a real implementation, use proper AST parsing)
-        if func_line.contains("request: Request") {
-            // This would be a request body
-            parameters.push(EndpointParameter::new("request", "Request", ParameterSource::Body));
-        }
+        for input in &sig.inputs {
+            match input {
+                syn::FnArg::Typed(pat_type) => {
+                    let param_name = match &*pat_type.pat {
+                        syn::Pat::Ident(ident) => ident.ident.to_string(),
+                        _ => continue, // Skip complex patterns
+                    };
 
-        // Look for Path parameters
-        if func_line.contains("Path(") {
-            // Extract path parameter info
-            parameters.push(EndpointParameter::new("id", "i32", ParameterSource::Path));
-        }
+                    let type_str = self.type_to_string(&pat_type.ty);
+                    let (source, optional) = self.determine_parameter_source(&type_str);
 
-        // Look for Query parameters  
-        if func_line.contains("Query(") {
-            parameters.push(EndpointParameter::new("limit", "Option<i32>", ParameterSource::Query).optional());
+                    parameters.push(EndpointParameter {
+                        name: param_name,
+                        param_type: type_str,
+                        source,
+                        optional,
+                        documentation: None,
+                    });
+                }
+                syn::FnArg::Receiver(_) => continue, // Skip self parameters
+            }
         }
 
         Ok(parameters)
     }
 
-    /// Extract documentation comments
-    fn extract_documentation(&self, lines: &[&str], route_index: usize) -> Option<String> {
+    /// Determine parameter source from type information
+    fn determine_parameter_source(&self, type_str: &str) -> (ParameterSource, bool) {
+        if type_str.contains("Path<") || type_str.contains("PathParams") {
+            (ParameterSource::Path, false)
+        } else if type_str.contains("Query<") || type_str.contains("QueryParams") {
+            (ParameterSource::Query, type_str.contains("Option<"))
+        } else if type_str.contains("Header<") || type_str.contains("HeaderMap") {
+            (ParameterSource::Header, type_str.contains("Option<"))
+        } else if type_str.contains("Json<") || type_str.contains("Form<") || type_str.contains("Request") {
+            (ParameterSource::Body, false)
+        } else {
+            // Default to query parameter
+            (ParameterSource::Query, type_str.contains("Option<"))
+        }
+    }
+
+    /// Convert syn::Type to string representation
+    fn type_to_string(&self, ty: &syn::Type) -> String {
+        quote::quote!(#ty).to_string()
+    }
+
+    /// Extract documentation from function attributes
+    fn extract_documentation_ast(&self, attrs: &[syn::Attribute]) -> Option<String> {
         let mut doc_lines = Vec::new();
 
-        // Look backwards for documentation comments
-        for i in (0..route_index).rev() {
-            let line = lines[i].trim();
-            if line.starts_with("///") {
-                doc_lines.insert(0, line.trim_start_matches("///").trim());
-            } else if line.starts_with("//!") {
-                doc_lines.insert(0, line.trim_start_matches("//!").trim());
-            } else if !line.is_empty() && !line.starts_with("//") {
-                break;
+        for attr in attrs {
+            if attr.path().is_ident("doc") {
+                if let syn::Meta::NameValue(meta) = &attr.meta {
+                    if let syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(lit_str), .. }) = &meta.value {
+                        doc_lines.push(lit_str.value().trim().to_string());
+                    }
+                }
             }
         }
 
         if doc_lines.is_empty() {
             None
         } else {
-            Some(doc_lines.join(" "))
+            Some(doc_lines.join("\n"))
         }
     }
+
 
     /// Discover models from src/models directory
     fn discover_models(&self) -> OpenApiResult<Vec<ModelInfo>> {
@@ -379,7 +457,7 @@ impl ProjectDiscovery {
                 let struct_name = self.extract_struct_name(line);
                 if struct_name.to_lowercase() == model_name.to_lowercase() {
                     let derives = self.extract_derives(&lines, i);
-                    let doc = self.extract_documentation(&lines, i);
+                    let doc = self.extract_documentation_from_lines(&lines, i);
                     let fields = self.extract_struct_fields(&lines, i)?;
 
                     model_info = Some(ModelInfo {
@@ -494,6 +572,30 @@ impl ProjectDiscovery {
             }
         }
         None
+    }
+
+    /// Bridge function for old line-based documentation extraction (used by model parsing)
+    /// TODO: Replace with AST-based model parsing
+    fn extract_documentation_from_lines(&self, lines: &[&str], route_index: usize) -> Option<String> {
+        let mut doc_lines = Vec::new();
+
+        // Look backwards for documentation comments
+        for i in (0..route_index).rev() {
+            let line = lines[i].trim();
+            if line.starts_with("///") {
+                doc_lines.insert(0, line.trim_start_matches("///").trim());
+            } else if line.starts_with("//!") {
+                doc_lines.insert(0, line.trim_start_matches("//!").trim());
+            } else if !line.is_empty() && !line.starts_with("//") {
+                break;
+            }
+        }
+
+        if doc_lines.is_empty() {
+            None
+        } else {
+            Some(doc_lines.join(" "))
+        }
     }
 }
 

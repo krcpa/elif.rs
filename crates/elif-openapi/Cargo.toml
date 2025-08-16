@@ -21,11 +21,15 @@ serde_yaml = { version = "0.9" }
 
 # HTTP and web utilities
 reqwest = { version = "0.11", features = ["json"] }
+axum = "0.7"
+tower = "0.5"
+tower-http = { version = "0.5", features = ["cors", "fs"] }
 
 # Procedural macros and code generation
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
+elif-openapi-derive = { path = "../elif-openapi-derive" }
 
 # Type reflection and inspection
 inventory = "0.3"

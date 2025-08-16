@@ -1,8 +1,8 @@
 /*!
-Procedural macros for OpenAPI schema generation.
+OpenAPI schema generation traits and utilities.
 
 This module provides traits and utilities for OpenAPI schema generation from Rust types.
-For now, this is a simplified version focusing on the core functionality.
+The derive macro implementation would be in a separate proc-macro crate.
 */
 
 /// Trait for types that can generate OpenAPI schemas
@@ -97,3 +97,5 @@ impl<T: OpenApiSchema> OpenApiSchema for Vec<T> {
         format!("Vec<{}>", T::schema_name())
     }
 }
+
+

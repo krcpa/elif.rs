@@ -9,9 +9,25 @@ use crate::{
     error::{OpenApiError, OpenApiResult},
     specification::OpenApiSpec,
 };
-use std::collections::HashMap;
-use tokio::net::TcpListener;
+use axum::{
+    body::Body,
+    extract::{Path, State},
+    http::{header, StatusCode},
+    response::{Html, Json, Response},
+    routing::get,
+    Router,
+};
 use std::sync::Arc;
+use tower_http::cors::CorsLayer;
+
+/// Application state for the Swagger UI server
+#[derive(Clone)]
+pub struct SwaggerState {
+    /// OpenAPI specification
+    pub spec: Arc<OpenApiSpec>,
+    /// Configuration
+    pub config: SwaggerConfig,
+}
 
 /// Swagger UI server for serving interactive API documentation
 pub struct SwaggerUi {
@@ -67,130 +83,70 @@ impl SwaggerUi {
         &self.config
     }
 
-    /// Start the Swagger UI server
+    /// Start the Swagger UI server using axum
     pub async fn serve(&self) -> OpenApiResult<()> {
+        let state = SwaggerState {
+            spec: Arc::clone(&self.spec),
+            config: self.config.clone(),
+        };
+
+        // Build the router
+        let app = Router::new()
+            .route("/", get(serve_index))
+            .route("/api-spec.json", get(serve_spec))
+            .route("/static/*path", get(serve_static))
+            .layer(CorsLayer::permissive())
+            .with_state(state);
+
+        // Bind to the configured address
         let addr = format!("{}:{}", self.config.host, self.config.port);
-        let listener = TcpListener::bind(&addr).await
+        let listener = tokio::net::TcpListener::bind(&addr).await
             .map_err(|e| OpenApiError::generic(format!("Failed to bind to {}: {}", addr, e)))?;
 
         println!("🚀 Swagger UI server running at http://{}", addr);
         println!("📖 API documentation available at http://{}/", addr);
 
-        loop {
-            let (stream, _) = listener.accept().await
-                .map_err(|e| OpenApiError::generic(format!("Failed to accept connection: {}", e)))?;
-
-            let spec = Arc::clone(&self.spec);
-            let config = self.config.clone();
-
-            tokio::spawn(async move {
-                if let Err(e) = Self::handle_connection(stream, spec, config).await {
-                    eprintln!("Error handling connection: {}", e);
-                }
-            });
-        }
-    }
-
-    /// Handle individual HTTP connection
-    async fn handle_connection(
-        mut stream: tokio::net::TcpStream,
-        spec: Arc<OpenApiSpec>,
-        config: SwaggerConfig,
-    ) -> OpenApiResult<()> {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let mut buffer = [0; 1024];
-        let n = stream.read(&mut buffer).await
-            .map_err(|e| OpenApiError::generic(format!("Failed to read request: {}", e)))?;
-
-        let request = String::from_utf8_lossy(&buffer[..n]);
-        let lines: Vec<&str> = request.lines().collect();
-        
-        if let Some(request_line) = lines.first() {
-            let parts: Vec<&str> = request_line.split_whitespace().collect();
-            if parts.len() >= 2 {
-                let method = parts[0];
-                let path = parts[1];
-
-                let response = match (method, path) {
-                    ("GET", "/") => Self::serve_index(&config),
-                    ("GET", "/api-spec.json") => Self::serve_spec(&spec),
-                    ("GET", path) if path.starts_with("/static/") => Self::serve_static(path),
-                    _ => Self::serve_404(),
-                };
-
-                let http_response = format!(
-                    "HTTP/1.1 {}\r\nContent-Length: {}\r\nContent-Type: {}\r\n\r\n{}",
-                    response.status,
-                    response.body.len(),
-                    response.content_type,
-                    response.body
-                );
-
-                stream.write_all(http_response.as_bytes()).await
-                    .map_err(|e| OpenApiError::generic(format!("Failed to write response: {}", e)))?;
-            }
-        }
+        // Start the server
+        axum::serve(listener, app)
+            .await
+            .map_err(|e| OpenApiError::generic(format!("Server error: {}", e)))?;
 
         Ok(())
     }
+}
 
-    /// Serve the main Swagger UI index page
-    fn serve_index(config: &SwaggerConfig) -> HttpResponse {
-        let html = Self::generate_index_html(config);
-        HttpResponse {
-            status: "200 OK".to_string(),
-            content_type: "text/html".to_string(),
-            body: html,
-        }
-    }
+// Axum handlers for Swagger UI routes
 
-    /// Serve the OpenAPI specification
-    fn serve_spec(spec: &OpenApiSpec) -> HttpResponse {
-        match serde_json::to_string_pretty(spec) {
-            Ok(json) => HttpResponse {
-                status: "200 OK".to_string(),
-                content_type: "application/json".to_string(),
-                body: json,
-            },
-            Err(_) => HttpResponse {
-                status: "500 Internal Server Error".to_string(),
-                content_type: "text/plain".to_string(),
-                body: "Failed to serialize OpenAPI specification".to_string(),
-            },
-        }
-    }
+/// Serve the main Swagger UI index page
+async fn serve_index(State(state): State<SwaggerState>) -> Html<String> {
+    let html = SwaggerUi::generate_index_html(&state.config);
+    Html(html)
+}
 
-    /// Serve static assets (CSS, JS)
-    fn serve_static(path: &str) -> HttpResponse {
-        match path {
-            "/static/swagger-ui-bundle.js" => HttpResponse {
-                status: "200 OK".to_string(),
-                content_type: "application/javascript".to_string(),
-                body: "// Swagger UI Bundle - placeholder".to_string(),
-            },
-            "/static/swagger-ui-standalone-preset.js" => HttpResponse {
-                status: "200 OK".to_string(),
-                content_type: "application/javascript".to_string(),
-                body: "// Swagger UI Preset - placeholder".to_string(),
-            },
-            "/static/swagger-ui.css" => HttpResponse {
-                status: "200 OK".to_string(),
-                content_type: "text/css".to_string(),
-                body: "/* Swagger UI CSS - placeholder */".to_string(),
-            },
-            _ => Self::serve_404(),
-        }
-    }
+/// Serve the OpenAPI specification JSON
+async fn serve_spec(State(state): State<SwaggerState>) -> Result<Json<OpenApiSpec>, (StatusCode, String)> {
+    Ok(Json((*state.spec).clone()))
+}
 
-    /// Serve 404 response
-    fn serve_404() -> HttpResponse {
-        HttpResponse {
-            status: "404 Not Found".to_string(),
-            content_type: "text/plain".to_string(),
-            body: "Not Found".to_string(),
-        }
-    }
+/// Serve static assets (CSS, JS)
+async fn serve_static(Path(path): Path<String>) -> Result<Response<Body>, (StatusCode, &'static str)> {
+    let (content_type, body) = match path.as_str() {
+        "swagger-ui-bundle.js" => ("application/javascript", "// Swagger UI Bundle - placeholder for CDN content"),
+        "swagger-ui-standalone-preset.js" => ("application/javascript", "// Swagger UI Preset - placeholder for CDN content"),  
+        "swagger-ui.css" => ("text/css", "/* Swagger UI CSS - placeholder for CDN content */"),
+        _ => return Err((StatusCode::NOT_FOUND, "Not Found")),
+    };
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .body(Body::from(body))
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response"))?;
+
+    Ok(response)
+}
+
+impl SwaggerUi {
 
     /// Generate the main HTML page
     fn generate_index_html(config: &SwaggerConfig) -> String {
@@ -395,12 +351,6 @@ impl SwaggerUi {
     }
 }
 
-/// HTTP response structure
-struct HttpResponse {
-    status: String,
-    content_type: String,
-    body: String,
-}
 
 impl Default for SwaggerConfig {
     fn default() -> Self {

@@ -37,6 +37,9 @@ pub use crate::{
     swagger::SwaggerUi,
 };
 
+// Re-export the derive macro from the proc-macro crate
+pub use elif_openapi_derive::OpenApiSchema;
+
 // Core modules
 pub mod config;
 pub mod error;  
