@@ -856,7 +856,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "service-builder",
+ "service-builder 0.2.2",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -874,7 +874,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "service-builder",
+ "service-builder 0.2.2",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -892,7 +892,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "service-builder",
+ "service-builder 0.2.2",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -1092,6 +1092,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "service-builder 0.3.0",
  "sqlx",
  "thiserror 1.0.69",
  "tokio",
@@ -2987,7 +2988,21 @@ dependencies = [
  "darling",
  "proc-macro2",
  "quote",
- "service-builder-macro",
+ "service-builder-macro 0.2.2",
+ "syn 2.0.104",
+ "thiserror 2.0.14",
+]
+
+[[package]]
+name = "service-builder"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7b843738e1df174d5eb42765be172b8a5b4b0c92fd04edace8c090d31228387"
+dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "service-builder-macro 0.3.0",
  "syn 2.0.104",
  "thiserror 2.0.14",
 ]
@@ -2997,6 +3012,19 @@ name = "service-builder-macro"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6b19d3ecbb23bfbf0fb60dd3ef624a8538597174da4a5ce790c63f108e08c68"
+dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
+ "thiserror 2.0.14",
+]
+
+[[package]]
+name = "service-builder-macro"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57a0a69401082d3f769cbc5e36f3c6555cb407fd86263af004fbefef6510eb48"
 dependencies = [
  "darling",
  "proc-macro2",

@@ -5,10 +5,11 @@
 
 use std::collections::HashMap;
 use serde_json::{Value as JsonValue, json};
+use service_builder::builder;
 use crate::{TestError, TestResult};
 
 /// HTTP test client for making requests in tests
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TestClient {
     base_url: String,
     headers: HashMap<String, String>,
@@ -112,83 +113,213 @@ pub trait AuthenticatedUser {
     }
 }
 
+/// Configuration for Request builder
+#[derive(Debug, Clone)]
+#[builder]
+pub struct RequestBuilderConfig {
+    pub client: TestClient,
+    pub method: String,
+    pub path: String,
+    
+    #[builder(default)]
+    pub headers: HashMap<String, String>,
+    
+    #[builder(optional)]
+    pub body: Option<String>,
+    
+    #[builder(default)]
+    pub query_params: HashMap<String, String>,
+}
+
+impl RequestBuilderConfig {
+    /// Build the final request
+    pub fn build_request(self) -> RequestBuilder {
+        RequestBuilder {
+            builder_config: self,
+        }
+    }
+}
+
+// Add convenience methods to the generated builder
+impl RequestBuilderConfigBuilder {
+    /// Add a header
+    pub fn add_header(self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        let mut headers = self.headers.clone().unwrap_or_default();
+        headers.insert(name.into(), value.into());
+        self.headers(headers)
+    }
+    
+    /// Add query parameter
+    pub fn add_query(self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        let mut query_params = self.query_params.clone().unwrap_or_default();
+        query_params.insert(key.into(), value.into());
+        self.query_params(query_params)
+    }
+    
+    /// Add multiple query parameters
+    pub fn add_queries(self, params: HashMap<String, String>) -> Self {
+        let mut query_params = self.query_params.clone().unwrap_or_default();
+        query_params.extend(params);
+        self.query_params(query_params)
+    }
+    
+    /// Set JSON body and content type
+    pub fn with_json_body<T: serde::Serialize>(self, data: &T) -> Self {
+        match serde_json::to_string(data) {
+            Ok(json_str) => {
+                self.body(Some(json_str))
+                    .add_header("Content-Type", "application/json")
+            },
+            Err(_) => self,
+        }
+    }
+    
+    /// Set form body and content type
+    pub fn with_form_body(self, data: HashMap<String, String>) -> Self {
+        let form_data = data.iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::<Vec<_>>()
+            .join("&");
+        self.body(Some(form_data))
+            .add_header("Content-Type", "application/x-www-form-urlencoded")
+    }
+    
+    pub fn build_config(self) -> RequestBuilderConfig {
+        self.build_with_defaults().unwrap()
+    }
+}
+
 /// Request builder for fluent API
 pub struct RequestBuilder {
-    client: TestClient,
-    method: String,
-    path: String,
-    headers: HashMap<String, String>,
-    body: Option<String>,
-    query_params: HashMap<String, String>,
+    builder_config: RequestBuilderConfig,
 }
 
 impl RequestBuilder {
     fn new(client: TestClient, method: String, path: String) -> Self {
         Self {
-            client,
-            method,
-            path,
-            headers: HashMap::new(),
-            body: None,
-            query_params: HashMap::new(),
+            builder_config: RequestBuilderConfig::builder()
+                .client(client)
+                .method(method)
+                .path(path)
+                .build_config(),
         }
     }
     
     /// Set a request header
-    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
-        self.headers.insert(name.into(), value.into());
-        self
+    pub fn header(self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        let config = self.builder_config;
+        let builder = RequestBuilderConfig::builder()
+            .client(config.client)
+            .method(config.method)
+            .path(config.path)
+            .headers(config.headers)
+            .body(config.body)
+            .query_params(config.query_params)
+            .add_header(name, value)
+            .build_config();
+        
+        Self {
+            builder_config: builder,
+        }
     }
     
     /// Set JSON body for the request
-    pub fn json<T: serde::Serialize>(mut self, data: &T) -> Self {
-        match serde_json::to_string(data) {
-            Ok(json_str) => {
-                self.body = Some(json_str);
-                self.headers.insert("Content-Type".to_string(), "application/json".to_string());
-            },
-            Err(_) => {
-                // This would be handled in send()
-            }
+    pub fn json<T: serde::Serialize>(self, data: &T) -> Self {
+        let config = self.builder_config;
+        let builder = RequestBuilderConfig::builder()
+            .client(config.client)
+            .method(config.method)
+            .path(config.path)
+            .headers(config.headers)
+            .body(config.body)
+            .query_params(config.query_params)
+            .with_json_body(data)
+            .build_config();
+        
+        Self {
+            builder_config: builder,
         }
-        self
     }
     
     /// Set form data body
-    pub fn form(mut self, data: HashMap<String, String>) -> Self {
-        let form_data = data.iter()
-            .map(|(k, v)| format!("{}={}", k, v))
-            .collect::<Vec<_>>()
-            .join("&");
-        self.body = Some(form_data);
-        self.headers.insert("Content-Type".to_string(), "application/x-www-form-urlencoded".to_string());
-        self
+    pub fn form(self, data: HashMap<String, String>) -> Self {
+        let config = self.builder_config;
+        let builder = RequestBuilderConfig::builder()
+            .client(config.client)
+            .method(config.method)
+            .path(config.path)
+            .headers(config.headers)
+            .body(config.body)
+            .query_params(config.query_params)
+            .with_form_body(data)
+            .build_config();
+        
+        Self {
+            builder_config: builder,
+        }
     }
     
     /// Set plain text body
-    pub fn body(mut self, body: impl Into<String>) -> Self {
-        self.body = Some(body.into());
-        self
+    pub fn body(self, body: impl Into<String>) -> Self {
+        let config = self.builder_config;
+        let builder = RequestBuilderConfig::builder()
+            .client(config.client)
+            .method(config.method)
+            .path(config.path)
+            .headers(config.headers)
+            .body(Some(body.into()))
+            .query_params(config.query_params)
+            .build_config();
+        
+        Self {
+            builder_config: builder,
+        }
     }
     
     /// Add query parameter
-    pub fn query(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.query_params.insert(key.into(), value.into());
-        self
+    pub fn query(self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        let config = self.builder_config;
+        let builder = RequestBuilderConfig::builder()
+            .client(config.client)
+            .method(config.method)
+            .path(config.path)
+            .headers(config.headers)
+            .body(config.body)
+            .query_params(config.query_params)
+            .add_query(key, value)
+            .build_config();
+        
+        Self {
+            builder_config: builder,
+        }
     }
     
     /// Add multiple query parameters
-    pub fn queries(mut self, params: HashMap<String, String>) -> Self {
-        self.query_params.extend(params);
-        self
+    pub fn queries(self, params: HashMap<String, String>) -> Self {
+        let config = self.builder_config;
+        let builder = RequestBuilderConfig::builder()
+            .client(config.client)
+            .method(config.method)
+            .path(config.path)
+            .headers(config.headers)
+            .body(config.body)
+            .query_params(config.query_params)
+            .add_queries(params)
+            .build_config();
+        
+        Self {
+            builder_config: builder,
+        }
     }
     
     /// Send the request and return a test response
     pub async fn send(self) -> TestResult<TestResponse> {
+        let config = &self.builder_config;
+        
         // Build the full URL
-        let mut url = format!("{}{}", self.client.base_url, self.path);
-        if !self.query_params.is_empty() {
-            let query_string = self.query_params.iter()
+        let mut url = format!("{}{}", config.client.base_url, config.path);
+        if !config.query_params.is_empty() {
+            let query_string = config.query_params.iter()
                 .map(|(k, v)| format!("{}={}", k, v))
                 .collect::<Vec<_>>()
                 .join("&");
@@ -204,7 +335,7 @@ impl RequestBuilder {
                 headers.insert("Content-Type".to_string(), "application/json".to_string());
                 headers
             },
-            body: json!({"message": "Test response", "method": self.method, "path": self.path}).to_string(),
+            body: json!({"message": "Test response", "method": config.method, "path": config.path}).to_string(),
         };
         
         Ok(response)

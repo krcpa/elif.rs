@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use serde_json::{Value as JsonValue, json};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
+use service_builder::builder;
 use crate::{TestResult, database::TestDatabase};
 
 /// Factory trait for creating test data
@@ -40,11 +41,70 @@ pub trait Factory<T: Send>: Send + Sync {
     }
 }
 
+/// Configuration for Factory builder
+#[derive(Clone)]
+#[builder]
+pub struct FactoryBuilderConfig {
+    #[builder(default)]
+    pub attributes: HashMap<String, JsonValue>,
+    
+    #[builder(optional)]
+    pub database: Option<Arc<TestDatabase>>,
+}
+
+impl std::fmt::Debug for FactoryBuilderConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FactoryBuilderConfig")
+            .field("attributes_count", &self.attributes.len())
+            .field("has_database", &self.database.is_some())
+            .finish()
+    }
+}
+
+impl FactoryBuilderConfig {
+    /// Build a FactoryBuilder from the builder config
+    pub fn build_factory<T>(self) -> FactoryBuilder<T> {
+        FactoryBuilder {
+            builder_config: self,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+// Add convenience methods to the generated builder
+impl FactoryBuilderConfigBuilder {
+    /// Set an attribute value
+    pub fn with_attr<V: serde::Serialize>(self, key: &str, value: V) -> Self {
+        let mut attributes = self.attributes.clone().unwrap_or_default();
+        if let Ok(json_value) = serde_json::to_value(value) {
+            attributes.insert(key.to_string(), json_value);
+        }
+        self.attributes(attributes)
+    }
+    
+    /// Set multiple attributes
+    pub fn with_attrs(self, new_attributes: HashMap<String, JsonValue>) -> Self {
+        let mut attributes = self.attributes.clone().unwrap_or_default();
+        attributes.extend(new_attributes);
+        self.attributes(attributes)
+    }
+    
+    /// Add relationship data
+    pub fn with_relation_data(self, name: &str, data: JsonValue) -> Self {
+        let mut attributes = self.attributes.clone().unwrap_or_default();
+        attributes.insert(format!("{}_data", name), data);
+        self.attributes(attributes)
+    }
+    
+    pub fn build_config(self) -> FactoryBuilderConfig {
+        self.build_with_defaults().unwrap()
+    }
+}
+
 /// Factory builder for fluent API
 #[derive(Clone)]
 pub struct FactoryBuilder<T> {
-    attributes: HashMap<String, JsonValue>,
-    database: Option<Arc<TestDatabase>>,
+    builder_config: FactoryBuilderConfig,
     _phantom: std::marker::PhantomData<T>,
 }
 
@@ -52,43 +112,69 @@ impl<T> FactoryBuilder<T> {
     /// Create a new factory builder
     pub fn new() -> Self {
         Self {
-            attributes: HashMap::new(),
-            database: None,
+            builder_config: FactoryBuilderConfig::builder().build_config(),
             _phantom: std::marker::PhantomData,
         }
     }
     
     /// Set an attribute value
-    pub fn with<V: serde::Serialize>(mut self, key: &str, value: V) -> Self {
-        if let Ok(json_value) = serde_json::to_value(value) {
-            self.attributes.insert(key.to_string(), json_value);
+    pub fn with<V: serde::Serialize>(self, key: &str, value: V) -> Self {
+        let config_builder = FactoryBuilderConfig::builder()
+            .attributes(self.builder_config.attributes.clone())
+            .database(self.builder_config.database.clone())
+            .with_attr(key, value)
+            .build_config();
+        
+        Self {
+            builder_config: config_builder,
+            _phantom: std::marker::PhantomData,
         }
-        self
     }
     
     /// Set multiple attributes
-    pub fn with_attributes(mut self, attributes: HashMap<String, JsonValue>) -> Self {
-        self.attributes.extend(attributes);
-        self
+    pub fn with_attributes(self, attributes: HashMap<String, JsonValue>) -> Self {
+        let config_builder = FactoryBuilderConfig::builder()
+            .attributes(self.builder_config.attributes.clone())
+            .database(self.builder_config.database.clone())
+            .with_attrs(attributes)
+            .build_config();
+        
+        Self {
+            builder_config: config_builder,
+            _phantom: std::marker::PhantomData,
+        }
     }
     
     /// Set database connection for persistence
-    pub fn with_database(mut self, database: Arc<TestDatabase>) -> Self {
-        self.database = Some(database);
-        self
+    pub fn with_database(self, database: Arc<TestDatabase>) -> Self {
+        let config_builder = FactoryBuilderConfig::builder()
+            .attributes(self.builder_config.attributes.clone())
+            .database(Some(database))
+            .build_config();
+        
+        Self {
+            builder_config: config_builder,
+            _phantom: std::marker::PhantomData,
+        }
     }
     
     /// Add a relationship (simplified version)
-    pub fn with_relationship_data(mut self, name: &str, data: JsonValue) -> Self {
-        // For now, just store as attributes - relationships would be handled differently in real implementation
-        self.attributes.insert(format!("{}_data", name), data);
-        self
+    pub fn with_relationship_data(self, name: &str, data: JsonValue) -> Self {
+        let config_builder = FactoryBuilderConfig::builder()
+            .attributes(self.builder_config.attributes.clone())
+            .database(self.builder_config.database.clone())
+            .with_relation_data(name, data)
+            .build_config();
+        
+        Self {
+            builder_config: config_builder,
+            _phantom: std::marker::PhantomData,
+        }
     }
-    
     
     /// Get the current attributes
     pub fn attributes(&self) -> &HashMap<String, JsonValue> {
-        &self.attributes
+        &self.builder_config.attributes
     }
 }
 
@@ -169,7 +255,7 @@ impl Factory<User> for UserFactory {
         let user = self.build()?;
         
         // If database is available, persist the user
-        if let Some(db) = &self.builder.database {
+        if let Some(db) = &self.builder.builder_config.database {
             let insert_sql = r#"
                 INSERT INTO users (id, name, email, created_at, updated_at)
                 VALUES ($1, $2, $3, $4, $5)
@@ -189,7 +275,7 @@ impl Factory<User> for UserFactory {
     }
     
     fn build(&self) -> TestResult<User> {
-        let attrs = &self.builder.attributes;
+        let attrs = &self.builder.builder_config.attributes;
         
         // Generate fresh values for each build
         let id = attrs.get("id")
@@ -301,7 +387,7 @@ impl Factory<Post> for PostFactory {
     async fn create(&self) -> TestResult<Post> {
         let post = self.build()?;
         
-        if let Some(db) = &self.builder.database {
+        if let Some(db) = &self.builder.builder_config.database {
             let insert_sql = r#"
                 INSERT INTO posts (id, title, content, user_id, created_at, updated_at)
                 VALUES ($1, $2, $3, $4, $5, $6)
@@ -322,7 +408,7 @@ impl Factory<Post> for PostFactory {
     }
     
     fn build(&self) -> TestResult<Post> {
-        let attrs = &self.builder.attributes;
+        let attrs = &self.builder.builder_config.attributes;
         
         // Generate fresh values for each build
         let id = attrs.get("id")

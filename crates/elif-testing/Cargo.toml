@@ -41,6 +41,7 @@ regex = { workspace = true }
 
 # Development and testing
 tokio-test = "0.4"
+service-builder = "0.3.0"
 
 [dev-dependencies]
 tokio-test = "0.4"

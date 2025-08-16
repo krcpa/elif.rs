@@ -5,9 +5,10 @@
 //! session management, and RBAC testing helpers.
 
 use std::collections::HashMap;
-use serde_json::{Value as JsonValue, json};
+use serde_json::{Value as JsonValue};
 use uuid::Uuid;
 use chrono::{DateTime, Utc, Duration};
+use service_builder::builder;
 use crate::{TestError, TestResult, factories::{User, UserFactory, Factory}};
 
 /// Test authentication provider for generating test tokens and sessions
@@ -289,11 +290,64 @@ impl TestSession {
     }
 }
 
+/// Configuration for TestUser builder
+#[derive(Debug, Clone)]
+#[builder]
+pub struct TestUserBuilderConfig {
+    pub user: User,
+    
+    #[builder(default = "vec![String::from(\"user\")]")]
+    pub roles: Vec<String>,
+    
+    #[builder(default)]
+    pub permissions: Vec<String>,
+}
+
+impl TestUserBuilderConfig {
+    /// Build the final tuple
+    pub fn build_user(self) -> (User, Vec<String>, Vec<String>) {
+        (self.user, self.roles, self.permissions)
+    }
+}
+
+// Add convenience methods to the generated builder
+impl TestUserBuilderConfigBuilder {
+    /// Add a role
+    pub fn add_role(self, role: impl Into<String>) -> Self {
+        let mut roles = self.roles.clone().unwrap_or_else(|| vec![String::from("user")]);
+        roles.push(role.into());
+        self.roles(roles)
+    }
+    
+    /// Add multiple roles
+    pub fn add_roles(self, new_roles: Vec<String>) -> Self {
+        let mut roles = self.roles.clone().unwrap_or_else(|| vec![String::from("user")]);
+        roles.extend(new_roles);
+        self.roles(roles)
+    }
+    
+    /// Add a permission
+    pub fn add_permission(self, permission: impl Into<String>) -> Self {
+        let mut permissions = self.permissions.clone().unwrap_or_default();
+        permissions.push(permission.into());
+        self.permissions(permissions)
+    }
+    
+    /// Add multiple permissions
+    pub fn add_permissions(self, new_permissions: Vec<String>) -> Self {
+        let mut permissions = self.permissions.clone().unwrap_or_default();
+        permissions.extend(new_permissions);
+        self.permissions(permissions)
+    }
+    
+    pub fn build_config(self) -> TestUserBuilderConfig {
+        self.build_with_defaults().unwrap()
+    }
+}
+
 /// Test user builder for authentication testing
 pub struct TestUserBuilder {
-    user: User,
-    roles: Vec<String>,
-    permissions: Vec<String>,
+    builder_config: TestUserBuilderConfigBuilder,
 }
 
 impl TestUserBuilder {
@@ -301,9 +355,7 @@ impl TestUserBuilder {
     pub fn new() -> TestResult<Self> {
         let user = UserFactory::new().build()?;
         Ok(Self {
-            user,
-            roles: vec!["user".to_string()],
-            permissions: vec![],
+            builder_config: TestUserBuilderConfig::builder().user(user),
         })
     }
     
@@ -311,56 +363,77 @@ impl TestUserBuilder {
     pub fn admin() -> TestResult<Self> {
         let user = UserFactory::new().build()?;
         Ok(Self {
-            user,
-            roles: vec!["admin".to_string()],
-            permissions: vec![
-                "users.create".to_string(),
-                "users.read".to_string(),
-                "users.update".to_string(),
-                "users.delete".to_string(),
-            ],
+            builder_config: TestUserBuilderConfig::builder()
+                .user(user)
+                .roles(vec!["admin".to_string()])
+                .permissions(vec![
+                    "users.create".to_string(),
+                    "users.read".to_string(),
+                    "users.update".to_string(),
+                    "users.delete".to_string(),
+                ]),
         })
     }
     
     /// Set user name
-    pub fn with_name(mut self, name: impl Into<String>) -> Self {
-        self.user.name = name.into();
-        self
+    pub fn with_name(self, name: impl Into<String>) -> Self {
+        let config = self.builder_config.build_config();
+        let mut user = config.user;
+        user.name = name.into();
+        
+        Self {
+            builder_config: TestUserBuilderConfig::builder()
+                .user(user)
+                .roles(config.roles)
+                .permissions(config.permissions),
+        }
     }
     
     /// Set user email
-    pub fn with_email(mut self, email: impl Into<String>) -> Self {
-        self.user.email = email.into();
-        self
+    pub fn with_email(self, email: impl Into<String>) -> Self {
+        let config = self.builder_config.build_config();
+        let mut user = config.user;
+        user.email = email.into();
+        
+        Self {
+            builder_config: TestUserBuilderConfig::builder()
+                .user(user)
+                .roles(config.roles)
+                .permissions(config.permissions),
+        }
     }
     
     /// Add a role
-    pub fn with_role(mut self, role: impl Into<String>) -> Self {
-        self.roles.push(role.into());
-        self
+    pub fn with_role(self, role: impl Into<String>) -> Self {
+        Self {
+            builder_config: self.builder_config.add_role(role),
+        }
     }
     
     /// Add multiple roles
-    pub fn with_roles(mut self, roles: Vec<String>) -> Self {
-        self.roles.extend(roles);
-        self
+    pub fn with_roles(self, roles: Vec<String>) -> Self {
+        Self {
+            builder_config: self.builder_config.add_roles(roles),
+        }
     }
     
     /// Add a permission
-    pub fn with_permission(mut self, permission: impl Into<String>) -> Self {
-        self.permissions.push(permission.into());
-        self
+    pub fn with_permission(self, permission: impl Into<String>) -> Self {
+        Self {
+            builder_config: self.builder_config.add_permission(permission),
+        }
     }
     
     /// Add multiple permissions
-    pub fn with_permissions(mut self, permissions: Vec<String>) -> Self {
-        self.permissions.extend(permissions);
-        self
+    pub fn with_permissions(self, permissions: Vec<String>) -> Self {
+        Self {
+            builder_config: self.builder_config.add_permissions(permissions),
+        }
     }
     
     /// Build the user
     pub fn build(self) -> (User, Vec<String>, Vec<String>) {
-        (self.user, self.roles, self.permissions)
+        self.builder_config.build_config().build_user()
     }
     
     /// Generate JWT token for this user
