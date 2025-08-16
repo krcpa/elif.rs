@@ -18,23 +18,17 @@
 //! ```rust
 //! use elif_testing::prelude::*;
 //!
-//! #[test_database]
-//! async fn test_user_creation() -> Result<(), Box<dyn std::error::Error>> {
-//!     let user = UserFactory::new().create().await?;
+//! #[test]
+//! fn test_utilities() {
+//!     // Generate test data
+//!     let test_email = utils::random_email();
+//!     let test_id = utils::test_uuid();
+//!     let timestamp = utils::test_timestamp();
 //!     
-//!     let response = TestClient::new()
-//!         .post("/api/users")
-//!         .json(&CreateUserRequest {
-//!             name: "Test User".to_string(),
-//!             email: "test@example.com".to_string(),
-//!         })
-//!         .send()
-//!         .await?;
-//!         
-//!     response.assert_status(201)
-//!            .assert_json_contains(json!({"name": "Test User"}));
-//!            
-//!     Ok(())
+//!     // Use utilities
+//!     assert!(test_email.contains("@example.com"));
+//!     assert!(!test_id.to_string().is_empty());
+//!     assert!(!timestamp.to_rfc3339().is_empty());
 //! }
 //! ```
 
@@ -58,6 +52,7 @@ pub mod prelude {
         client::{TestClient, TestResponse},
         factories::{Factory, FactoryBuilder},
         assertions::TestAssertions,
+        utils,
     };
     
     // Re-export commonly used external types
