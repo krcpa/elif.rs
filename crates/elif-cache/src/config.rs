@@ -9,15 +9,15 @@ use service_builder::builder;
 #[builder]
 pub struct CacheConfig {
     /// Default TTL for cache entries
-    #[builder(optional, getter)]
+    #[builder(getter, default = "Some(Duration::from_secs(3600))")]
     pub default_ttl: Option<Duration>,
     
     /// Maximum number of entries (for memory backend)
-    #[builder(optional, getter)]
+    #[builder(getter, default = "Some(10_000)")]
     pub max_entries: Option<usize>,
     
     /// Memory limit in bytes (for memory backend)
-    #[builder(optional, getter)]
+    #[builder(getter, default = "Some(100 * 1024 * 1024)")]
     pub max_memory: Option<usize>,
     
     /// Connection timeout
@@ -39,15 +39,13 @@ pub struct CacheConfig {
 
 impl Default for CacheConfig {
     fn default() -> Self {
-        Self {
-            default_ttl: Some(Duration::from_secs(3600)), // 1 hour
-            max_entries: Some(10_000),
-            max_memory: Some(100 * 1024 * 1024), // 100MB
-            connection_timeout: Duration::from_secs(5),
-            operation_timeout: Duration::from_secs(1),
-            compression: false,
-            compression_threshold: 1024, // 1KB
-        }
+        // Use the builder with defaults to ensure consistency
+        CacheConfig::builder()
+            .default_ttl(Some(Duration::from_secs(3600))) // 1 hour
+            .max_entries(Some(10_000))
+            .max_memory(Some(100 * 1024 * 1024)) // 100MB
+            .build()
+            .unwrap()
     }
 }
 
