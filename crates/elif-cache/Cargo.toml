@@ -26,6 +26,7 @@ hex = "0.4"
 dashmap = "5.0"
 parking_lot = "0.12"
 rand = "0.8"
+lru = "0.12"
 
 # Pattern matching
 regex = "1.0"

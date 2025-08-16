@@ -47,7 +47,8 @@
       "Bash(gh pr view:*)",
       "Bash(gh pr list:*)",
       "Bash(gh api:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(gh pr close:*)"
     ],
     "deny": []
   }
