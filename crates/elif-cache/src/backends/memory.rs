@@ -142,14 +142,14 @@ impl MemoryBackend {
     
     /// Check if we need to evict entries
     fn should_evict(&self) -> bool {
-        if let Some(max_entries) = self.config.max_entries {
-            if self.entries.len() >= max_entries {
+        if let Some(max_entries) = self.config.get_max_entries() {
+            if self.entries.len() >= *max_entries {
                 return true;
             }
         }
         
-        if let Some(max_memory) = self.config.max_memory {
-            if self.memory_usage() >= max_memory {
+        if let Some(max_memory) = self.config.get_max_memory() {
+            if self.memory_usage() >= *max_memory {
                 return true;
             }
         }
@@ -442,8 +442,8 @@ mod tests {
     #[tokio::test]
     async fn test_memory_backend_lru_eviction() {
         let config = CacheConfig::builder()
-            .max_entries(2)
-            .build();
+            .max_entries_limit(2)
+            .build_config();
         let backend = MemoryBackend::new(config);
         
         // Fill cache to capacity
