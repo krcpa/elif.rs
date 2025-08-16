@@ -252,23 +252,35 @@ impl RouteBuilderConfig {
 impl RouteBuilderConfigBuilder {
     /// Add parameter type specification
     pub fn add_param(self, name: &str, param_type: ParamType) -> Self {
-        let mut param_types = self.param_types.clone().unwrap_or_default();
-        param_types.insert(name.to_string(), param_type);
-        self.param_types(param_types)
+        let mut param_types_map = self.param_types.unwrap_or_default();
+        param_types_map.insert(name.to_string(), param_type);
+        RouteBuilderConfigBuilder {
+            name: self.name,
+            param_types: Some(param_types_map),
+            middleware: self.middleware,
+        }
     }
     
     /// Add multiple parameter type specifications
     pub fn add_params(self, params: HashMap<String, ParamType>) -> Self {
-        let mut param_types = self.param_types.clone().unwrap_or_default();
-        param_types.extend(params);
-        self.param_types(param_types)
+        let mut param_types_map = self.param_types.unwrap_or_default();
+        param_types_map.extend(params);
+        RouteBuilderConfigBuilder {
+            name: self.name,
+            param_types: Some(param_types_map),
+            middleware: self.middleware,
+        }
     }
     
     /// Add middleware
     pub fn add_middleware(self, middleware: &str) -> Self {
-        let mut middlewares = self.middleware.clone().unwrap_or_default();
-        middlewares.push(middleware.to_string());
-        self.middleware(middlewares)
+        let mut middlewares_vec = self.middleware.unwrap_or_default();
+        middlewares_vec.push(middleware.to_string());
+        RouteBuilderConfigBuilder {
+            name: self.name,
+            param_types: self.param_types,
+            middleware: Some(middlewares_vec),
+        }
     }
     
     pub fn build_config(self) -> RouteBuilderConfig {

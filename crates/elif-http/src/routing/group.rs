@@ -214,16 +214,24 @@ impl GroupBuilderConfig {
 impl GroupBuilderConfigBuilder {
     /// Add middleware to the group
     pub fn add_middleware(self, middleware_name: &str) -> Self {
-        let mut middlewares = self.middleware.clone().unwrap_or_default();
-        middlewares.push(middleware_name.to_string());
-        self.middleware(middlewares)
+        let mut middlewares_vec = self.middleware.unwrap_or_default();
+        middlewares_vec.push(middleware_name.to_string());
+        GroupBuilderConfigBuilder {
+            name: self.name,
+            prefix: self.prefix,
+            middleware: Some(middlewares_vec),
+        }
     }
     
     /// Add multiple middlewares
-    pub fn add_middlewares(self, middlewares: Vec<String>) -> Self {
-        let mut current_middlewares = self.middleware.clone().unwrap_or_default();
-        current_middlewares.extend(middlewares);
-        self.middleware(current_middlewares)
+    pub fn add_middlewares(self, new_middlewares: Vec<String>) -> Self {
+        let mut middlewares_vec = self.middleware.unwrap_or_default();
+        middlewares_vec.extend(new_middlewares);
+        GroupBuilderConfigBuilder {
+            name: self.name,
+            prefix: self.prefix,
+            middleware: Some(middlewares_vec),
+        }
     }
     
     pub fn build_config(self) -> GroupBuilderConfig {

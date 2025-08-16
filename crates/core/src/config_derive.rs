@@ -39,16 +39,24 @@ impl<T> ConfigBuilderConfig<T> {
 impl<T> ConfigBuilderConfigBuilder<T> {
     /// Add a configuration field
     pub fn add_field(self, field: ConfigField) -> Self {
-        let mut fields = self.fields.clone().unwrap_or_default();
-        fields.push(field);
-        self.fields(fields)
+        let mut fields_vec = self.fields.unwrap_or_default();
+        fields_vec.push(field);
+        ConfigBuilderConfigBuilder {
+            fields: Some(fields_vec),
+            name: self.name,
+            _phantom: self._phantom,
+        }
     }
     
     /// Add multiple configuration fields
     pub fn add_fields(self, new_fields: Vec<ConfigField>) -> Self {
-        let mut fields = self.fields.clone().unwrap_or_default();
-        fields.extend(new_fields);
-        self.fields(fields)
+        let mut fields_vec = self.fields.unwrap_or_default();
+        fields_vec.extend(new_fields);
+        ConfigBuilderConfigBuilder {
+            fields: Some(fields_vec),
+            name: self.name,
+            _phantom: self._phantom,
+        }
     }
     
     pub fn build_config(self) -> ConfigBuilderConfig<T> {
