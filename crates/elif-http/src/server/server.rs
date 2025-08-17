@@ -4,15 +4,16 @@
 //! Users interact only with framework types - Axum is completely abstracted away.
 
 use crate::{
-    HttpConfig, HttpError, HttpResult,
-    ElifRouter, 
-    MiddlewarePipeline, Middleware,
+    config::HttpConfig, 
+    errors::{HttpError, HttpResult},
+    routing::ElifRouter, 
+    middleware::{MiddlewarePipeline, Middleware},
 };
+use super::lifecycle::{build_internal_router, start_server};
 use elif_core::Container;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::signal;
-use tracing::{info, warn};
+use tracing::info;
 
 /// The main HTTP server - NestJS-like experience
 /// 
@@ -25,13 +26,9 @@ use tracing::{info, warn};
 /// 
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     // TODO: Set up test config and database after refactor
-///     
-///     let container = Container::new(); // TODO: Proper setup after refactor
-///         
+///     let container = Container::new();
 ///     let server = Server::new(container, HttpConfig::default())?;
 ///     server.listen("0.0.0.0:3000").await?;
-///     
 ///     Ok(())
 /// }
 /// ```
@@ -76,11 +73,7 @@ impl Server {
     /// # async fn create_user(_req: ElifRequest) -> HttpResult<&'static str> { Ok("created") }
     /// 
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// // TODO: Set up test config and database after refactor
-    /// // TODO: Set up test database after refactor
-    /// 
-    /// let container = Container::new(); // TODO: Proper setup after refactor
-    ///     
+    /// let container = Container::new();
     /// let mut server = Server::new(container, HttpConfig::default())?;
     /// 
     /// let router = ElifRouter::new()
@@ -112,11 +105,7 @@ impl Server {
     /// # impl elif_http::Middleware for LoggingMiddleware {}
     /// 
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// // TODO: Set up test config and database after refactor
-    /// // TODO: Set up test database after refactor
-    /// 
-    /// let container = Container::new(); // TODO: Proper setup after refactor
-    ///     
+    /// let container = Container::new();
     /// let mut server = Server::new(container, HttpConfig::default())?;
     /// server.use_middleware(LoggingMiddleware::default());
     /// # Ok(())
@@ -141,11 +130,7 @@ impl Server {
     /// # 
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// #     // TODO: Set up test config and database after refactor
-    /// #     // TODO: Set up test database after refactor
-    /// #     
-    /// #     let container = Container::new(); // TODO: Proper setup after refactor
-    /// #         
+    /// #     let container = Container::new();
     /// #     let server = Server::new(container, HttpConfig::default())?;
     /// server.listen("0.0.0.0:3000").await?;
     /// #     Ok(())
@@ -165,118 +150,37 @@ impl Server {
         info!("📋 Health check endpoint: {}", self.config.health_check_path);
         
         // Build the internal router
-        let axum_router = self.build_internal_router().await?;
+        let axum_router = build_internal_router(self.container.clone(), self.config.clone(), self.router).await?;
         
-        // Create TCP listener
-        let listener = tokio::net::TcpListener::bind(addr)
-            .await
-            .map_err(|e| HttpError::startup(format!("Failed to bind to {}: {}", addr, e)))?;
-
-        info!("✅ Server listening on {}", addr);
-        info!("🔧 Framework: Elif.rs (Axum under the hood)");
-
-        // Serve with graceful shutdown
-        axum::serve(listener, axum_router.into_make_service_with_connect_info::<SocketAddr>())
-            .with_graceful_shutdown(shutdown_signal())
-            .await
-            .map_err(|e| HttpError::internal(format!("Server error: {}", e)))?;
+        // Start the server
+        start_server(addr, axum_router).await?;
 
         info!("🛑 Server shut down gracefully");
         Ok(())
     }
 
-    /// Build the internal Axum router (hidden from users)
-    async fn build_internal_router(self) -> HttpResult<axum::Router> {
-        let container = self.container.clone();
-        let config = self.config.clone();
-
-        // Create health check handler with captured context
-        let health_container = container.clone();
-        let health_config = config.clone();
-        let health_handler = move |_req: crate::request::ElifRequest| {
-            let container = health_container.clone();
-            let config = health_config.clone();
-            async move {
-                Ok(crate::response::ElifResponse::ok().json(&health_check(container, config).await.0)?)
-            }
-        };
-
-        // Start with framework router
-        let mut router = if let Some(user_router) = self.router {
-            user_router
-        } else {
-            ElifRouter::new()
-        };
-
-        // Add health check route
-        router = router.get(&config.health_check_path, health_handler);
-
-        // Convert to Axum router
-        Ok(router.into_axum_router())
+    // Getter methods for testing and inspection
+    pub fn container(&self) -> &Arc<Container> {
+        &self.container
     }
-}
 
-/// Default health check handler
-pub async fn health_check(_container: Arc<Container>, _config: HttpConfig) -> axum::response::Json<serde_json::Value> {
-    use serde_json::json;
+    pub fn config(&self) -> &HttpConfig {
+        &self.config
+    }
 
-    let response = json!({
-        "status": "healthy",
-        "framework": "Elif.rs",
-        "version": env!("CARGO_PKG_VERSION"),
-        "timestamp": std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
-        "server": {
-            "ready": true,
-            "uptime": "N/A"
-        }
-    });
+    pub fn router(&self) -> Option<&ElifRouter> {
+        self.router.as_ref()
+    }
 
-    axum::response::Json(response)
-}
-
-/// Graceful shutdown signal handler
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("Failed to install Ctrl+C handler");
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("Failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! {
-        _ = ctrl_c => {
-            warn!("📡 Received Ctrl+C, shutting down gracefully...");
-        },
-        _ = terminate => {
-            warn!("📡 Received terminate signal, shutting down gracefully...");
-        },
+    pub fn middleware(&self) -> &MiddlewarePipeline {
+        &self.middleware
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use elif_core::{
-        app_config::AppConfigTrait,
-    };
-
-    fn create_test_container() -> Arc<Container> {
-        // TODO: Implement proper test container setup after refactor
-        Arc::new(Container::new())
-    }
+    use crate::testing::create_test_container;
 
     #[test]
     fn test_server_creation() {
@@ -296,24 +200,12 @@ mod tests {
         assert!(server.is_ok());
     }
 
-    #[tokio::test]
-    async fn test_health_check_handler() {
-        let container = create_test_container();
-        let config = HttpConfig::default();
-        
-        let response = health_check(container, config).await;
-        // Test that response is properly formatted JSON
-        assert!(response.0.get("status").is_some());
-        assert_eq!(response.0["status"], "healthy");
-    }
-
     #[test]
-    fn test_invalid_address() {
+    fn test_server_configuration() {
         let container = create_test_container();
         let config = HttpConfig::default();
         let server = Server::with_container(container, config).unwrap();
         
-        // This should be tested with an actual tokio runtime in integration tests
-        // For now, we just verify the server can be created
+        assert_eq!(server.config().health_check_path, "/health");
     }
 }
