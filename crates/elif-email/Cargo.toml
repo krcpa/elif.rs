@@ -1,0 +1,38 @@
+[package]
+name = "elif-email"
+version = "0.1.0"
+edition = "2021"
+description = "Email system for elif.rs with multiple providers and templating"
+license = "MIT"
+authors = ["krcpa <krcpa@users.noreply.github.com>"]
+repository = "https://github.com/krcpa/elif.rs"
+
+[dependencies]
+# Email sending
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder", "hostname"] }
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+
+# Templating
+handlebars = "4.4"
+
+# Utilities
+base64 = "0.22"
+urlencoding = "2.1"
+
+# Core elif dependencies
+elif-core = { version = "0.4.0", path = "../core" }
+
+# Workspace dependencies
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+regex = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.8"
