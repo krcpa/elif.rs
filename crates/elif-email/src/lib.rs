@@ -207,30 +207,7 @@ impl Email {
     
     /// Validate all attachments against configuration
     pub fn validate_attachments(&self, config: &crate::config::AttachmentConfig) -> Result<(), crate::EmailError> {
-        // Check attachment count
-        if self.attachments.len() > config.max_count {
-            return Err(crate::EmailError::validation(
-                "attachment_count",
-                format!("Too many attachments: {} (max: {})", self.attachments.len(), config.max_count)
-            ));
-        }
-        
-        // Check total size
-        let total_size: usize = self.attachments.iter().map(|a| a.size).sum();
-        if total_size > config.max_total_size {
-            return Err(crate::EmailError::validation(
-                "attachments_total_size",
-                format!("Total attachments size too large: {} bytes (max: {} bytes)",
-                    total_size, config.max_total_size)
-            ));
-        }
-        
-        // Validate each attachment
-        for attachment in &self.attachments {
-            attachment.validate(config)?;
-        }
-        
-        Ok(())
+        crate::compression::validate_attachments(&self.attachments, config)
     }
     
     /// Get all inline attachments (for HTML embedding)
