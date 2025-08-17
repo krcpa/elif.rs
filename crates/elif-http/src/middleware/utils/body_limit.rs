@@ -124,22 +124,10 @@ impl BodyLimitMiddleware {
 
     /// Create body limit exceeded error response
     fn create_error_response(&self, content_length: Option<usize>) -> Response {
-        let mut error = HttpError::payload_too_large(&self.config.error_message);
-
-        if self.config.include_headers {
-            if let Some(size) = content_length {
-                error = error.with_detail(&format!(
-                    "Request body size {} bytes exceeds limit of {} bytes", 
-                    size, 
-                    self.config.max_size
-                ));
-            } else {
-                error = error.with_detail(&format!(
-                    "Request body exceeds limit of {} bytes", 
-                    self.config.max_size
-                ));
-            }
-        }
+        let error = match content_length {
+            Some(size) => HttpError::payload_too_large(size, self.config.max_size),
+            None => HttpError::payload_too_large(0, self.config.max_size),
+        };
 
         let mut response = error.into_response();
         

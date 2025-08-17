@@ -148,22 +148,15 @@ impl HttpError {
     }
 
     /// Create a timeout error
-    pub fn timeout<T: Into<String>>(_message: T) -> Self {
+    pub fn timeout() -> Self {
         HttpError::RequestTimeout
     }
 
-    /// Create a payload too large error
-    pub fn payload_too_large<T: Into<String>>(_message: T) -> Self {
-        HttpError::RequestTooLarge { 
-            size: 0,
-            limit: 0
-        }
-    }
-
     /// Create a payload too large error with specific sizes
-    pub fn payload_too_large_with_sizes<T: Into<String>>(_message: T, size: usize, limit: usize) -> Self {
+    pub fn payload_too_large(size: usize, limit: usize) -> Self {
         HttpError::RequestTooLarge { size, limit }
     }
+
 
     /// Add additional detail to error (for now, just returns self - future enhancement)
     pub fn with_detail<T: Into<String>>(self, _detail: T) -> Self {

@@ -116,7 +116,7 @@ impl TimeoutMiddleware {
 
     /// Create timeout error response
     fn timeout_response(&self) -> Response {
-        let error = HttpError::timeout(&self.config.timeout_message);
+        let error = HttpError::timeout();
         error.into_response()
     }
 }
@@ -186,7 +186,7 @@ where
         Ok(result) => Ok(result),
         Err(_) => {
             error!("Request timed out after {:?}: {}", duration, timeout_message);
-            let error = HttpError::timeout(timeout_message);
+            let error = HttpError::timeout();
             Err(error.into_response())
         }
     }
@@ -250,7 +250,7 @@ where
                 },
                 Err(_) => {
                     error!("Request timed out after {:?}: {}", duration, message);
-                    let error = HttpError::timeout(&message);
+                    let error = HttpError::timeout();
                     Err(error.into_response())
                 }
             }
