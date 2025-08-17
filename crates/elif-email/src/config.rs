@@ -238,8 +238,10 @@ impl SmtpConfig {
 
     /// Get effective TLS configuration, handling legacy settings
     pub fn effective_tls_config(&self) -> SmtpTlsConfig {
-        // Handle legacy configuration
-        if let (Some(use_tls), Some(use_starttls)) = (self.use_tls, self.use_starttls) {
+        // Handle legacy configuration - if either field is present, use legacy logic
+        if self.use_tls.is_some() || self.use_starttls.is_some() {
+            let use_tls = self.use_tls.unwrap_or(false);
+            let use_starttls = self.use_starttls.unwrap_or(false);
             match (use_tls, use_starttls) {
                 (true, false) => SmtpTlsConfig::Tls,
                 (false, true) => SmtpTlsConfig::StartTls,
@@ -272,5 +274,73 @@ impl MailgunConfig {
             region: None,
             timeout: Some(30),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_effective_tls_config_new_field() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.tls = SmtpTlsConfig::Tls;
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::Tls));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_both() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_tls = Some(true);
+        config.use_starttls = Some(false);
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::Tls));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_only_tls() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_tls = Some(true);
+        // use_starttls remains None, should default to false
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::Tls));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_only_starttls() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_starttls = Some(true);
+        // use_tls remains None, should default to false
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::StartTls));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_both_false() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_tls = Some(false);
+        config.use_starttls = Some(false);
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::None));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_both_true() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_tls = Some(true);
+        config.use_starttls = Some(true);
+        
+        // Should prefer STARTTLS when both are true
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::StartTls));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_false_none() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_tls = Some(false);
+        // use_starttls remains None, should default to false
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::None));
     }
 }
