@@ -1,66 +1,8 @@
-use clap::Args;
-use elif_core::ElifError;
-use crate::command_system::{CommandHandler, CommandError, CommandDefinition, impl_command};
+use crate::command_system::CommandError;
 use crate::interactive::{Prompt, Format, ProgressBar};
-use async_trait::async_trait;
 use std::io;
 
-/// Interactive setup command arguments
-#[derive(Args, Debug, Clone)]
-pub struct InteractiveSetupArgs {
-    /// Skip interactive mode and use defaults
-    #[arg(long)]
-    pub non_interactive: bool,
-    
-    /// Show verbose output during setup
-    #[arg(long, short)]
-    pub verbose: bool,
-}
-
-impl_command!(
-    InteractiveSetupArgs,
-    "interactive-setup",
-    "Interactive project setup and configuration wizard",
-    "Run an interactive setup wizard to configure your elif project.\n\n\
-     Features:\n\
-     - Database configuration\n\
-     - Authentication setup\n\
-     - Environment configuration\n\
-     - Development tools setup\n\n\
-     Examples:\n\
-       elifrs interactive-setup\n\
-       elifrs interactive-setup --verbose\n\
-       elifrs interactive-setup --non-interactive"
-);
-
-/// Interactive setup command handler
-pub struct InteractiveSetupCommand {
-    pub args: InteractiveSetupArgs,
-}
-
-#[async_trait]
-impl CommandHandler for InteractiveSetupCommand {
-    async fn handle(&self) -> Result<(), CommandError> {
-        if self.args.non_interactive {
-            self.non_interactive_setup().await
-        } else {
-            self.interactive_setup().await
-        }
-    }
-    
-    fn name(&self) -> &'static str {
-        InteractiveSetupArgs::NAME
-    }
-    
-    fn description(&self) -> &'static str {
-        InteractiveSetupArgs::DESCRIPTION
-    }
-    
-    fn help(&self) -> Option<&'static str> {
-        InteractiveSetupArgs::HELP
-    }
-}
-
+/// Project configuration structure
 #[derive(Debug, Clone)]
 pub struct ProjectConfig {
     pub project_name: String,
@@ -94,74 +36,17 @@ impl Default for ProjectConfig {
     }
 }
 
-impl InteractiveSetupCommand {
-    pub fn new(args: InteractiveSetupArgs) -> Self {
-        Self { args }
+/// Handler for interactive configuration collection and generation
+pub struct InteractiveConfigHandler {
+    verbose: bool,
+}
+
+impl InteractiveConfigHandler {
+    pub fn new(verbose: bool) -> Self {
+        Self { verbose }
     }
     
-    async fn interactive_setup(&self) -> Result<(), CommandError> {
-        Format::header("🚀 elif.rs Interactive Setup");
-        
-        println!("Welcome to the elif.rs project setup wizard!");
-        println!("This will help you configure your project with the best settings.");
-        println!();
-        
-        if !Prompt::confirm("Would you like to continue with the setup?", true)
-            .map_err(|e| CommandError::Io(e))? 
-        {
-            Format::info("Setup cancelled by user");
-            return Ok(());
-        }
-        
-        let mut config = ProjectConfig::default();
-        
-        // Project configuration
-        self.configure_project(&mut config).await?;
-        
-        // Database configuration
-        self.configure_database(&mut config).await?;
-        
-        // Authentication configuration
-        self.configure_auth(&mut config).await?;
-        
-        // Server configuration
-        self.configure_server(&mut config).await?;
-        
-        // Logging configuration
-        self.configure_logging(&mut config).await?;
-        
-        // Summary
-        self.show_summary(&config).await?;
-        
-        // Apply configuration
-        if Prompt::confirm("Apply this configuration?", true)
-            .map_err(|e| CommandError::Io(e))? 
-        {
-            self.apply_configuration(&config).await?;
-            Format::success("Setup completed successfully!");
-        } else {
-            Format::info("Setup cancelled - no changes were made");
-        }
-        
-        Ok(())
-    }
-    
-    async fn non_interactive_setup(&self) -> Result<(), CommandError> {
-        Format::info("Running non-interactive setup with default values");
-        
-        let config = ProjectConfig::default();
-        
-        if self.args.verbose {
-            self.show_summary(&config).await?;
-        }
-        
-        self.apply_configuration(&config).await?;
-        Format::success("Non-interactive setup completed!");
-        
-        Ok(())
-    }
-    
-    async fn configure_project(&self, config: &mut ProjectConfig) -> Result<(), CommandError> {
+    pub async fn configure_project(&self, config: &mut ProjectConfig) -> Result<(), CommandError> {
         Format::subheader("📋 Project Configuration");
         
         config.project_name = Prompt::input(
@@ -183,7 +68,7 @@ impl InteractiveSetupCommand {
         Ok(())
     }
     
-    async fn configure_database(&self, config: &mut ProjectConfig) -> Result<(), CommandError> {
+    pub async fn configure_database(&self, config: &mut ProjectConfig) -> Result<(), CommandError> {
         Format::subheader("🗄️  Database Configuration");
         
         let db_types = [
@@ -212,7 +97,7 @@ impl InteractiveSetupCommand {
         Ok(())
     }
     
-    async fn configure_auth(&self, config: &mut ProjectConfig) -> Result<(), CommandError> {
+    pub async fn configure_auth(&self, config: &mut ProjectConfig) -> Result<(), CommandError> {
         Format::subheader("🔐 Authentication Configuration");
         
         let auth_providers = [
@@ -239,7 +124,7 @@ impl InteractiveSetupCommand {
         Ok(())
     }
     
-    async fn configure_server(&self, config: &mut ProjectConfig) -> Result<(), CommandError> {
+    pub async fn configure_server(&self, config: &mut ProjectConfig) -> Result<(), CommandError> {
         Format::subheader("🌐 Server Configuration");
         
         config.host = Prompt::input(
@@ -255,7 +140,7 @@ impl InteractiveSetupCommand {
         Ok(())
     }
     
-    async fn configure_logging(&self, config: &mut ProjectConfig) -> Result<(), CommandError> {
+    pub async fn configure_logging(&self, config: &mut ProjectConfig) -> Result<(), CommandError> {
         Format::subheader("📝 Logging Configuration");
         
         config.enable_logging = Prompt::confirm(
@@ -281,7 +166,7 @@ impl InteractiveSetupCommand {
         Ok(())
     }
     
-    async fn show_summary(&self, config: &ProjectConfig) -> Result<(), CommandError> {
+    pub async fn show_summary(&self, config: &ProjectConfig) -> Result<(), CommandError> {
         Format::header("📋 Configuration Summary");
         
         let data = vec![
@@ -303,7 +188,7 @@ impl InteractiveSetupCommand {
         Ok(())
     }
     
-    async fn apply_configuration(&self, config: &ProjectConfig) -> Result<(), CommandError> {
+    pub async fn apply_configuration(&self, config: &ProjectConfig) -> Result<(), CommandError> {
         Format::info("Applying configuration...");
         
         let steps = vec![
@@ -318,7 +203,7 @@ impl InteractiveSetupCommand {
         let mut pb = ProgressBar::new("Setup Progress", steps.len());
         
         for (i, step) in steps.iter().enumerate() {
-            if self.args.verbose {
+            if self.verbose {
                 Format::info(&format!("Step {}: {}", i + 1, step));
             }
             
@@ -338,7 +223,7 @@ impl InteractiveSetupCommand {
     }
     
     async fn generate_config_files(&self, config: &ProjectConfig) -> Result<(), CommandError> {
-        if self.args.verbose {
+        if self.verbose {
             Format::info("Generating configuration files...");
         }
         
@@ -370,7 +255,7 @@ impl InteractiveSetupCommand {
         tokio::fs::write(".env", env_content).await
             .map_err(|e| CommandError::Io(e))?;
         
-        if self.args.verbose {
+        if self.verbose {
             Format::success("Generated .env file");
         }
         
@@ -394,18 +279,10 @@ impl InteractiveSetupCommand {
         tokio::fs::write("config/database.toml", db_content).await
             .map_err(|e| CommandError::Io(e))?;
         
-        if self.args.verbose {
+        if self.verbose {
             Format::success("Generated config/database.toml");
         }
         
         Ok(())
     }
-}
-
-/// Create and run interactive setup command
-pub async fn run(args: InteractiveSetupArgs) -> Result<(), ElifError> {
-    let command = InteractiveSetupCommand::new(args);
-    command.handle().await.map_err(|e| {
-        ElifError::Codegen(format!("Interactive setup command failed: {}", e))
-    })
 }

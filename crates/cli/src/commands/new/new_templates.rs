@@ -1,62 +1,8 @@
 use elif_core::ElifError;
-use std::fs;
 use std::path::Path;
+use tokio::fs;
 
-pub async fn create_app(name: &str, target_path: Option<&str>) -> Result<(), ElifError> {
-    let app_path = match target_path {
-        Some(path) => format!("{}/{}", path, name),
-        None => format!("./{}", name),
-    };
-    
-    let app_dir = Path::new(&app_path);
-    
-    if app_dir.exists() {
-        return Err(ElifError::Validation(
-            format!("Directory {} already exists", app_path)
-        ));
-    }
-    
-    println!("📦 Creating new elif application: {}", name);
-    
-    // Create directory structure
-    create_app_structure(&app_dir, name)?;
-    
-    // Create configuration files
-    create_config_files(&app_dir, name)?;
-    
-    // Create source files
-    create_source_files(&app_dir, name)?;
-    
-    println!("✅ Application '{}' created successfully!", name);
-    println!("📂 Location: {}", app_dir.display());
-    println!("\n🚀 To get started:");
-    println!("   cd {}", app_path);
-    println!("   elif route add GET /hello hello_controller");
-    println!("   cargo run");
-    
-    Ok(())
-}
-
-fn create_app_structure(app_dir: &Path, _name: &str) -> Result<(), ElifError> {
-    let dirs = [
-        "src/controllers",
-        "src/middleware", 
-        "src/models",
-        "src/routes",
-        "resources",
-        "migrations",
-        "tests",
-        ".elif",
-    ];
-    
-    for dir in &dirs {
-        fs::create_dir_all(app_dir.join(dir))?;
-    }
-    
-    Ok(())
-}
-
-fn create_config_files(app_dir: &Path, name: &str) -> Result<(), ElifError> {
+pub async fn create_config_files(app_dir: &Path, name: &str) -> Result<(), ElifError> {
     // Cargo.toml
     let cargo_toml = format!(r#"[package]
 name = "{}"
@@ -83,7 +29,7 @@ chrono = {{ version = "0.4", features = ["serde"] }}
 # Note: No direct web framework dependencies - use framework abstractions only
 "#, name);
     
-    fs::write(app_dir.join("Cargo.toml"), cargo_toml)?;
+    fs::write(app_dir.join("Cargo.toml"), cargo_toml).await?;
     
     // .elif/manifest.yaml
     let manifest = format!(r#"name: {}
@@ -98,7 +44,7 @@ routes:
   prefix: "/api/v1"
 "#, name);
     
-    fs::write(app_dir.join(".elif/manifest.yaml"), manifest)?;
+    fs::write(app_dir.join(".elif/manifest.yaml"), manifest).await?;
     
     // .elif/errors.yaml - Standardized error codes
     let errors_yaml = r#"# Standardized error codes for consistent API responses
@@ -160,19 +106,19 @@ routes:
   hint: "Please wait before making more requests"
 "#;
     
-    fs::write(app_dir.join(".elif/errors.yaml"), errors_yaml)?;
+    fs::write(app_dir.join(".elif/errors.yaml"), errors_yaml).await?;
     
     // .env
     let env_content = r#"DATABASE_URL=postgresql://localhost/elif_dev
 RUST_LOG=info
 "#;
     
-    fs::write(app_dir.join(".env"), env_content)?;
+    fs::write(app_dir.join(".env"), env_content).await?;
     
     Ok(())
 }
 
-fn create_source_files(app_dir: &Path, name: &str) -> Result<(), ElifError> {
+pub async fn create_source_files(app_dir: &Path, name: &str) -> Result<(), ElifError> {
     // src/main.rs
     let main_rs = r#"mod controllers;
 mod middleware;
@@ -322,7 +268,7 @@ async fn health_check() -> ElifResponse {
 }
 "#;
     
-    fs::write(app_dir.join("src/main.rs"), main_rs)?;
+    fs::write(app_dir.join("src/main.rs"), main_rs).await?;
     
     // src/routes/mod.rs
     let routes_mod = r#"use elif_http::ElifRouter;
@@ -334,7 +280,7 @@ pub fn framework_router() -> ElifRouter {
 }
 "#;
     
-    fs::write(app_dir.join("src/routes/mod.rs"), routes_mod)?;
+    fs::write(app_dir.join("src/routes/mod.rs"), routes_mod).await?;
     
     // src/controllers/mod.rs
     let controllers_mod = r#"// Controllers will be added here by `elif route add` command
@@ -347,13 +293,13 @@ pub fn framework_router() -> ElifRouter {
 // }
 "#;
     
-    fs::write(app_dir.join("src/controllers/mod.rs"), controllers_mod)?;
+    fs::write(app_dir.join("src/controllers/mod.rs"), controllers_mod).await?;
     
     // src/models/mod.rs
-    fs::write(app_dir.join("src/models/mod.rs"), "// Models will be added here\n")?;
+    fs::write(app_dir.join("src/models/mod.rs"), "// Models will be added here\n").await?;
     
     // src/middleware/mod.rs
-    fs::write(app_dir.join("src/middleware/mod.rs"), "// Middleware will be added here\n")?;
+    fs::write(app_dir.join("src/middleware/mod.rs"), "// Middleware will be added here\n").await?;
     
     // README.md
     let readme = format!(r#"# {}
@@ -390,7 +336,7 @@ cargo run
 - `resources/` - Resource specifications
 "#, name);
     
-    fs::write(app_dir.join("README.md"), readme)?;
+    fs::write(app_dir.join("README.md"), readme).await?;
     
     // LLM.md - AI agent instructions
     let llm_md = format!(r#"# LLM.md — {} (LLM-friendly Rust web framework)
@@ -487,7 +433,7 @@ cargo run
 Bu uygulama elif.rs framework ile oluşturuldu - AI agent odaklı geliştirme için tasarlandı.
 "#, name, name);
     
-    fs::write(app_dir.join("LLM.md"), llm_md)?;
+    fs::write(app_dir.join("LLM.md"), llm_md).await?;
     
     Ok(())
 }
