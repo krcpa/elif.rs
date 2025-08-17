@@ -13,7 +13,7 @@ use serde::{Serialize, Deserialize};
 use serde_json::Value;
 
 use elif_core::Container;
-use crate::{HttpResult, HttpError, ApiResponse};
+use crate::{HttpResult, response::ApiResponse};
 
 /// Query parameters for pagination and filtering
 #[derive(Debug, Serialize, Deserialize)]
