@@ -6,7 +6,7 @@ use crate::{Email, EmailError, EmailProvider, EmailResult};
 use async_trait::async_trait;
 use elif_queue::{
     Job, JobResult, JobEntry, JobId, Priority, Queue, QueueBackend, 
-    QueueResult, QueueError, JobState, QueueStats
+    QueueResult, QueueError, JobState
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -238,10 +238,26 @@ impl EmailJobProcessor {
             self.default_provider.clone()
         };
         
-        // Attempt to send email
+        // Attempt to send email (with panic safety)  
         let result = tokio::time::timeout(
             Duration::from_secs(job.timeout_seconds),
-            provider.send(&job.email)
+            async {
+                // Wrap the provider call in a task that can handle panics
+                let provider_clone = provider.clone();
+                let email_clone = job.email.clone();
+                match tokio::spawn(async move {
+                    provider_clone.send(&email_clone).await
+                }).await {
+                    Ok(result) => result,
+                    Err(join_error) => {
+                        if join_error.is_panic() {
+                            Err(EmailError::provider("unknown", "Provider panicked during send"))
+                        } else {
+                            Err(EmailError::provider("unknown", "Provider task was cancelled"))
+                        }
+                    }
+                }
+            }
         ).await;
         
         let attempt_result = match result {
@@ -348,7 +364,23 @@ impl<B: QueueBackend> EmailQueueService<B> {
     pub async fn enqueue_scheduled(&self, email: Email, send_at: chrono::DateTime<chrono::Utc>) -> QueueResult<JobId> {
         let now = chrono::Utc::now();
         let delay = if send_at > now {
-            (send_at - now).to_std().unwrap_or(Duration::from_secs(0))
+            match (send_at - now).to_std() {
+                Ok(duration) => {
+                    // Cap at maximum reasonable delay (30 days)
+                    let max_delay = Duration::from_secs(30 * 24 * 60 * 60);
+                    if duration > max_delay {
+                        return Err(QueueError::Configuration(
+                            format!("Scheduled time is too far in the future (max 30 days): {:?}", duration)
+                        ));
+                    }
+                    duration
+                }
+                Err(_) => {
+                    return Err(QueueError::Configuration(
+                        "Invalid scheduled time: duration cannot be converted to std::time::Duration".to_string()
+                    ));
+                }
+            }
         } else {
             Duration::from_secs(0)
         };
@@ -411,8 +443,12 @@ impl<B: QueueBackend> EmailQueueService<B> {
         if let Some(processor) = &self.processor {
             if let Some(job_entry) = self.queue.dequeue().await? {
                 let job_id = job_entry.id();
-                let result = job_entry.execute::<EmailJob>().await;
-                
+
+                let result = match serde_json::from_value::<EmailJob>(job_entry.payload().clone()) {
+                    Ok(job) => processor.process(&job).await,
+                    Err(e) => Err(e.into()),
+                };
+
                 // Complete the job in the queue
                 self.queue.complete(job_id, result).await?;
                 Ok(true)
@@ -439,7 +475,7 @@ pub struct EmailQueueStats {
 /// Email worker for background processing
 pub struct EmailWorker<B: QueueBackend> {
     service: Arc<EmailQueueService<B>>,
-    is_running: Arc<tokio::sync::RwLock<bool>>,
+    shutdown_notify: Arc<tokio::sync::Notify>,
     worker_id: String,
     config: EmailWorkerConfig,
 }
@@ -473,7 +509,7 @@ impl<B: QueueBackend + 'static> EmailWorker<B> {
     pub fn new(service: Arc<EmailQueueService<B>>) -> Self {
         Self {
             service,
-            is_running: Arc::new(tokio::sync::RwLock::new(false)),
+            shutdown_notify: Arc::new(tokio::sync::Notify::new()),
             worker_id: Uuid::new_v4().to_string(),
             config: EmailWorkerConfig::default(),
         }
@@ -488,19 +524,14 @@ impl<B: QueueBackend + 'static> EmailWorker<B> {
     /// Start the worker
     pub async fn start(&self) -> tokio::task::JoinHandle<()> {
         let service = self.service.clone();
-        let is_running = self.is_running.clone();
+        let shutdown_notify = self.shutdown_notify.clone();
         let worker_id = self.worker_id.clone();
         let config = self.config.clone();
         
         tokio::spawn(async move {
-            {
-                let mut running = is_running.write().await;
-                *running = true;
-            }
-            
             info!("Email worker {} started", worker_id);
             
-            while *is_running.read().await {
+            loop {
                 let mut processed_count = 0;
                 
                 // Process up to batch_size jobs
@@ -519,26 +550,26 @@ impl<B: QueueBackend + 'static> EmailWorker<B> {
                     info!("Worker {} processed {} jobs", worker_id, processed_count);
                 }
                 
-                // Sleep before next poll
-                tokio::time::sleep(config.poll_interval).await;
+                // Wait for either shutdown signal or poll interval
+                tokio::select! {
+                    _ = shutdown_notify.notified() => {
+                        info!("Received shutdown signal for worker {}", worker_id);
+                        break;
+                    }
+                    _ = tokio::time::sleep(config.poll_interval) => {
+                        // Continue to next iteration
+                    }
+                }
             }
             
             info!("Email worker {} stopped", worker_id);
         })
     }
     
-    /// Stop the worker
-    pub async fn stop(&self) {
+    /// Stop the worker gracefully
+    pub fn stop(&self) {
         info!("Stopping email worker {}", self.worker_id);
-        {
-            let mut running = self.is_running.write().await;
-            *running = false;
-        }
-    }
-    
-    /// Check if worker is running
-    pub async fn is_running(&self) -> bool {
-        *self.is_running.read().await
+        self.shutdown_notify.notify_one();
     }
 }
 
@@ -599,5 +630,152 @@ mod tests {
         let stats = service.stats().await.unwrap();
         assert_eq!(stats.total, 1);
         assert_eq!(stats.pending, 1);
+    }
+    
+    #[tokio::test]
+    async fn test_process_next_job_with_processor() {
+        use crate::providers::MockEmailProvider;
+        
+        let backend = MemoryBackend::new(QueueConfig::default());
+        let provider = Arc::new(MockEmailProvider::new());
+        let processor = Arc::new(EmailJobProcessor::new(provider));
+        let service = EmailQueueService::new(backend).with_processor(processor);
+        
+        let email = Email::new()
+            .from("test@example.com")
+            .to("user@example.com")
+            .subject("Test")
+            .text_body("Hello");
+        
+        service.enqueue(email).await.unwrap();
+        
+        // Process job should work with processor configured
+        let processed = service.process_next_job().await.unwrap();
+        assert!(processed);
+        
+        // No more jobs to process
+        let processed_again = service.process_next_job().await.unwrap();
+        assert!(!processed_again);
+    }
+    
+    #[tokio::test]
+    async fn test_process_next_job_without_processor() {
+        let backend = MemoryBackend::new(QueueConfig::default());
+        let service = EmailQueueService::new(backend);
+        
+        let email = Email::new()
+            .from("test@example.com")
+            .to("user@example.com")
+            .subject("Test")
+            .text_body("Hello");
+        
+        service.enqueue(email).await.unwrap();
+        
+        // Should fail without processor
+        let result = service.process_next_job().await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No email processor configured"));
+    }
+    
+    #[tokio::test]
+    async fn test_enqueue_scheduled_future_date() {
+        let backend = MemoryBackend::new(QueueConfig::default());
+        let service = EmailQueueService::new(backend);
+        
+        let email = Email::new()
+            .from("test@example.com")
+            .to("user@example.com")
+            .subject("Scheduled Test")
+            .text_body("Hello");
+        
+        let future_time = chrono::Utc::now() + chrono::Duration::hours(1);
+        let job_id = service.enqueue_scheduled(email, future_time).await.unwrap();
+        assert!(!job_id.to_string().is_empty());
+    }
+    
+    #[tokio::test]
+    async fn test_enqueue_scheduled_too_far_future() {
+        let backend = MemoryBackend::new(QueueConfig::default());
+        let service = EmailQueueService::new(backend);
+        
+        let email = Email::new()
+            .from("test@example.com")
+            .to("user@example.com")
+            .subject("Too Far Future Test")
+            .text_body("Hello");
+        
+        let too_far_future = chrono::Utc::now() + chrono::Duration::days(31);
+        let result = service.enqueue_scheduled(email, too_far_future).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("too far in the future"));
+    }
+    
+    #[tokio::test]
+    async fn test_enqueue_scheduled_past_date() {
+        let backend = MemoryBackend::new(QueueConfig::default());
+        let service = EmailQueueService::new(backend);
+        
+        let email = Email::new()
+            .from("test@example.com")
+            .to("user@example.com")
+            .subject("Past Date Test")
+            .text_body("Hello");
+        
+        let past_time = chrono::Utc::now() - chrono::Duration::hours(1);
+        let job_id = service.enqueue_scheduled(email, past_time).await.unwrap();
+        assert!(!job_id.to_string().is_empty());
+    }
+    
+    #[tokio::test]
+    async fn test_email_worker_graceful_shutdown() {
+        use crate::providers::MockEmailProvider;
+        
+        let backend = MemoryBackend::new(QueueConfig::default());
+        let provider = Arc::new(MockEmailProvider::new());
+        let processor = Arc::new(EmailJobProcessor::new(provider));
+        let service = Arc::new(EmailQueueService::new(backend).with_processor(processor));
+        
+        let worker = EmailWorker::new(service.clone()).with_config(EmailWorkerConfig {
+            poll_interval: Duration::from_millis(100),
+            batch_size: 1,
+            shutdown_timeout: Duration::from_secs(5),
+            verbose: true,
+        });
+        
+        let handle = worker.start().await;
+        
+        // Give worker time to start
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        
+        // Stop worker - should be immediate with new graceful shutdown
+        let start_time = std::time::Instant::now();
+        worker.stop();
+        
+        // Wait for worker to finish
+        tokio::time::timeout(Duration::from_secs(2), handle).await.unwrap().unwrap();
+        
+        let shutdown_time = start_time.elapsed();
+        // Should shutdown much faster than poll_interval with graceful shutdown
+        assert!(shutdown_time < Duration::from_millis(200), 
+                "Shutdown took {:?}, expected < 200ms", shutdown_time);
+    }
+    
+    #[tokio::test] 
+    async fn test_email_job_processor_panic_safety() {
+        use crate::providers::PanickingEmailProvider;
+        
+        let provider = Arc::new(PanickingEmailProvider::new());
+        let processor = EmailJobProcessor::new(provider);
+        
+        let job = EmailJob::new(Email::new()
+            .from("test@example.com")
+            .to("user@example.com")
+            .subject("Panic Test")
+            .text_body("This should handle panics"));
+        
+        // Should handle panic gracefully and return error
+        let result = processor.process(&job).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("panicked"));
     }
 }

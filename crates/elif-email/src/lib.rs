@@ -27,6 +27,8 @@ pub use config::*;
 pub use error::*;
 pub use mailable::*;
 pub use providers::*;
+#[cfg(test)]
+pub use providers::{MockEmailProvider, PanickingEmailProvider};
 pub use templates::*;
 pub use tracking::*;
 pub use validation::*;
