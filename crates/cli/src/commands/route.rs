@@ -6,9 +6,7 @@ pub async fn add_route(method: &str, path: &str, controller: &str) -> Result<(),
     // Validate method
     let method = method.to_uppercase();
     if !["GET", "POST", "PUT", "DELETE", "PATCH"].contains(&method.as_str()) {
-        return Err(ElifError::Validation(
-            format!("Invalid HTTP method: {}. Use GET, POST, PUT, DELETE, or PATCH", method)
-        ));
+        return Err(ElifError::Validation { message: format!("Invalid HTTP method: {}. Use GET, POST, PUT, DELETE, or PATCH", method) });
     }
     
     println!("🛣️  Adding route: {} {} -> {}", method, path, controller);
@@ -34,7 +32,7 @@ pub async fn list_routes() -> Result<(), ElifError> {
         return Ok(());
     }
     
-    let content = fs::read_to_string(routes_file)?;
+    let content = fs::read_to_string(routes_file).map_err(|e| ElifError::Io(e))?;
     
     println!("📋 Current Routes:");
     
@@ -74,7 +72,7 @@ pub async fn {}() -> Result<Json<Value>, StatusCode> {{
 // <<<ELIF:END agent-editable:{}>>>
 "#, controller_name, controller_name, controller_name, controller_name);
     
-    fs::write(&controller_path, controller_content)?;
+    fs::write(&controller_path, controller_content).map_err(|e| ElifError::Io(e))?;
     
     // Update controllers/mod.rs
     update_controllers_mod(controller_name)?;
@@ -86,7 +84,7 @@ pub async fn {}() -> Result<Json<Value>, StatusCode> {{
 
 fn update_controllers_mod(controller_name: &str) -> Result<(), ElifError> {
     let mod_path = "src/controllers/mod.rs";
-    let mut content = fs::read_to_string(mod_path)?;
+    let mut content = fs::read_to_string(mod_path).map_err(|e| ElifError::Io(e))?;
     
     // Add module declaration if not present
     let mod_declaration = format!("pub mod {};", controller_name);
@@ -114,7 +112,7 @@ fn update_controllers_mod(controller_name: &str) -> Result<(), ElifError> {
             content = format!("{}\n{}", mod_declaration, content);
         }
         
-        fs::write(mod_path, content)?;
+        fs::write(mod_path, content).map_err(|e| ElifError::Io(e))?;
     }
     
     Ok(())
@@ -122,7 +120,7 @@ fn update_controllers_mod(controller_name: &str) -> Result<(), ElifError> {
 
 async fn add_route_to_router(method: &str, path: &str, controller: &str) -> Result<(), ElifError> {
     let routes_path = "src/routes/mod.rs";
-    let content = fs::read_to_string(routes_path)?;
+    let content = fs::read_to_string(routes_path).map_err(|e| ElifError::Io(e))?;
     
     let axum_method = match method {
         "GET" => "get",
@@ -130,7 +128,7 @@ async fn add_route_to_router(method: &str, path: &str, controller: &str) -> Resu
         "PUT" => "put",
         "DELETE" => "delete",
         "PATCH" => "patch",
-        _ => return Err(ElifError::Validation(format!("Unsupported method: {}", method))),
+        _ => return Err(ElifError::Validation { message: format!("Unsupported method: {}", method) }),
     };
     
     let route_line = format!(r#"        .route("{}", {}(crate::controllers::{}::{}))"#, 
@@ -144,11 +142,9 @@ async fn add_route_to_router(method: &str, path: &str, controller: &str) -> Resu
             &format!("Router::new()\n{}", route_line)
         );
         
-        fs::write(routes_path, new_content)?;
+        fs::write(routes_path, new_content).map_err(|e| ElifError::Io(e))?;
     } else {
-        return Err(ElifError::Validation(
-            "Could not find Router::new() in src/routes/mod.rs".to_string()
-        ));
+        return Err(ElifError::Validation { message: "Could not find Router::new() in src/routes/mod.rs".to_string() });
     }
     
     Ok(())

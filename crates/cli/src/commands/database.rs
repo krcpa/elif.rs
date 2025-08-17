@@ -12,7 +12,7 @@ pub async fn seed(env: Option<String>, force: bool, verbose: bool) -> Result<(),
         .max_connections(5)
         .connect(&database_url)
         .await
-        .map_err(|e| ElifError::Database(format!("Failed to connect to database: {}", e)))?;
+        .map_err(|e| ElifError::Database { message: format!("Failed to connect to database: {}", e) })?;
 
     // Determine environment
     let environment = if let Some(env_str) = env {
@@ -35,9 +35,9 @@ pub async fn seed(env: Option<String>, force: bool, verbose: bool) -> Result<(),
     // Run seeders based on environment
     match environment {
         Environment::Production if !force => {
-            return Err(ElifError::Database(
-                "Cannot run seeders in production environment without --force flag".to_string()
-            ));
+            return Err(ElifError::Database {
+                message: "Cannot run seeders in production environment without --force flag".to_string()
+            });
         }
         Environment::Production => {
             println!("⚠️  WARNING: Running seeders in PRODUCTION environment!");
@@ -49,7 +49,7 @@ pub async fn seed(env: Option<String>, force: bool, verbose: bool) -> Result<(),
             }
             
             seeder_manager.run_production_force(&pool).await
-                .map_err(|e| ElifError::Database(format!("Production seeding failed: {}", e)))?;
+                .map_err(|e| ElifError::Database { message: format!("Production seeding failed: {}", e) })?;
         }
         _ => {
             if verbose {
@@ -57,7 +57,7 @@ pub async fn seed(env: Option<String>, force: bool, verbose: bool) -> Result<(),
             }
             
             seeder_manager.run_for_environment(&pool, &environment).await
-                .map_err(|e| ElifError::Database(format!("Seeding failed: {}", e)))?;
+                .map_err(|e| ElifError::Database { message: format!("Seeding failed: {}", e) })?;
         }
     }
 

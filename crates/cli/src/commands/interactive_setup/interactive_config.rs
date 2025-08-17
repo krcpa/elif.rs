@@ -1,6 +1,5 @@
 use crate::command_system::CommandError;
 use crate::interactive::{Prompt, Format, ProgressBar};
-use std::io;
 
 /// Project configuration structure
 #[derive(Debug, Clone)]

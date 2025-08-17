@@ -27,7 +27,7 @@ pub async fn template_render(args: EmailTemplateRenderArgs) -> Result<(), ElifEr
     // Parse context data if provided
     let _context_data: HashMap<String, Value> = if let Some(context_str) = &args.context {
         from_str(context_str)
-            .map_err(|e| ElifError::Validation(format!("Invalid JSON context: {}", e)))?
+            .map_err(|e| ElifError::Validation { message: format!("Invalid JSON context: {}", e) })?
     } else {
         HashMap::new()
     };

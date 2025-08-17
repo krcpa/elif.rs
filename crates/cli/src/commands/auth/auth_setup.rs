@@ -9,7 +9,7 @@ pub async fn setup(provider: AuthProvider, mfa: bool, rbac: bool) -> Result<(), 
     
     // Check if we're in an elif project
     if !Path::new("Cargo.toml").exists() {
-        return Err(ElifError::Validation("Not in an elif project directory".to_string()));
+        return Err(ElifError::Validation { message: "Not in an elif project directory".to_string() });
     }
     
     // Create config directory if it doesn't exist
@@ -91,7 +91,7 @@ async fn setup_session_auth(mfa: bool, rbac: bool) -> Result<(), ElifError> {
         config.push_str("\n");
     }
     
-    fs::write("config/auth_session.env", config).await?;
+    fs::write("config/auth_session.env", config).await.map_err(|e| ElifError::Validation { message: format!("Failed to write session auth config: {}", e) })?;
     println!("📄 Created config/auth_session.env");
     
     Ok(())

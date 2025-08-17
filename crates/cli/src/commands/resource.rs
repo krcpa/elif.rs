@@ -73,11 +73,11 @@ pub fn new_resource(name: &str, route: &str, fields_str: &str) -> Result<(), Eli
     };
     
     let resources_dir = PathBuf::from("resources");
-    std::fs::create_dir_all(&resources_dir)?;
+    std::fs::create_dir_all(&resources_dir).map_err(|e| ElifError::Io(e))?;
     
     let file_path = resources_dir.join(format!("{}.resource.yaml", name.to_lowercase()));
     let yaml = spec.to_yaml()?;
-    std::fs::write(file_path, yaml)?;
+    std::fs::write(file_path, yaml).map_err(|e| ElifError::Io(e))?;
     
     println!("✓ Created resource specification for {}", name);
     Ok(())
@@ -99,9 +99,7 @@ fn parse_fields(fields_str: &str) -> Result<Vec<FieldSpec>, ElifError> {
     for field_def in fields_str.split(',') {
         let parts: Vec<&str> = field_def.trim().split(':').collect();
         if parts.len() != 2 {
-            return Err(ElifError::Validation(
-                format!("Invalid field definition: {}. Expected name:type format", field_def)
-            ));
+            return Err(ElifError::Validation { message: format!("Invalid field definition: {}. Expected name:type format", field_def) });
         }
         
         fields.push(FieldSpec {

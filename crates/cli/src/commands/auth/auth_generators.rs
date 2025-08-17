@@ -6,7 +6,7 @@ pub fn generate_key(length: usize) -> Result<(), ElifError> {
     println!("🔑 Generating secure key...");
     
     if length < 32 {
-        return Err(ElifError::Validation("Key length must be at least 32 bytes".to_string()));
+        return Err(ElifError::Validation { message: "Key length must be at least 32 bytes".to_string() });
     }
     
     let mut rng = rand::thread_rng();

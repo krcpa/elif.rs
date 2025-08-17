@@ -373,7 +373,7 @@ pub fn api_info() -> serde_json::Value {{
         }
 
         let content = serde_yaml::to_string(&spec)
-            .map_err(|e| ElifError::Validation(format!("Failed to serialize OpenAPI spec: {}", e)))?;
+            .map_err(|e| ElifError::Validation { message: format!("Failed to serialize OpenAPI spec: {}", e) })?;
 
         Ok(GeneratedFile {
             path: self.project_root.join("openapi").join(format!("api_{}.yml", options.version)),

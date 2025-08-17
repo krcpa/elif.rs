@@ -145,6 +145,6 @@ impl QueueStatusCommand {
 pub async fn status(args: QueueStatusArgs) -> Result<(), ElifError> {
     let command = QueueStatusCommand::new(args);
     command.handle().await.map_err(|e| {
-        ElifError::Codegen(format!("Queue status command failed: {}", e))
+        ElifError::Codegen { message: format!("Queue status command failed: {}", e) }
     })
 }

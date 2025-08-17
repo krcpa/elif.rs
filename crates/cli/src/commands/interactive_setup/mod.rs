@@ -20,6 +20,6 @@ use crate::command_system::CommandHandler;
 pub async fn run(args: InteractiveSetupArgs) -> Result<(), ElifError> {
     let command = InteractiveSetupCommand::new(args);
     command.handle().await.map_err(|e| {
-        ElifError::Codegen(format!("Interactive setup command failed: {}", e))
+        ElifError::Codegen { message: format!("Interactive setup command failed: {}", e) }
     })
 }

@@ -11,9 +11,7 @@ pub async fn create_app(name: &str, target_path: Option<&str>) -> Result<(), Eli
     let app_dir = Path::new(&app_path);
     
     if app_dir.exists() {
-        return Err(ElifError::Validation(
-            format!("Directory {} already exists", app_path)
-        ));
+        return Err(ElifError::Validation { message: format!("Directory {} already exists", app_path) });
     }
     
     println!("📦 Creating new elif application: {}", name);

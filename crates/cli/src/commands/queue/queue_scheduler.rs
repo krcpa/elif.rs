@@ -407,6 +407,6 @@ impl ScheduleRunCommand {
 pub async fn schedule_run(args: ScheduleRunArgs) -> Result<(), ElifError> {
     let command = ScheduleRunCommand::new(args);
     command.handle().await.map_err(|e| {
-        ElifError::Codegen(format!("Schedule run command failed: {}", e))
+        ElifError::Codegen { message: format!("Schedule run command failed: {}", e) }
     })
 }

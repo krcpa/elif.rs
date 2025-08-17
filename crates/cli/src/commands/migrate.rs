@@ -12,7 +12,7 @@ pub async fn create(name: &str) -> Result<(), ElifError> {
             println!("✓ Created migration: {}", filename);
             Ok(())
         }
-        Err(e) => Err(ElifError::Database(format!("Failed to create migration: {}", e)))
+        Err(e) => Err(ElifError::Database { message: format!("Failed to create migration: {}", e) })
     }
 }
 
@@ -24,7 +24,7 @@ pub async fn run() -> Result<(), ElifError> {
     // Create migration manager and runner
     let manager = MigrationManager::new();
     let runner = MigrationRunner::from_url(manager, &database_url).await
-        .map_err(|e| ElifError::Database(format!("Failed to create migration runner: {}", e)))?;
+        .map_err(|e| ElifError::Database { message: format!("Failed to create migration runner: {}", e) })?;
     
     println!("🚀 Running database migrations...");
     
@@ -44,7 +44,7 @@ pub async fn run() -> Result<(), ElifError> {
             }
             Ok(())
         }
-        Err(e) => Err(ElifError::Database(format!("Migration failed: {}", e)))
+        Err(e) => Err(ElifError::Database { message: format!("Migration failed: {}", e) })
     }
 }
 
@@ -56,7 +56,7 @@ pub async fn rollback() -> Result<(), ElifError> {
     // Create migration manager and runner
     let manager = MigrationManager::new();
     let runner = MigrationRunner::from_url(manager, &database_url).await
-        .map_err(|e| ElifError::Database(format!("Failed to create migration runner: {}", e)))?;
+        .map_err(|e| ElifError::Database { message: format!("Failed to create migration runner: {}", e) })?;
     
     println!("🔄 Rolling back last batch of migrations...");
     
@@ -73,7 +73,7 @@ pub async fn rollback() -> Result<(), ElifError> {
             }
             Ok(())
         }
-        Err(e) => Err(ElifError::Database(format!("Rollback failed: {}", e)))
+        Err(e) => Err(ElifError::Database { message: format!("Rollback failed: {}", e) })
     }
 }
 
@@ -85,7 +85,7 @@ pub async fn status() -> Result<(), ElifError> {
     // Create migration manager and runner
     let manager = MigrationManager::new();
     let runner = MigrationRunner::from_url(manager, &database_url).await
-        .map_err(|e| ElifError::Database(format!("Failed to create migration runner: {}", e)))?;
+        .map_err(|e| ElifError::Database { message: format!("Failed to create migration runner: {}", e) })?;
     
     println!("Migration Status:");
     println!("================");
@@ -138,6 +138,6 @@ pub async fn status() -> Result<(), ElifError> {
             }
             Ok(())
         }
-        Err(e) => Err(ElifError::Database(format!("Failed to get migration status: {}", e)))
+        Err(e) => Err(ElifError::Database { message: format!("Failed to get migration status: {}", e) })
     }
 }

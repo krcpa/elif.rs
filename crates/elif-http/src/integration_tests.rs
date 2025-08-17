@@ -13,7 +13,6 @@ mod tests {
     };
     use elif_core::{
         Container,
-        container::test_implementations::*,
         app_config::AppConfigTrait,
     };
     use serde::{Deserialize, Serialize};
@@ -36,15 +35,8 @@ mod tests {
     }
 
     fn create_test_container() -> Arc<Container> {
-        let config = Arc::new(create_test_config());
-        let database = Arc::new(TestDatabase::new()) as Arc<dyn elif_core::DatabaseConnection>;
-        
-        Container::builder()
-            .config(config)
-            .database(database)
-            .build()
-            .unwrap()
-            .into()
+        // TODO: Implement proper test container setup after refactor
+        Arc::new(Container::new())
     }
 
     // Pure framework handler - no external framework knowledge

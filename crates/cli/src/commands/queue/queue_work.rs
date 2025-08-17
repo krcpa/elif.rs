@@ -239,6 +239,6 @@ impl QueueWorkCommand {
 pub async fn work(args: QueueWorkArgs) -> Result<(), ElifError> {
     let command = QueueWorkCommand::new(args);
     command.handle().await.map_err(|e| {
-        ElifError::Codegen(format!("Queue work command failed: {}", e))
+        ElifError::Codegen { message: format!("Queue work command failed: {}", e) }
     })
 }

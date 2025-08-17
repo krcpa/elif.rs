@@ -8,20 +8,20 @@ pub async fn run() -> Result<(), ElifError> {
     let fmt_output = Command::new("cargo")
         .args(&["fmt", "--check"])
         .output()
-        .map_err(|e| ElifError::Codegen(format!("Failed to run cargo fmt: {}", e)))?;
+        .map_err(|e| ElifError::Codegen { message: format!("Failed to run cargo fmt: {}", e) })?;
     
     if !fmt_output.status.success() {
-        return Err(ElifError::Validation("Code formatting issues found. Run `cargo fmt` to fix.".to_string()));
+        return Err(ElifError::Validation { message: "Code formatting issues found. Run `cargo fmt` to fix.".to_string() });
     }
     
     // Run cargo clippy
     let clippy_output = Command::new("cargo")
         .args(&["clippy", "--", "-D", "warnings"])
         .output()
-        .map_err(|e| ElifError::Codegen(format!("Failed to run cargo clippy: {}", e)))?;
+        .map_err(|e| ElifError::Codegen { message: format!("Failed to run cargo clippy: {}", e) })?;
     
     if !clippy_output.status.success() {
-        return Err(ElifError::Validation("Clippy issues found.".to_string()));
+        return Err(ElifError::Validation { message: "Clippy issues found.".to_string() });
     }
     
     // Check resource specifications

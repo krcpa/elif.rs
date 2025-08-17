@@ -7,7 +7,7 @@ pub async fn scaffold(registration: bool, reset_password: bool) -> Result<(), El
     
     // Check if we're in an elif project
     if !Path::new("Cargo.toml").exists() {
-        return Err(ElifError::Validation("Not in an elif project directory".to_string()));
+        return Err(ElifError::Validation { message: "Not in an elif project directory".to_string() });
     }
     
     // Create necessary directories
