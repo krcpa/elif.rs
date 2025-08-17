@@ -296,12 +296,11 @@ impl Mailable for InvoiceEmail {
 
         // Add PDF attachment if provided
         if let Some(ref pdf_data) = self.pdf_attachment {
-            email = email.attach(crate::Attachment {
-                filename: format!("invoice_{}.pdf", self.invoice_number),
-                content_type: "application/pdf".to_string(),
-                content: pdf_data.clone(),
-                content_id: None,
-            });
+            let attachment = crate::Attachment::new(
+                format!("invoice_{}.pdf", self.invoice_number),
+                pdf_data.clone()
+            ).with_content_type("application/pdf");
+            email = email.attach(attachment);
         }
 
         Ok(email)

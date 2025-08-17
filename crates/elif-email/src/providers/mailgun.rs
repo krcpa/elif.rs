@@ -121,34 +121,23 @@ impl MailgunProvider {
 
         // Attachments
         for attachment in &email.attachments {
-            let part = if let Some(_content_id) = &attachment.content_id {
-                // Inline attachment
-                Part::bytes(attachment.content.clone())
-                    .file_name(attachment.filename.clone())
-                    .mime_str(&attachment.content_type)
-                    .map_err(|e| {
-                        EmailError::validation(
-                            "attachment",
-                            format!("Invalid content type '{}': {}", attachment.content_type, e),
-                        )
-                    })?
-            } else {
-                // Regular attachment
-                Part::bytes(attachment.content.clone())
-                    .file_name(attachment.filename.clone())
-                    .mime_str(&attachment.content_type)
-                    .map_err(|e| {
-                        EmailError::validation(
-                            "attachment",
-                            format!("Invalid content type '{}': {}", attachment.content_type, e),
-                        )
-                    })?
-            };
+            let part = Part::bytes(attachment.content.clone())
+                .file_name(attachment.filename.clone())
+                .mime_str(&attachment.content_type)
+                .map_err(|e| {
+                    EmailError::validation(
+                        "attachment",
+                        format!("Invalid content type '{}': {}", attachment.content_type, e),
+                    )
+                })?;
 
-            if attachment.content_id.is_some() {
-                form = form.part("inline", part);
-            } else {
-                form = form.part("attachment", part);
+            match attachment.disposition {
+                crate::AttachmentDisposition::Inline => {
+                    form = form.part("inline", part);
+                }
+                crate::AttachmentDisposition::Attachment => {
+                    form = form.part("attachment", part);
+                }
             }
         }
 

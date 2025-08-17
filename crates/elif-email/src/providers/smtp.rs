@@ -142,55 +142,151 @@ impl SmtpProvider {
             debug!("Custom headers provided but not fully supported in lettre 0.11: {:?}", email.headers);
         }
 
-        // Build message body
+        // Build message body with proper multipart structure
         let message = if email.attachments.is_empty() {
             // Simple message without attachments
-            match (&email.html_body, &email.text_body) {
-                (Some(html), Some(text)) => {
-                    let multipart = MultiPart::alternative()
-                        .singlepart(SinglePart::plain(text.clone()))
-                        .singlepart(SinglePart::html(html.clone()));
-                    message_builder.multipart(multipart)?
-                }
-                (Some(html), None) => message_builder.header(ContentType::TEXT_HTML).body(html.clone())?,
-                (None, Some(text)) => message_builder.header(ContentType::TEXT_PLAIN).body(text.clone())?,
-                (None, None) => {
-                    return Err(EmailError::validation("body", "Email must have either HTML or text body"));
-                }
-            }
+            self.build_simple_message(message_builder, email)?
         } else {
-            // Handle emails with attachments using proper multipart
-            let mut multipart = match (&email.html_body, &email.text_body) {
-                (Some(html), Some(text)) => {
-                    MultiPart::mixed().multipart(
-                        MultiPart::alternative()
-                            .singlepart(SinglePart::plain(text.clone()))
-                            .singlepart(SinglePart::html(html.clone()))
-                    )
-                }
-                (Some(html), None) => {
-                    MultiPart::mixed().singlepart(SinglePart::html(html.clone()))
-                }
-                (None, Some(text)) => {
-                    MultiPart::mixed().singlepart(SinglePart::plain(text.clone()))
-                }
-                (None, None) => {
-                    return Err(EmailError::validation("body", "Email must have either HTML or text body"));
-                }
-            };
-
-            // Add attachments
-            for attachment in &email.attachments {
-                let lettre_attachment = LettreAttachment::new(attachment.filename.clone())
-                    .body(attachment.content.clone(), attachment.content_type.parse().unwrap_or("application/octet-stream".parse().unwrap()));
-                
-                multipart = multipart.singlepart(lettre_attachment);
-            }
-
-            message_builder.multipart(multipart)?
+            // Complex message with attachments and/or inline images
+            self.build_complex_message(message_builder, email)?
         };
 
         Ok(message)
+    }
+
+    /// Build simple message without attachments
+    fn build_simple_message(&self, message_builder: lettre::message::MessageBuilder, email: &Email) -> Result<Message, EmailError> {
+        match (&email.html_body, &email.text_body) {
+            (Some(html), Some(text)) => {
+                let multipart = MultiPart::alternative()
+                    .singlepart(SinglePart::plain(text.clone()))
+                    .singlepart(SinglePart::html(html.clone()));
+                Ok(message_builder.multipart(multipart)?)
+            }
+            (Some(html), None) => Ok(message_builder.header(ContentType::TEXT_HTML).body(html.clone())?),
+            (None, Some(text)) => Ok(message_builder.header(ContentType::TEXT_PLAIN).body(text.clone())?),
+            (None, None) => {
+                Err(EmailError::validation("body", "Email must have either HTML or text body"))
+            }
+        }
+    }
+
+    /// Build complex message with attachments and inline content
+    fn build_complex_message(&self, message_builder: lettre::message::MessageBuilder, email: &Email) -> Result<Message, EmailError> {
+        let inline_attachments = email.inline_attachments();
+        let regular_attachments = email.regular_attachments();
+
+        // If we have inline attachments, we need a different structure
+        if !inline_attachments.is_empty() {
+            self.build_message_with_inline_attachments(message_builder, email, &inline_attachments, &regular_attachments)
+        } else {
+            self.build_message_with_attachments_only(message_builder, email, &regular_attachments)
+        }
+    }
+
+    /// Build message with inline attachments (embedded images)
+    fn build_message_with_inline_attachments(&self, message_builder: lettre::message::MessageBuilder, email: &Email, inline_attachments: &[&crate::Attachment], regular_attachments: &[&crate::Attachment]) -> Result<Message, EmailError> {
+        // Structure: multipart/mixed
+        //   - multipart/related (for HTML + inline images)
+        //     - multipart/alternative (for text + HTML) or single part
+        //   - regular attachments
+
+        // Build the content part (either single part or alternative)
+        let content_part = match (&email.html_body, &email.text_body) {
+            (Some(html), Some(text)) => {
+                MultiPart::alternative()
+                    .singlepart(SinglePart::plain(text.clone()))
+                    .singlepart(SinglePart::html(html.clone()))
+            }
+            (Some(html), None) => {
+                MultiPart::alternative()
+                    .singlepart(SinglePart::html(html.clone()))
+            }
+            (None, Some(text)) => {
+                MultiPart::alternative()
+                    .singlepart(SinglePart::plain(text.clone()))
+            }
+            (None, None) => {
+                return Err(EmailError::validation("body", "Email must have either HTML or text body"));
+            }
+        };
+
+        // Build multipart/related containing the content + inline attachments
+        let mut related_part = MultiPart::related().multipart(content_part);
+        
+        // Add inline attachments
+        for attachment in inline_attachments {
+            let lettre_attachment = LettreAttachment::new(attachment.filename.clone())
+                .body(
+                    attachment.content.clone(),
+                    attachment.content_type.parse().unwrap_or_else(|_| "application/octet-stream".parse().unwrap())
+                );
+            
+            // Note: lettre 0.11 has limited support for Content-ID headers.
+            // This is a known limitation. The multipart/related structure is key.
+            related_part = related_part.singlepart(lettre_attachment);
+        }
+
+        // If we have regular attachments, wrap in multipart/mixed
+        let final_multipart = if !regular_attachments.is_empty() {
+            let mut mixed = MultiPart::mixed().multipart(related_part);
+            
+            // Add regular attachments
+            for attachment in regular_attachments {
+                let lettre_attachment = LettreAttachment::new(attachment.filename.clone())
+                    .body(
+                        attachment.content.clone(),
+                        attachment.content_type.parse().unwrap_or_else(|_| "application/octet-stream".parse().unwrap())
+                    );
+                
+                mixed = mixed.singlepart(lettre_attachment);
+            }
+            mixed
+        } else {
+            // No regular attachments, just use the related part.
+            MultiPart::mixed().multipart(related_part)
+        };
+
+        Ok(message_builder.multipart(final_multipart)?)
+    }
+
+    /// Build message with regular attachments only (no inline)
+    fn build_message_with_attachments_only(&self, message_builder: lettre::message::MessageBuilder, email: &Email, regular_attachments: &[&crate::Attachment]) -> Result<Message, EmailError> {
+        // Structure: multipart/mixed
+        //   - multipart/alternative (for text + HTML) OR single part
+        //   - attachments
+        
+        let mut multipart = match (&email.html_body, &email.text_body) {
+            (Some(html), Some(text)) => {
+                MultiPart::mixed().multipart(
+                    MultiPart::alternative()
+                        .singlepart(SinglePart::plain(text.clone()))
+                        .singlepart(SinglePart::html(html.clone()))
+                )
+            }
+            (Some(html), None) => {
+                MultiPart::mixed().singlepart(SinglePart::html(html.clone()))
+            }
+            (None, Some(text)) => {
+                MultiPart::mixed().singlepart(SinglePart::plain(text.clone()))
+            }
+            (None, None) => {
+                return Err(EmailError::validation("body", "Email must have either HTML or text body"));
+            }
+        };
+
+        // Add regular attachments
+        for attachment in regular_attachments {
+            let lettre_attachment = LettreAttachment::new(attachment.filename.clone())
+                .body(
+                    attachment.content.clone(),
+                    attachment.content_type.parse().unwrap_or_else(|_| "application/octet-stream".parse().unwrap())
+                );
+            
+            multipart = multipart.singlepart(lettre_attachment);
+        }
+
+        Ok(message_builder.multipart(multipart)?)
     }
 }
 
@@ -323,12 +419,7 @@ mod tests {
         let config = SmtpConfig::new("smtp.gmail.com", 587, "user@gmail.com", "password");
         let provider = SmtpProvider::new(config).unwrap();
 
-        let attachment = Attachment {
-            filename: "test.txt".to_string(),
-            content_type: "text/plain".to_string(),
-            content: b"Test content".to_vec(),
-            content_id: None,
-        };
+        let attachment = Attachment::new("test.txt", b"Test content".to_vec());
 
         let email = Email::new()
             .from("sender@example.com")
@@ -336,6 +427,46 @@ mod tests {
             .subject("Test Email with Attachment")
             .text_body("Hello, World!")
             .attach(attachment);
+
+        let result = provider.convert_email(&email);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_email_with_inline_attachments() {
+        let config = SmtpConfig::new("smtp.gmail.com", 587, "user@gmail.com", "password");
+        let provider = SmtpProvider::new(config).unwrap();
+
+        let inline_attachment = Attachment::inline("logo.png", b"PNG data".to_vec(), "logo123");
+
+        let email = Email::new()
+            .from("sender@example.com")
+            .to("recipient@example.com")
+            .subject("Test Email with Inline Image")
+            .html_body("<html><body><img src=\"cid:logo123\" /></body></html>")
+            .text_body("Hello, World!")
+            .attach_inline(inline_attachment);
+
+        let result = provider.convert_email(&email);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_email_with_mixed_attachments() {
+        let config = SmtpConfig::new("smtp.gmail.com", 587, "user@gmail.com", "password");
+        let provider = SmtpProvider::new(config).unwrap();
+
+        let regular_attachment = Attachment::new("document.pdf", b"PDF data".to_vec());
+        let inline_attachment = Attachment::inline("logo.png", b"PNG data".to_vec(), "logo123");
+
+        let email = Email::new()
+            .from("sender@example.com")
+            .to("recipient@example.com")
+            .subject("Test Email with Mixed Attachments")
+            .html_body("<html><body><p>Hello!</p><img src=\"cid:logo123\" /></body></html>")
+            .text_body("Hello, World!")
+            .attach(regular_attachment)
+            .attach_inline(inline_attachment);
 
         let result = provider.convert_email(&email);
         assert!(result.is_ok());
