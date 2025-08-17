@@ -53,10 +53,9 @@ impl AttachmentCompressor {
             attachment.size = attachment.content.len();
             attachment.compressed = true;
             
-            // Update content type to indicate compression
-            if !attachment.content_type.contains("gzip") {
-                attachment.content_type = format!("{}; compression=gzip", attachment.content_type);
-            }
+            // Update filename and content type to reflect compression in a standard way
+            attachment.filename = format!("{}.gz", attachment.filename);
+            attachment.content_type = "application/gzip".to_string();
         }
         
         Ok(())
@@ -64,6 +63,11 @@ impl AttachmentCompressor {
     
     /// Get compression ratio estimate for an attachment
     pub fn estimate_compression_ratio(attachment: &Attachment) -> f64 {
+        // If already compressed (gzip), no further compression
+        if attachment.compressed || attachment.content_type == "application/gzip" {
+            return 1.0;
+        }
+        
         if !attachment.can_compress() {
             return 1.0;
         }
@@ -147,5 +151,43 @@ mod tests {
         
         let result = validate_attachments(&attachments, &config);
         assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_compression_updates_filename_and_content_type() {
+        let mut attachment = Attachment::new("test.txt", b"Hello World! This is a test document that should compress well because it has repeating text. Hello World! This is a test document that should compress well because it has repeating text.".to_vec());
+        let config = AttachmentConfig {
+            auto_compress: true,
+            ..AttachmentConfig::default()
+        };
+        
+        let original_filename = attachment.filename.clone();
+        let original_content_type = attachment.content_type.clone();
+        
+        let result = AttachmentCompressor::compress_if_beneficial(&mut attachment, &config);
+        assert!(result.is_ok());
+        
+        // If compression occurred, filename and content type should be updated
+        if attachment.compressed {
+            assert_eq!(attachment.filename, format!("{}.gz", original_filename));
+            assert_eq!(attachment.content_type, "application/gzip");
+        } else {
+            // If no compression, should remain unchanged
+            assert_eq!(attachment.filename, original_filename);
+            assert_eq!(attachment.content_type, original_content_type);
+        }
+    }
+    
+    #[test]
+    fn test_compression_ratio_for_gzip_files() {
+        let mut attachment = Attachment::new("test.txt.gz", b"compressed data".to_vec());
+        attachment.content_type = "application/gzip".to_string();
+        attachment.compressed = true;
+        
+        // Should not attempt further compression
+        assert_eq!(AttachmentCompressor::estimate_compression_ratio(&attachment), 1.0);
+        
+        let text_attachment = Attachment::new("test.txt", b"plain text".to_vec());
+        assert_eq!(AttachmentCompressor::estimate_compression_ratio(&text_attachment), 0.3);
     }
 }
