@@ -18,6 +18,8 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
+cron = "0.12"
+rand = "0.8"
 
 # Memory backend dependencies
 dashmap = "5.0"
