@@ -1,6 +1,6 @@
 [package]
 name = "elifrs"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 description = "LLM-friendly Rust web framework CLI with migration system - AI agent-optimized development tools"
 license = "MIT"
@@ -17,7 +17,7 @@ name = "elifrs"
 path = "src/main.rs"
 
 [dependencies]
-elif-core = { version = "0.3.0", path = "../core" }
+elif-core = { version = "0.4.0", path = "../core" }
 elif-codegen = { version = "0.3.1", path = "../codegen" }
 elif-introspect = { version = "0.2.1", path = "../introspect" }
 elif-orm = { version = "0.6.0", path = "../orm" }
