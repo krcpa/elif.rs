@@ -1,23 +1,49 @@
 //! # elif-orm: Database Layer for elif.rs
 //!
-//! Phase 2 implementation: Production-ready ORM with relationships,
-//! query builder, migrations, and connection management.
+//! Production-ready ORM with modular architecture featuring:
+//! - Core database abstraction layer
+//! - Query building and execution
+//! - Model system with relationships
+//! - Migration and schema management
+//! - Factory system for testing
+//! - Connection pool management
 //!
-//! This crate provides the core database layer for elif.rs web framework,
-//! including Model trait, QueryBuilder, error handling, and future support
-//! for relationships, migrations, and connection management.
+//! ## New Modular Architecture
+//!
+//! The ORM is organized into 6 main domains:
+//! - `backends/` - Database backend abstractions (PostgreSQL, etc.)
+//! - `connection/` - Connection pool management and health monitoring
+//! - `transactions/` - Transaction lifecycle and isolation management
+//! - `query/` - Query building and execution
+//! - `sql/` - SQL generation and security
+//! - `conditions/` - WHERE clauses, JOINs, and ordering
+//! - `models/` - Model traits and CRUD operations
+//! - `relationships/` - Relationship system and loading
+//! - `loading/` - Eager/lazy loading strategies
+//! - `migrations/` - Schema migrations
+//! - `factories/` - Model factories and test data
 
+// New modular architecture
+pub mod backends;
+pub mod connection;
+pub mod transactions;
+pub mod query;
+pub mod sql;
+pub mod conditions;
+pub mod models;
+pub mod relationships;
+pub mod loading;
+pub mod migrations;
+pub mod factories;
+
+// Legacy modules (maintained for backward compatibility)
 pub mod model;
-pub mod query; // Directory-based module
 pub mod error;
 pub mod database;
 pub mod transaction;
 pub mod migration;
 pub mod migration_runner;
-pub mod relationships;
 pub mod security;
-pub mod loading;
-pub mod backends;
 pub mod factory;
 
 #[cfg(test)]
