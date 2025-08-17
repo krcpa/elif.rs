@@ -24,6 +24,7 @@ flate2 = "1.0"
 
 # Core elif dependencies
 elif-core = { version = "0.4.0", path = "../core" }
+elif-queue = { path = "../elif-queue" }
 
 # Workspace dependencies
 serde = { workspace = true }
@@ -36,6 +37,15 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 regex = { workspace = true }
+rand = { workspace = true }
+
+# Optional dependencies for features
+tracing-subscriber = { version = "0.3", optional = true }
 
 [dev-dependencies]
 tempfile = "3.8"
+
+[features]
+default = ["smtp"]
+smtp = ["lettre/smtp-transport"]
+integration-examples = ["tracing-subscriber"]
