@@ -54,25 +54,16 @@ impl SmtpProvider {
 
         // Configure TLS with proper parameters
         let tls_config = config.effective_tls_config();
-        match tls_config {
-            SmtpTlsConfig::None => {
-                // No TLS
-            }
-            SmtpTlsConfig::Tls => {
-                let tls_parameters = TlsParameters::new(config.host.clone())
-                    .map_err(|e| EmailError::configuration(format!("TLS parameter error: {}", e)))?;
-                transport_builder = transport_builder.tls(Tls::Required(tls_parameters));
-            }
-            SmtpTlsConfig::StartTls => {
-                let tls_parameters = TlsParameters::new(config.host.clone())
-                    .map_err(|e| EmailError::configuration(format!("TLS parameter error: {}", e)))?;
-                transport_builder = transport_builder.tls(Tls::Opportunistic(tls_parameters));
-            }
-            SmtpTlsConfig::StartTlsRequired => {
-                let tls_parameters = TlsParameters::new(config.host.clone())
-                    .map_err(|e| EmailError::configuration(format!("TLS parameter error: {}", e)))?;
-                transport_builder = transport_builder.tls(Tls::Required(tls_parameters));
-            }
+        if tls_config != SmtpTlsConfig::None {
+            let tls_parameters = TlsParameters::new(config.host.clone())
+                .map_err(|e| EmailError::configuration(format!("TLS parameter error: {}", e)))?;
+
+            let tls = match tls_config {
+                SmtpTlsConfig::Tls | SmtpTlsConfig::StartTlsRequired => Tls::Required(tls_parameters),
+                SmtpTlsConfig::StartTls => Tls::Opportunistic(tls_parameters),
+                SmtpTlsConfig::None => unreachable!(), // Already handled by the if-condition
+            };
+            transport_builder = transport_builder.tls(tls);
         }
 
         // Set up connection semaphore for pooling
@@ -226,12 +217,13 @@ impl EmailProvider for SmtpProvider {
             match self.transport.send(message.clone()).await {
                 Ok(_response) => {
                     debug!("SMTP send successful on attempt {}", attempt + 1);
-                    let message_id = format!("smtp-{}-{}", email.id, chrono::Utc::now().timestamp());
+                    let now = chrono::Utc::now();
+                    let message_id = format!("smtp-{}-{}", email.id, now.timestamp());
                     
                     return Ok(EmailResult {
                         email_id: email.id,
                         message_id,
-                        sent_at: chrono::Utc::now(),
+                        sent_at: now,
                         provider: "smtp".to_string(),
                     });
                 }

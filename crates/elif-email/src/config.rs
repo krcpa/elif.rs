@@ -40,7 +40,7 @@ pub enum SmtpAuthMethod {
 }
 
 /// SMTP TLS configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SmtpTlsConfig {
     #[serde(rename = "none")]
     None,
