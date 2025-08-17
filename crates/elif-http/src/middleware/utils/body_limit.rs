@@ -9,7 +9,7 @@ use axum::{
     body::Body,
     http::{StatusCode, HeaderValue},
 };
-use tracing::{warn, error};
+use tracing::warn;
 
 use crate::{
     middleware::{Middleware, BoxFuture},
@@ -334,7 +334,7 @@ pub mod limits {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{Method, HeaderValue};
+    use axum::http::Method;
 
     #[tokio::test]
     async fn test_body_limit_middleware_basic() {

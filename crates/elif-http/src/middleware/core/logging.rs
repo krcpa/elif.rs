@@ -6,7 +6,6 @@ use std::time::Instant;
 use axum::{
     extract::Request,
     response::Response,
-    http::{Method, Uri},
 };
 use log::{info, debug, error};
 
@@ -149,7 +148,7 @@ fn is_sensitive_header(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{StatusCode, Method, HeaderName, HeaderValue};
+    use axum::http::{StatusCode, Method};
     
     #[test]
     fn test_sensitive_header_detection() {

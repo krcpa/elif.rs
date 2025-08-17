@@ -2,7 +2,6 @@
 //! 
 //! Provides fluent response building with status codes, headers, and JSON serialization.
 
-use std::collections::HashMap;
 use axum::{
     http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::{Response, IntoResponse},

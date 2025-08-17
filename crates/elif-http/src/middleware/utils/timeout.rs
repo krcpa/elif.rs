@@ -4,7 +4,7 @@
 //! Replaces tower-http TimeoutLayer with framework-native implementation.
 
 use std::time::Duration;
-use tokio::time::{timeout, Timeout};
+use tokio::time::timeout;
 use axum::{
     extract::Request,
     response::{Response, IntoResponse},

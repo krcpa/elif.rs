@@ -8,7 +8,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::ops::{Deref, DerefMut};
-use crate::errors::{HttpError, HttpResult};
+use crate::errors::HttpResult;
 use crate::response::{ElifResponse, IntoElifResponse};
 
 /// Enhanced JSON extractor with better error handling

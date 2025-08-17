@@ -5,20 +5,18 @@
 
 use std::time::{Instant, Duration};
 use std::collections::HashMap;
-use std::sync::Arc;
 use uuid::Uuid;
 
 use axum::{
     extract::Request,
     response::Response,
-    http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
+    http::{HeaderMap, HeaderName, HeaderValue},
 };
 
-use tracing::{info, debug, warn, error, Span, span, Level};
+use tracing::{info, warn, error, Span, span, Level};
 use serde_json::{json, Value};
 
 use crate::middleware::{Middleware, BoxFuture};
-
 /// Enhanced logging middleware with structured logging and request tracing
 #[derive(Debug, Clone)]
 pub struct EnhancedLoggingMiddleware {
@@ -477,7 +475,7 @@ impl EnhancedLoggingMiddleware {
 mod tests {
     use super::*;
     use axum::{
-        http::{Method, StatusCode, Request, HeaderName, HeaderValue},
+        http::{Method, StatusCode, Request},
         body::Body,
     };
     

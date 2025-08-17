@@ -138,7 +138,7 @@ pub fn format_duration(duration: std::time::Duration) -> String {
 mod tests {
     use super::*;
     use axum::http::{StatusCode, Method};
-    use tokio::time::{sleep, Duration};
+    use tokio::time::Duration;
     
     #[test]
     fn test_format_duration() {

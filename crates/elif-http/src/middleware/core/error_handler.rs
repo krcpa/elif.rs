@@ -267,20 +267,17 @@ pub fn error_handler_layer_with_config(config: ErrorHandlerConfig) -> ErrorHandl
 mod tests {
     use super::*;
     use axum::{
-        extract::Request,
-        http::StatusCode,
         response::IntoResponse,
         routing::get,
         Router,
     };
-    use tower::util::ServiceExt;
 
     async fn panic_handler() -> impl IntoResponse {
         panic!("Test panic");
     }
 
     async fn error_handler() -> impl IntoResponse {
-        HttpError::bad_request("Test error").into_response()
+        HttpError::bad_request("Test error")
     }
 
     async fn ok_handler() -> impl IntoResponse {

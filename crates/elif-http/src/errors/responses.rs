@@ -111,8 +111,10 @@ mod tests {
 
     #[test]
     fn test_error_response_format_consistency() {
+        use axum::response::IntoResponse as AxumIntoResponse;
+        
         let error = HttpError::not_found("User");
-        let response = error.into_response();
+        let response = AxumIntoResponse::into_response(error);
         
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }

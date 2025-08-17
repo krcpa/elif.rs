@@ -7,7 +7,6 @@ use std::time::Instant;
 use axum::{
     extract::Request,
     response::Response,
-    http::Method,
 };
 use tracing::{info, warn, error, Span, Level};
 use uuid::Uuid;

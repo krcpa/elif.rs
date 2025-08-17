@@ -4,10 +4,10 @@
 
 use crate::request::ElifRequest;
 use crate::response::{ElifResponse, IntoElifResponse};
-use crate::errors::{HttpError, HttpResult};
+use crate::errors::HttpResult;
 use axum::{
     extract::{Request as AxumRequest},
-    response::{Response as AxumResponse, IntoResponse},
+    response::{Response as AxumResponse},
     handler::Handler as AxumHandler,
 };
 use std::future::Future;
@@ -136,7 +136,6 @@ macro_rules! elif_route {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::response::ElifStatusCode;
 
     async fn test_handler(_req: ElifRequest) -> HttpResult<ElifResponse> {
         Ok(ElifResponse::ok().text("Hello, World!"))
@@ -144,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_elif_handler_conversion() {
-        let handler = elif_handler(test_handler);
+        let _handler = elif_handler(test_handler);
         
         // This test verifies the handler compiles and can be used
         // Full integration testing would require setting up Axum routing
