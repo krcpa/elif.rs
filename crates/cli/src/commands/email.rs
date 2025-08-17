@@ -470,10 +470,6 @@ pub async fn test_show(args: EmailTestShowArgs) -> Result<(), ElifError> {
 
 /// Clear captured emails
 pub async fn test_clear(args: EmailTestClearArgs) -> Result<(), ElifError> {
-    if !args.all && args.older_than.is_none() {
-        return Err(ElifError::Validation("Must specify either --all or --older-than".to_string()));
-    }
-    
     let capture_dir = get_capture_directory(None)?;
     
     if !capture_dir.exists() {
@@ -503,13 +499,24 @@ pub async fn test_clear(args: EmailTestClearArgs) -> Result<(), ElifError> {
             let metadata = fs::metadata(&path)
                 .map_err(|e| ElifError::Validation(format!("Failed to get file metadata: {}", e)))?;
             
-            if let Ok(created) = metadata.created() {
-                let age = created.elapsed().map_err(|_| ElifError::Validation("Failed to calculate file age".to_string()))?;
-                if age.as_secs() > (days as u64 * 24 * 60 * 60) {
-                    fs::remove_file(&path)
-                        .map_err(|e| ElifError::Validation(format!("Failed to remove file: {}", e)))?;
-                    cleared_count += 1;
+            // Try creation time first, fall back to modification time for cross-platform compatibility
+            let file_time = match metadata.created() {
+                Ok(created) => created,
+                Err(_) => {
+                    // Log warning and use modification time as fallback
+                    eprintln!("Warning: File creation time not available on this platform, using modification time for {}", path.display());
+                    metadata.modified()
+                        .map_err(|e| ElifError::Validation(format!("Failed to get file modification time: {}", e)))?
                 }
+            };
+            
+            let age = file_time.elapsed()
+                .map_err(|_| ElifError::Validation("Failed to calculate file age".to_string()))?;
+            
+            if age.as_secs() > (days as u64 * 24 * 60 * 60) {
+                fs::remove_file(&path)
+                    .map_err(|e| ElifError::Validation(format!("Failed to remove file: {}", e)))?;
+                cleared_count += 1;
             }
         }
     }
@@ -596,7 +603,8 @@ async fn capture_email_to_filesystem(
 ) -> Result<(), ElifError> {
     let capture_dir = get_capture_directory(None)?;
     
-    let email_id = format!("email_{}", Utc::now().timestamp_micros());
+    let now = Utc::now();
+    let email_id = format!("email_{}", now.timestamp_micros());
     let mut headers = HashMap::new();
     headers.insert("To".to_string(), args.to.clone());
     headers.insert("Subject".to_string(), args.subject.clone());
@@ -604,7 +612,7 @@ async fn capture_email_to_filesystem(
     
     let captured_email = CapturedEmail {
         id: email_id.clone(),
-        timestamp: Utc::now(),
+        timestamp: now,
         to: args.to.clone(),
         from: "test@elif.rs".to_string(),
         subject: args.subject.clone(),

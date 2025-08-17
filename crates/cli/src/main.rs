@@ -636,6 +636,11 @@ enum EmailTestCommands {
     },
     
     /// Clear captured emails
+    #[command(group(
+        clap::ArgGroup::new("clear_mode")
+            .required(true)
+            .args(&["all", "older_than"]),
+    ))]
     Clear {
         /// Clear all captured emails
         #[arg(long)]
