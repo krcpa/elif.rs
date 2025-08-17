@@ -28,6 +28,30 @@ pub enum ProviderConfig {
     Mailgun(MailgunConfig),
 }
 
+/// SMTP authentication method
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SmtpAuthMethod {
+    #[serde(rename = "plain")]
+    Plain,
+    #[serde(rename = "login")]
+    Login,
+    #[serde(rename = "xoauth2")]
+    XOAuth2,
+}
+
+/// SMTP TLS configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SmtpTlsConfig {
+    #[serde(rename = "none")]
+    None,
+    #[serde(rename = "tls")]
+    Tls,
+    #[serde(rename = "starttls")]
+    StartTls,
+    #[serde(rename = "starttls_required")]
+    StartTlsRequired,
+}
+
 /// SMTP provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SmtpConfig {
@@ -39,12 +63,26 @@ pub struct SmtpConfig {
     pub username: String,
     /// Password for authentication
     pub password: String,
-    /// Use TLS encryption
-    pub use_tls: bool,
-    /// Use STARTTLS
-    pub use_starttls: bool,
+    /// TLS configuration
+    pub tls: SmtpTlsConfig,
+    /// Authentication method
+    pub auth_method: SmtpAuthMethod,
     /// Connection timeout in seconds
     pub timeout: Option<u64>,
+    /// Connection pool size
+    pub pool_size: Option<u32>,
+    /// Enable connection keepalive
+    pub keepalive: bool,
+    /// Max retry attempts
+    pub max_retries: u32,
+    /// Retry delay in seconds
+    pub retry_delay: u64,
+    
+    /// Legacy fields for backward compatibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_tls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_starttls: Option<bool>,
 }
 
 /// SendGrid provider configuration
@@ -161,6 +199,18 @@ impl Default for GlobalTrackingConfig {
     }
 }
 
+impl Default for SmtpAuthMethod {
+    fn default() -> Self {
+        SmtpAuthMethod::Plain
+    }
+}
+
+impl Default for SmtpTlsConfig {
+    fn default() -> Self {
+        SmtpTlsConfig::StartTls
+    }
+}
+
 impl SmtpConfig {
     /// Create new SMTP configuration
     pub fn new(
@@ -174,9 +224,30 @@ impl SmtpConfig {
             port,
             username: username.into(),
             password: password.into(),
-            use_tls: true,
-            use_starttls: false,
+            tls: SmtpTlsConfig::StartTls,
+            auth_method: SmtpAuthMethod::Plain,
             timeout: Some(30),
+            pool_size: Some(10),
+            keepalive: true,
+            max_retries: 3,
+            retry_delay: 5,
+            use_tls: None,
+            use_starttls: None,
+        }
+    }
+
+    /// Get effective TLS configuration, handling legacy settings
+    pub fn effective_tls_config(&self) -> SmtpTlsConfig {
+        // Handle legacy configuration
+        if let (Some(use_tls), Some(use_starttls)) = (self.use_tls, self.use_starttls) {
+            match (use_tls, use_starttls) {
+                (true, false) => SmtpTlsConfig::Tls,
+                (false, true) => SmtpTlsConfig::StartTls,
+                (false, false) => SmtpTlsConfig::None,
+                (true, true) => SmtpTlsConfig::StartTls, // Prefer STARTTLS when both are set
+            }
+        } else {
+            self.tls.clone()
         }
     }
 }

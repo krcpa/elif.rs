@@ -1,11 +1,23 @@
-use crate::{config::SmtpConfig, Email, EmailError, EmailProvider, EmailResult};
+use crate::{
+    config::{SmtpAuthMethod, SmtpConfig, SmtpTlsConfig},
+    Email, EmailError, EmailProvider, EmailResult,
+};
 use async_trait::async_trait;
 use lettre::{
-    message::{header::ContentType, Attachment as LettreAttachment, MultiPart, SinglePart},
-    transport::smtp::authentication::Credentials,
+    message::{
+        header::ContentType,
+        Attachment as LettreAttachment, MultiPart, SinglePart,
+    },
+    transport::smtp::{
+        authentication::{Credentials, Mechanism},
+        client::{Tls, TlsParameters},
+    },
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Semaphore;
+use tokio::time::sleep;
 use tracing::{debug, error};
 
 /// SMTP email provider using lettre
@@ -13,6 +25,8 @@ use tracing::{debug, error};
 pub struct SmtpProvider {
     config: SmtpConfig,
     transport: AsyncSmtpTransport<Tokio1Executor>,
+    /// Connection semaphore for limiting concurrent connections
+    connection_semaphore: Arc<Semaphore>,
 }
 
 impl SmtpProvider {
@@ -25,14 +39,45 @@ impl SmtpProvider {
         let creds = Credentials::new(config.username.clone(), config.password.clone());
         transport_builder = transport_builder.credentials(creds);
 
-        // Configure TLS - use simpler API
-        if config.use_tls {
-            // For TLS, we can use the default TLS settings
-            // transport_builder = transport_builder.tls(...); // Skip complex TLS config for now
-        } else if config.use_starttls {
-            // For STARTTLS, use default settings  
-            // transport_builder = transport_builder.starttls(...); // Skip complex config for now
+        // Configure authentication mechanism
+        match config.auth_method {
+            SmtpAuthMethod::Plain => {
+                transport_builder = transport_builder.authentication(vec![Mechanism::Plain]);
+            }
+            SmtpAuthMethod::Login => {
+                transport_builder = transport_builder.authentication(vec![Mechanism::Login]);
+            }
+            SmtpAuthMethod::XOAuth2 => {
+                transport_builder = transport_builder.authentication(vec![Mechanism::Xoauth2]);
+            }
         }
+
+        // Configure TLS with proper parameters
+        let tls_config = config.effective_tls_config();
+        match tls_config {
+            SmtpTlsConfig::None => {
+                // No TLS
+            }
+            SmtpTlsConfig::Tls => {
+                let tls_parameters = TlsParameters::new(config.host.clone())
+                    .map_err(|e| EmailError::configuration(format!("TLS parameter error: {}", e)))?;
+                transport_builder = transport_builder.tls(Tls::Required(tls_parameters));
+            }
+            SmtpTlsConfig::StartTls => {
+                let tls_parameters = TlsParameters::new(config.host.clone())
+                    .map_err(|e| EmailError::configuration(format!("TLS parameter error: {}", e)))?;
+                transport_builder = transport_builder.tls(Tls::Opportunistic(tls_parameters));
+            }
+            SmtpTlsConfig::StartTlsRequired => {
+                let tls_parameters = TlsParameters::new(config.host.clone())
+                    .map_err(|e| EmailError::configuration(format!("TLS parameter error: {}", e)))?;
+                transport_builder = transport_builder.tls(Tls::Required(tls_parameters));
+            }
+        }
+
+        // Set up connection semaphore for pooling
+        let pool_size = config.pool_size.unwrap_or(10);
+        let connection_semaphore = Arc::new(Semaphore::new(pool_size as usize));
 
         // Configure timeout
         if let Some(timeout) = config.timeout {
@@ -44,7 +89,11 @@ impl SmtpProvider {
 
         let transport = transport_builder.build();
 
-        Ok(Self { config, transport })
+        Ok(Self { 
+            config, 
+            transport,
+            connection_semaphore,
+        })
     }
 
     /// Convert elif Email to lettre Message
@@ -95,10 +144,11 @@ impl SmtpProvider {
             );
         }
 
-        // Skip custom headers for now - lettre API is complex
-        // TODO: Add custom headers support later
-        for (_key, _value) in &email.headers {
-            // message_builder = message_builder.header(...);
+        // Add custom headers
+        // Note: lettre 0.11 has limited custom header support
+        // For now, skip custom headers - this is a known limitation
+        if !email.headers.is_empty() {
+            debug!("Custom headers provided but not fully supported in lettre 0.11: {:?}", email.headers);
         }
 
         // Build message body
@@ -118,15 +168,35 @@ impl SmtpProvider {
                 }
             }
         } else {
-            // For now, just use simple text/html content and skip attachments
-            // TODO: Implement proper multipart support later
-            match (&email.html_body, &email.text_body) {
-                (Some(html), _) => message_builder.header(ContentType::TEXT_HTML).body(html.clone())?,
-                (None, Some(text)) => message_builder.header(ContentType::TEXT_PLAIN).body(text.clone())?,
+            // Handle emails with attachments using proper multipart
+            let mut multipart = match (&email.html_body, &email.text_body) {
+                (Some(html), Some(text)) => {
+                    MultiPart::mixed().multipart(
+                        MultiPart::alternative()
+                            .singlepart(SinglePart::plain(text.clone()))
+                            .singlepart(SinglePart::html(html.clone()))
+                    )
+                }
+                (Some(html), None) => {
+                    MultiPart::mixed().singlepart(SinglePart::html(html.clone()))
+                }
+                (None, Some(text)) => {
+                    MultiPart::mixed().singlepart(SinglePart::plain(text.clone()))
+                }
                 (None, None) => {
                     return Err(EmailError::validation("body", "Email must have either HTML or text body"));
                 }
+            };
+
+            // Add attachments
+            for attachment in &email.attachments {
+                let lettre_attachment = LettreAttachment::new(attachment.filename.clone())
+                    .body(attachment.content.clone(), attachment.content_type.parse().unwrap_or("application/octet-stream".parse().unwrap()));
+                
+                multipart = multipart.singlepart(lettre_attachment);
             }
+
+            message_builder.multipart(multipart)?
         };
 
         Ok(message)
@@ -143,41 +213,82 @@ impl EmailProvider for SmtpProvider {
 
         let message = self.convert_email(email)?;
 
-        let _response = self.transport.send(message).await.map_err(|e| {
-            error!("SMTP send failed: {}", e);
-            EmailError::provider("SMTP", e.to_string())
-        })?;
+        // Implement retry logic
+        let mut attempt = 0;
+        let max_retries = self.config.max_retries;
+        let retry_delay = self.config.retry_delay;
 
-        let message_id = format!("smtp-{}", email.id);
-
-        Ok(EmailResult {
-            email_id: email.id,
-            message_id,
-            sent_at: chrono::Utc::now(),
-            provider: "smtp".to_string(),
-        })
+        loop {
+            // Acquire connection semaphore permit to limit concurrent connections
+            let _permit = self.connection_semaphore.acquire().await
+                .map_err(|_| EmailError::provider("SMTP", "Failed to acquire connection permit"))?;
+            
+            match self.transport.send(message.clone()).await {
+                Ok(_response) => {
+                    debug!("SMTP send successful on attempt {}", attempt + 1);
+                    let message_id = format!("smtp-{}-{}", email.id, chrono::Utc::now().timestamp());
+                    
+                    return Ok(EmailResult {
+                        email_id: email.id,
+                        message_id,
+                        sent_at: chrono::Utc::now(),
+                        provider: "smtp".to_string(),
+                    });
+                }
+                Err(e) => {
+                    attempt += 1;
+                    error!("SMTP send failed on attempt {}: {}", attempt, e);
+                    
+                    if attempt >= max_retries {
+                        return Err(EmailError::provider("SMTP", format!(
+                            "Failed after {} attempts: {}", max_retries, e
+                        )));
+                    }
+                    
+                    debug!("Retrying in {} seconds...", retry_delay);
+                    sleep(Duration::from_secs(retry_delay)).await;
+                }
+            }
+        }
     }
 
     async fn validate_config(&self) -> Result<(), EmailError> {
-        debug!("Validating SMTP configuration for {}", self.config.host);
+        debug!("Validating SMTP configuration for {}:{}", self.config.host, self.config.port);
 
-        // Test connection by creating a test transport
-        let test_result = self.transport.test_connection().await;
+        // Acquire connection permit for testing
+        let _permit = self.connection_semaphore.acquire().await
+            .map_err(|_| EmailError::configuration("Failed to acquire connection permit for validation"))?;
+
+        // Test connection with timeout
+        let test_result = tokio::time::timeout(
+            Duration::from_secs(self.config.timeout.unwrap_or(30)),
+            self.transport.test_connection()
+        ).await;
 
         match test_result {
-            Ok(true) => {
-                debug!("SMTP connection test successful");
+            Ok(Ok(true)) => {
+                debug!("SMTP connection test successful for {}:{}", self.config.host, self.config.port);
                 Ok(())
             }
-            Ok(false) => {
-                error!("SMTP connection test failed");
-                Err(EmailError::configuration("SMTP connection test failed"))
-            }
-            Err(e) => {
-                error!("SMTP connection test error: {}", e);
+            Ok(Ok(false)) => {
+                error!("SMTP connection test failed for {}:{}", self.config.host, self.config.port);
                 Err(EmailError::configuration(format!(
-                    "SMTP connection test error: {}",
-                    e
+                    "SMTP connection test failed for {}:{} - check host, port, and credentials",
+                    self.config.host, self.config.port
+                )))
+            }
+            Ok(Err(e)) => {
+                error!("SMTP connection test error for {}:{}: {}", self.config.host, self.config.port, e);
+                Err(EmailError::configuration(format!(
+                    "SMTP connection test error for {}:{}: {}",
+                    self.config.host, self.config.port, e
+                )))
+            }
+            Err(_) => {
+                error!("SMTP connection test timeout for {}:{}", self.config.host, self.config.port);
+                Err(EmailError::configuration(format!(
+                    "SMTP connection test timeout for {}:{} - check network connectivity",
+                    self.config.host, self.config.port
                 )))
             }
         }
