@@ -13,3 +13,4 @@ pub mod make;
 pub mod serve;
 pub mod queue;
 pub mod interactive_setup;
+pub mod database;

@@ -39,19 +39,19 @@ futures = "0.3"
 redis = { version = "0.23", features = ["tokio-comp", "connection-manager"], optional = true }
 
 # Configuration
-elif-core = { path = "../core" }
+elif-core = { version = "0.4.0", path = "../core" }
 service-builder = "0.3.0"
 
-# HTTP integration
-elif-http = { path = "../elif-http", optional = true }
+# HTTP integration (temporarily disabled for initial publishing)
+# elif-http = { version = "0.6.0", path = "../elif-http", optional = true }
 axum = { version = "0.7", optional = true }
 
 [features]
 default = ["memory"]
 memory = []
 redis-backend = ["redis"]
-http-cache = ["elif-http", "axum"]
-all = ["memory", "redis-backend", "http-cache"]
+http-cache = ["axum"]
+all = ["memory", "redis-backend"]
 
 [dev-dependencies]
 tokio-test = "0.4"

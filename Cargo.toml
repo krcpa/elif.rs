@@ -49,6 +49,7 @@ regex = "1.10"
 async-trait = "0.1"
 rand = "0.8"
 hex = "0.4"
+url = "2.4"
 
 
 # CLI
