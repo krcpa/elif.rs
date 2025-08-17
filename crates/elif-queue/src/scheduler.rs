@@ -745,13 +745,12 @@ impl JobMetrics {
             self.max_execution_time_ms = execution_time_ms;
         }
         
-        // Update average based on completed jobs, not total executions
+        // Update average using numerically stable running average algorithm
         let completed_jobs = self.successful_jobs + self.failed_jobs + self.timeout_jobs + self.cancelled_jobs;
-        if completed_jobs == 1 {
-            self.avg_execution_time_ms = execution_time_ms as f64;
-        } else {
-            let total_time = self.avg_execution_time_ms * (completed_jobs - 1) as f64;
-            self.avg_execution_time_ms = (total_time + execution_time_ms as f64) / completed_jobs as f64;
+        if completed_jobs > 0 {
+            let new_sample = execution_time_ms as f64;
+            // Use a numerically stable algorithm for running average: new_avg = old_avg + (new_sample - old_avg) / sample_count
+            self.avg_execution_time_ms += (new_sample - self.avg_execution_time_ms) / completed_jobs as f64;
         }
     }
     
@@ -765,11 +764,10 @@ impl JobMetrics {
     
     /// Update retry attempts average
     fn update_retry_attempts(&mut self, attempts: u32) {
-        if self.failed_jobs == 1 {
-            self.avg_retry_attempts = attempts as f64;
-        } else {
-            let total_attempts = self.avg_retry_attempts * (self.failed_jobs - 1) as f64;
-            self.avg_retry_attempts = (total_attempts + attempts as f64) / self.failed_jobs as f64;
+        if self.failed_jobs > 0 {
+            let new_sample = attempts as f64;
+            // Use a numerically stable algorithm for running average: new_avg = old_avg + (new_sample - old_avg) / sample_count
+            self.avg_retry_attempts += (new_sample - self.avg_retry_attempts) / self.failed_jobs as f64;
         }
     }
 }
