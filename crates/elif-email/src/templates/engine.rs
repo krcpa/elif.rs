@@ -202,13 +202,29 @@ fn format_date_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResul
 }
 
 fn format_datetime_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
-    use chrono::{DateTime, Utc, TimeZone};
+    use chrono::{DateTime, Utc, TimeZone, NaiveDateTime};
     
     let format_str = args.get("format").and_then(|v| v.as_str()).unwrap_or("%Y-%m-%d %H:%M:%S");
     
     let formatted = match value {
         Value::String(s) => {
+            // Try various common datetime formats
             if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+                dt.format(format_str).to_string()
+            } else if let Ok(dt) = DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S %z") {
+                dt.format(format_str).to_string()
+            } else if let Ok(dt) = DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%z") {
+                dt.format(format_str).to_string()
+            } else if let Ok(dt) = DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S %#z") {
+                dt.format(format_str).to_string()
+            } else if let Ok(naive_dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+                let dt = Utc.from_utc_datetime(&naive_dt);
+                dt.format(format_str).to_string()
+            } else if let Ok(naive_dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M") {
+                let dt = Utc.from_utc_datetime(&naive_dt);
+                dt.format(format_str).to_string()
+            } else if let Ok(naive_dt) = NaiveDateTime::parse_from_str(s, "%Y/%m/%d %H:%M:%S") {
+                let dt = Utc.from_utc_datetime(&naive_dt);
                 dt.format(format_str).to_string()
             } else {
                 s.clone()
@@ -588,6 +604,64 @@ mod tests {
 
         let rendered = engine.render_template(&template, &context).unwrap();
         assert_eq!(rendered.html_content, Some("Date: December 25, 2023".to_string()));
+    }
+
+    #[test]
+    fn test_format_datetime_filter_multiple_formats() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        // Test RFC 3339 format
+        let template = EmailTemplate {
+            name: "datetime_rfc3339".to_string(),
+            html_template: Some("DateTime: {{ datetime_value | format_datetime(format=\"%B %d, %Y %H:%M\") }}".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        let mut context = TemplateContext::new();
+        context.insert("datetime_value".to_string(), serde_json::Value::String("2023-12-25T14:30:00Z".to_string()));
+
+        let rendered = engine.render_template(&template, &context).unwrap();
+        assert_eq!(rendered.html_content, Some("DateTime: December 25, 2023 14:30".to_string()));
+
+        // Test legacy %Y-%m-%d %H:%M:%S format (with timezone) - This should fall back to string unchanged
+        let template2 = EmailTemplate {
+            name: "datetime_legacy".to_string(),
+            html_template: Some("DateTime: {{ datetime_value | format_datetime }}".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        let mut context2 = TemplateContext::new();
+        context2.insert("datetime_value".to_string(), serde_json::Value::String("2023-12-25 14:30:00 +00:00".to_string()));
+
+        let rendered2 = engine.render_template(&template2, &context2).unwrap();
+        // The timezone format should be parsed and converted to UTC, then formatted with default format
+        assert_eq!(rendered2.html_content, Some("DateTime: 2023-12-25 14:30:00".to_string()));
+
+        // Test naive datetime format %Y-%m-%d %H:%M:%S (without timezone)
+        let template3 = EmailTemplate {
+            name: "datetime_naive".to_string(),
+            html_template: Some("DateTime: {{ datetime_value | format_datetime(format=\"%B %d, %Y %H:%M\") }}".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        let mut context3 = TemplateContext::new();
+        context3.insert("datetime_value".to_string(), serde_json::Value::String("2023-12-25 14:30:00".to_string()));
+
+        let rendered3 = engine.render_template(&template3, &context3).unwrap();
+        assert_eq!(rendered3.html_content, Some("DateTime: December 25, 2023 14:30".to_string()));
     }
 
     #[test]
