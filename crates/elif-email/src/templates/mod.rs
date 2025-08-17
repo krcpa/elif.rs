@@ -183,15 +183,15 @@ impl Email {
         Ok(email)
     }
 
-    /// Update email with rendered template content
+    /// Update email with rendered template content by name
     pub fn with_template(
         mut self,
         engine: &TemplateEngine,
-        template: &EmailTemplate,
+        template_name: &str,
         context: impl IntoTemplateContext,
     ) -> Result<Self, EmailError> {
         let context = context.into_context()?;
-        let rendered = template.render(engine, &context)?;
+        let rendered = engine.render_template_by_name(template_name, &context)?;
 
         if let Some(html) = rendered.html_content {
             self.html_body = Some(html);
@@ -209,15 +209,15 @@ impl Email {
         Ok(self)
     }
 
-    /// Update email with rendered template content by name
-    pub fn with_template_name(
+    /// Update email with rendered template content using EmailTemplate struct
+    pub fn with_template_struct(
         mut self,
         engine: &TemplateEngine,
-        template_name: &str,
+        template: &EmailTemplate,
         context: impl IntoTemplateContext,
     ) -> Result<Self, EmailError> {
         let context = context.into_context()?;
-        let rendered = engine.render_template_by_name(template_name, &context)?;
+        let rendered = template.render(engine, &context)?;
 
         if let Some(html) = rendered.html_content {
             self.html_body = Some(html);
