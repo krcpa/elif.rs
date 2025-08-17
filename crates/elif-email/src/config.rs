@@ -28,6 +28,30 @@ pub enum ProviderConfig {
     Mailgun(MailgunConfig),
 }
 
+/// SMTP authentication method
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SmtpAuthMethod {
+    #[serde(rename = "plain")]
+    Plain,
+    #[serde(rename = "login")]
+    Login,
+    #[serde(rename = "xoauth2")]
+    XOAuth2,
+}
+
+/// SMTP TLS configuration
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SmtpTlsConfig {
+    #[serde(rename = "none")]
+    None,
+    #[serde(rename = "tls")]
+    Tls,
+    #[serde(rename = "starttls")]
+    StartTls,
+    #[serde(rename = "starttls_required")]
+    StartTlsRequired,
+}
+
 /// SMTP provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SmtpConfig {
@@ -39,12 +63,26 @@ pub struct SmtpConfig {
     pub username: String,
     /// Password for authentication
     pub password: String,
-    /// Use TLS encryption
-    pub use_tls: bool,
-    /// Use STARTTLS
-    pub use_starttls: bool,
+    /// TLS configuration
+    pub tls: SmtpTlsConfig,
+    /// Authentication method
+    pub auth_method: SmtpAuthMethod,
     /// Connection timeout in seconds
     pub timeout: Option<u64>,
+    /// Connection pool size
+    pub pool_size: Option<u32>,
+    /// Enable connection keepalive
+    pub keepalive: bool,
+    /// Max retry attempts
+    pub max_retries: u32,
+    /// Retry delay in seconds
+    pub retry_delay: u64,
+    
+    /// Legacy fields for backward compatibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_tls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_starttls: Option<bool>,
 }
 
 /// SendGrid provider configuration
@@ -161,6 +199,18 @@ impl Default for GlobalTrackingConfig {
     }
 }
 
+impl Default for SmtpAuthMethod {
+    fn default() -> Self {
+        SmtpAuthMethod::Plain
+    }
+}
+
+impl Default for SmtpTlsConfig {
+    fn default() -> Self {
+        SmtpTlsConfig::StartTls
+    }
+}
+
 impl SmtpConfig {
     /// Create new SMTP configuration
     pub fn new(
@@ -174,9 +224,32 @@ impl SmtpConfig {
             port,
             username: username.into(),
             password: password.into(),
-            use_tls: true,
-            use_starttls: false,
+            tls: SmtpTlsConfig::StartTls,
+            auth_method: SmtpAuthMethod::Plain,
             timeout: Some(30),
+            pool_size: Some(10),
+            keepalive: true,
+            max_retries: 3,
+            retry_delay: 5,
+            use_tls: None,
+            use_starttls: None,
+        }
+    }
+
+    /// Get effective TLS configuration, handling legacy settings
+    pub fn effective_tls_config(&self) -> SmtpTlsConfig {
+        // Handle legacy configuration - if either field is present, use legacy logic
+        if self.use_tls.is_some() || self.use_starttls.is_some() {
+            let use_tls = self.use_tls.unwrap_or(false);
+            let use_starttls = self.use_starttls.unwrap_or(false);
+            match (use_tls, use_starttls) {
+                (true, false) => SmtpTlsConfig::Tls,
+                (false, true) => SmtpTlsConfig::StartTls,
+                (false, false) => SmtpTlsConfig::None,
+                (true, true) => SmtpTlsConfig::StartTls, // Prefer STARTTLS when both are set
+            }
+        } else {
+            self.tls.clone()
         }
     }
 }
@@ -201,5 +274,73 @@ impl MailgunConfig {
             region: None,
             timeout: Some(30),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_effective_tls_config_new_field() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.tls = SmtpTlsConfig::Tls;
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::Tls));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_both() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_tls = Some(true);
+        config.use_starttls = Some(false);
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::Tls));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_only_tls() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_tls = Some(true);
+        // use_starttls remains None, should default to false
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::Tls));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_only_starttls() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_starttls = Some(true);
+        // use_tls remains None, should default to false
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::StartTls));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_both_false() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_tls = Some(false);
+        config.use_starttls = Some(false);
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::None));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_both_true() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_tls = Some(true);
+        config.use_starttls = Some(true);
+        
+        // Should prefer STARTTLS when both are true
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::StartTls));
+    }
+
+    #[test]
+    fn test_effective_tls_config_legacy_false_none() {
+        let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
+        config.use_tls = Some(false);
+        // use_starttls remains None, should default to false
+        
+        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::None));
     }
 }
