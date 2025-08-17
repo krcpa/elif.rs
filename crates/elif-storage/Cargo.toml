@@ -1,0 +1,57 @@
+[package]
+name = "elif-storage"
+version = "0.1.0"
+edition = "2021"
+description = "Multi-backend file storage system for elif.rs framework"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/krcpa/elif.rs"
+
+[dependencies]
+# Core dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+async-trait = "0.1"
+thiserror = "1.0"
+tracing = "0.1"
+uuid = { version = "1.0", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# File handling
+mime = "0.3"
+bytes = "1.0"
+futures = "0.3"
+tokio-util = { version = "0.7", features = ["codec", "io"] }
+
+# HTTP client (for cloud backends)
+reqwest = { version = "0.11", features = ["json", "stream"], optional = true }
+url = "2.4"
+
+# Image processing (optional)
+image = { version = "0.24", features = ["jpeg", "png", "webp"], optional = true }
+
+# AWS S3 backend (optional)
+aws-config = { version = "0.55", optional = true }
+aws-sdk-s3 = { version = "0.28", optional = true }
+
+
+# Configuration
+elif-core = { version = "0.4.0", path = "../core" }
+elif-auth = { version = "0.3.1", path = "../elif-auth", optional = true }
+
+# Temporary file handling
+tempfile = "3.0"
+
+[features]
+default = ["local"]
+local = []
+aws-s3 = ["reqwest", "aws-config", "aws-sdk-s3"]
+image-processing = ["image"]
+access-control = ["elif-auth"]
+all = ["local", "aws-s3", "image-processing", "access-control"]
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.0"
+criterion = "0.5"
+filetime = "0.2"
