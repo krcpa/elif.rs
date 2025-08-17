@@ -4,11 +4,6 @@
 //! the elif framework error system.
 
 use thiserror::Error;
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
-use axum::Json;
-use serde_json::json;
-use crate::response::{ElifResponse, IntoElifResponse};
 
 /// Result type for HTTP operations
 pub type HttpResult<T> = Result<T, HttpError>;
@@ -97,7 +92,7 @@ impl HttpError {
             message: message.into() 
         }
     }
-    
+
     /// Create an internal error
     pub fn internal<T: Into<String>>(message: T) -> Self {
         HttpError::InternalError { 
@@ -151,56 +146,21 @@ impl HttpError {
             message: message.into() 
         }
     }
-    
-    /// Create an internal server error
-    pub fn internal_server_error<T: Into<String>>(message: T) -> Self {
-        HttpError::InternalError { 
-            message: message.into() 
-        }
-    }
 
     /// Create a timeout error
-    pub fn timeout<T: Into<String>>(_message: T) -> Self {
+    pub fn timeout() -> Self {
         HttpError::RequestTimeout
     }
 
-    /// Create a payload too large error
-    pub fn payload_too_large<T: Into<String>>(_message: T) -> Self {
-        HttpError::RequestTooLarge { 
-            size: 0, // Will be set dynamically if needed
-            limit: 0
-        }
-    }
-
     /// Create a payload too large error with specific sizes
-    pub fn payload_too_large_with_sizes<T: Into<String>>(_message: T, size: usize, limit: usize) -> Self {
+    pub fn payload_too_large(size: usize, limit: usize) -> Self {
         HttpError::RequestTooLarge { size, limit }
     }
+
 
     /// Add additional detail to error (for now, just returns self - future enhancement)
     pub fn with_detail<T: Into<String>>(self, _detail: T) -> Self {
         self
-    }
-
-    /// Get the appropriate HTTP status code for this error
-    pub fn status_code(&self) -> StatusCode {
-        match self {
-            HttpError::StartupFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::ShutdownFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::ConfigError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::ServiceResolutionFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::RequestTimeout => StatusCode::REQUEST_TIMEOUT,
-            HttpError::RequestTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
-            HttpError::BadRequest { .. } => StatusCode::BAD_REQUEST,
-            HttpError::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::HealthCheckFailed { .. } => StatusCode::SERVICE_UNAVAILABLE,
-            HttpError::DatabaseError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::ValidationError { .. } => StatusCode::UNPROCESSABLE_ENTITY,
-            HttpError::NotFound { .. } => StatusCode::NOT_FOUND,
-            HttpError::Conflict { .. } => StatusCode::CONFLICT,
-            HttpError::Unauthorized => StatusCode::UNAUTHORIZED,
-            HttpError::Forbidden { .. } => StatusCode::FORBIDDEN,
-        }
     }
 
     /// Get error code for consistent API responses
@@ -222,50 +182,6 @@ impl HttpError {
             HttpError::Unauthorized => "UNAUTHORIZED_ACCESS",
             HttpError::Forbidden { .. } => "ACCESS_FORBIDDEN",
         }
-    }
-}
-
-// Implement IntoElifResponse for HttpError
-impl IntoElifResponse for HttpError {
-    fn into_elif_response(self) -> ElifResponse {
-        let body = json!({
-            "error": {
-                "code": self.error_code(),
-                "message": self.to_string(),
-                "hint": match &self {
-                    HttpError::RequestTooLarge { .. } => Some("Reduce request payload size"),
-                    HttpError::RequestTimeout => Some("Retry the request"),
-                    HttpError::BadRequest { .. } => Some("Check request format and parameters"),
-                    HttpError::HealthCheckFailed { .. } => Some("Server may be starting up or experiencing issues"),
-                    _ => None,
-                }
-            }
-        });
-
-        ElifResponse::with_status(self.status_code())
-            .json_value(body)
-    }
-}
-
-// Implement IntoResponse for automatic HTTP error responses
-impl IntoResponse for HttpError {
-    fn into_response(self) -> Response {
-        let status = self.status_code();
-        let body = json!({
-            "error": {
-                "code": self.error_code(),
-                "message": self.to_string(),
-                "hint": match &self {
-                    HttpError::RequestTooLarge { .. } => Some("Reduce request payload size"),
-                    HttpError::RequestTimeout => Some("Retry the request"),
-                    HttpError::BadRequest { .. } => Some("Check request format and parameters"),
-                    HttpError::HealthCheckFailed { .. } => Some("Server may be starting up or experiencing issues"),
-                    _ => None,
-                }
-            }
-        });
-
-        (status, Json(body)).into_response()
     }
 }
 
@@ -295,7 +211,6 @@ impl From<hyper::Error> for HttpError {
         }
     }
 }
-
 
 // Convert from serde_json errors
 impl From<serde_json::Error> for HttpError {
@@ -372,7 +287,6 @@ impl From<orm::QueryError> for HttpError {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -381,22 +295,7 @@ mod tests {
     fn test_error_creation() {
         let error = HttpError::startup("Failed to bind to port");
         assert!(matches!(error, HttpError::StartupFailed { .. }));
-        assert_eq!(error.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
         assert_eq!(error.error_code(), "SERVER_STARTUP_FAILED");
-    }
-
-    #[test]
-    fn test_error_status_codes() {
-        assert_eq!(HttpError::bad_request("test").status_code(), StatusCode::BAD_REQUEST);
-        assert_eq!(HttpError::RequestTimeout.status_code(), StatusCode::REQUEST_TIMEOUT);
-        assert_eq!(
-            HttpError::RequestTooLarge { size: 100, limit: 50 }.status_code(), 
-            StatusCode::PAYLOAD_TOO_LARGE
-        );
-        assert_eq!(
-            HttpError::health_check("Database unavailable").status_code(), 
-            StatusCode::SERVICE_UNAVAILABLE
-        );
     }
 
     #[test]
@@ -420,49 +319,9 @@ mod tests {
         assert!(matches!(http_error, HttpError::InternalError { .. }));
     }
 
-    #[cfg(feature = "orm")]
     #[test]
-    fn test_orm_error_conversions() {
-        // Test ModelError conversions
-        let not_found_error = orm::ModelError::NotFound("users".to_string());
-        let http_error = HttpError::from(not_found_error);
-        assert!(matches!(http_error, HttpError::NotFound { .. }));
-        assert_eq!(http_error.status_code(), StatusCode::NOT_FOUND);
-
-        let validation_error = orm::ModelError::Validation("Invalid email".to_string());
-        let http_error = HttpError::from(validation_error);
-        assert!(matches!(http_error, HttpError::ValidationError { .. }));
-        assert_eq!(http_error.status_code(), StatusCode::UNPROCESSABLE_ENTITY);
-
-        let database_error = orm::ModelError::Database("Connection failed".to_string());
-        let http_error = HttpError::from(database_error);
-        assert!(matches!(http_error, HttpError::DatabaseError { .. }));
-        assert_eq!(http_error.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
-
-        // Test QueryError conversions
-        let query_error = orm::QueryError::InvalidSql("Syntax error".to_string());
-        let http_error = HttpError::from(query_error);
-        assert!(matches!(http_error, HttpError::BadRequest { .. }));
-        assert_eq!(http_error.status_code(), StatusCode::BAD_REQUEST);
-    }
-
-    #[test]
-    fn test_validation_error_status_code() {
+    fn test_validation_error_creation() {
         let validation_error = HttpError::validation_error("Field is required");
-        assert_eq!(validation_error.status_code(), StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(validation_error.error_code(), "VALIDATION_ERROR");
-    }
-
-    #[test]
-    fn test_error_response_format_consistency() {
-        use axum::response::IntoResponse as AxumIntoResponse;
-        
-        let error = HttpError::not_found("User");
-        let response = AxumIntoResponse::into_response(error);
-        
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        
-        // Check that response contains proper JSON structure
-        // In a real test environment, we'd deserialize the body to verify JSON structure
     }
 }

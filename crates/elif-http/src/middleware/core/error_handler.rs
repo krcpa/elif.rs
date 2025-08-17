@@ -9,7 +9,7 @@ use axum::{
     response::{Response, IntoResponse},
 };
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use crate::error::HttpError;
+use crate::errors::HttpError;
 use crate::response::IntoElifResponse;
 use tower::Layer;
 use tower::Service;
@@ -130,9 +130,8 @@ pub async fn error_handler_with_config(
             };
 
             let http_error = HttpError::internal(error_message);
-            Ok(http_error.into_elif_response().build().unwrap_or_else(|_| {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
-            }))
+            let elif_response = IntoElifResponse::into_response(http_error);
+            Ok(IntoResponse::into_response(elif_response))
         }
     }
 }
@@ -221,9 +220,8 @@ where
                                 HttpError::internal("Service error occurred")
                             };
 
-                            Ok(http_error.into_elif_response().build().unwrap_or_else(|_| {
-                                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
-                            }))
+                            let elif_response = IntoElifResponse::into_response(http_error);
+                            Ok(IntoResponse::into_response(elif_response))
                         }
                     }
                 }
@@ -247,9 +245,8 @@ where
                     };
 
                     let http_error = HttpError::internal(error_message);
-                    Ok(http_error.into_elif_response().build().unwrap_or_else(|_| {
-                        (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
-                    }))
+                    let elif_response = IntoElifResponse::into_response(http_error);
+                    Ok(IntoResponse::into_response(elif_response))
                 }
             }
         })
@@ -270,20 +267,17 @@ pub fn error_handler_layer_with_config(config: ErrorHandlerConfig) -> ErrorHandl
 mod tests {
     use super::*;
     use axum::{
-        extract::Request,
-        http::StatusCode,
         response::IntoResponse,
         routing::get,
         Router,
     };
-    use tower::util::ServiceExt;
 
     async fn panic_handler() -> impl IntoResponse {
         panic!("Test panic");
     }
 
     async fn error_handler() -> impl IntoResponse {
-        HttpError::bad_request("Test error").into_response()
+        HttpError::bad_request("Test error")
     }
 
     async fn ok_handler() -> impl IntoResponse {

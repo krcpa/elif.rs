@@ -1,16 +1,14 @@
 //! Core routing functionality
 
 use super::{HttpMethod, RouteInfo, RouteRegistry, params::{ParamExtractor, ParamType}};
-use crate::handler::{ElifHandler, elif_handler};
+use crate::handlers::elif_handler;
 use crate::request::ElifRequest;
-use crate::response::{ElifResponse, IntoElifResponse};
-use crate::error::HttpResult;
+use crate::response::IntoElifResponse;
+use crate::errors::HttpResult;
 use service_builder::builder;
 use axum::{
     Router as AxumRouter,
     routing::{get, post, put, delete, patch},
-    handler::Handler,
-    response::IntoResponse,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -368,7 +366,7 @@ mod tests {
     use super::*;
     use crate::request::ElifRequest;
     use crate::response::ElifResponse;
-    use crate::error::HttpResult;
+    use crate::errors::HttpResult;
 
     async fn elif_handler(_req: ElifRequest) -> HttpResult<ElifResponse> {
         Ok(ElifResponse::ok().text("Hello, World!"))
@@ -395,7 +393,7 @@ mod tests {
 
     #[test]
     fn test_url_generation() {
-        let mut router = Router::<()>::new().get("/users/{id}/posts/{slug}", elif_handler);
+        let router = Router::<()>::new().get("/users/{id}/posts/{slug}", elif_handler);
         
         // Manually add a named route to registry for testing
         {

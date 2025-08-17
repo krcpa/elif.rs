@@ -1,8 +1,7 @@
 //! Route parameter extraction and validation
 
-use axum::extract::{Path, FromRequestParts};
-use axum::http::request::Parts;
-use serde::{Deserialize, de::DeserializeOwned};
+use axum::extract::Path;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use thiserror::Error;
 

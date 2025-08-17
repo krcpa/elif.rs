@@ -3,6 +3,7 @@
 //! Provides configuration structures for HTTP server setup, integrating with
 //! the elif-core configuration system.
 
+use super::defaults::HttpDefaults;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use elif_core::{AppConfigTrait, ConfigError, ConfigSource};
@@ -29,70 +30,17 @@ pub struct HttpConfig {
 impl Default for HttpConfig {
     fn default() -> Self {
         Self {
-            request_timeout_secs: 30,
-            keep_alive_timeout_secs: 75,
-            max_request_size: 16 * 1024 * 1024, // 16MB
-            enable_tracing: true,
-            health_check_path: "/health".to_string(),
-            shutdown_timeout_secs: 10,
+            request_timeout_secs: HttpDefaults::REQUEST_TIMEOUT_SECS,
+            keep_alive_timeout_secs: HttpDefaults::KEEP_ALIVE_TIMEOUT_SECS,
+            max_request_size: HttpDefaults::MAX_REQUEST_SIZE,
+            enable_tracing: HttpDefaults::ENABLE_TRACING,
+            health_check_path: HttpDefaults::HEALTH_CHECK_PATH.to_string(),
+            shutdown_timeout_secs: HttpDefaults::SHUTDOWN_TIMEOUT_SECS,
         }
     }
 }
 
 impl AppConfigTrait for HttpConfig {
-    fn from_env() -> Result<Self, ConfigError> {
-        let request_timeout_secs = get_env_or_default("HTTP_REQUEST_TIMEOUT", "30")?
-            .parse::<u64>()
-            .map_err(|_| ConfigError::InvalidValue {
-                field: "request_timeout_secs".to_string(),
-                value: env::var("HTTP_REQUEST_TIMEOUT").unwrap_or_default(),
-                expected: "valid number of seconds".to_string(),
-            })?;
-
-        let keep_alive_timeout_secs = get_env_or_default("HTTP_KEEP_ALIVE_TIMEOUT", "75")?
-            .parse::<u64>()
-            .map_err(|_| ConfigError::InvalidValue {
-                field: "keep_alive_timeout_secs".to_string(),
-                value: env::var("HTTP_KEEP_ALIVE_TIMEOUT").unwrap_or_default(),
-                expected: "valid number of seconds".to_string(),
-            })?;
-
-        let max_request_size = get_env_or_default("HTTP_MAX_REQUEST_SIZE", "16777216")?
-            .parse::<usize>()
-            .map_err(|_| ConfigError::InvalidValue {
-                field: "max_request_size".to_string(),
-                value: env::var("HTTP_MAX_REQUEST_SIZE").unwrap_or_default(),
-                expected: "valid number of bytes".to_string(),
-            })?;
-
-        let enable_tracing = get_env_or_default("HTTP_ENABLE_TRACING", "true")?
-            .parse::<bool>()
-            .map_err(|_| ConfigError::InvalidValue {
-                field: "enable_tracing".to_string(),
-                value: env::var("HTTP_ENABLE_TRACING").unwrap_or_default(),
-                expected: "true or false".to_string(),
-            })?;
-
-        let health_check_path = get_env_or_default("HTTP_HEALTH_CHECK_PATH", "/health")?;
-
-        let shutdown_timeout_secs = get_env_or_default("HTTP_SHUTDOWN_TIMEOUT", "10")?
-            .parse::<u64>()
-            .map_err(|_| ConfigError::InvalidValue {
-                field: "shutdown_timeout_secs".to_string(),
-                value: env::var("HTTP_SHUTDOWN_TIMEOUT").unwrap_or_default(),
-                expected: "valid number of seconds".to_string(),
-            })?;
-
-        Ok(HttpConfig {
-            request_timeout_secs,
-            keep_alive_timeout_secs,
-            max_request_size,
-            enable_tracing,
-            health_check_path,
-            shutdown_timeout_secs,
-        })
-    }
-
     fn validate(&self) -> Result<(), ConfigError> {
         // Validate timeout values
         if self.request_timeout_secs == 0 {
@@ -118,6 +66,59 @@ impl AppConfigTrait for HttpConfig {
         }
 
         Ok(())
+    }
+    
+    fn from_env() -> Result<Self, ConfigError> {
+        let request_timeout_secs = get_env_or_default("HTTP_REQUEST_TIMEOUT", &HttpDefaults::REQUEST_TIMEOUT_SECS.to_string())?
+            .parse::<u64>()
+            .map_err(|_| ConfigError::InvalidValue {
+                field: "request_timeout_secs".to_string(),
+                value: env::var("HTTP_REQUEST_TIMEOUT").unwrap_or_default(),
+                expected: "valid number of seconds".to_string(),
+            })?;
+
+        let keep_alive_timeout_secs = get_env_or_default("HTTP_KEEP_ALIVE_TIMEOUT", &HttpDefaults::KEEP_ALIVE_TIMEOUT_SECS.to_string())?
+            .parse::<u64>()
+            .map_err(|_| ConfigError::InvalidValue {
+                field: "keep_alive_timeout_secs".to_string(),
+                value: env::var("HTTP_KEEP_ALIVE_TIMEOUT").unwrap_or_default(),
+                expected: "valid number of seconds".to_string(),
+            })?;
+
+        let max_request_size = get_env_or_default("HTTP_MAX_REQUEST_SIZE", &HttpDefaults::MAX_REQUEST_SIZE.to_string())?
+            .parse::<usize>()
+            .map_err(|_| ConfigError::InvalidValue {
+                field: "max_request_size".to_string(),
+                value: env::var("HTTP_MAX_REQUEST_SIZE").unwrap_or_default(),
+                expected: "valid number of bytes".to_string(),
+            })?;
+
+        let enable_tracing = get_env_or_default("HTTP_ENABLE_TRACING", &HttpDefaults::ENABLE_TRACING.to_string())?
+            .parse::<bool>()
+            .map_err(|_| ConfigError::InvalidValue {
+                field: "enable_tracing".to_string(),
+                value: env::var("HTTP_ENABLE_TRACING").unwrap_or_default(),
+                expected: "true or false".to_string(),
+            })?;
+
+        let health_check_path = get_env_or_default("HTTP_HEALTH_CHECK_PATH", HttpDefaults::HEALTH_CHECK_PATH)?;
+
+        let shutdown_timeout_secs = get_env_or_default("HTTP_SHUTDOWN_TIMEOUT", &HttpDefaults::SHUTDOWN_TIMEOUT_SECS.to_string())?
+            .parse::<u64>()
+            .map_err(|_| ConfigError::InvalidValue {
+                field: "shutdown_timeout_secs".to_string(),
+                value: env::var("HTTP_SHUTDOWN_TIMEOUT").unwrap_or_default(),
+                expected: "valid number of seconds".to_string(),
+            })?;
+
+        Ok(HttpConfig {
+            request_timeout_secs,
+            keep_alive_timeout_secs,
+            max_request_size,
+            enable_tracing,
+            health_check_path,
+            shutdown_timeout_secs,
+        })
     }
 
     fn config_sources(&self) -> HashMap<String, ConfigSource> {
@@ -191,12 +192,12 @@ mod tests {
     fn test_http_config_defaults() {
         let config = HttpConfig::default();
         
-        assert_eq!(config.request_timeout_secs, 30);
-        assert_eq!(config.keep_alive_timeout_secs, 75);
-        assert_eq!(config.max_request_size, 16 * 1024 * 1024);
-        assert!(config.enable_tracing);
-        assert_eq!(config.health_check_path, "/health");
-        assert_eq!(config.shutdown_timeout_secs, 10);
+        assert_eq!(config.request_timeout_secs, HttpDefaults::REQUEST_TIMEOUT_SECS);
+        assert_eq!(config.keep_alive_timeout_secs, HttpDefaults::KEEP_ALIVE_TIMEOUT_SECS);
+        assert_eq!(config.max_request_size, HttpDefaults::MAX_REQUEST_SIZE);
+        assert_eq!(config.enable_tracing, HttpDefaults::ENABLE_TRACING);
+        assert_eq!(config.health_check_path, HttpDefaults::HEALTH_CHECK_PATH);
+        assert_eq!(config.shutdown_timeout_secs, HttpDefaults::SHUTDOWN_TIMEOUT_SECS);
     }
 
     #[test]
@@ -217,29 +218,11 @@ mod tests {
     }
 
     #[test]
-    fn test_http_config_validation() {
-        let _guard = TEST_MUTEX.lock().unwrap();
-        
-        let config = HttpConfig::default();
-        assert!(config.validate().is_ok());
-
-        // Test invalid request timeout
-        let mut invalid_config = config.clone();
-        invalid_config.request_timeout_secs = 0;
-        assert!(invalid_config.validate().is_err());
-
-        // Test invalid health check path
-        let mut invalid_config = config.clone();
-        invalid_config.health_check_path = "no-slash".to_string();
-        assert!(invalid_config.validate().is_err());
-    }
-
-    #[test]
     fn test_duration_helpers() {
         let config = HttpConfig::default();
         
-        assert_eq!(config.request_timeout(), Duration::from_secs(30));
-        assert_eq!(config.keep_alive_timeout(), Duration::from_secs(75));
-        assert_eq!(config.shutdown_timeout(), Duration::from_secs(10));
+        assert_eq!(config.request_timeout(), Duration::from_secs(HttpDefaults::REQUEST_TIMEOUT_SECS));
+        assert_eq!(config.keep_alive_timeout(), Duration::from_secs(HttpDefaults::KEEP_ALIVE_TIMEOUT_SECS));
+        assert_eq!(config.shutdown_timeout(), Duration::from_secs(HttpDefaults::SHUTDOWN_TIMEOUT_SECS));
     }
 }

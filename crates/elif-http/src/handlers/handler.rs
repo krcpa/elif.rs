@@ -2,12 +2,12 @@
 //!
 //! This module provides a bridge between elif types and Axum's handler system.
 
-use crate::request::{ElifRequest, RequestExtractor};
+use crate::request::ElifRequest;
 use crate::response::{ElifResponse, IntoElifResponse};
-use crate::error::{HttpError, HttpResult};
+use crate::errors::HttpResult;
 use axum::{
     extract::{Request as AxumRequest},
-    response::{Response as AxumResponse, IntoResponse},
+    response::{Response as AxumResponse},
     handler::Handler as AxumHandler,
 };
 use std::future::Future;
@@ -96,11 +96,11 @@ where
             
             match (self.handler)(elif_request).await {
                 Ok(response) => {
-                    let elif_response = response.into_elif_response();
+                    let elif_response = response.into_response();
                     convert_elif_to_axum_response(elif_response)
                 }
                 Err(error) => {
-                    let error_response = error.into_elif_response();
+                    let error_response = crate::response::IntoElifResponse::into_response(error);
                     convert_elif_to_axum_response(error_response)
                 }
             }
@@ -121,22 +121,21 @@ where
 /// Convert ElifResponse to Axum Response
 fn convert_elif_to_axum_response(elif_response: ElifResponse) -> AxumResponse {
     // ElifResponse already implements IntoResponse for Axum
-    elif_response.into_response()
+    use axum::response::IntoResponse as AxumIntoResponse;
+    AxumIntoResponse::into_response(elif_response)
 }
 
 /// Macro to create elif handlers more easily
 #[macro_export]
 macro_rules! elif_route {
     ($handler:expr) => {
-        $crate::handler::elif_handler($handler)
+        $crate::handlers::elif_handler($handler)
     };
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::response::ElifStatusCode;
-    use axum::http::Method;
 
     async fn test_handler(_req: ElifRequest) -> HttpResult<ElifResponse> {
         Ok(ElifResponse::ok().text("Hello, World!"))
@@ -144,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_elif_handler_conversion() {
-        let handler = elif_handler(test_handler);
+        let _handler = elif_handler(test_handler);
         
         // This test verifies the handler compiles and can be used
         // Full integration testing would require setting up Axum routing

@@ -10,7 +10,7 @@ use axum::{
 };
 use log::{debug, warn};
 
-use super::{Middleware, BoxFuture};
+use crate::middleware::{Middleware, BoxFuture};
 
 /// Request timing middleware that tracks request duration and adds timing headers
 pub struct TimingMiddleware {
@@ -138,7 +138,7 @@ pub fn format_duration(duration: std::time::Duration) -> String {
 mod tests {
     use super::*;
     use axum::http::{StatusCode, Method};
-    use tokio::time::{sleep, Duration};
+    use tokio::time::Duration;
     
     #[test]
     fn test_format_duration() {

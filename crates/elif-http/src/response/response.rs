@@ -2,14 +2,13 @@
 //! 
 //! Provides fluent response building with status codes, headers, and JSON serialization.
 
-use std::collections::HashMap;
 use axum::{
     http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
-    response::{Json, Response, IntoResponse},
+    response::{Response, IntoResponse},
     body::{Body, Bytes},
 };
 use serde::Serialize;
-use crate::error::{HttpError, HttpResult};
+use crate::errors::{HttpError, HttpResult};
 
 /// Framework-native status codes - use instead of axum::http::StatusCode
 pub use axum::http::StatusCode as ElifStatusCode;
@@ -57,6 +56,11 @@ impl ElifResponse {
     pub fn status(mut self, status: StatusCode) -> Self {
         self.status = status;
         self
+    }
+
+    /// Get response status code
+    pub fn status_code(&self) -> StatusCode {
+        self.status
     }
 
     /// Add header to response
@@ -236,29 +240,29 @@ impl ElifResponse {
 
 /// Helper trait for converting types to ElifResponse
 pub trait IntoElifResponse {
-    fn into_elif_response(self) -> ElifResponse;
+    fn into_response(self) -> ElifResponse;
 }
 
 impl IntoElifResponse for String {
-    fn into_elif_response(self) -> ElifResponse {
+    fn into_response(self) -> ElifResponse {
         ElifResponse::ok().text(self)
     }
 }
 
 impl IntoElifResponse for &str {
-    fn into_elif_response(self) -> ElifResponse {
+    fn into_response(self) -> ElifResponse {
         ElifResponse::ok().text(self)
     }
 }
 
 impl IntoElifResponse for StatusCode {
-    fn into_elif_response(self) -> ElifResponse {
+    fn into_response(self) -> ElifResponse {
         ElifResponse::with_status(self)
     }
 }
 
 impl IntoElifResponse for ElifResponse {
-    fn into_elif_response(self) -> ElifResponse {
+    fn into_response(self) -> ElifResponse {
         self
     }
 }
@@ -378,5 +382,11 @@ mod tests {
         let redirect = ElifResponse::redirect_permanent("/new-location").unwrap();
         assert_eq!(redirect.status, StatusCode::MOVED_PERMANENTLY);
         assert!(redirect.headers.contains_key("location"));
+    }
+
+    #[test]
+    fn test_status_code_getter() {
+        let response = ElifResponse::created();
+        assert_eq!(response.status_code(), StatusCode::CREATED);
     }
 }

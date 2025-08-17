@@ -8,7 +8,7 @@ use axum::{
     body::Bytes,
 };
 use serde::de::DeserializeOwned;
-use crate::error::{HttpError, HttpResult};
+use crate::errors::{HttpError, HttpResult};
 
 /// Request abstraction that wraps Axum's request types
 /// with additional parsing and extraction capabilities
@@ -37,6 +37,20 @@ impl ElifRequest {
             query_params: HashMap::new(),
             body_bytes: None,
         }
+    }
+
+    /// Extract ElifRequest from request components
+    pub fn extract_elif_request(
+        method: Method,
+        uri: Uri,
+        headers: HeaderMap,
+        body: Option<Bytes>,
+    ) -> ElifRequest {
+        let mut request = ElifRequest::new(method, uri, headers);
+        if let Some(body) = body {
+            request = request.with_body(body);
+        }
+        request
     }
 
     /// Set path parameters extracted from route
@@ -161,6 +175,22 @@ impl ElifRequest {
             .map_err(|e| HttpError::bad_request(format!("Invalid form data: {}", e)))
     }
 
+    /// Parse query parameters to specified type
+    pub fn query<T: DeserializeOwned>(&self) -> HttpResult<T> {
+        let query_str = self.query_string().unwrap_or("");
+        serde_urlencoded::from_str::<T>(query_str)
+            .map_err(|e| HttpError::bad_request(format!("Invalid query parameters: {}", e)))
+    }
+
+    /// Parse path parameters to specified type
+    pub fn path_params<T: DeserializeOwned>(&self) -> HttpResult<T> {
+        let json_value = serde_json::to_value(&self.path_params)
+            .map_err(|e| HttpError::internal(format!("Failed to serialize path params: {}", e)))?;
+        
+        serde_json::from_value::<T>(json_value)
+            .map_err(|e| HttpError::bad_request(format!("Invalid path parameters: {}", e)))
+    }
+
     /// Get User-Agent header
     pub fn user_agent(&self) -> HttpResult<Option<String>> {
         self.header_string("user-agent")
@@ -225,81 +255,10 @@ impl ElifRequest {
     }
 }
 
-/// Helper trait for extracting ElifRequest from Axum request parts
-pub trait RequestExtractor {
-    /// Extract ElifRequest from request components
-    fn extract_elif_request(
-        method: Method,
-        uri: Uri,
-        headers: HeaderMap,
-        body: Option<Bytes>,
-    ) -> ElifRequest {
-        let mut request = ElifRequest::new(method, uri, headers);
-        if let Some(body) = body {
-            request = request.with_body(body);
-        }
-        request
-    }
-}
-
-impl RequestExtractor for ElifRequest {}
-
-/// Framework-native Query extractor - use instead of axum::extract::Query
-#[derive(Debug)]
-pub struct ElifQuery<T>(pub T);
-
-impl<T: DeserializeOwned> ElifQuery<T> {
-    /// Extract and deserialize query parameters from request
-    pub fn from_request(request: &ElifRequest) -> HttpResult<Self> {
-        let query_str = request.query_string().unwrap_or("");
-        let data = serde_urlencoded::from_str::<T>(query_str)
-            .map_err(|e| HttpError::bad_request(format!("Invalid query parameters: {}", e)))?;
-        Ok(ElifQuery(data))
-    }
-}
-
-/// Framework-native Path extractor - use instead of axum::extract::Path  
-#[derive(Debug)]
-pub struct ElifPath<T>(pub T);
-
-impl<T: DeserializeOwned> ElifPath<T> {
-    /// Extract and deserialize path parameters from request
-    pub fn from_request(request: &ElifRequest) -> HttpResult<Self> {
-        // Convert HashMap to JSON for deserialization
-        let json_value = serde_json::to_value(&request.path_params)
-            .map_err(|e| HttpError::internal_server_error(format!("Failed to serialize path params: {}", e)))?;
-        
-        let data = serde_json::from_value::<T>(json_value)
-            .map_err(|e| HttpError::bad_request(format!("Invalid path parameters: {}", e)))?;
-        Ok(ElifPath(data))
-    }
-}
-
-/// Framework-native State extractor - use instead of axum::extract::State
-#[derive(Debug)]  
-pub struct ElifState<T>(pub T);
-
-impl<T: Clone> ElifState<T> {
-    /// Extract state from application context
-    pub fn new(state: T) -> Self {
-        ElifState(state)
-    }
-    
-    /// Get reference to inner state
-    pub fn inner(&self) -> &T {
-        &self.0
-    }
-    
-    /// Get owned copy of inner state (requires Clone)
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{Method, Uri}; // TODO: Replace with framework types when available
+    use axum::http::{Method, Uri};
     use std::collections::HashMap;
 
     #[test]
@@ -373,5 +332,19 @@ mod tests {
 
         let token = request.bearer_token().unwrap().unwrap();
         assert_eq!(token, "abc123xyz");
+    }
+
+    #[test]
+    fn test_extract_elif_request() {
+        let method = Method::POST;
+        let uri: Uri = "/test".parse().unwrap();
+        let headers = HeaderMap::new();
+        let body = Some(Bytes::from("test body"));
+
+        let request = ElifRequest::extract_elif_request(method.clone(), uri.clone(), headers.clone(), body.clone());
+
+        assert_eq!(request.method, method);
+        assert_eq!(request.uri, uri);
+        assert_eq!(request.body_bytes(), body.as_ref());
     }
 }

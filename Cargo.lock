@@ -1424,6 +1424,7 @@ dependencies = [
  "elif-auth",
  "elif-core",
  "hyper 1.6.0",
+ "lazy_static",
  "log",
  "serde",
  "serde_json",
