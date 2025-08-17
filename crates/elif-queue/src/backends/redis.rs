@@ -522,18 +522,36 @@ impl QueueBackend for RedisBackend {
     async fn clear(&self) -> QueueResult<()> {
         let mut conn = self.get_connection().await?;
         
-        // Get all keys with our prefix
+        // Use SCAN to iterate through keys with our prefix to avoid blocking Redis
         let pattern = format!("{}:*", self.config.key_prefix);
-        let keys: Vec<String> = conn
-            .keys(&pattern)
-            .await
-            .map_err(|e| QueueError::Backend(format!("Failed to get keys: {}", e)))?;
+        let mut cursor: u64 = 0;
+        let mut all_keys: Vec<String> = Vec::new();
         
-        if !keys.is_empty() {
-            let _: () = conn
-                .del(keys)
+        // Scan through all keys in batches
+        loop {
+            let (new_cursor, keys): (u64, Vec<String>) = conn
+                .scan_match(cursor, &pattern, Some(100)) // Process 100 keys at a time
                 .await
-                .map_err(|e| QueueError::Backend(format!("Failed to clear queue: {}", e)))?;
+                .map_err(|e| QueueError::Backend(format!("Failed to scan keys: {}", e)))?;
+            
+            all_keys.extend(keys);
+            cursor = new_cursor;
+            
+            // SCAN returns 0 when iteration is complete
+            if cursor == 0 {
+                break;
+            }
+        }
+        
+        // Delete all found keys in batches to avoid large commands
+        const BATCH_SIZE: usize = 100;
+        for chunk in all_keys.chunks(BATCH_SIZE) {
+            if !chunk.is_empty() {
+                let _: () = conn
+                    .del(chunk)
+                    .await
+                    .map_err(|e| QueueError::Backend(format!("Failed to clear queue batch: {}", e)))?;
+            }
         }
         
         Ok(())
