@@ -1,10 +1,6 @@
 use elif_core::ElifError;
 
-#[derive(Debug)]
-pub struct EmailTrackAnalyticsArgs {
-    pub range: String,
-    pub filter: Option<String>,
-}
+use super::types::EmailTrackAnalyticsArgs;
 
 /// Show email tracking analytics
 pub async fn track_analytics(args: EmailTrackAnalyticsArgs) -> Result<(), ElifError> {

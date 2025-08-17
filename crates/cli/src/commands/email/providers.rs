@@ -1,10 +1,6 @@
 use elif_core::ElifError;
 
-#[derive(Debug)]
-pub struct EmailProviderConfigureArgs {
-    pub provider: String,
-    pub interactive: bool,
-}
+use super::types::EmailProviderConfigureArgs;
 
 /// Test email provider connection
 pub async fn provider_test(provider: Option<String>) -> Result<(), ElifError> {

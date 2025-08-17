@@ -3,57 +3,12 @@ use std::collections::HashMap;
 use serde_json::{Value, to_string_pretty, from_str};
 use std::fs;
 use std::path::PathBuf;
-use chrono::{DateTime, Utc};
-use std::io::Write;
+use chrono::Utc;
 
-#[derive(Debug)]
-pub struct EmailCaptureArgs {
-    pub enable: bool,
-    pub disable: bool,
-    pub dir: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct EmailTestListArgs {
-    pub detailed: bool,
-    pub to: Option<String>,
-    pub subject: Option<String>,
-    pub limit: usize,
-}
-
-#[derive(Debug)]
-pub struct EmailTestShowArgs {
-    pub email_id: String,
-    pub raw: bool,
-    pub part: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct EmailTestClearArgs {
-    pub all: bool,
-    pub older_than: Option<u32>,
-}
-
-#[derive(Debug)]
-pub struct EmailTestExportArgs {
-    pub format: String,
-    pub output: Option<String>,
-    pub include_body: bool,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct CapturedEmail {
-    pub id: String,
-    pub timestamp: DateTime<Utc>,
-    pub to: String,
-    pub from: String,
-    pub subject: String,
-    pub body_text: Option<String>,
-    pub body_html: Option<String>,
-    pub headers: HashMap<String, String>,
-    pub template: Option<String>,
-    pub context: Option<HashMap<String, Value>>,
-}
+use super::types::{
+    EmailSendArgs, EmailCaptureArgs, EmailTestListArgs, EmailTestShowArgs, 
+    EmailTestClearArgs, EmailTestExportArgs, CapturedEmail
+};
 
 /// Configure email capture to filesystem
 pub async fn test_capture(args: EmailCaptureArgs) -> Result<(), ElifError> {
@@ -358,7 +313,7 @@ async fn set_capture_enabled(enabled: bool, capture_dir: &PathBuf) -> Result<(),
 }
 
 pub async fn capture_email_to_filesystem(
-    args: &super::core::EmailSendArgs,
+    args: &EmailSendArgs,
     body_text: Option<String>,
     body_html: Option<String>,
     context_data: &HashMap<String, Value>

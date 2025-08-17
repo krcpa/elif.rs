@@ -2,12 +2,7 @@ use elif_core::ElifError;
 use std::collections::HashMap;
 use serde_json::{Value, from_str};
 
-#[derive(Debug)]
-pub struct EmailTemplateRenderArgs {
-    pub template: String,
-    pub context: Option<String>,
-    pub format: String,
-}
+use super::types::EmailTemplateRenderArgs;
 
 /// List all available email templates
 pub async fn template_list() -> Result<(), ElifError> {

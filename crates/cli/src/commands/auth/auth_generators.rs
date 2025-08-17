@@ -1,7 +1,7 @@
 use elif_core::ElifError;
+use rand::Rng;
 
-pub async fn generate_key(length: usize) -> Result<(), ElifError> {
-    use rand::Rng;
+pub fn generate_key(length: usize) -> Result<(), ElifError> {
     
     println!("🔑 Generating secure key...");
     

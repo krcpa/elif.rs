@@ -856,7 +856,7 @@ async fn main() -> Result<(), ElifError> {
                     auth::setup(provider, mfa, rbac).await?;
                 }
                 AuthCommands::GenerateKey { length } => {
-                    auth::generate_key(length).await?;
+                    auth::generate_key(length)?;
                 }
                 AuthCommands::Scaffold { registration, reset_password } => {
                     auth::scaffold(registration, reset_password).await?;

@@ -2,21 +2,7 @@ use elif_core::ElifError;
 use std::collections::HashMap;
 use serde_json::{Value, from_str};
 
-#[derive(Debug)]
-pub struct EmailSendArgs {
-    pub to: String,
-    pub subject: String,
-    pub template: Option<String>,
-    pub body: Option<String>,
-    pub html: bool,
-    pub context: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct EmailSetupArgs {
-    pub provider: Option<String>,
-    pub non_interactive: bool,
-}
+use super::types::{EmailSendArgs, EmailSetupArgs};
 
 /// Send a test email
 pub async fn send(args: EmailSendArgs) -> Result<(), ElifError> {
@@ -56,8 +42,8 @@ pub async fn send(args: EmailSendArgs) -> Result<(), ElifError> {
     };
 
     // Check if email capture is enabled
-    if super::testing::is_capture_enabled().await? {
-        super::testing::capture_email_to_filesystem(&args, body_text, body_html, &context_data).await?;
+    if crate::commands::email::testing::is_capture_enabled().await? {
+        crate::commands::email::testing::capture_email_to_filesystem(&args, body_text, body_html, &context_data).await?;
         println!("📁 Email captured to filesystem for testing");
     } else {
         println!("⏳ Email sending not yet implemented - would send email");

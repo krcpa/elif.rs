@@ -1,6 +1,6 @@
 use elif_core::ElifError;
-use std::fs;
 use std::path::Path;
+use tokio::fs;
 
 use crate::AuthProvider;
 
@@ -13,7 +13,7 @@ pub async fn setup(provider: AuthProvider, mfa: bool, rbac: bool) -> Result<(), 
     }
     
     // Create config directory if it doesn't exist
-    fs::create_dir_all("config")?;
+    fs::create_dir_all("config").await?;
     
     match provider {
         AuthProvider::Jwt => setup_jwt_auth(mfa, rbac).await?,
@@ -59,7 +59,7 @@ async fn setup_jwt_auth(mfa: bool, rbac: bool) -> Result<(), ElifError> {
         config.push_str("\n");
     }
     
-    fs::write("config/auth_jwt.env", config)?;
+    fs::write("config/auth_jwt.env", config).await?;
     println!("📄 Created config/auth_jwt.env");
     
     Ok(())
@@ -91,7 +91,7 @@ async fn setup_session_auth(mfa: bool, rbac: bool) -> Result<(), ElifError> {
         config.push_str("\n");
     }
     
-    fs::write("config/auth_session.env", config)?;
+    fs::write("config/auth_session.env", config).await?;
     println!("📄 Created config/auth_session.env");
     
     Ok(())

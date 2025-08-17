@@ -1,16 +1,6 @@
 use elif_core::ElifError;
 
-#[derive(Debug)]
-pub struct EmailQueueProcessArgs {
-    pub limit: Option<u32>,
-    pub timeout: u64,
-}
-
-#[derive(Debug)]
-pub struct EmailQueueClearArgs {
-    pub failed: bool,
-    pub completed: bool,
-}
+use super::types::{EmailQueueProcessArgs, EmailQueueClearArgs};
 
 /// Show email queue status
 pub async fn queue_status(detailed: bool) -> Result<(), ElifError> {
