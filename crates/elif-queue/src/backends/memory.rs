@@ -102,6 +102,14 @@ impl MemoryBackend {
         
         // Look for a ready job at the top of the heap
         while let Some(priority_entry) = queue.peek() {
+            // If the job has been removed from the main map, discard it from the pending queue.
+            // This handles "ghost" jobs that might remain in the BinaryHeap after being removed
+            // via `remove_job`.
+            if !self.jobs.contains_key(&priority_entry.entry.id()) {
+                queue.pop();
+                continue; 
+            }
+            
             if priority_entry.entry.is_ready() {
                 let priority_entry = queue.pop().unwrap();
                 return Some(priority_entry.entry);
@@ -333,6 +341,69 @@ mod tests {
         
         let third = backend.dequeue().await.unwrap().unwrap();
         assert_eq!(third.priority(), Priority::Low);
+    }
+    
+    #[tokio::test]
+    async fn test_ghost_job_cleanup() {
+        let config = crate::config::QueueConfigBuilder::testing().build().expect("Failed to build config");
+        let backend = MemoryBackend::new(config);
+        
+        // Create and enqueue a job
+        let job = TestJob { id: 1, message: "ghost test".to_string() };
+        let entry = JobEntry::new(job, Some(Priority::Normal), None).unwrap();
+        let job_id = backend.enqueue(entry).await.unwrap();
+        
+        // Verify job is in both jobs map and pending queue
+        assert!(backend.jobs.contains_key(&job_id));
+        assert_eq!(backend.pending_queue.read().len(), 1);
+        
+        // Remove job directly from jobs map (simulating a manual removal)
+        backend.jobs.remove(&job_id);
+        
+        // The pending queue still contains the ghost entry
+        assert_eq!(backend.pending_queue.read().len(), 1);
+        
+        // But dequeue should clean up the ghost and return None
+        let result = backend.dequeue().await.unwrap();
+        assert!(result.is_none());
+        
+        // The pending queue should now be empty (ghost cleaned up)
+        assert_eq!(backend.pending_queue.read().len(), 0);
+    }
+    
+    #[tokio::test]
+    async fn test_multiple_ghost_jobs_cleanup() {
+        let config = crate::config::QueueConfigBuilder::testing().build().expect("Failed to build config");
+        let backend = MemoryBackend::new(config);
+        
+        // Create multiple jobs
+        let mut job_ids = Vec::new();
+        for i in 1..=5 {
+            let job = TestJob { id: i, message: format!("ghost test {}", i) };
+            let entry = JobEntry::new(job, Some(Priority::Normal), None).unwrap();
+            let job_id = backend.enqueue(entry).await.unwrap();
+            job_ids.push(job_id);
+        }
+        
+        // Verify all jobs are queued
+        assert_eq!(backend.pending_queue.read().len(), 5);
+        assert_eq!(backend.jobs.len(), 5);
+        
+        // Remove first 3 jobs from jobs map (creating ghosts)
+        for &job_id in &job_ids[0..3] {
+            backend.jobs.remove(&job_id);
+        }
+        
+        // Pending queue still has all 5 entries
+        assert_eq!(backend.pending_queue.read().len(), 5);
+        assert_eq!(backend.jobs.len(), 2);
+        
+        // First dequeue should skip the 3 ghost jobs and return the 4th job
+        let result = backend.dequeue().await.unwrap().unwrap();
+        assert_eq!(result.payload.get("id").unwrap().as_u64().unwrap(), 4);
+        
+        // Pending queue should now have cleaned up the ghosts plus the dequeued job
+        assert_eq!(backend.pending_queue.read().len(), 1);
     }
     
     #[tokio::test]
