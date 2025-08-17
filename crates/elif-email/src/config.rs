@@ -14,6 +14,8 @@ pub struct EmailConfig {
     pub templates: TemplateConfig,
     /// Tracking configuration
     pub tracking: GlobalTrackingConfig,
+    /// Attachment configuration
+    pub attachments: AttachmentConfig,
 }
 
 /// Provider-specific configuration
@@ -152,6 +154,25 @@ pub struct GlobalTrackingConfig {
     pub link_endpoint: String,
 }
 
+/// Attachment configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachmentConfig {
+    /// Maximum attachment size in bytes (default 25MB)
+    pub max_size: usize,
+    /// Maximum total attachments size per email (default 50MB)
+    pub max_total_size: usize,
+    /// Maximum number of attachments per email
+    pub max_count: usize,
+    /// Allowed MIME types (empty means all allowed)
+    pub allowed_types: Vec<String>,
+    /// Blocked MIME types
+    pub blocked_types: Vec<String>,
+    /// Enable automatic compression for supported types
+    pub auto_compress: bool,
+    /// Compression quality (0-100, only for images)
+    pub compression_quality: Option<u8>,
+}
+
 impl Default for EmailConfig {
     fn default() -> Self {
         Self {
@@ -160,6 +181,7 @@ impl Default for EmailConfig {
             providers: HashMap::new(),
             templates: TemplateConfig::default(),
             tracking: GlobalTrackingConfig::default(),
+            attachments: AttachmentConfig::default(),
         }
     }
 }
@@ -195,6 +217,24 @@ impl Default for GlobalTrackingConfig {
             base_url: None,
             pixel_endpoint: "/email/track/open".to_string(),
             link_endpoint: "/email/track/click".to_string(),
+        }
+    }
+}
+
+impl Default for AttachmentConfig {
+    fn default() -> Self {
+        Self {
+            max_size: 25 * 1024 * 1024,        // 25MB
+            max_total_size: 50 * 1024 * 1024,  // 50MB
+            max_count: 10,
+            allowed_types: vec![],  // Empty means all allowed
+            blocked_types: vec![
+                "application/x-executable".to_string(),
+                "application/x-dosexec".to_string(),
+                "application/x-msdownload".to_string(),
+            ],
+            auto_compress: false,
+            compression_quality: Some(85),
         }
     }
 }

@@ -150,10 +150,9 @@ impl SendGridProvider {
                     content: base64::encode(&att.content),
                     content_type: att.content_type.clone(),
                     filename: att.filename.clone(),
-                    disposition: if att.content_id.is_some() {
-                        "inline".to_string()
-                    } else {
-                        "attachment".to_string()
+                    disposition: match att.disposition {
+                        crate::AttachmentDisposition::Inline => "inline".to_string(),
+                        crate::AttachmentDisposition::Attachment => "attachment".to_string(),
                     },
                     content_id: att.content_id.clone(),
                 })
