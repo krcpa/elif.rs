@@ -1,6 +1,6 @@
 use elif_core::ElifError;
-use std::fs;
 use std::path::Path;
+use tokio::fs;
 
 pub async fn create_app(name: &str, target_path: Option<&str>) -> Result<(), ElifError> {
     let app_path = match target_path {
@@ -19,13 +19,13 @@ pub async fn create_app(name: &str, target_path: Option<&str>) -> Result<(), Eli
     println!("📦 Creating new elif application: {}", name);
     
     // Create directory structure
-    create_app_structure(&app_dir, name)?;
+    create_app_structure(&app_dir, name).await?;
     
     // Create configuration files
-    super::new_templates::create_config_files(&app_dir, name)?;
+    super::new_templates::create_config_files(&app_dir, name).await?;
     
     // Create source files
-    super::new_templates::create_source_files(&app_dir, name)?;
+    super::new_templates::create_source_files(&app_dir, name).await?;
     
     println!("✅ Application '{}' created successfully!", name);
     println!("📂 Location: {}", app_dir.display());
@@ -37,7 +37,7 @@ pub async fn create_app(name: &str, target_path: Option<&str>) -> Result<(), Eli
     Ok(())
 }
 
-fn create_app_structure(app_dir: &Path, _name: &str) -> Result<(), ElifError> {
+async fn create_app_structure(app_dir: &Path, _name: &str) -> Result<(), ElifError> {
     let dirs = [
         "src/controllers",
         "src/middleware", 
@@ -50,7 +50,7 @@ fn create_app_structure(app_dir: &Path, _name: &str) -> Result<(), ElifError> {
     ];
     
     for dir in &dirs {
-        fs::create_dir_all(app_dir.join(dir))?;
+        fs::create_dir_all(app_dir.join(dir)).await?;
     }
     
     Ok(())
