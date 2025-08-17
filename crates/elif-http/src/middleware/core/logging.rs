@@ -10,7 +10,7 @@ use axum::{
 };
 use log::{info, debug, error};
 
-use super::{Middleware, BoxFuture};
+use crate::middleware::{Middleware, BoxFuture};
 
 /// HTTP request logging middleware that logs request details and response status
 pub struct LoggingMiddleware {

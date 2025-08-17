@@ -6,7 +6,6 @@
 use std::time::{Instant, Duration};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::str::FromStr;
 use uuid::Uuid;
 
 use axum::{
@@ -18,7 +17,7 @@ use axum::{
 use tracing::{info, debug, warn, error, Span, span, Level};
 use serde_json::{json, Value};
 
-use super::{Middleware, BoxFuture};
+use crate::middleware::{Middleware, BoxFuture};
 
 /// Enhanced logging middleware with structured logging and request tracing
 #[derive(Debug, Clone)]

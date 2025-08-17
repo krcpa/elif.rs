@@ -10,7 +10,7 @@ use axum::{
 };
 use log::{debug, warn};
 
-use super::{Middleware, BoxFuture};
+use crate::middleware::{Middleware, BoxFuture};
 
 /// Request timing middleware that tracks request duration and adds timing headers
 pub struct TimingMiddleware {
