@@ -185,7 +185,7 @@ impl ElifRequest {
     /// Parse path parameters to specified type
     pub fn path_params<T: DeserializeOwned>(&self) -> HttpResult<T> {
         let json_value = serde_json::to_value(&self.path_params)
-            .map_err(|e| HttpError::internal_server_error(format!("Failed to serialize path params: {}", e)))?;
+            .map_err(|e| HttpError::internal(format!("Failed to serialize path params: {}", e)))?;
         
         serde_json::from_value::<T>(json_value)
             .map_err(|e| HttpError::bad_request(format!("Invalid path parameters: {}", e)))

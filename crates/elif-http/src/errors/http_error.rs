@@ -146,13 +146,6 @@ impl HttpError {
             message: message.into() 
         }
     }
-    
-    /// Create an internal server error
-    pub fn internal_server_error<T: Into<String>>(message: T) -> Self {
-        HttpError::InternalError { 
-            message: message.into() 
-        }
-    }
 
     /// Create a timeout error
     pub fn timeout<T: Into<String>>(_message: T) -> Self {

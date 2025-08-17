@@ -4,7 +4,7 @@ use std::pin::Pin;
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-pub trait ElifHandler<T>: Clone + Send + Sync + 'static {
+pub trait GenericHandler<T>: Clone + Send + Sync + 'static {
     type Response;
     
     fn call(&self, request: T) -> BoxFuture<'_, HttpResult<Self::Response>>;

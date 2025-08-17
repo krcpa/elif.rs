@@ -34,7 +34,7 @@ pub use config::HttpConfig;
 pub use errors::{HttpError, HttpResult};
 
 // Re-export foundation types
-pub use foundation::{ElifHandler, IntoElifResponse, RequestExtractor, BoxFuture};
+pub use foundation::{GenericHandler, IntoElifResponse, RequestExtractor, BoxFuture};
 
 // Re-export routing types
 pub use routing::{
@@ -86,7 +86,7 @@ pub use controller::{Controller, BaseController};
 pub use controller::pagination::{QueryParams, PaginationMeta};
 
 // Re-export handler types
-pub use handlers::{ElifHandler as HandlerTrait, elif_handler};
+pub use handlers::{ElifHandler, elif_handler};
 
 // Re-export testing utilities (for development and testing)
 pub use testing::{
