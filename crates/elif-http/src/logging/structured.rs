@@ -10,13 +10,9 @@ pub fn log_entry(level: &str, message: &str, fields: Option<Value>) -> Value {
         "message": message
     });
     
-    if let Some(fields) = fields {
-        if let Value::Object(ref mut map) = entry {
-            if let Value::Object(fields_map) = fields {
-                for (key, value) in fields_map {
-                    map.insert(key, value);
-                }
-            }
+    if let Some(Value::Object(fields_map)) = fields {
+        if let Value::Object(entry_map) = &mut entry {
+            entry_map.extend(fields_map);
         }
     }
     
