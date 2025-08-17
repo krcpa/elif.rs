@@ -185,7 +185,7 @@ async fn test_server_health_check() {
     
     assert_eq!(health_data["status"], "healthy");
     assert_eq!(health_data["framework"], "Elif.rs");
-    assert_eq!(health_data["version"], "0.6.0");
+    assert_eq!(health_data["version"], env!("CARGO_PKG_VERSION"));
     assert!(health_data["timestamp"].is_number());
 }
 
