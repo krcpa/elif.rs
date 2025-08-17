@@ -170,7 +170,7 @@ mod tests {
         let config = HttpConfig::default();
 
         // Test health check using framework abstractions
-        let health_response = crate::server::health_check(container, config).await;
+        let health_response = crate::server::health::health_check_handler(container, config).await;
         let health_data = health_response.0;
 
         // Validate health check response structure
