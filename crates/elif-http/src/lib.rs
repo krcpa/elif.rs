@@ -10,27 +10,31 @@
 //! - Health check endpoints
 //! - Framework-native routing system
 
+// Core modules
+pub mod foundation;
 pub mod server;
 pub mod config;
-pub mod error;
-pub mod tests;
-pub mod integration_tests;
+pub mod errors;
 pub mod routing;
 pub mod request;
 pub mod response;
-pub mod json;
 pub mod middleware;
-pub mod controller;
-pub mod handler;
+pub mod handlers;
 pub mod logging;
+pub mod controller;
+pub mod testing;
 
+// Feature-gated modules
 #[cfg(feature = "auth")]
 pub mod auth;
 
 // Main server API - NestJS-like experience
 pub use server::Server;
 pub use config::HttpConfig;
-pub use error::{HttpError, HttpResult};
+pub use errors::{HttpError, HttpResult};
+
+// Re-export foundation types
+pub use foundation::{ElifHandler, IntoElifResponse, RequestExtractor, BoxFuture};
 
 // Re-export routing types
 pub use routing::{
@@ -41,26 +45,21 @@ pub use routing::{
 };
 
 // Re-export request/response types  
-pub use request::{ElifRequest, RequestExtractor, ElifQuery, ElifPath, ElifState};
-pub use response::{ElifResponse, ResponseBody, IntoElifResponse, ElifStatusCode, ElifHeaderMap};
-pub use json::{ElifJson, JsonError, JsonResponse, ValidationErrors, ApiResponse};
+pub use request::{ElifRequest, ElifQuery, ElifPath, ElifState};
+pub use response::{ElifResponse, ResponseBody, ElifStatusCode, ElifHeaderMap};
+
+// Re-export JSON handling
+pub use response::{ElifJson, JsonError, JsonResponse, ValidationErrors, ApiResponse};
 
 // Re-export middleware types
 pub use middleware::{
-    Middleware, MiddlewarePipeline, ErrorHandlingMiddleware,
+    Middleware, MiddlewarePipeline, ErrorHandlingMiddleware, BoxFuture as MiddlewareBoxFuture,
+    // Core middleware
     error_handler::{
         ErrorHandlerMiddleware, ErrorHandlerConfig, ErrorHandlerLayer,
         error_handler_middleware, error_handler_with_config, 
         error_handler_layer, error_handler_layer_with_config
     },
-};
-
-// Re-export authentication types (if auth feature is enabled)
-#[cfg(feature = "auth")]
-pub use auth::{RequestAuthExt, AuthMiddleware};
-
-// Re-export additional middleware types
-pub use middleware::{
     logging::LoggingMiddleware,
     enhanced_logging::{EnhancedLoggingMiddleware, LoggingConfig as MiddlewareLoggingConfig, RequestContext},
     timing::{TimingMiddleware, RequestStartTime, format_duration},
@@ -69,18 +68,37 @@ pub use middleware::{
     body_limit::{BodyLimitMiddleware, BodyLimitConfig, BodyLimitInfo, limit_body_size, limits},
 };
 
-// Re-export structured logging types
+// Re-export authentication types (if auth feature is enabled)
+#[cfg(feature = "auth")]
+pub use auth::{RequestAuthExt, AuthMiddleware};
+
+// Re-export logging types
 pub use logging::{
     LoggingConfig, init_logging, log_startup_info, log_shutdown_info, 
-    LoggingContext, structured,
+    structured,
 };
+// Re-export specific LoggingContext from context module
+pub use logging::context::LoggingContext;
 
 // Re-export controller types
-pub use controller::{Controller, BaseController, QueryParams, PaginationMeta};
-
+pub use controller::{Controller, BaseController};
+// Re-export from specific modules to avoid conflicts
+pub use controller::pagination::{QueryParams, PaginationMeta};
 
 // Re-export handler types
-pub use handler::{ElifHandler, elif_handler};
+pub use handlers::{ElifHandler as HandlerTrait, elif_handler};
+
+// Re-export testing utilities (for development and testing)
+pub use testing::{
+    TestUser, TestQuery, test_http_config, test_handler, test_json_handler, test_error_handler,
+    create_test_container, TestContainerBuilder, TestServerBuilder,
+    HttpAssertions, ErrorAssertions,
+    get_test_port, test_socket_addr
+};
+
+// Legacy compatibility re-exports
+pub use response::ElifJson as Json;
+pub use errors::HttpError as ElifError;
 
 // Framework-native types - Use these instead of raw Axum types
 // Note: Use Router from routing module, not axum::Router

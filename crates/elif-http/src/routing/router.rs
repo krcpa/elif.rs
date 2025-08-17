@@ -1,15 +1,14 @@
 //! Core routing functionality
 
 use super::{HttpMethod, RouteInfo, RouteRegistry, params::{ParamExtractor, ParamType}};
-use crate::handler::{ElifHandler, elif_handler};
+use crate::handlers::{ElifHandler, elif_handler};
 use crate::request::ElifRequest;
 use crate::response::{ElifResponse, IntoElifResponse};
-use crate::error::HttpResult;
+use crate::errors::HttpResult;
 use service_builder::builder;
 use axum::{
     Router as AxumRouter,
     routing::{get, post, put, delete, patch},
-    handler::Handler,
     response::IntoResponse,
 };
 use std::collections::HashMap;
@@ -368,7 +367,7 @@ mod tests {
     use super::*;
     use crate::request::ElifRequest;
     use crate::response::ElifResponse;
-    use crate::error::HttpResult;
+    use crate::errors::HttpResult;
 
     async fn elif_handler(_req: ElifRequest) -> HttpResult<ElifResponse> {
         Ok(ElifResponse::ok().text("Hello, World!"))
