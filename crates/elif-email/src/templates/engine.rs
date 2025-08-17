@@ -84,24 +84,18 @@ impl TemplateEngine {
 
     /// Get template info for debugging
     pub fn get_template_info(&self, template_name: &str) -> Result<TemplateDebugInfo, EmailError> {
-        let mut tera = self.tera.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
-        
-        // Check if template exists
-        if !tera.get_template_names().any(|name| name == template_name) {
-            return Err(EmailError::template(format!("Template '{}' not found", template_name)));
-        }
+        let template = self.get_template(template_name)?;
 
-        // For simplicity, we'll return basic info since Tera doesn't expose template content directly
         Ok(TemplateDebugInfo {
-            name: template_name.to_string(),
-            has_html: true, // Assume true since we can't easily check
-            has_text: false,
-            has_subject: false,
-            layout: None,
-            metadata: HashMap::new(),
-            html_content: Some(format!("Template '{}' exists in Tera", template_name)),
-            text_content: None,
-            subject_content: None,
+            name: template.name.clone(),
+            has_html: template.html_template.is_some(),
+            has_text: template.text_template.is_some(),
+            has_subject: template.subject_template.is_some(),
+            layout: template.layout.clone(),
+            metadata: template.metadata.clone(),
+            html_content: template.html_template.clone(),
+            text_content: template.text_template.clone(),
+            subject_content: template.subject_template.clone(),
         })
     }
 
@@ -708,5 +702,69 @@ mod tests {
 
         let rendered = engine.render_template(&template, &context).unwrap();
         assert_eq!(rendered.html_content, Some("<div style=\"color: #ff0000\">Hello User</div>".to_string()));
+    }
+
+    #[test]
+    fn test_template_debug_info() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        let mut metadata = HashMap::new();
+        metadata.insert("version".to_string(), "1.0".to_string());
+        metadata.insert("author".to_string(), "test".to_string());
+
+        let template = EmailTemplate {
+            name: "debug_test".to_string(),
+            html_template: Some("<h1>Debug Test</h1>".to_string()),
+            text_template: Some("Debug Test".to_string()),
+            subject_template: Some("Debug: {{ type }}".to_string()),
+            layout: Some("base".to_string()),
+            metadata,
+        };
+
+        // Register template
+        engine.register_template(template.clone()).unwrap();
+
+        // Get debug info
+        let debug_info = engine.get_template_info("debug_test").unwrap();
+
+        // Verify accurate debug information
+        assert_eq!(debug_info.name, "debug_test");
+        assert_eq!(debug_info.has_html, true);
+        assert_eq!(debug_info.has_text, true);
+        assert_eq!(debug_info.has_subject, true);
+        assert_eq!(debug_info.layout, Some("base".to_string()));
+        assert_eq!(debug_info.metadata.get("version"), Some(&"1.0".to_string()));
+        assert_eq!(debug_info.metadata.get("author"), Some(&"test".to_string()));
+        assert_eq!(debug_info.html_content, Some("<h1>Debug Test</h1>".to_string()));
+        assert_eq!(debug_info.text_content, Some("Debug Test".to_string()));
+        assert_eq!(debug_info.subject_content, Some("Debug: {{ type }}".to_string()));
+
+        // Test with template that has no text content
+        let minimal_template = EmailTemplate {
+            name: "minimal".to_string(),
+            html_template: Some("<p>Minimal</p>".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        engine.register_template(minimal_template).unwrap();
+        let minimal_debug = engine.get_template_info("minimal").unwrap();
+
+        assert_eq!(minimal_debug.has_html, true);
+        assert_eq!(minimal_debug.has_text, false);
+        assert_eq!(minimal_debug.has_subject, false);
+        assert_eq!(minimal_debug.layout, None);
+        assert!(minimal_debug.metadata.is_empty());
+
+        // Test error case for non-existent template
+        let result = engine.get_template_info("nonexistent");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Template 'nonexistent' not found"));
     }
 }
