@@ -195,7 +195,11 @@ impl JobEntry {
     /// Create a new job entry
     pub fn new<T: Job>(job: T, priority: Option<Priority>, delay: Option<Duration>) -> QueueResult<Self> {
         let now = Utc::now();
-        let run_at = delay.map(|d| now + chrono::Duration::from_std(d).unwrap()).unwrap_or(now);
+        let run_at = match delay {
+            Some(d) => now + chrono::Duration::from_std(d)
+                .map_err(|e| QueueError::Configuration(format!("Invalid delay duration: {}", e)))?,
+            None => now,
+        };
         
         let job_type = job.job_type().to_string();
         let max_retries = job.max_retries();
@@ -279,7 +283,11 @@ impl JobEntry {
             self.state = JobState::Failed;
             // Set next retry time with exponential backoff
             let delay = Duration::from_secs(1 << self.attempts.min(6));
-            self.run_at = Utc::now() + chrono::Duration::from_std(delay).unwrap();
+            // Set next retry time with exponential backoff
+            // If the delay is too large for chrono::Duration, cap it at max value
+            let chrono_delay = chrono::Duration::from_std(delay)
+                .unwrap_or(chrono::Duration::MAX);
+            self.run_at = Utc::now() + chrono_delay;
         }
     }
 }
@@ -430,6 +438,40 @@ mod tests {
         // Delayed job should not be ready immediately
         assert!(!entry.is_ready());
         assert!(entry.run_at() > Utc::now());
+    }
+    
+    #[tokio::test]
+    async fn test_duration_conversion_error_handling() {
+        use std::time::Duration as StdDuration;
+        
+        let job = TestJob {
+            message: "test".to_string(),
+        };
+        
+        // Test with maximum possible duration that would overflow chrono::Duration
+        let max_delay = StdDuration::MAX;
+        let result = JobEntry::new(job.clone(), None, Some(max_delay));
+        
+        // This should fail with a Configuration error instead of panicking
+        assert!(result.is_err());
+        if let Err(QueueError::Configuration(msg)) = result {
+            assert!(msg.contains("Invalid delay duration"));
+        } else {
+            panic!("Expected Configuration error for invalid delay duration");
+        }
+        
+        // Test that mark_failed doesn't panic with very large retry attempts
+        let entry = JobEntry::new(job, None, None).unwrap();
+        let mut job_entry = entry;
+        
+        // Set attempts to a very high value to test exponential backoff overflow
+        job_entry.attempts = 100; // This would cause 2^100 seconds delay, way beyond chrono limits
+        
+        // This should not panic, but gracefully handle the overflow
+        job_entry.mark_failed("test error".to_string());
+        
+        // Job should still be properly handled
+        assert_eq!(job_entry.state, JobState::Dead); // Should exceed max_retries and be dead
     }
     
     #[tokio::test]
