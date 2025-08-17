@@ -4,6 +4,7 @@ use serde_json::{Value, from_str, to_string_pretty};
 use std::fs;
 use std::path::PathBuf;
 use chrono::{DateTime, Utc};
+use std::io::Write;
 
 #[derive(Debug)]
 pub struct EmailSendArgs {
@@ -631,19 +632,44 @@ async fn list_captured_emails(
     limit: Option<usize>,
     _max_results: usize
 ) -> Result<Vec<CapturedEmail>, ElifError> {
-    let mut emails = Vec::new();
-    
     let entries = fs::read_dir(capture_dir)
         .map_err(|e| ElifError::Validation(format!("Failed to read capture directory: {}", e)))?;
     
+    // Collect and sort file paths first (without reading contents)
+    let mut file_paths: Vec<PathBuf> = Vec::new();
     for entry in entries {
         let entry = entry.map_err(|e| ElifError::Validation(format!("Failed to read directory entry: {}", e)))?;
         let path = entry.path();
         
-        if !path.extension().map_or(false, |ext| ext == "json") {
-            continue;
+        if path.extension().map_or(false, |ext| ext == "json") {
+            file_paths.push(path);
         }
-        
+    }
+    
+    // Sort paths by modification time (newest first) - this is fast as it doesn't read file contents
+    file_paths.sort_by(|a, b| {
+        let a_meta = a.metadata().ok();
+        let b_meta = b.metadata().ok();
+        match (a_meta, b_meta) {
+            (Some(a_meta), Some(b_meta)) => {
+                b_meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                    .cmp(&a_meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH))
+            }
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }
+    });
+    
+    // Only read the files we need based on limit
+    let files_to_read = if let Some(limit) = limit {
+        std::cmp::min(limit * 2, file_paths.len()) // Read a bit more to account for filtering
+    } else {
+        file_paths.len()
+    };
+    
+    let mut emails = Vec::new();
+    for path in file_paths.into_iter().take(files_to_read) {
         let content = fs::read_to_string(&path)
             .map_err(|e| ElifError::Validation(format!("Failed to read email file: {}", e)))?;
         
@@ -664,16 +690,68 @@ async fn list_captured_emails(
         }
         
         emails.push(email);
+        
+        // Early exit if we have enough emails after filtering
+        if let Some(limit) = limit {
+            if emails.len() >= limit {
+                break;
+            }
+        }
     }
     
     // Sort by timestamp (newest first)
     emails.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
     
+    // Apply final limit
     if let Some(limit) = limit {
         emails.truncate(limit);
     }
     
     Ok(emails)
+}
+
+async fn get_captured_email_by_index(capture_dir: &PathBuf, index: usize) -> Result<CapturedEmail, ElifError> {
+    let entries = fs::read_dir(capture_dir)
+        .map_err(|e| ElifError::Validation(format!("Failed to read capture directory: {}", e)))?;
+    
+    // Collect and sort file paths first (without reading contents)
+    let mut file_paths: Vec<PathBuf> = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| ElifError::Validation(format!("Failed to read directory entry: {}", e)))?;
+        let path = entry.path();
+        
+        if path.extension().map_or(false, |ext| ext == "json") {
+            file_paths.push(path);
+        }
+    }
+    
+    // Sort paths by modification time (newest first)
+    file_paths.sort_by(|a, b| {
+        let a_meta = a.metadata().ok();
+        let b_meta = b.metadata().ok();
+        match (a_meta, b_meta) {
+            (Some(a_meta), Some(b_meta)) => {
+                b_meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                    .cmp(&a_meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH))
+            }
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }
+    });
+    
+    // Check if index is valid
+    if index >= file_paths.len() {
+        return Err(ElifError::Validation(format!("Email index {} not found (only {} emails available)", index + 1, file_paths.len())));
+    }
+    
+    // Read only the single file at the specified index
+    let file_path = &file_paths[index];
+    let content = fs::read_to_string(file_path)
+        .map_err(|e| ElifError::Validation(format!("Failed to read email file: {}", e)))?;
+    
+    from_str(&content)
+        .map_err(|e| ElifError::Validation(format!("Failed to parse email JSON: {}", e)))
 }
 
 async fn get_captured_email(capture_dir: &PathBuf, email_id: &str) -> Result<CapturedEmail, ElifError> {
@@ -690,9 +768,8 @@ async fn get_captured_email(capture_dir: &PathBuf, email_id: &str) -> Result<Cap
     
     // Try index-based lookup (1-based)
     if let Ok(index) = email_id.parse::<usize>() {
-        let emails = list_captured_emails(capture_dir, None, None, None, 999999).await?;
-        if index > 0 && index <= emails.len() {
-            return Ok(emails[index - 1].clone());
+        if index > 0 {
+            return get_captured_email_by_index(capture_dir, index - 1).await;
         }
     }
     
@@ -700,6 +777,9 @@ async fn get_captured_email(capture_dir: &PathBuf, email_id: &str) -> Result<Cap
 }
 
 fn export_as_json(emails: &[CapturedEmail], output_path: &str, include_body: bool) -> Result<(), ElifError> {
+    let file = std::fs::File::create(output_path)
+        .map_err(|e| ElifError::Validation(format!("Failed to create export file: {}", e)))?;
+    
     let export_data: Vec<_> = if include_body {
         emails.iter().cloned().collect()
     } else {
@@ -717,58 +797,61 @@ fn export_as_json(emails: &[CapturedEmail], output_path: &str, include_body: boo
         }).collect()
     };
     
-    let json_content = to_string_pretty(&export_data)
-        .map_err(|e| ElifError::Validation(format!("Failed to serialize export data: {}", e)))?;
-    
-    fs::write(output_path, json_content)
-        .map_err(|e| ElifError::Validation(format!("Failed to write export file: {}", e)))?;
+    // Stream JSON directly to file instead of building in memory
+    serde_json::to_writer_pretty(file, &export_data)
+        .map_err(|e| ElifError::Validation(format!("Failed to write JSON export: {}", e)))?;
     
     Ok(())
 }
 
 fn export_as_csv(emails: &[CapturedEmail], output_path: &str, include_body: bool) -> Result<(), ElifError> {
-    let mut csv_content = if include_body {
-        "timestamp,from,to,subject,template,body_text,body_html\n".to_string()
-    } else {
-        "timestamp,from,to,subject,template\n".to_string()
-    };
+    let file = std::fs::File::create(output_path)
+        .map_err(|e| ElifError::Validation(format!("Failed to create CSV file: {}", e)))?;
     
-    for email in emails {
-        let template = email.template.as_deref().unwrap_or("");
-        let row = if include_body {
-            format!("{},{},{},{},{},{},{}\n",
-                email.timestamp.format("%Y-%m-%d %H:%M:%S"),
-                csv_escape(&email.from),
-                csv_escape(&email.to),
-                csv_escape(&email.subject),
-                csv_escape(template),
-                csv_escape(&email.body_text.as_deref().unwrap_or("")),
-                csv_escape(&email.body_html.as_deref().unwrap_or(""))
-            )
-        } else {
-            format!("{},{},{},{},{}\n",
-                email.timestamp.format("%Y-%m-%d %H:%M:%S"),
-                csv_escape(&email.from),
-                csv_escape(&email.to),
-                csv_escape(&email.subject),
-                csv_escape(template)
-            )
-        };
-        csv_content.push_str(&row);
+    let mut writer = csv::Writer::from_writer(file);
+    
+    // Write header
+    if include_body {
+        writer.write_record(&["timestamp", "from", "to", "subject", "template", "body_text", "body_html"])
+            .map_err(|e| ElifError::Validation(format!("Failed to write CSV header: {}", e)))?;
+    } else {
+        writer.write_record(&["timestamp", "from", "to", "subject", "template"])
+            .map_err(|e| ElifError::Validation(format!("Failed to write CSV header: {}", e)))?;
     }
     
-    fs::write(output_path, csv_content)
-        .map_err(|e| ElifError::Validation(format!("Failed to write CSV file: {}", e)))?;
+    // Write rows directly to file stream
+    for email in emails {
+        let timestamp = email.timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
+        let template = email.template.as_deref().unwrap_or("");
+        
+        if include_body {
+            let body_text = email.body_text.as_deref().unwrap_or("");
+            let body_html = email.body_html.as_deref().unwrap_or("");
+            
+            writer.write_record(&[
+                &timestamp,
+                &email.from,
+                &email.to,
+                &email.subject,
+                template,
+                body_text,
+                body_html
+            ]).map_err(|e| ElifError::Validation(format!("Failed to write CSV row: {}", e)))?;
+        } else {
+            writer.write_record(&[
+                &timestamp,
+                &email.from,
+                &email.to,
+                &email.subject,
+                template
+            ]).map_err(|e| ElifError::Validation(format!("Failed to write CSV row: {}", e)))?;
+        }
+    }
+    
+    writer.flush()
+        .map_err(|e| ElifError::Validation(format!("Failed to flush CSV writer: {}", e)))?;
     
     Ok(())
-}
-
-fn csv_escape(s: &str) -> String {
-    if s.contains(',') || s.contains('"') || s.contains('\n') {
-        format!("\"{}\"", s.replace('"', "\"\""))
-    } else {
-        s.to_string()
-    }
 }
 
 fn export_as_mbox(_emails: &[CapturedEmail], _output_path: &str) -> Result<(), ElifError> {
