@@ -4,8 +4,9 @@
 //! with realistic fake data generation and relationship support.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use serde_json::Value;
+use once_cell::sync::Lazy;
 use crate::error::{OrmError, OrmResult};
 use crate::model::Model;
 
@@ -169,27 +170,22 @@ impl FactoryRegistry {
 }
 
 /// Global factory registry instance
-static mut FACTORY_REGISTRY: Option<FactoryRegistry> = None;
-static FACTORY_REGISTRY_INIT: std::sync::Once = std::sync::Once::new();
+static FACTORY_REGISTRY: Lazy<RwLock<FactoryRegistry>> = Lazy::new(|| RwLock::new(FactoryRegistry::new()));
 
-/// Get the global factory registry
-pub fn factory_registry() -> &'static FactoryRegistry {
-    unsafe {
-        FACTORY_REGISTRY_INIT.call_once(|| {
-            FACTORY_REGISTRY = Some(FactoryRegistry::new());
-        });
-        FACTORY_REGISTRY.as_ref().unwrap()
-    }
+/// Get a read guard for the global factory registry.
+///
+/// # Panics
+/// Panics if the lock is poisoned.
+pub fn factory_registry() -> std::sync::RwLockReadGuard<'static, FactoryRegistry> {
+    FACTORY_REGISTRY.read().unwrap()
 }
 
-/// Get mutable access to the global factory registry
-pub fn factory_registry_mut() -> &'static mut FactoryRegistry {
-    unsafe {
-        FACTORY_REGISTRY_INIT.call_once(|| {
-            FACTORY_REGISTRY = Some(FactoryRegistry::new());
-        });
-        FACTORY_REGISTRY.as_mut().unwrap()
-    }
+/// Get a write guard for the global factory registry.
+///
+/// # Panics
+/// Panics if the lock is poisoned.
+pub fn factory_registry_mut() -> std::sync::RwLockWriteGuard<'static, FactoryRegistry> {
+    FACTORY_REGISTRY.write().unwrap()
 }
 
 #[cfg(test)]

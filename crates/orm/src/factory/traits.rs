@@ -1,7 +1,9 @@
 //! Factory trait definitions and core abstractions
 
 use std::collections::HashMap;
+use std::sync::RwLock;
 use serde_json::Value;
+use once_cell::sync::Lazy;
 use crate::error::OrmResult;
 
 /// Trait for factory states that can modify model attributes
@@ -96,25 +98,22 @@ impl Default for FactoryConfig {
 }
 
 /// Global factory configuration
-static mut FACTORY_CONFIG: Option<FactoryConfig> = None;
-static FACTORY_CONFIG_INIT: std::sync::Once = std::sync::Once::new();
+static FACTORY_CONFIG: Lazy<RwLock<FactoryConfig>> = Lazy::new(|| RwLock::new(FactoryConfig::default()));
 
-/// Get the global factory configuration
-pub fn factory_config() -> &'static FactoryConfig {
-    unsafe {
-        FACTORY_CONFIG_INIT.call_once(|| {
-            FACTORY_CONFIG = Some(FactoryConfig::default());
-        });
-        FACTORY_CONFIG.as_ref().unwrap()
-    }
+/// Get a read guard for the global factory configuration.
+///
+/// # Panics
+/// Panics if the lock is poisoned.
+pub fn factory_config() -> std::sync::RwLockReadGuard<'static, FactoryConfig> {
+    FACTORY_CONFIG.read().unwrap()
 }
 
 /// Set the global factory configuration
+///
+/// # Panics
+/// Panics if the lock is poisoned.
 pub fn set_factory_config(config: FactoryConfig) {
-    unsafe {
-        FACTORY_CONFIG_INIT.call_once(|| {});
-        FACTORY_CONFIG = Some(config);
-    }
+    *FACTORY_CONFIG.write().unwrap() = config;
 }
 
 /// Macro for easily implementing the Factory trait
