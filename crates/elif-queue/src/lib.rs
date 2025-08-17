@@ -248,7 +248,7 @@ impl JobEntry {
     
     /// Check if job is ready to be processed
     pub fn is_ready(&self) -> bool {
-        self.state == JobState::Pending && self.run_at <= Utc::now()
+        matches!(self.state, JobState::Pending | JobState::Failed) && self.run_at <= Utc::now()
     }
     
     /// Deserialize and execute the job
