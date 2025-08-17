@@ -15,6 +15,7 @@ members = [
     "crates/elif-cache",
     "crates/elif-queue",
     "crates/elif-storage",
+    "crates/elif-email",
 ]
 resolver = "2"
 
