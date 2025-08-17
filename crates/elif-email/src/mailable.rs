@@ -157,7 +157,7 @@ impl<'a> MailableBuilder<'a> {
                     }
                 };
                 
-                email = email.with_template(engine, template_name, context)?;
+                email = email.with_template_name(engine, template_name, context)?;
             }
         }
         

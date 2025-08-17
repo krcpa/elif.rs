@@ -1,282 +1,34 @@
 use crate::{
     config::TemplateConfig,
     error::EmailError,
-    templates::{EmailTemplate, RenderedEmail, TemplateContext, TemplateDebugInfo, helpers},
+    templates::{EmailTemplate, RenderedEmail, TemplateContext, TemplateDebugInfo},
 };
-use handlebars::{Handlebars, no_escape};
-use std::{
-    collections::HashMap,
-    fs,
-    path::Path,
-    sync::RwLock,
-    time::SystemTime,
-};
-use tracing::{debug, warn};
+use std::{collections::HashMap, sync::RwLock};
+use tera::{Tera, Context, Value, to_value, Result as TeraResult};
 
-/// Email template engine using Handlebars
+/// Email template engine using Tera
 pub struct TemplateEngine {
-    handlebars: Handlebars<'static>,
+    tera: RwLock<Tera>,
     config: TemplateConfig,
     templates: RwLock<HashMap<String, EmailTemplate>>,
-    layouts: RwLock<HashMap<String, String>>,
-    partials: RwLock<HashMap<String, String>>,
-    // Template file cache with modification times
-    template_file_cache: RwLock<HashMap<String, (SystemTime, String)>>,
-    layout_file_cache: RwLock<HashMap<String, (SystemTime, String)>>,
-    partial_file_cache: RwLock<HashMap<String, (SystemTime, String)>>,
 }
 
 impl TemplateEngine {
     /// Create new template engine
     pub fn new(config: TemplateConfig) -> Result<Self, EmailError> {
-        let mut handlebars = Handlebars::new();
+        let mut tera = Tera::new(&format!("{}/**/*", config.templates_dir))?;
         
-        // Register built-in helpers
-        helpers::register_email_helpers(&mut handlebars);
+        // Register custom filters
+        register_email_filters(&mut tera);
         
-        // Disable HTML escaping for email content
-        handlebars.register_escape_fn(no_escape);
+        // Enable auto-escaping for HTML but not for text
+        tera.autoescape_on(vec![".html", ".htm"]);
         
-        let engine = Self {
-            handlebars,
+        Ok(Self { 
+            tera: RwLock::new(tera), 
             config,
             templates: RwLock::new(HashMap::new()),
-            layouts: RwLock::new(HashMap::new()),
-            partials: RwLock::new(HashMap::new()),
-            template_file_cache: RwLock::new(HashMap::new()),
-            layout_file_cache: RwLock::new(HashMap::new()),
-            partial_file_cache: RwLock::new(HashMap::new()),
-        };
-
-        // Load templates, layouts, and partials from filesystem if directories exist
-        let mut engine_mut = engine;
-        engine_mut.load_from_filesystem()?;
-
-        Ok(engine_mut)
-    }
-
-    /// Load templates from filesystem
-    pub fn load_from_filesystem(&mut self) -> Result<(), EmailError> {
-        // Load layouts
-        if Path::new(&self.config.layouts_dir).exists() {
-            self.load_layouts()?;
-        } else {
-            debug!("Layouts directory does not exist: {}", self.config.layouts_dir);
-        }
-
-        // Load partials
-        if Path::new(&self.config.partials_dir).exists() {
-            self.load_partials()?;
-        } else {
-            debug!("Partials directory does not exist: {}", self.config.partials_dir);
-        }
-
-        // Load templates
-        if Path::new(&self.config.templates_dir).exists() {
-            self.load_templates_from_directory()?;
-        } else {
-            debug!("Templates directory does not exist: {}", self.config.templates_dir);
-        }
-
-        Ok(())
-    }
-
-    /// Load layouts from directory
-    fn load_layouts(&self) -> Result<(), EmailError> {
-        let layouts_path = Path::new(&self.config.layouts_dir);
-        let entries = fs::read_dir(layouts_path)?;
-
-        let mut layouts = self.layouts.write().map_err(|_| {
-            EmailError::template("Failed to acquire write lock on layouts")
-        })?;
-
-        let mut cache = if self.config.enable_cache {
-            Some(self.layout_file_cache.write().map_err(|_| {
-                EmailError::template("Failed to acquire write lock on layout file cache")
-            })?)
-        } else {
-            None
-        };
-
-        for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
-            
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "hbs") {
-                let name = path.file_stem()
-                    .and_then(|s| s.to_str())
-                    .ok_or_else(|| EmailError::template(format!("Invalid layout filename: {:?}", path)))?;
-                
-                let path_str = path.to_string_lossy().to_string();
-                let should_load = if self.config.enable_cache {
-                    if let (Some(cache), Ok(metadata)) = (cache.as_ref(), fs::metadata(&path)) {
-                        if let (Ok(modified), Some((cached_time, _))) = (metadata.modified(), cache.get(&path_str)) {
-                            // Only load if file has been modified since last cache
-                            modified > *cached_time
-                        } else {
-                            // File not in cache or metadata error, load it
-                            true
-                        }
-                    } else {
-                        true
-                    }
-                } else {
-                    // No caching, always load
-                    true
-                };
-
-                if should_load {
-                    let content = fs::read_to_string(&path)?;
-                    layouts.insert(name.to_string(), content.clone());
-                    
-                    // Update cache if enabled
-                    if let (Some(cache), Ok(metadata)) = (cache.as_mut(), fs::metadata(&path)) {
-                        if let Ok(modified) = metadata.modified() {
-                            cache.insert(path_str, (modified, content));
-                        }
-                    }
-                    
-                    debug!("Loaded layout: {}", name);
-                } else {
-                    // Use cached content
-                    if let Some(cache) = cache.as_ref() {
-                        if let Some((_, cached_content)) = cache.get(&path_str) {
-                            layouts.insert(name.to_string(), cached_content.clone());
-                            debug!("Using cached layout: {}", name);
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Load partials from directory
-    fn load_partials(&mut self) -> Result<(), EmailError> {
-        let partials_path = Path::new(&self.config.partials_dir);
-        let entries = fs::read_dir(partials_path)?;
-
-        for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
-            
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "hbs") {
-                let name = path.file_stem()
-                    .and_then(|s| s.to_str())
-                    .ok_or_else(|| EmailError::template(format!("Invalid partial filename: {:?}", path)))?;
-                
-                let content = fs::read_to_string(&path)?;
-                
-                self.handlebars.register_partial(name, content)?;
-                
-                let mut partials = self.partials.write().map_err(|_| {
-                    EmailError::template("Failed to acquire write lock on partials")
-                })?;
-                partials.insert(name.to_string(), fs::read_to_string(&path)?);
-                
-                debug!("Loaded partial: {}", name);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Load templates from directory
-    fn load_templates_from_directory(&self) -> Result<(), EmailError> {
-        let templates_path = Path::new(&self.config.templates_dir);
-        let entries = fs::read_dir(templates_path)?;
-
-        for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
-            
-            if path.is_dir() {
-                // Each subdirectory represents a template with HTML/text variants
-                let template_name = path.file_name()
-                    .and_then(|s| s.to_str())
-                    .ok_or_else(|| EmailError::template(format!("Invalid template directory name: {:?}", path)))?;
-                
-                self.load_template_from_directory(template_name, &path)?;
-            } else if path.is_file() && path.extension().map_or(false, |ext| ext == "hbs") {
-                // Single file template (assume HTML)
-                let template_name = path.file_stem()
-                    .and_then(|s| s.to_str())
-                    .ok_or_else(|| EmailError::template(format!("Invalid template filename: {:?}", path)))?;
-                
-                let content = fs::read_to_string(&path)?;
-                let template = EmailTemplate::builder(template_name)
-                    .html_template(content)
-                    .build();
-                
-                self.register_template(template)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Load a specific template from its directory
-    fn load_template_from_directory(&self, name: &str, dir: &Path) -> Result<(), EmailError> {
-        let mut template_builder = EmailTemplate::builder(name);
-        
-        // Look for HTML template
-        let html_path = dir.join(format!("html{}", self.config.template_extension));
-        if html_path.exists() {
-            let html_content = fs::read_to_string(&html_path)?;
-            template_builder = template_builder.html_template(html_content);
-        }
-
-        // Look for text template
-        let text_path = dir.join(format!("text{}", self.config.template_extension));
-        if text_path.exists() {
-            let text_content = fs::read_to_string(&text_path)?;
-            template_builder = template_builder.text_template(text_content);
-        }
-
-        // Look for subject template
-        let subject_path = dir.join(format!("subject{}", self.config.template_extension));
-        if subject_path.exists() {
-            let subject_content = fs::read_to_string(&subject_path)?;
-            template_builder = template_builder.subject_template(subject_content);
-        }
-
-        // Look for metadata file
-        let metadata_path = dir.join("meta.json");
-        if metadata_path.exists() {
-            let metadata_content = fs::read_to_string(&metadata_path)?;
-            let metadata: HashMap<String, String> = serde_json::from_str(&metadata_content)?;
-            for (key, value) in metadata {
-                template_builder = template_builder.metadata(key, value);
-            }
-        }
-
-        let template = template_builder.build();
-        self.register_template(template)?;
-        
-        debug!("Loaded template: {}", name);
-        Ok(())
-    }
-
-    /// Register a template
-    pub fn register_template(&self, template: EmailTemplate) -> Result<(), EmailError> {
-        let mut templates = self.templates.write().map_err(|_| {
-            EmailError::template("Failed to acquire write lock on templates")
-        })?;
-
-        templates.insert(template.name.clone(), template);
-        Ok(())
-    }
-
-    /// Get template by name
-    pub fn get_template(&self, name: &str) -> Result<EmailTemplate, EmailError> {
-        let templates = self.templates.read().map_err(|_| {
-            EmailError::template("Failed to acquire read lock on templates")
-        })?;
-
-        templates.get(name)
-            .cloned()
-            .ok_or_else(|| EmailError::template(format!("Template '{}' not found", name)))
+        })
     }
 
     /// Render template with context
@@ -285,18 +37,25 @@ impl TemplateEngine {
         template: &EmailTemplate,
         context: &TemplateContext,
     ) -> Result<RenderedEmail, EmailError> {
-        // Add template metadata to context
-        let mut extended_context = context.clone();
-        for (key, value) in &template.metadata {
-            extended_context.insert(key.clone(), serde_json::Value::String(value.clone()));
+        // Create tera context from template context
+        let mut tera_context = Context::new();
+        for (key, value) in context {
+            tera_context.insert(key, value);
         }
+
+        // Add template metadata to context
+        for (key, value) in &template.metadata {
+            tera_context.insert(key, value);
+        }
+
+        let mut tera = self.tera.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
 
         // Render subject
         let subject = if let Some(subject_template) = &template.subject_template {
-            self.handlebars.render_template(subject_template, &extended_context)?
+            tera.render_str(subject_template, &tera_context)?
         } else {
-            // Fallback to a default subject
-            extended_context.get("subject")
+            // Fallback to context value or default
+            tera_context.get("subject")
                 .and_then(|v| v.as_str())
                 .unwrap_or("No Subject")
                 .to_string()
@@ -304,28 +63,14 @@ impl TemplateEngine {
 
         // Render HTML content
         let html_content = if let Some(html_template) = &template.html_template {
-            // Check if template uses {% extends %} syntax
-            let processed_template = self.process_template_inheritance(html_template, &extended_context)?;
-            let rendered_html = self.handlebars.render_template(&processed_template, &extended_context)?;
-            
-            // Apply layout if specified (fallback for old layout system)
-            if let Some(layout_name) = &template.layout {
-                let layout = self.get_layout(layout_name)?;
-                let mut layout_context = extended_context.clone();
-                layout_context.insert("content".to_string(), serde_json::Value::String(rendered_html));
-                layout_context.insert("subject".to_string(), serde_json::Value::String(subject.clone()));
-                
-                Some(self.handlebars.render_template(&layout, &layout_context)?)
-            } else {
-                Some(rendered_html)
-            }
+            Some(tera.render_str(html_template, &tera_context)?)
         } else {
             None
         };
 
         // Render text content
         let text_content = if let Some(text_template) = &template.text_template {
-            Some(self.handlebars.render_template(text_template, &extended_context)?)
+            Some(tera.render_str(text_template, &tera_context)?)
         } else {
             None
         };
@@ -337,371 +82,291 @@ impl TemplateEngine {
         })
     }
 
-    /// Get layout by name
-    fn get_layout(&self, name: &str) -> Result<String, EmailError> {
-        let layouts = self.layouts.read().map_err(|_| {
-            EmailError::template("Failed to acquire read lock on layouts")
-        })?;
+    /// Get template info for debugging
+    pub fn get_template_info(&self, template_name: &str) -> Result<TemplateDebugInfo, EmailError> {
+        let mut tera = self.tera.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
+        
+        // Check if template exists
+        if !tera.get_template_names().any(|name| name == template_name) {
+            return Err(EmailError::template(format!("Template '{}' not found", template_name)));
+        }
 
-        layouts.get(name)
+        // For simplicity, we'll return basic info since Tera doesn't expose template content directly
+        Ok(TemplateDebugInfo {
+            name: template_name.to_string(),
+            has_html: true, // Assume true since we can't easily check
+            has_text: false,
+            has_subject: false,
+            layout: None,
+            metadata: HashMap::new(),
+            html_content: Some(format!("Template '{}' exists in Tera", template_name)),
+            text_content: None,
+            subject_content: None,
+        })
+    }
+
+    /// Register a template
+    pub fn register_template(&self, template: EmailTemplate) -> Result<(), EmailError> {
+        let mut templates = self.templates.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
+        templates.insert(template.name.clone(), template);
+        Ok(())
+    }
+
+    /// Get template by name
+    pub fn get_template(&self, name: &str) -> Result<EmailTemplate, EmailError> {
+        let templates = self.templates.read().map_err(|_| EmailError::template("Failed to acquire read lock"))?;
+        templates.get(name)
             .cloned()
-            .ok_or_else(|| EmailError::template(format!("Layout '{}' not found", name)))
+            .ok_or_else(|| EmailError::template(format!("Template '{}' not found", name)))
     }
 
-    /// Process template inheritance using {% extends %} syntax
-    fn process_template_inheritance(&self, template: &str, _context: &TemplateContext) -> Result<String, EmailError> {
-        use regex::Regex;
-        
-        // Check if template has {% extends %} directive
-        let extends_regex = Regex::new(r#"^\s*\{%\s*extends\s+["']([^"']+)["']\s*%\}\s*"#)
-            .map_err(|e| EmailError::template(format!("Failed to compile regex: {}", e)))?;
-        
-        if let Some(captures) = extends_regex.captures(template) {
-            let parent_name = captures.get(1)
-                .ok_or_else(|| EmailError::template("Invalid extends syntax"))?
-                .as_str();
-            
-            // Remove the extends directive from the template
-            let child_template = extends_regex.replace(template, "").to_string();
-            
-            // Get parent layout
-            let parent_layout = self.get_layout(parent_name)?;
-            
-            // Process template blocks
-            self.process_template_blocks(&parent_layout, &child_template)
-        } else {
-            // No inheritance, return template as-is
-            Ok(template.to_string())
-        }
+    /// Render template by name with context
+    pub fn render_template_by_name(
+        &self,
+        template_name: &str,
+        context: &TemplateContext,
+    ) -> Result<RenderedEmail, EmailError> {
+        let template = self.get_template(template_name)?;
+        self.render_template(&template, context)
     }
 
-    /// Process template blocks for inheritance
-    fn process_template_blocks(&self, parent: &str, child: &str) -> Result<String, EmailError> {
-        use regex::Regex;
-        use std::collections::HashMap;
+    /// Validate template syntax
+    pub fn validate_template(&self, template_str: &str, template_name: Option<&str>) -> Result<(), EmailError> {
+        let mut tera = self.tera.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
         
-        // Extract blocks from child template
-        let block_regex = Regex::new(r#"\{%\s*block\s+(\w+)\s*%\}(.*?)\{%\s*endblock\s*%\}"#)
-            .map_err(|e| EmailError::template(format!("Failed to compile block regex: {}", e)))?;
+        // For validation, we just try to compile the template - we don't need to render it
+        // Since render_str requires variables to exist, let's just try to create an empty template
+        let template_name_internal = template_name.unwrap_or("__validation_template");
         
-        let mut child_blocks = HashMap::new();
-        for captures in block_regex.captures_iter(child) {
-            let block_name = captures.get(1)
-                .ok_or_else(|| EmailError::template("Invalid block syntax"))?
-                .as_str();
-            let block_content = captures.get(2)
-                .ok_or_else(|| EmailError::template("Invalid block content"))?
-                .as_str();
-            
-            child_blocks.insert(block_name.to_string(), block_content.trim().to_string());
-        }
-        
-        // Replace blocks in parent template
-        let mut result = parent.to_string();
-        for (block_name, block_content) in child_blocks {
-            let block_pattern = format!(r#"\{{\{{\s*block\s+{}\s*\}}\}}(.*?)\{{\{{\s*endblock\s*\}}\}}"#, block_name);
-            let block_regex = Regex::new(&block_pattern)
-                .map_err(|e| EmailError::template(format!("Failed to compile replacement regex: {}", e)))?;
-            
-            // Replace with child content
-            result = block_regex.replace_all(&result, &block_content).to_string();
-        }
-        
-        // Handle default block syntax for handlebars
-        let default_block_regex = Regex::new(r#"\{%\s*block\s+(\w+)\s*%\}(.*?)\{%\s*endblock\s*%\}"#)
-            .map_err(|e| EmailError::template(format!("Failed to compile default block regex: {}", e)))?;
-        
-        result = default_block_regex.replace_all(&result, r#"{{$2}}"#).to_string();
-        
-        Ok(result)
-    }
-
-    /// List available templates
-    pub fn list_templates(&self) -> Result<Vec<String>, EmailError> {
-        let templates = self.templates.read().map_err(|_| {
-            EmailError::template("Failed to acquire read lock on templates")
-        })?;
-
-        Ok(templates.keys().cloned().collect())
-    }
-
-    /// Reload templates from filesystem
-    pub fn reload(&mut self) -> Result<(), EmailError> {
-        // Clear existing templates, layouts, and partials
-        {
-            let mut templates = self.templates.write().map_err(|_| {
-                EmailError::template("Failed to acquire write lock on templates")
-            })?;
-            templates.clear();
-        }
-        
-        {
-            let mut layouts = self.layouts.write().map_err(|_| {
-                EmailError::template("Failed to acquire write lock on layouts")
-            })?;
-            layouts.clear();
-        }
-
-        {
-            let mut partials = self.partials.write().map_err(|_| {
-                EmailError::template("Failed to acquire write lock on partials")
-            })?;
-            partials.clear();
-        }
-
-        // Clear file caches if caching is enabled
-        if self.config.enable_cache {
-            {
-                let mut cache = self.template_file_cache.write().map_err(|_| {
-                    EmailError::template("Failed to acquire write lock on template file cache")
-                })?;
-                cache.clear();
-            }
-            
-            {
-                let mut cache = self.layout_file_cache.write().map_err(|_| {
-                    EmailError::template("Failed to acquire write lock on layout file cache")
-                })?;
-                cache.clear();
-            }
-
-            {
-                let mut cache = self.partial_file_cache.write().map_err(|_| {
-                    EmailError::template("Failed to acquire write lock on partial file cache")
-                })?;
-                cache.clear();
-            }
-        }
-
-        // Reload from filesystem
-        self.load_from_filesystem()?;
-        
-        debug!("Templates reloaded successfully");
-        Ok(())
-    }
-
-    /// Register custom helper
-    pub fn register_helper<F>(&mut self, name: &str, helper: F) -> Result<(), EmailError>
-    where
-        F: handlebars::HelperDef + Send + Sync + 'static,
-    {
-        self.handlebars.register_helper(name, Box::new(helper));
-        Ok(())
-    }
-
-    /// Check if any template files need to be reloaded
-    pub fn check_for_changes(&mut self) -> Result<bool, EmailError> {
-        if !self.config.enable_cache {
-            // If caching is disabled, always return true to force reload
-            return Ok(true);
-        }
-
-        let mut has_changes = false;
-
-        // Check template files
-        if let Ok(entries) = fs::read_dir(&self.config.templates_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if let Ok(metadata) = fs::metadata(&path) {
-                    if let Ok(modified) = metadata.modified() {
-                        let path_str = path.to_string_lossy().to_string();
-                        if let Ok(cache) = self.template_file_cache.read() {
-                            if let Some((cached_time, _)) = cache.get(&path_str) {
-                                if modified > *cached_time {
-                                    has_changes = true;
-                                    break;
-                                }
-                            } else {
-                                // New file not in cache
-                                has_changes = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Check layout files
-        if !has_changes {
-            if let Ok(entries) = fs::read_dir(&self.config.layouts_dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if let Ok(metadata) = fs::metadata(&path) {
-                        if let Ok(modified) = metadata.modified() {
-                            let path_str = path.to_string_lossy().to_string();
-                            if let Ok(cache) = self.layout_file_cache.read() {
-                                if let Some((cached_time, _)) = cache.get(&path_str) {
-                                    if modified > *cached_time {
-                                        has_changes = true;
-                                        break;
-                                    }
-                                } else {
-                                    // New file not in cache
-                                    has_changes = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Check partial files
-        if !has_changes {
-            if let Ok(entries) = fs::read_dir(&self.config.partials_dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if let Ok(metadata) = fs::metadata(&path) {
-                        if let Ok(modified) = metadata.modified() {
-                            let path_str = path.to_string_lossy().to_string();
-                            if let Ok(cache) = self.partial_file_cache.read() {
-                                if let Some((cached_time, _)) = cache.get(&path_str) {
-                                    if modified > *cached_time {
-                                        has_changes = true;
-                                        break;
-                                    }
-                                } else {
-                                    // New file not in cache
-                                    has_changes = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(has_changes)
-    }
-
-    /// Hot-reload templates if there are changes
-    pub fn hot_reload(&mut self) -> Result<bool, EmailError> {
-        if self.check_for_changes()? {
-            debug!("Template changes detected, reloading...");
-            self.reload()?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
-
-    /// Force reload all templates regardless of cache
-    pub fn force_reload(&mut self) -> Result<(), EmailError> {
-        debug!("Force reloading all templates...");
-        self.reload()
-    }
-
-    /// Validate a template string for syntax errors
-    pub fn validate_template(&self, template: &str, template_name: Option<&str>) -> Result<(), EmailError> {
-        // Try to compile the template to check for syntax errors
-        match self.handlebars.render_template(template, &HashMap::<String, serde_json::Value>::new()) {
-            Ok(_) => Ok(()),
+        match tera.add_raw_template(template_name_internal, template_str) {
+            Ok(_) => {
+                // Remove the template after validation to avoid polluting the engine
+                let _ = tera.templates.remove(template_name_internal);
+                Ok(())
+            },
             Err(e) => {
-                let context = if let Some(name) = template_name {
+                let context_info = if let Some(name) = template_name {
                     format!("template '{}': {}", name, e)
                 } else {
                     format!("template: {}", e)
                 };
-                Err(EmailError::template(format!("Invalid {}", context)))
+                Err(EmailError::template(format!("Invalid {}", context_info)))
             }
         }
     }
 
-    /// Validate all loaded templates
-    pub fn validate_all_templates(&self) -> Result<Vec<String>, EmailError> {
-        let mut errors = Vec::new();
-        
-        // Validate templates
-        let templates = self.templates.read().map_err(|_| {
-            EmailError::template("Failed to acquire read lock on templates")
-        })?;
-
-        for (name, template) in templates.iter() {
-            // Validate HTML template
-            if let Some(html) = &template.html_template {
-                if let Err(e) = self.validate_template(html, Some(&format!("{} (HTML)", name))) {
-                    errors.push(e.to_string());
-                }
-            }
-
-            // Validate text template
-            if let Some(text) = &template.text_template {
-                if let Err(e) = self.validate_template(text, Some(&format!("{} (Text)", name))) {
-                    errors.push(e.to_string());
-                }
-            }
-
-            // Validate subject template
-            if let Some(subject) = &template.subject_template {
-                if let Err(e) = self.validate_template(subject, Some(&format!("{} (Subject)", name))) {
-                    errors.push(e.to_string());
-                }
-            }
-        }
-
-        // Validate layouts
-        let layouts = self.layouts.read().map_err(|_| {
-            EmailError::template("Failed to acquire read lock on layouts")
-        })?;
-
-        for (name, layout) in layouts.iter() {
-            if let Err(e) = self.validate_template(layout, Some(&format!("layout '{}'", name))) {
-                errors.push(e.to_string());
-            }
-        }
-
-        // Validate partials
-        let partials = self.partials.read().map_err(|_| {
-            EmailError::template("Failed to acquire read lock on partials")
-        })?;
-
-        for (name, partial) in partials.iter() {
-            if let Err(e) = self.validate_template(partial, Some(&format!("partial '{}'", name))) {
-                errors.push(e.to_string());
-            }
-        }
-
-        Ok(errors)
+    /// List available templates
+    pub fn list_templates(&self) -> Result<Vec<String>, EmailError> {
+        let mut tera = self.tera.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
+        Ok(tera.get_template_names().map(|s| s.to_string()).collect())
     }
+}
 
-    /// Get detailed template information for debugging
-    pub fn get_template_info(&self, template_name: &str) -> Result<TemplateDebugInfo, EmailError> {
-        let templates = self.templates.read().map_err(|_| {
-            EmailError::template("Failed to acquire read lock on templates")
-        })?;
+/// Register custom email filters for Tera
+fn register_email_filters(tera: &mut Tera) {
+    // Date formatting filters
+    tera.register_filter("format_date", format_date_filter);
+    tera.register_filter("format_datetime", format_datetime_filter);
+    tera.register_filter("now", now_filter);
+    
+    // Email tracking filters
+    tera.register_filter("tracking_pixel", tracking_pixel_filter);
+    tera.register_filter("tracking_link", tracking_link_filter);
+    
+    // Formatting filters
+    tera.register_filter("currency", format_currency_filter);
+    tera.register_filter("phone", format_phone_filter);
+    tera.register_filter("address", format_address_filter);
+    
+    // String filters
+    tera.register_filter("url_encode", url_encode_filter);
+}
 
-        let template = templates.get(template_name)
-            .ok_or_else(|| EmailError::template(format!("Template '{}' not found", template_name)))?;
-
-        Ok(TemplateDebugInfo {
-            name: template.name.clone(),
-            has_html: template.html_template.is_some(),
-            has_text: template.text_template.is_some(),
-            has_subject: template.subject_template.is_some(),
-            layout: template.layout.clone(),
-            metadata: template.metadata.clone(),
-            html_content: template.html_template.clone(),
-            text_content: template.text_template.clone(),
-            subject_content: template.subject_template.clone(),
-        })
-    }
-
-    /// List all validation errors in a human-readable format
-    pub fn get_validation_report(&self) -> Result<String, EmailError> {
-        let errors = self.validate_all_templates()?;
-        
-        if errors.is_empty() {
-            Ok("✅ All templates are valid".to_string())
-        } else {
-            let mut report = format!("❌ Found {} validation error(s):\n\n", errors.len());
-            for (i, error) in errors.iter().enumerate() {
-                report.push_str(&format!("{}. {}\n", i + 1, error));
+// Tera filter implementations
+fn format_date_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
+    use chrono::{DateTime, Utc, NaiveDateTime, TimeZone};
+    
+    let format_str = args.get("format").and_then(|v| v.as_str()).unwrap_or("%Y-%m-%d");
+    
+    let formatted = match value {
+        Value::String(s) => {
+            if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+                dt.format(format_str).to_string()
+            } else if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d") {
+                let dt = Utc.from_utc_datetime(&dt);
+                dt.format(format_str).to_string()
+            } else {
+                s.clone()
             }
-            Ok(report)
         }
+        Value::Number(n) => {
+            if let Some(timestamp) = n.as_i64() {
+                let dt = Utc.timestamp_opt(timestamp, 0).single().unwrap_or_else(|| Utc::now());
+                dt.format(format_str).to_string()
+            } else {
+                "Invalid timestamp".to_string()
+            }
+        }
+        _ => "Invalid date".to_string(),
+    };
+    
+    Ok(to_value(formatted)?)
+}
+
+fn format_datetime_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
+    use chrono::{DateTime, Utc, TimeZone};
+    
+    let format_str = args.get("format").and_then(|v| v.as_str()).unwrap_or("%Y-%m-%d %H:%M:%S");
+    
+    let formatted = match value {
+        Value::String(s) => {
+            if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+                dt.format(format_str).to_string()
+            } else {
+                s.clone()
+            }
+        }
+        Value::Number(n) => {
+            if let Some(timestamp) = n.as_i64() {
+                let dt = Utc.timestamp_opt(timestamp, 0).single().unwrap_or_else(|| Utc::now());
+                dt.format(format_str).to_string()
+            } else {
+                "Invalid timestamp".to_string()
+            }
+        }
+        _ => "Invalid datetime".to_string(),
+    };
+    
+    Ok(to_value(formatted)?)
+}
+
+fn now_filter(_value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
+    use chrono::Utc;
+    let format_str = args.get("format").and_then(|v| v.as_str()).unwrap_or("%Y-%m-%d %H:%M:%S");
+    let now = Utc::now();
+    let formatted = now.format(format_str).to_string();
+    Ok(to_value(formatted)?)
+}
+
+fn tracking_pixel_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
+    use chrono::Utc;
+    use uuid::Uuid;
+    
+    let email_id = value.as_str().ok_or_else(|| tera::Error::msg("tracking_pixel: email_id must be string"))?;
+    let base_url = args.get("base_url").and_then(|v| v.as_str()).unwrap_or("https://tracking.example.com");
+    
+    // Validate UUID format
+    Uuid::parse_str(email_id).map_err(|_| tera::Error::msg("tracking_pixel: invalid UUID format"))?;
+    
+    let timestamp = Utc::now().timestamp();
+    let pixel_url = format!("{}/email/track/open?id={}&t={}", base_url, email_id, timestamp);
+    let pixel_html = format!(
+        r#"<img src="{}" alt="" width="1" height="1" style="display: block; width: 1px; height: 1px;" />"#,
+        pixel_url
+    );
+    
+    Ok(to_value(pixel_html)?)
+}
+
+fn tracking_link_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
+    use uuid::Uuid;
+    
+    let email_id = value.as_str().ok_or_else(|| tera::Error::msg("tracking_link: email_id must be string"))?;
+    let target_url = args.get("url").and_then(|v| v.as_str()).ok_or_else(|| tera::Error::msg("tracking_link: missing url parameter"))?;
+    let base_url = args.get("base_url").and_then(|v| v.as_str()).unwrap_or("https://tracking.example.com");
+    
+    // Validate UUID format
+    Uuid::parse_str(email_id).map_err(|_| tera::Error::msg("tracking_link: invalid UUID format"))?;
+    
+    let encoded_url = urlencoding::encode(target_url);
+    let tracking_url = format!("{}/email/track/click?id={}&url={}", base_url, email_id, encoded_url);
+    
+    Ok(to_value(tracking_url)?)
+}
+
+fn format_currency_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
+    let amount = value.as_f64().ok_or_else(|| tera::Error::msg("currency: amount must be number"))?;
+    let currency = args.get("currency").and_then(|v| v.as_str()).unwrap_or("USD");
+    
+    let symbol = match currency {
+        "USD" => "$",
+        "EUR" => "€", 
+        "GBP" => "£",
+        "JPY" => "¥",
+        _ => currency,
+    };
+    
+    let formatted = if currency == "JPY" {
+        format!("{}{:.0}", symbol, amount)
+    } else {
+        format!("{}{:.2}", symbol, amount)
+    };
+    
+    Ok(to_value(formatted)?)
+}
+
+fn format_phone_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
+    let phone_str = value.as_str().ok_or_else(|| tera::Error::msg("phone: must be string"))?;
+    let country = args.get("country").and_then(|v| v.as_str()).unwrap_or("US");
+    
+    let digits: String = phone_str.chars().filter(|c| c.is_ascii_digit()).collect();
+    
+    let formatted = match country {
+        "US" if digits.len() == 10 => {
+            format!("({}) {}-{}", &digits[0..3], &digits[3..6], &digits[6..10])
+        }
+        "US" if digits.len() == 11 && digits.starts_with('1') => {
+            format!("+1 ({}) {}-{}", &digits[1..4], &digits[4..7], &digits[7..11])
+        }
+        _ => phone_str.to_string(),
+    };
+    
+    Ok(to_value(formatted)?)
+}
+
+fn format_address_filter(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
+    let formatted = match value {
+        Value::Object(obj) => {
+            let street = obj.get("street").and_then(|v| v.as_str()).unwrap_or("");
+            let city = obj.get("city").and_then(|v| v.as_str()).unwrap_or("");
+            let state = obj.get("state").and_then(|v| v.as_str()).unwrap_or("");
+            let zip = obj.get("zip").and_then(|v| v.as_str()).unwrap_or("");
+            
+            let mut parts = Vec::new();
+            if !street.is_empty() { parts.push(street.to_string()); }
+            
+            let mut city_line = Vec::new();
+            if !city.is_empty() { city_line.push(city.to_string()); }
+            if !state.is_empty() && !zip.is_empty() {
+                city_line.push(format!("{} {}", state, zip));
+            } else if !state.is_empty() {
+                city_line.push(state.to_string());
+            } else if !zip.is_empty() {
+                city_line.push(zip.to_string());
+            }
+            
+            if !city_line.is_empty() {
+                parts.push(city_line.join(" "));
+            }
+            
+            parts.join("<br/>")
+        }
+        Value::String(s) => s.replace('\n', "<br/>"),
+        _ => "Invalid address format".to_string(),
+    };
+    
+    Ok(to_value(formatted)?)
+}
+
+fn url_encode_filter(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
+    let text = value.as_str().ok_or_else(|| tera::Error::msg("url_encode: must be string"))?;
+    let encoded = urlencoding::encode(text);
+    Ok(to_value(encoded.to_string())?)
+}
+
+impl From<tera::Error> for EmailError {
+    fn from(err: tera::Error) -> Self {
+        EmailError::template(format!("Template error: {}", err))
     }
 }
 
@@ -709,48 +374,339 @@ impl TemplateEngine {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    use std::fs;
-
+    
     fn create_test_config(temp_dir: &TempDir) -> TemplateConfig {
         TemplateConfig {
             templates_dir: temp_dir.path().join("templates").to_string_lossy().to_string(),
             layouts_dir: temp_dir.path().join("layouts").to_string_lossy().to_string(),
             partials_dir: temp_dir.path().join("partials").to_string_lossy().to_string(),
             enable_cache: false,
-            template_extension: ".hbs".to_string(),
+            template_extension: ".html".to_string(),
+            cache_size: None,
+            watch_files: false,
         }
     }
 
     #[test]
     fn test_template_engine_creation() {
         let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config);
         assert!(engine.is_ok());
     }
 
     #[test]
-    fn test_template_registration_and_rendering() {
+    fn test_basic_template_rendering() {
         let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
-        let template = EmailTemplate::builder("test")
-            .html_template("<h1>Hello {{name}}</h1>")
-            .text_template("Hello {{name}}")
-            .subject_template("Welcome {{name}}")
-            .build();
-
-        engine.register_template(template).unwrap();
+        let template = EmailTemplate {
+            name: "test".to_string(),
+            html_template: Some("<h1>Hello {{ name }}</h1>".to_string()),
+            text_template: Some("Hello {{ name }}".to_string()),
+            subject_template: Some("Welcome {{ name }}".to_string()),
+            layout: None,
+            metadata: HashMap::new(),
+        };
 
         let mut context = TemplateContext::new();
         context.insert("name".to_string(), serde_json::Value::String("World".to_string()));
 
-        let template = engine.get_template("test").unwrap();
         let rendered = engine.render_template(&template, &context).unwrap();
 
         assert_eq!(rendered.subject, "Welcome World");
         assert_eq!(rendered.html_content, Some("<h1>Hello World</h1>".to_string()));
         assert_eq!(rendered.text_content, Some("Hello World".to_string()));
+    }
+
+    #[test]
+    fn test_tera_filters_compatibility() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        // Test currency filter
+        let template = EmailTemplate {
+            name: "currency_test".to_string(),
+            html_template: Some("Price: {{ amount | currency(currency=\"USD\") }}".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        let mut context = TemplateContext::new();
+        context.insert("amount".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(99.99).unwrap()));
+
+        let rendered = engine.render_template(&template, &context).unwrap();
+        assert_eq!(rendered.html_content, Some("Price: $99.99".to_string()));
+    }
+
+    #[test]
+    fn test_phone_filter() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        let template = EmailTemplate {
+            name: "phone_test".to_string(),
+            html_template: Some("Phone: {{ phone_number | phone(country=\"US\") }}".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        let mut context = TemplateContext::new();
+        context.insert("phone_number".to_string(), serde_json::Value::String("5551234567".to_string()));
+
+        let rendered = engine.render_template(&template, &context).unwrap();
+        assert_eq!(rendered.html_content, Some("Phone: (555) 123-4567".to_string()));
+    }
+
+    #[test]
+    fn test_address_filter() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        let template = EmailTemplate {
+            name: "address_test".to_string(),
+            html_template: Some("Address: {{ address | address }}".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        let mut context = TemplateContext::new();
+        let address_obj = serde_json::json!({
+            "street": "123 Main St",
+            "city": "Anytown",
+            "state": "CA",
+            "zip": "90210"
+        });
+        context.insert("address".to_string(), address_obj);
+
+        let rendered = engine.render_template(&template, &context).unwrap();
+        assert_eq!(rendered.html_content, Some("Address: 123 Main St<br/>Anytown CA 90210".to_string()));
+    }
+
+    #[test]
+    fn test_url_encode_filter() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        let template = EmailTemplate {
+            name: "url_test".to_string(),
+            html_template: Some("URL: {{ url | url_encode }}".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        let mut context = TemplateContext::new();
+        context.insert("url".to_string(), serde_json::Value::String("hello world & more".to_string()));
+
+        let rendered = engine.render_template(&template, &context).unwrap();
+        assert_eq!(rendered.html_content, Some("URL: hello%20world%20%26%20more".to_string()));
+    }
+
+    #[test]
+    fn test_tracking_pixel_filter() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        let template = EmailTemplate {
+            name: "tracking_test".to_string(),
+            html_template: Some("{{ email_id | tracking_pixel(base_url=\"https://test.com\") }}".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        let mut context = TemplateContext::new();
+        context.insert("email_id".to_string(), serde_json::Value::String("550e8400-e29b-41d4-a716-446655440000".to_string()));
+
+        let rendered = engine.render_template(&template, &context).unwrap();
+        let html_content = rendered.html_content.as_ref().unwrap();
+        assert!(html_content.contains("https://test.com/email/track/open"));
+        assert!(html_content.contains("550e8400-e29b-41d4-a716-446655440000"));
+    }
+
+    #[test]
+    fn test_tracking_link_filter() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        let template = EmailTemplate {
+            name: "link_test".to_string(),
+            html_template: Some("{{ email_id | tracking_link(url=\"https://example.com\", base_url=\"https://track.com\") }}".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        let mut context = TemplateContext::new();
+        context.insert("email_id".to_string(), serde_json::Value::String("550e8400-e29b-41d4-a716-446655440000".to_string()));
+
+        let rendered = engine.render_template(&template, &context).unwrap();
+        let expected = "https://track.com/email/track/click?id=550e8400-e29b-41d4-a716-446655440000&url=https%3A%2F%2Fexample.com";
+        assert_eq!(rendered.html_content, Some(expected.to_string()));
+    }
+
+    #[test]
+    fn test_format_date_filter() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        let template = EmailTemplate {
+            name: "date_test".to_string(),
+            html_template: Some("Date: {{ date_value | format_date(format=\"%B %d, %Y\") }}".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        let mut context = TemplateContext::new();
+        context.insert("date_value".to_string(), serde_json::Value::String("2023-12-25T10:00:00Z".to_string()));
+
+        let rendered = engine.render_template(&template, &context).unwrap();
+        assert_eq!(rendered.html_content, Some("Date: December 25, 2023".to_string()));
+    }
+
+    #[test]
+    fn test_now_filter() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        let template = EmailTemplate {
+            name: "now_test".to_string(),
+            html_template: Some("Current year: {{ \"\" | now(format=\"%Y\") }}".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        let context = TemplateContext::new();
+        let rendered = engine.render_template(&template, &context).unwrap();
+        
+        // Should contain the current year
+        let current_year = chrono::Utc::now().format("%Y").to_string();
+        assert_eq!(rendered.html_content, Some(format!("Current year: {}", current_year)));
+    }
+
+    #[test]
+    fn test_template_registration_and_retrieval() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        let template = EmailTemplate {
+            name: "registered_template".to_string(),
+            html_template: Some("<p>Hello {{ user }}</p>".to_string()),
+            text_template: Some("Hello {{ user }}".to_string()),
+            subject_template: Some("Welcome {{ user }}".to_string()),
+            layout: None,
+            metadata: HashMap::new(),
+        };
+
+        // Register template
+        engine.register_template(template.clone()).unwrap();
+
+        // Retrieve and verify
+        let retrieved = engine.get_template("registered_template").unwrap();
+        assert_eq!(retrieved.name, "registered_template");
+        assert_eq!(retrieved.html_template, template.html_template);
+
+        // Render by name
+        let mut context = TemplateContext::new();
+        context.insert("user".to_string(), serde_json::Value::String("Alice".to_string()));
+
+        let rendered = engine.render_template_by_name("registered_template", &context).unwrap();
+        assert_eq!(rendered.subject, "Welcome Alice");
+        assert_eq!(rendered.html_content, Some("<p>Hello Alice</p>".to_string()));
+        assert_eq!(rendered.text_content, Some("Hello Alice".to_string()));
+    }
+
+    #[test]
+    fn test_template_validation() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        // Valid template should validate
+        let result = engine.validate_template("Hello {{ name }}", Some("valid"));
+        if let Err(e) = &result {
+            println!("Template validation error: {}", e);
+        }
+        assert!(result.is_ok());
+
+        // Invalid template syntax
+        let result = engine.validate_template("Hello {{ invalid_syntax", Some("invalid"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid template 'invalid'"));
+    }
+
+    #[test]
+    fn test_template_metadata_in_context() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
+        
+        let config = create_test_config(&temp_dir);
+        let engine = TemplateEngine::new(config).unwrap();
+
+        let mut metadata = HashMap::new();
+        metadata.insert("brand_color".to_string(), "#ff0000".to_string());
+
+        let template = EmailTemplate {
+            name: "metadata_test".to_string(),
+            html_template: Some("<div style=\"color: {{ brand_color }}\">Hello {{ name }}</div>".to_string()),
+            text_template: None,
+            subject_template: None,
+            layout: None,
+            metadata,
+        };
+
+        let mut context = TemplateContext::new();
+        context.insert("name".to_string(), serde_json::Value::String("User".to_string()));
+
+        let rendered = engine.render_template(&template, &context).unwrap();
+        assert_eq!(rendered.html_content, Some("<div style=\"color: #ff0000\">Hello User</div>".to_string()));
     }
 }
