@@ -360,6 +360,20 @@ pub trait QueueBackend: Send + Sync {
             Ok(false)
         }
     }
+    
+    /// Atomically clear all jobs in a specific state
+    /// Default implementation is non-atomic for backward compatibility
+    async fn clear_jobs_by_state(&self, state: JobState) -> QueueResult<u64> {
+        // Non-atomic fallback implementation
+        let jobs = self.get_jobs_by_state(state, None).await?;
+        let count = jobs.len() as u64;
+        
+        for job in jobs {
+            self.remove_job(job.id()).await?;
+        }
+        
+        Ok(count)
+    }
 }
 
 /// Queue statistics

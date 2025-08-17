@@ -471,14 +471,8 @@ impl<B: crate::QueueBackend + 'static> JobScheduler<B> {
     
     /// Clear all dead letter queue entries
     pub async fn clear_dead_jobs(&self) -> QueueResult<u64> {
-        let dead_jobs = self.get_dead_jobs(None).await?;
-        let count = dead_jobs.len() as u64;
-        
-        for job in dead_jobs {
-            self.backend.remove_job(job.id()).await?;
-        }
-        
-        Ok(count)
+        // Use atomic clear operation
+        self.backend.clear_jobs_by_state(crate::JobState::Dead).await
     }
 }
 
@@ -1192,5 +1186,88 @@ mod tests {
         assert_eq!(metrics.successful_jobs, 1);
         assert_eq!(metrics.success_rate, 1.0);
         assert!(metrics.min_execution_time_ms >= 10);
+    }
+    
+    #[tokio::test]
+    async fn test_atomic_clear_dead_jobs() {
+        use crate::{MemoryBackend, QueueConfig, JobEntry, Priority, QueueBackend};
+        
+        let backend = std::sync::Arc::new(MemoryBackend::new(QueueConfig::default()));
+        let scheduler = JobScheduler::new(backend.clone());
+        
+        // Create some test jobs and mark them as dead
+        let job1 = TestJob { message: "job1".to_string() };
+        let job2 = TestJob { message: "job2".to_string() };
+        let job3 = TestJob { message: "job3".to_string() };
+        
+        let mut entry1 = JobEntry::new(job1, Some(Priority::Normal), None).unwrap();
+        let mut entry2 = JobEntry::new(job2, Some(Priority::High), None).unwrap();
+        let mut entry3 = JobEntry::new(job3, Some(Priority::Low), None).unwrap();
+        
+        // Mark jobs as failed beyond retry limit (dead) - using a fixed number since max_retries is not accessible
+        for _ in 0..=3 {
+            entry1.mark_failed("Test failure".to_string());
+            entry2.mark_failed("Test failure".to_string());
+            entry3.mark_failed("Test failure".to_string());
+        }
+        
+        // Enqueue the dead jobs
+        backend.enqueue(entry1).await.unwrap();
+        backend.enqueue(entry2).await.unwrap();
+        backend.enqueue(entry3).await.unwrap();
+        
+        // Verify dead jobs exist
+        let dead_jobs_before = scheduler.get_dead_jobs(None).await.unwrap();
+        assert_eq!(dead_jobs_before.len(), 3);
+        
+        // Clear dead jobs atomically
+        let cleared_count = scheduler.clear_dead_jobs().await.unwrap();
+        assert_eq!(cleared_count, 3);
+        
+        // Verify no dead jobs remain
+        let dead_jobs_after = scheduler.get_dead_jobs(None).await.unwrap();
+        assert_eq!(dead_jobs_after.len(), 0);
+        
+        // Verify stats are updated correctly
+        let stats = backend.stats().await.unwrap();
+        assert_eq!(stats.dead_jobs, 0);
+    }
+    
+    #[tokio::test]
+    async fn test_atomic_requeue_dead_job() {
+        use crate::{MemoryBackend, QueueConfig, JobEntry, JobState, Priority, QueueBackend};
+        
+        let backend = std::sync::Arc::new(MemoryBackend::new(QueueConfig::default()));
+        let scheduler = JobScheduler::new(backend.clone());
+        
+        // Create and enqueue a dead job
+        let job = TestJob { message: "dead job".to_string() };
+        let mut entry = JobEntry::new(job, Some(Priority::Normal), None).unwrap();
+        let job_id = entry.id();
+        
+        // Mark as dead - using a fixed number since max_retries is not accessible
+        for _ in 0..=3 {
+            entry.mark_failed("Test failure".to_string());
+        }
+        backend.enqueue(entry).await.unwrap();
+        
+        // Verify job is dead
+        let stats_before = backend.stats().await.unwrap();
+        assert_eq!(stats_before.dead_jobs, 1);
+        assert_eq!(stats_before.pending_jobs, 0);
+        
+        // Requeue the dead job atomically
+        let requeued = scheduler.requeue_dead_job(job_id).await.unwrap();
+        assert!(requeued);
+        
+        // Verify job is now pending
+        let stats_after = backend.stats().await.unwrap();
+        assert_eq!(stats_after.dead_jobs, 0);
+        assert_eq!(stats_after.pending_jobs, 1);
+        
+        // Verify job state was reset
+        let job_entry = backend.get_job(job_id).await.unwrap().unwrap();
+        assert_eq!(job_entry.state(), &JobState::Pending);
+        assert_eq!(job_entry.attempts(), 0);
     }
 }

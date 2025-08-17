@@ -278,6 +278,43 @@ impl QueueBackend for MemoryBackend {
             Ok(false)
         }
     }
+    
+    /// Atomic clear jobs by state implementation for memory backend
+    async fn clear_jobs_by_state(&self, state: JobState) -> QueueResult<u64> {
+        let mut count = 0u64;
+        let mut stats = self.stats.write();
+        
+        // Use retain to atomically filter and count removed jobs
+        self.jobs.retain(|_, job| {
+            if job.state() == &state {
+                count += 1;
+                
+                // Update stats for removed job
+                match state {
+                    JobState::Pending => stats.pending_jobs = stats.pending_jobs.saturating_sub(1),
+                    JobState::Processing => stats.processing_jobs = stats.processing_jobs.saturating_sub(1),
+                    JobState::Completed => stats.completed_jobs = stats.completed_jobs.saturating_sub(1),
+                    JobState::Failed => stats.failed_jobs = stats.failed_jobs.saturating_sub(1),
+                    JobState::Dead => stats.dead_jobs = stats.dead_jobs.saturating_sub(1),
+                }
+                
+                false // Remove this job
+            } else {
+                true // Keep this job
+            }
+        });
+        
+        // Also remove any matching jobs from the pending queue if we're clearing pending jobs
+        if state == JobState::Pending {
+            let mut pending_queue = self.pending_queue.write();
+            pending_queue.retain(|priority_entry| {
+                priority_entry.entry.state() != &JobState::Pending
+            });
+        }
+        
+        stats.total_jobs = stats.total_jobs.saturating_sub(count);
+        Ok(count)
+    }
 }
 
 #[cfg(test)]

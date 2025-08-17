@@ -533,6 +533,67 @@ impl QueueBackend for RedisBackend {
             _ => Err(QueueError::Backend("Unexpected result from requeue script".to_string())),
         }
     }
+    
+    /// Atomic clear jobs by state implementation for Redis using Lua script
+    async fn clear_jobs_by_state(&self, state: JobState) -> QueueResult<u64> {
+        let mut conn = self.get_connection().await?;
+        
+        let state_key = format!("{}:state:{:?}", self.config.key_prefix, state);
+        let job_prefix = format!("{}:job:", self.config.key_prefix);
+        
+        // Lua script for atomic clear by state operation
+        let script = r#"
+            local state_key = KEYS[1]
+            local job_prefix = ARGV[1]
+            local priority_prefix = ARGV[2]
+            local delayed_prefix = ARGV[3]
+            
+            -- Get all job IDs in this state
+            local job_ids = redis.call('SMEMBERS', state_key)
+            local count = #job_ids
+            
+            if count == 0 then
+                return 0
+            end
+            
+            -- Remove all jobs from the state set
+            redis.call('DEL', state_key)
+            
+            -- Remove job data and from priority/delayed queues
+            for i = 1, count do
+                local job_id = job_ids[i]
+                local job_key = job_prefix .. job_id
+                
+                -- Delete job data
+                redis.call('DEL', job_key)
+                
+                -- Remove from all possible priority queues
+                for priority = 0, 3 do
+                    local priority_key = priority_prefix .. priority
+                    redis.call('ZREM', priority_key, job_id)
+                end
+                
+                -- Remove from delayed queue
+                redis.call('ZREM', delayed_prefix, job_id)
+            end
+            
+            return count
+        "#;
+        
+        let priority_prefix = format!("{}:priority:", self.config.key_prefix);
+        let delayed_key = format!("{}:delayed", self.config.key_prefix);
+        
+        let count: u64 = redis::Script::new(script)
+            .key(&state_key)
+            .arg(&job_prefix)
+            .arg(&priority_prefix)
+            .arg(&delayed_key)
+            .invoke_async(&mut conn)
+            .await
+            .map_err(|e| QueueError::Backend(format!("Failed to clear jobs atomically: {}", e)))?;
+            
+        Ok(count)
+    }
 }
 
 #[cfg(test)]
