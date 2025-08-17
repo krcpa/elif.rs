@@ -1640,13 +1640,13 @@ dependencies = [
  "elif-introspect",
  "elif-openapi",
  "elif-orm",
- "handlebars",
  "hex",
  "rand 0.8.5",
  "serde_json",
  "serde_yaml",
  "sqlx",
  "tempfile",
+ "tera",
  "thiserror 1.0.69",
  "tokio",
  "url",
@@ -2089,20 +2089,6 @@ checksum = "459196ed295495a68f7d7fe1d84f6c4b7ff0e21fe3017b2f283c6fac3ad803c9"
 dependencies = [
  "cfg-if",
  "crunchy",
-]
-
-[[package]]
-name = "handlebars"
-version = "4.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faa67bab9ff362228eb3d00bd024a4965d8231bbb7921167f0cfa66c6626b225"
-dependencies = [
- "log",
- "pest",
- "pest_derive",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
 ]
 
 [[package]]

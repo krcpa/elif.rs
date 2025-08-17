@@ -1,0 +1,135 @@
+use elif_auth::prelude::*;
+use crate::models::{{ name | snake_case }}::{{ name | pascal_case }};
+
+pub struct {{ name | pascal_case }}Policy;
+
+impl {{ name | pascal_case }}Policy {
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-policy-view-any>>>
+    pub fn view_any(&self, user: &UserContext) -> bool {
+        // Define who can view any {{ name | pluralize | lower }}
+        user.is_authenticated()
+    }
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-policy-view-any>>>
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-policy-view>>>
+    pub fn view(&self, user: &UserContext, {{ name | snake_case }}: &{{ name | pascal_case }}) -> bool {
+        // Define who can view a specific {{ name | lower }}
+        {% if user_owned %}
+        user.id() == Some({{ name | snake_case }}.user_id) || user.has_role("admin")
+        {% else %}
+        user.is_authenticated()
+        {% endif %}
+    }
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-policy-view>>>
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-policy-create>>>
+    pub fn create(&self, user: &UserContext) -> bool {
+        // Define who can create {{ name | pluralize | lower }}
+        {% if user_owned %}
+        user.is_authenticated()
+        {% else %}
+        user.has_permission("create:{{ name | snake_case | pluralize }}")
+        {% endif %}
+    }
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-policy-create>>>
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-policy-update>>>
+    pub fn update(&self, user: &UserContext, {{ name | snake_case }}: &{{ name | pascal_case }}) -> bool {
+        // Define who can update a specific {{ name | lower }}
+        {% if user_owned %}
+        user.id() == Some({{ name | snake_case }}.user_id) || user.has_role("admin")
+        {% else %}
+        user.has_permission("update:{{ name | snake_case | pluralize }}")
+        {% endif %}
+    }
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-policy-update>>>
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-policy-delete>>>
+    pub fn delete(&self, user: &UserContext, {{ name | snake_case }}: &{{ name | pascal_case }}) -> bool {
+        // Define who can delete a specific {{ name | lower }}
+        {% if user_owned %}
+        user.id() == Some({{ name | snake_case }}.user_id) || user.has_role("admin")
+        {% else %}
+        user.has_permission("delete:{{ name | snake_case | pluralize }}")
+        {% endif %}
+    }
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-policy-delete-->
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-policy-restore>>>
+    {% if soft_delete %}
+    pub fn restore(&self, user: &UserContext, {{ name | snake_case }}: &{{ name | pascal_case }}) -> bool {
+        // Define who can restore a deleted {{ name | lower }}
+        user.has_permission("restore:{{ name | snake_case | pluralize }}")
+    }
+    {% endif %}
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-policy-restore-->
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-policy-force-delete-->
+    {% if soft_delete %}
+    pub fn force_delete(&self, user: &UserContext, {{ name | snake_case }}: &{{ name | pascal_case }}) -> bool {
+        // Define who can permanently delete a {{ name | lower }}
+        user.has_role("admin")
+    }
+    {% endif %}
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-policy-force-delete-->
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use elif_testing::prelude::*;
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-policy-tests>>>
+    
+    #[test]
+    fn test_view_any_policy() {
+        let policy = {{ name | pascal_case }}Policy;
+        
+        let authenticated_user = UserContext::new(1, "user@example.com", vec![], vec![]);
+        assert!(policy.view_any(&authenticated_user));
+        
+        let anonymous_user = UserContext::anonymous();
+        assert!(!policy.view_any(&anonymous_user));
+    }
+
+    #[test]
+    fn test_view_policy() {
+        let policy = {{ name | pascal_case }}Policy;
+        let {{ name | snake_case }} = {{ name | pascal_case }}Factory::new().build();
+        
+        {% if user_owned %}
+        let owner = UserContext::new({{ name | snake_case }}.user_id, "owner@example.com", vec![], vec![]);
+        assert!(policy.view(&owner, &{{ name | snake_case }}));
+        
+        let other_user = UserContext::new(999, "other@example.com", vec![], vec![]);
+        assert!(!policy.view(&other_user, &{{ name | snake_case }}));
+        
+        let admin = UserContext::new(2, "admin@example.com", vec!["admin".to_string()], vec![]);
+        assert!(policy.view(&admin, &{{ name | snake_case }}));
+        {% else %}
+        let authenticated_user = UserContext::new(1, "user@example.com", vec![], vec![]);
+        assert!(policy.view(&authenticated_user, &{{ name | snake_case }}));
+        {% endif %}
+    }
+
+    #[test]
+    fn test_create_policy() {
+        let policy = {{ name | pascal_case }}Policy;
+        
+        {% if user_owned %}
+        let authenticated_user = UserContext::new(1, "user@example.com", vec![], vec![]);
+        assert!(policy.create(&authenticated_user));
+        
+        let anonymous_user = UserContext::anonymous();
+        assert!(!policy.create(&anonymous_user));
+        {% else %}
+        let user_with_permission = UserContext::new(1, "user@example.com", vec![], vec!["create:{{ name | snake_case | pluralize }}".to_string()]);
+        assert!(policy.create(&user_with_permission));
+        
+        let user_without_permission = UserContext::new(2, "user2@example.com", vec![], vec![]);
+        assert!(!policy.create(&user_without_permission));
+        {% endif %}
+    }
+    
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-policy-tests>>>
+}

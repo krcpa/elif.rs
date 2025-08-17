@@ -1,0 +1,115 @@
+use elif_orm::prelude::*;
+use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+{% if has_uuid %}
+use uuid::Uuid;
+{% endif %}
+
+#[derive(Model, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[table_name = "{{ table_name | snake_case }}"]
+pub struct {{ name | pascal_case }} {
+    {% for field in fields %}
+    {% if field.pk %}
+    #[primary_key]
+    {% endif %}
+    {% if field.index %}
+    #[index]
+    {% endif %}
+    pub {{ field.name | snake_case }}: {{ field.field_type }},
+    {% endfor %}
+    {% if timestamps %}
+    
+    #[timestamp]
+    pub created_at: DateTime<Utc>,
+    
+    #[timestamp]
+    pub updated_at: DateTime<Utc>,
+    {% endif %}
+    {% if soft_delete %}
+    
+    #[soft_delete]
+    pub deleted_at: Option<DateTime<Utc>>,
+    {% endif %}
+}
+
+impl {{ name | pascal_case }} {
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-model-methods>>>
+    
+    // Add your custom model methods here
+    
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-model-methods>>>
+}
+
+{% if relationships %}
+// Relationship definitions
+impl {{ name | pascal_case }} {
+    {% for relationship in relationships %}
+    {% if relationship.type == "belongs_to" %}
+    pub async fn {{ relationship.related_model | snake_case }}(&self) -> Result<{{ relationship.related_model | pascal_case }}, ModelError> {
+        {{ name | pascal_case }}::query()
+            .belongs_to::<{{ relationship.related_model | pascal_case }}>("{{ relationship.related_model | snake_case }}_id")
+            .load_for(self)
+            .await
+    }
+    {% endif %}
+    
+    {% if relationship.type == "has_one" %}
+    pub async fn {{ relationship.related_model | snake_case }}(&self) -> Result<Option<{{ relationship.related_model | pascal_case }}>, ModelError> {
+        {{ relationship.related_model | pascal_case }}::query()
+            .where_eq("{{ name | snake_case }}_id", &self.id)
+            .first()
+            .await
+    }
+    {% endif %}
+    
+    {% if relationship.type == "has_many" %}
+    pub async fn {{ relationship.related_model | snake_case | pluralize }}(&self) -> Result<Vec<{{ relationship.related_model | pascal_case }}>, ModelError> {
+        {{ relationship.related_model | pascal_case }}::query()
+            .where_eq("{{ name | snake_case }}_id", &self.id)
+            .load()
+            .await
+    }
+    {% endif %}
+    
+    {% if relationship.type == "belongs_to_many" %}
+    pub async fn {{ relationship.related_model | snake_case | pluralize }}(&self) -> Result<Vec<{{ relationship.related_model | pascal_case }}>, ModelError> {
+        {{ name | pascal_case }}::query()
+            .belongs_to_many::<{{ relationship.related_model | pascal_case }}>("{{ name | snake_case }}_{{ relationship.related_model | snake_case | pluralize }}")
+            .load_for(self)
+            .await
+    }
+    {% endif %}
+    {% endfor %}
+}
+{% endif %}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use elif_testing::prelude::*;
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-model-tests>>>
+    
+    #[test_database]
+    async fn test_{{ name | snake_case }}_creation() {
+        let {{ name | snake_case }} = {{ name | pascal_case }} {
+            {% for field in fields %}
+            {% if not field.pk %}
+            {{ field.name | snake_case }}: {% if field.field_type == "String" %}"test".to_string(){% else %}Default::default(){% endif %},
+            {% endif %}
+            {% endfor %}
+            {% if timestamps %}
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            {% endif %}
+            {% if soft_delete %}
+            deleted_at: None,
+            {% endif %}
+        };
+
+        let saved_{{ name | snake_case }} = {{ name | snake_case }}.save().await.unwrap();
+        {% for field in fields %}{% if field.pk %}assert_eq!(saved_{{ name | snake_case }}.{{ field.name | snake_case }}, {{ name | snake_case }}.{{ field.name | snake_case }});{% endif %}{% endfor %}
+    }
+    
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-model-tests>>>
+}
