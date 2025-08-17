@@ -2,61 +2,7 @@ use elif_core::ElifError;
 use std::fs;
 use std::path::Path;
 
-pub async fn create_app(name: &str, target_path: Option<&str>) -> Result<(), ElifError> {
-    let app_path = match target_path {
-        Some(path) => format!("{}/{}", path, name),
-        None => format!("./{}", name),
-    };
-    
-    let app_dir = Path::new(&app_path);
-    
-    if app_dir.exists() {
-        return Err(ElifError::Validation(
-            format!("Directory {} already exists", app_path)
-        ));
-    }
-    
-    println!("📦 Creating new elif application: {}", name);
-    
-    // Create directory structure
-    create_app_structure(&app_dir, name)?;
-    
-    // Create configuration files
-    create_config_files(&app_dir, name)?;
-    
-    // Create source files
-    create_source_files(&app_dir, name)?;
-    
-    println!("✅ Application '{}' created successfully!", name);
-    println!("📂 Location: {}", app_dir.display());
-    println!("\n🚀 To get started:");
-    println!("   cd {}", app_path);
-    println!("   elif route add GET /hello hello_controller");
-    println!("   cargo run");
-    
-    Ok(())
-}
-
-fn create_app_structure(app_dir: &Path, _name: &str) -> Result<(), ElifError> {
-    let dirs = [
-        "src/controllers",
-        "src/middleware", 
-        "src/models",
-        "src/routes",
-        "resources",
-        "migrations",
-        "tests",
-        ".elif",
-    ];
-    
-    for dir in &dirs {
-        fs::create_dir_all(app_dir.join(dir))?;
-    }
-    
-    Ok(())
-}
-
-fn create_config_files(app_dir: &Path, name: &str) -> Result<(), ElifError> {
+pub fn create_config_files(app_dir: &Path, name: &str) -> Result<(), ElifError> {
     // Cargo.toml
     let cargo_toml = format!(r#"[package]
 name = "{}"
@@ -172,7 +118,7 @@ RUST_LOG=info
     Ok(())
 }
 
-fn create_source_files(app_dir: &Path, name: &str) -> Result<(), ElifError> {
+pub fn create_source_files(app_dir: &Path, name: &str) -> Result<(), ElifError> {
     // src/main.rs
     let main_rs = r#"mod controllers;
 mod middleware;
