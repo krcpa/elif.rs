@@ -11,11 +11,11 @@ use std::path::Path;
 pub async fn generate(output_path: Option<String>, format: Option<String>) -> Result<(), ElifError> {
     println!("🔍 Discovering project structure...");
     
-    let project_root = std::env::current_dir()?;
+    let project_root = std::env::current_dir().map_err(|e| ElifError::Io(e))?;
     
     let discovery = ProjectDiscovery::new(&project_root);
     let project_structure = discovery.discover()
-        .map_err(|e| ElifError::Codegen(format!("Project discovery failed: {}", e)))?;
+        .map_err(|e| ElifError::Codegen { message: format!("Project discovery failed: {}", e) })?;
     
     println!("📊 Found {} controllers, {} models", 
         project_structure.controllers.len(), 
@@ -33,7 +33,7 @@ pub async fn generate(output_path: Option<String>, format: Option<String>) -> Re
     
     println!("⚙️  Generating OpenAPI specification...");
     let spec = generator.generate(&routes)
-        .map_err(|e| ElifError::Codegen(format!("OpenAPI generation failed: {}", e)))?;
+        .map_err(|e| ElifError::Codegen { message: format!("OpenAPI generation failed: {}", e) })?;
     
     // Determine output format and path
     let output_format = match format.as_deref() {
@@ -50,18 +50,18 @@ pub async fn generate(output_path: Option<String>, format: Option<String>) -> Re
     
     // Ensure target directory exists
     if let Some(parent) = Path::new(final_path).parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent).map_err(|e| ElifError::Io(e))?;
     }
     
     // Save the specification
     OpenApiUtils::save_spec_to_file(spec, final_path, output_format, true)
-        .map_err(|e| ElifError::Codegen(format!("Failed to save specification: {}", e)))?;
+        .map_err(|e| ElifError::Codegen { message: format!("Failed to save specification: {}", e) })?;
     
     println!("✅ OpenAPI specification generated: {}", final_path);
     
     // Validate the specification
     let warnings = OpenApiUtils::validate_spec(spec)
-        .map_err(|e| ElifError::Validation(format!("Validation failed: {}", e)))?;
+        .map_err(|e| ElifError::Validation { message: format!("Validation failed: {}", e) })?;
     
     if !warnings.is_empty() {
         println!("⚠️  Validation warnings:");
@@ -97,12 +97,12 @@ pub async fn export(format: String, output: String) -> Result<(), ElifError> {
     };
     
     let spec = OpenApiUtils::load_spec_from_file(spec_path)
-        .map_err(|e| ElifError::Codegen(format!("Failed to load specification: {}", e)))?;
+        .map_err(|e| ElifError::Codegen { message: format!("Failed to load specification: {}", e) })?;
     
     match format.to_lowercase().as_str() {
         "postman" => {
             let collection = elif_openapi::export::OpenApiExporter::export_postman(&spec)
-                .map_err(|e| ElifError::Codegen(format!("Postman export failed: {}", e)))?;
+                .map_err(|e| ElifError::Codegen { message: format!("Postman export failed: {}", e) })?;
             
             let json = serde_json::to_string_pretty(&collection)?;
             
@@ -112,7 +112,7 @@ pub async fn export(format: String, output: String) -> Result<(), ElifError> {
         },
         "insomnia" => {
             let workspace = elif_openapi::export::OpenApiExporter::export_insomnia(&spec)
-                .map_err(|e| ElifError::Codegen(format!("Insomnia export failed: {}", e)))?;
+                .map_err(|e| ElifError::Codegen { message: format!("Insomnia export failed: {}", e) })?;
             
             let json = serde_json::to_string_pretty(&workspace)?;
             
@@ -121,7 +121,7 @@ pub async fn export(format: String, output: String) -> Result<(), ElifError> {
             println!("✅ Insomnia workspace exported: {}", output);
         },
         _ => {
-            return Err(ElifError::Validation(format!("Unsupported export format: {}", format)));
+            return Err(ElifError::Validation { message: format!("Unsupported export format: {}", format) });
         }
     }
     
@@ -146,7 +146,7 @@ pub async fn serve(port: Option<u16>) -> Result<(), ElifError> {
     };
     
     let spec = OpenApiUtils::load_spec_from_file(spec_path)
-        .map_err(|e| ElifError::Codegen(format!("Failed to load specification: {}", e)))?;
+        .map_err(|e| ElifError::Codegen { message: format!("Failed to load specification: {}", e) })?;
     
     // Configure Swagger UI
     let config = elif_openapi::swagger::SwaggerConfig::new()
@@ -160,10 +160,10 @@ pub async fn serve(port: Option<u16>) -> Result<(), ElifError> {
     let html = elif_openapi::swagger::SwaggerUi::generate_static_html(
         swagger_ui.specification().unwrap(),
         swagger_ui.config()
-    ).map_err(|e| ElifError::Codegen(format!("HTML generation failed: {}", e)))?;
+    ).map_err(|e| ElifError::Codegen { message: format!("HTML generation failed: {}", e) })?;
     
-    std::fs::create_dir_all("target")?;
-    std::fs::write("target/_swagger.html", html)?;
+    std::fs::create_dir_all("target").map_err(|e| ElifError::Io(e))?;
+    std::fs::write("target/_swagger.html", html).map_err(|e| ElifError::Io(e))?;
     
     println!("📖 Static Swagger UI generated: target/_swagger.html");
     println!("💡 Open target/_swagger.html in your browser to view the API documentation");

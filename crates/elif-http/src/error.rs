@@ -270,8 +270,8 @@ impl IntoResponse for HttpError {
 }
 
 // Convert from elif-core ConfigError
-impl From<elif_core::app_config::ConfigError> for HttpError {
-    fn from(err: elif_core::app_config::ConfigError) -> Self {
+impl From<elif_core::ConfigError> for HttpError {
+    fn from(err: elif_core::ConfigError) -> Self {
         HttpError::ConfigError { 
             message: err.to_string() 
         }
@@ -408,9 +408,7 @@ mod tests {
 
     #[test]
     fn test_config_error_conversion() {
-        let config_error = elif_core::app_config::ConfigError::MissingEnvVar {
-            var: "TEST_VAR".to_string(),
-        };
+        let config_error = elif_core::ConfigError::validation_failed("Test validation error");
         let http_error = HttpError::from(config_error);
         assert!(matches!(http_error, HttpError::ConfigError { .. }));
     }

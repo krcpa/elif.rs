@@ -11,7 +11,7 @@ pub async fn send(args: EmailSendArgs) -> Result<(), ElifError> {
     // Parse context data if provided
     let context_data: HashMap<String, Value> = if let Some(context_str) = &args.context {
         from_str(context_str)
-            .map_err(|e| ElifError::Validation(format!("Invalid JSON context: {}", e)))?
+            .map_err(|e| ElifError::Validation { message: format!("Invalid JSON context: {}", e) })?
     } else {
         HashMap::new()
     };
@@ -38,7 +38,7 @@ pub async fn send(args: EmailSendArgs) -> Result<(), ElifError> {
             (Some(body.clone()), None)
         }
     } else {
-        return Err(ElifError::Validation("Either --template or --body must be provided".to_string()));
+        return Err(ElifError::Validation { message: "Either --template or --body must be provided".to_string() });
     };
 
     // Check if email capture is enabled

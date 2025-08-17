@@ -35,7 +35,7 @@ pub async fn queue_clear(args: EmailQueueClearArgs) -> Result<(), ElifError> {
         println!("✅ Clearing completed jobs");
     }
     if !args.failed && !args.completed {
-        return Err(ElifError::Validation("Must specify either --failed or --completed".to_string()));
+        return Err(ElifError::Validation { message: "Must specify either --failed or --completed".to_string() });
     }
     println!("⏳ Queue clearing not yet implemented");
     // TODO: Connect to queue backend and clear specified jobs

@@ -6,21 +6,13 @@ mod tests {
     use crate::{HttpConfig, Server};
     use elif_core::{
         Container,
-        container::test_implementations::*,
         app_config::{AppConfigTrait},
     };
     use std::sync::Arc;
 
     fn create_test_container() -> Arc<Container> {
-        let config = Arc::new(create_test_config());
-        let database = Arc::new(TestDatabase::new()) as Arc<dyn elif_core::DatabaseConnection>;
-        
-        Container::builder()
-            .config(config)
-            .database(database)
-            .build()
-            .unwrap()
-            .into()
+        // TODO: Implement proper test container setup after refactor
+        Arc::new(Container::new())
     }
 
     #[test]
@@ -124,12 +116,10 @@ mod tests {
     #[test]
     fn test_error_conversions() {
         use crate::error::HttpError;
-        use elif_core::app_config::ConfigError;
+        use elif_core::ConfigError;
         
         // Test ConfigError conversion
-        let config_error = ConfigError::MissingEnvVar {
-            var: "TEST_VAR".to_string(),
-        };
+        let config_error = ConfigError::validation_failed("Test validation error");
         let http_error: HttpError = config_error.into();
         assert!(matches!(http_error, HttpError::ConfigError { .. }));
         

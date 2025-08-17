@@ -16,25 +16,25 @@ impl TemplateEngine {
         
         // Load stub templates from files
         let template_dir = std::env::current_dir()
-            .map_err(|e| ElifError::Validation(format!("Failed to get current directory: {}", e)))?
+            .map_err(|e| ElifError::Validation { message: format!("Failed to get current directory: {}", e) })?
             .join("crates/cli/templates");
             
         if template_dir.exists() {
             // Load from stub files if available
             tera = Tera::new(&format!("{}/*.stub", template_dir.display()))
-                .map_err(|e| ElifError::Validation(format!("Failed to load stub templates: {}", e)))?;
+                .map_err(|e| ElifError::Validation { message: format!("Failed to load stub templates: {}", e) })?;
         } else {
             // Fallback to embedded templates for backwards compatibility
             tera.add_raw_template("model.stub", include_str!("../../templates/model.stub"))
-                .map_err(|e| ElifError::Validation(format!("Failed to register model template: {}", e)))?;
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register model template: {}", e) })?;
             tera.add_raw_template("controller.stub", include_str!("../../templates/controller.stub"))
-                .map_err(|e| ElifError::Validation(format!("Failed to register controller template: {}", e)))?;
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register controller template: {}", e) })?;
             tera.add_raw_template("migration.stub", include_str!("../../templates/migration.stub"))
-                .map_err(|e| ElifError::Validation(format!("Failed to register migration template: {}", e)))?;
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register migration template: {}", e) })?;
             tera.add_raw_template("test.stub", include_str!("../../templates/test.stub"))
-                .map_err(|e| ElifError::Validation(format!("Failed to register test template: {}", e)))?;
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register test template: {}", e) })?;
             tera.add_raw_template("policy.stub", include_str!("../../templates/policy.stub"))
-                .map_err(|e| ElifError::Validation(format!("Failed to register policy template: {}", e)))?;
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register policy template: {}", e) })?;
         }
         
         // Register filters (Tera equivalent of Handlebars helpers)
@@ -57,7 +57,7 @@ impl TemplateEngine {
         };
         
         self.tera.render(template_name, &context)
-            .map_err(|e| ElifError::Validation(format!("Template rendering error: {}", e)))
+            .map_err(|e| ElifError::Validation { message: format!("Template rendering error: {}", e) })
     }
 }
 

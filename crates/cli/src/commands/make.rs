@@ -162,9 +162,7 @@ fn parse_fields(fields_str: &str) -> Result<Vec<FieldSpec>, ElifError> {
     for field_def in fields_str.split(',') {
         let parts: Vec<&str> = field_def.trim().split(':').collect();
         if parts.len() != 2 {
-            return Err(ElifError::Validation(
-                format!("Invalid field definition: {}. Expected name:type format", field_def)
-            ));
+            return Err(ElifError::Validation { message: format!("Invalid field definition: {}. Expected name:type format", field_def) });
         }
         
         fields.push(FieldSpec {
@@ -187,9 +185,7 @@ fn parse_relationships(relationships_str: &str) -> Result<Vec<ResourceRelationsh
     for rel_def in relationships_str.split(',') {
         let parts: Vec<&str> = rel_def.trim().split(':').collect();
         if parts.len() != 2 {
-            return Err(ElifError::Validation(
-                format!("Invalid relationship definition: {}. Expected name:type format", rel_def)
-            ));
+            return Err(ElifError::Validation { message: format!("Invalid relationship definition: {}. Expected name:type format", rel_def) });
         }
         
         let related_model = parts[0].trim().to_string();
@@ -199,9 +195,7 @@ fn parse_relationships(relationships_str: &str) -> Result<Vec<ResourceRelationsh
         match rel_type.as_str() {
             "belongs_to" | "has_one" | "has_many" | "belongs_to_many" => {},
             _ => {
-                return Err(ElifError::Validation(
-                    format!("Invalid relationship type: {}. Valid types: belongs_to, has_one, has_many, belongs_to_many", rel_type)
-                ));
+                return Err(ElifError::Validation { message: format!("Invalid relationship type: {}. Valid types: belongs_to, has_one, has_many, belongs_to_many", rel_type) });
             }
         }
         

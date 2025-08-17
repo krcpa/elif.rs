@@ -46,9 +46,9 @@ fn parse_fields(fields_str: &str) -> Result<Vec<Field>, ElifError> {
     for field_def in fields_str.split(',') {
         let parts: Vec<&str> = field_def.trim().split(':').collect();
         if parts.len() != 2 {
-            return Err(ElifError::Validation(
-                format!("Invalid field definition: {}. Expected name:type format", field_def)
-            ));
+            return Err(ElifError::Validation {
+                message: format!("Invalid field definition: {}. Expected name:type format", field_def)
+            });
         }
         
         let field_name = parts[0].trim();
@@ -160,7 +160,7 @@ impl {} {{
 async fn create_migration(name: &str, fields: &Vec<Field>) -> Result<(), ElifError> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| ElifError::Codegen(format!("Time error: {}", e)))?
+        .map_err(|e| ElifError::Codegen { message: format!("Time error: {}", e) })?
         .as_secs();
     
     let migration_path = format!("migrations/{}_create_{}.sql", timestamp, name.to_lowercase());

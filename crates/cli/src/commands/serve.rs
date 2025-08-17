@@ -300,6 +300,6 @@ impl ServeCommand {
 pub async fn run(args: ServeArgs) -> Result<(), ElifError> {
     let command = ServeCommand::new(args);
     command.handle().await.map_err(|e| {
-        ElifError::Codegen(format!("Serve command failed: {}", e))
+        ElifError::Codegen { message: format!("Serve command failed: {}", e) }
     })
 }

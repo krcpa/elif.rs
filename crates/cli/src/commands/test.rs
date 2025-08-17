@@ -13,11 +13,11 @@ pub async fn run(focus: Option<String>) -> Result<(), ElifError> {
     }
     
     let output = cmd.output()
-        .map_err(|e| ElifError::Codegen(format!("Failed to run tests: {}", e)))?;
+        .map_err(|e| ElifError::Codegen { message: format!("Failed to run tests: {}", e) })?;
     
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(ElifError::Validation(format!("Tests failed:\n{}", stderr)));
+        return Err(ElifError::Validation { message: format!("Tests failed:\n{}", stderr) });
     }
     
     let stdout = String::from_utf8_lossy(&output.stdout);
