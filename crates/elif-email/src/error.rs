@@ -72,17 +72,7 @@ impl EmailError {
 }
 
 // Convert from common error types
-impl From<handlebars::RenderError> for EmailError {
-    fn from(err: handlebars::RenderError) -> Self {
-        Self::template(err.to_string())
-    }
-}
-
-impl From<handlebars::TemplateError> for EmailError {
-    fn from(err: handlebars::TemplateError) -> Self {
-        Self::template(err.to_string())
-    }
-}
+// Handlebars error handling removed - using Tera now
 
 impl From<lettre::error::Error> for EmailError {
     fn from(err: lettre::error::Error) -> Self {

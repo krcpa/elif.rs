@@ -122,8 +122,12 @@ pub struct TemplateConfig {
     pub partials_dir: String,
     /// Enable template caching
     pub enable_cache: bool,
-    /// Template file extension
+    /// Template file extension (now supports .html, .tera, .hbs for compatibility)
     pub template_extension: String,
+    /// Cache size for moka cache (None uses default)
+    pub cache_size: Option<u64>,
+    /// Enable file watching for hot-reloading
+    pub watch_files: bool,
 }
 
 /// Email queue configuration (placeholder for future queue integration)
@@ -193,7 +197,9 @@ impl Default for TemplateConfig {
             layouts_dir: "templates/emails/layouts".to_string(),
             partials_dir: "templates/emails/partials".to_string(),
             enable_cache: true,
-            template_extension: ".hbs".to_string(),
+            template_extension: ".html".to_string(),
+            cache_size: None,
+            watch_files: false,
         }
     }
 }

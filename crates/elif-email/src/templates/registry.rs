@@ -298,6 +298,8 @@ mod tests {
             partials_dir: temp_dir.path().to_string_lossy().to_string(),
             enable_cache: false,
             template_extension: ".hbs".to_string(),
+            cache_size: None,
+            watch_files: false,
         };
 
         let engine = registry.create_engine("test", config).unwrap();
@@ -318,6 +320,8 @@ mod tests {
             partials_dir: temp_dir.path().to_string_lossy().to_string(),
             enable_cache: false,
             template_extension: ".hbs".to_string(),
+            cache_size: None,
+            watch_files: false,
         };
 
         let engine = registry.create_engine("default", config).unwrap();

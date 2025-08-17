@@ -13,7 +13,9 @@ lettre = { version = "0.11", default-features = false, features = ["tokio1-rustl
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 
 # Templating
-handlebars = "4.4"
+tera = "1.19"
+notify = "6.1"
+moka = { version = "0.12", features = ["future"] }
 
 # Utilities
 base64 = "0.22"
