@@ -1,0 +1,50 @@
+-- Migration: {{ timestamp }}_create_{{ name | snake_case | pluralize }}_table.sql
+-- Created at: {{ created_at }}
+
+-- Up
+CREATE TABLE {{ name | snake_case | pluralize }} (
+    {% for field in fields %}
+    {{ field.name | snake_case }} {{ field.field_type | sql_type }}{% if field.pk %} PRIMARY KEY{% endif %}{% if field.required %} NOT NULL{% endif %}{% if field.default %} DEFAULT {{ field.default }}{% endif %},
+    {% endfor %}
+    {% if timestamps %}
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    {% endif %}
+    {% if soft_delete %}
+    deleted_at TIMESTAMPTZ,
+    {% endif %}
+);
+
+{% if indexes %}
+-- Indexes
+{% for index in indexes %}
+CREATE {% if index.unique %}UNIQUE {% endif %}INDEX {{ index.index_name }} ON {{ index.table_name }} ({{ index.columns }});
+{% endfor %}
+{% endif %}
+
+{% if foreign_keys %}
+-- Foreign key constraints
+{% for fk in foreign_keys %}
+ALTER TABLE {{ table_name }} ADD CONSTRAINT {{ fk.constraint_name }} 
+    FOREIGN KEY ({{ fk.column }}) REFERENCES {{ fk.referenced_table }} ({{ fk.referenced_column }})
+    {% if fk.on_delete %}ON DELETE {{ fk.on_delete }}{% endif %}
+    {% if fk.on_update %}ON UPDATE {{ fk.on_update }}{% endif %};
+{% endfor %}
+{% endif %}
+
+-- Down
+{% if foreign_keys %}
+-- Drop foreign key constraints
+{% for fk in foreign_keys %}
+ALTER TABLE {{ table_name }} DROP CONSTRAINT IF EXISTS {{ fk.constraint_name }};
+{% endfor %}
+{% endif %}
+
+{% if indexes %}
+-- Drop indexes
+{% for index in indexes %}
+DROP INDEX IF EXISTS {{ index.index_name }};
+{% endfor %}
+{% endif %}
+
+DROP TABLE IF EXISTS {{ table_name }};

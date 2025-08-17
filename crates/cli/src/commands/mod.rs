@@ -14,3 +14,4 @@ pub mod serve;
 pub mod queue;
 pub mod interactive_setup;
 pub mod database;
+pub mod email;

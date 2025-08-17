@@ -1,0 +1,19 @@
+{
+  "id": "email_1755437250994015",
+  "timestamp": "2025-08-17T13:27:30.994235Z",
+  "to": "user@example.com",
+  "from": "test@elif.rs",
+  "subject": "Test Email",
+  "body_text": "This is a test email for filesystem capture testing",
+  "body_html": null,
+  "headers": {
+    "From": "test@elif.rs",
+    "To": "user@example.com",
+    "Subject": "Test Email"
+  },
+  "template": null,
+  "context": {
+    "name": "John",
+    "role": "developer"
+  }
+}

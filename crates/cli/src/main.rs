@@ -138,6 +138,12 @@ enum Commands {
         #[arg(long, short)]
         verbose: bool,
     },
+    
+    /// Email system management
+    Email {
+        #[command(subcommand)]
+        email_command: EmailCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -401,6 +407,263 @@ enum QueueCommands {
         /// Check interval in seconds when running as daemon
         #[arg(long, default_value = "60")]
         check_interval: u64,
+    },
+}
+
+#[derive(Subcommand)]
+enum EmailCommands {
+    /// Send test emails
+    Send {
+        /// Recipient email address
+        to: String,
+        
+        /// Email subject
+        #[arg(long)]
+        subject: String,
+        
+        /// Email template to use
+        #[arg(long)]
+        template: Option<String>,
+        
+        /// Email body (if not using template)
+        #[arg(long)]
+        body: Option<String>,
+        
+        /// Send as HTML
+        #[arg(long)]
+        html: bool,
+        
+        /// Context data as JSON
+        #[arg(long)]
+        context: Option<String>,
+    },
+    
+    /// Template management
+    Template {
+        #[command(subcommand)]
+        template_command: EmailTemplateCommands,
+    },
+    
+    /// Provider configuration and testing
+    Provider {
+        #[command(subcommand)]
+        provider_command: EmailProviderCommands,
+    },
+    
+    /// Queue management for emails
+    Queue {
+        #[command(subcommand)]
+        queue_command: EmailQueueCommands,
+    },
+    
+    /// Email tracking and analytics
+    Track {
+        #[command(subcommand)]
+        track_command: EmailTrackCommands,
+    },
+    
+    /// Email configuration wizard
+    Setup {
+        /// Email provider (smtp, mailgun, sendgrid, postmark)
+        #[arg(long)]
+        provider: Option<String>,
+        
+        /// Skip interactive mode and use defaults
+        #[arg(long)]
+        non_interactive: bool,
+    },
+    
+    /// Email testing and inspection commands
+    Test {
+        #[command(subcommand)]
+        test_command: EmailTestCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum EmailTemplateCommands {
+    /// List all available templates
+    List,
+    
+    /// Validate template syntax
+    Validate {
+        /// Template name or file path
+        template: String,
+    },
+    
+    /// Render template with context data
+    Render {
+        /// Template name or file path
+        template: String,
+        
+        /// Context data as JSON
+        #[arg(long)]
+        context: Option<String>,
+        
+        /// Output format (html, text, both)
+        #[arg(long, default_value = "both")]
+        format: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum EmailProviderCommands {
+    /// Test email provider connection
+    Test {
+        /// Provider name (smtp, mailgun, sendgrid, postmark)
+        #[arg(long)]
+        provider: Option<String>,
+    },
+    
+    /// Configure email provider
+    Configure {
+        /// Provider name
+        provider: String,
+        
+        /// Interactive configuration mode
+        #[arg(long)]
+        interactive: bool,
+    },
+    
+    /// Switch active email provider
+    Switch {
+        /// Provider name
+        provider: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum EmailQueueCommands {
+    /// Show email queue status
+    Status {
+        /// Show detailed job information
+        #[arg(long, short)]
+        detailed: bool,
+    },
+    
+    /// Process queued emails
+    Process {
+        /// Maximum number of emails to process
+        #[arg(long)]
+        limit: Option<u32>,
+        
+        /// Timeout in seconds for each email
+        #[arg(long, default_value = "30")]
+        timeout: u64,
+    },
+    
+    /// Clear failed email jobs
+    Clear {
+        /// Clear all failed jobs
+        #[arg(long)]
+        failed: bool,
+        
+        /// Clear all completed jobs  
+        #[arg(long)]
+        completed: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum EmailTrackCommands {
+    /// Show email tracking analytics
+    Analytics {
+        /// Date range (today, week, month)
+        #[arg(long, default_value = "today")]
+        range: String,
+        
+        /// Email campaign or template filter
+        #[arg(long)]
+        filter: Option<String>,
+    },
+    
+    /// Show delivery statistics
+    Stats {
+        /// Group by (day, hour, provider, template)
+        #[arg(long, default_value = "day")]
+        group_by: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum EmailTestCommands {
+    /// Capture emails to filesystem for testing
+    Capture {
+        /// Enable filesystem email capture
+        #[arg(long)]
+        enable: bool,
+        
+        /// Disable filesystem email capture
+        #[arg(long)]
+        disable: bool,
+        
+        /// Custom capture directory
+        #[arg(long)]
+        dir: Option<String>,
+    },
+    
+    /// List captured emails
+    List {
+        /// Show detailed email information
+        #[arg(long, short)]
+        detailed: bool,
+        
+        /// Filter by recipient email
+        #[arg(long)]
+        to: Option<String>,
+        
+        /// Filter by subject
+        #[arg(long)]
+        subject: Option<String>,
+        
+        /// Number of emails to show (latest first)
+        #[arg(long, short, default_value = "10")]
+        limit: usize,
+    },
+    
+    /// Show specific captured email
+    Show {
+        /// Email ID or index
+        email_id: String,
+        
+        /// Show raw email content
+        #[arg(long)]
+        raw: bool,
+        
+        /// Show only specific part (headers, text, html, attachments)
+        #[arg(long)]
+        part: Option<String>,
+    },
+    
+    /// Clear captured emails
+    #[command(group(
+        clap::ArgGroup::new("clear_mode")
+            .required(true)
+            .args(&["all", "older_than"]),
+    ))]
+    Clear {
+        /// Clear all captured emails
+        #[arg(long)]
+        all: bool,
+        
+        /// Clear emails older than N days
+        #[arg(long)]
+        older_than: Option<u32>,
+    },
+    
+    /// Export captured emails
+    Export {
+        /// Export format (json, csv, mbox)
+        #[arg(long, default_value = "json")]
+        format: String,
+        
+        /// Output file path
+        #[arg(long)]
+        output: Option<String>,
+        
+        /// Include email bodies in export
+        #[arg(long)]
+        include_body: bool,
     },
 }
 
@@ -718,6 +981,142 @@ async fn main() -> Result<(), ElifError> {
                 verbose,
             };
             interactive_setup::run(args).await?;
+        }
+        Commands::Email { email_command } => {
+            match email_command {
+                EmailCommands::Send { to, subject, template, body, html, context } => {
+                    let args = email::EmailSendArgs {
+                        to,
+                        subject,
+                        template,
+                        body,
+                        html,
+                        context,
+                    };
+                    email::send(args).await?;
+                }
+                EmailCommands::Template { template_command } => {
+                    match template_command {
+                        EmailTemplateCommands::List => {
+                            email::template_list().await?;
+                        }
+                        EmailTemplateCommands::Validate { template } => {
+                            email::template_validate(&template).await?;
+                        }
+                        EmailTemplateCommands::Render { template, context, format } => {
+                            let args = email::EmailTemplateRenderArgs {
+                                template,
+                                context,
+                                format,
+                            };
+                            email::template_render(args).await?;
+                        }
+                    }
+                }
+                EmailCommands::Provider { provider_command } => {
+                    match provider_command {
+                        EmailProviderCommands::Test { provider } => {
+                            email::provider_test(provider).await?;
+                        }
+                        EmailProviderCommands::Configure { provider, interactive } => {
+                            let args = email::EmailProviderConfigureArgs {
+                                provider,
+                                interactive,
+                            };
+                            email::provider_configure(args).await?;
+                        }
+                        EmailProviderCommands::Switch { provider } => {
+                            email::provider_switch(&provider).await?;
+                        }
+                    }
+                }
+                EmailCommands::Queue { queue_command } => {
+                    match queue_command {
+                        EmailQueueCommands::Status { detailed } => {
+                            email::queue_status(detailed).await?;
+                        }
+                        EmailQueueCommands::Process { limit, timeout } => {
+                            let args = email::EmailQueueProcessArgs {
+                                limit,
+                                timeout,
+                            };
+                            email::queue_process(args).await?;
+                        }
+                        EmailQueueCommands::Clear { failed, completed } => {
+                            let args = email::EmailQueueClearArgs {
+                                failed,
+                                completed,
+                            };
+                            email::queue_clear(args).await?;
+                        }
+                    }
+                }
+                EmailCommands::Track { track_command } => {
+                    match track_command {
+                        EmailTrackCommands::Analytics { range, filter } => {
+                            let args = email::EmailTrackAnalyticsArgs {
+                                range,
+                                filter,
+                            };
+                            email::track_analytics(args).await?;
+                        }
+                        EmailTrackCommands::Stats { group_by } => {
+                            email::track_stats(&group_by).await?;
+                        }
+                    }
+                }
+                EmailCommands::Setup { provider, non_interactive } => {
+                    let args = email::EmailSetupArgs {
+                        provider,
+                        non_interactive,
+                    };
+                    email::setup(args).await?;
+                }
+                EmailCommands::Test { test_command } => {
+                    match test_command {
+                        EmailTestCommands::Capture { enable, disable, dir } => {
+                            let args = email::EmailCaptureArgs {
+                                enable,
+                                disable,
+                                dir,
+                            };
+                            email::test_capture(args).await?;
+                        }
+                        EmailTestCommands::List { detailed, to, subject, limit } => {
+                            let args = email::EmailTestListArgs {
+                                detailed,
+                                to,
+                                subject,
+                                limit,
+                            };
+                            email::test_list(args).await?;
+                        }
+                        EmailTestCommands::Show { email_id, raw, part } => {
+                            let args = email::EmailTestShowArgs {
+                                email_id,
+                                raw,
+                                part,
+                            };
+                            email::test_show(args).await?;
+                        }
+                        EmailTestCommands::Clear { all, older_than } => {
+                            let args = email::EmailTestClearArgs {
+                                all,
+                                older_than,
+                            };
+                            email::test_clear(args).await?;
+                        }
+                        EmailTestCommands::Export { format, output, include_body } => {
+                            let args = email::EmailTestExportArgs {
+                                format,
+                                output,
+                                include_body,
+                            };
+                            email::test_export(args).await?;
+                        }
+                    }
+                }
+            }
         }
     }
     

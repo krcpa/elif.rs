@@ -1,0 +1,231 @@
+use elif_testing::prelude::*;
+use crate::models::{{ name | snake_case }}::{{ name | pascal_case }};
+{% if has_controller %}
+use crate::controllers::{{ name | snake_case }}_controller::{{ name | pascal_case }}Controller;
+{% endif %}
+
+mod {{ name | snake_case }}_tests {
+    use super::*;
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-model-tests>>>
+    
+    #[test_database]
+    async fn test_create_{{ name | snake_case }}() -> TestResult<()> {
+        let {{ name | snake_case }} = {{ name | pascal_case }}Factory::new().create().await?;
+        
+        {% for field in fields %}{% if field.pk %}assert!(!{{ name | snake_case }}.{{ field.name | snake_case }}.is_nil());{% endif %}{% endfor %}
+        {% for field in fields %}
+        {% if not field.pk and field.field_type != "DateTime<Utc>" %}
+        // Assert {{ field.name | snake_case }} field
+        {% endif %}
+        {% endfor %}
+        
+        Ok(())
+    }
+
+    #[test_database]
+    async fn test_{{ name | snake_case }}_validation() -> TestResult<()> {
+        // Test required field validation
+        {% for field in fields %}
+        {% if field.required and not field.pk %}
+        let result = {{ name | pascal_case }}::create({{ name | pascal_case }} {
+            {{ field.name | snake_case }}: {% if field.field_type == "String" %}String::new(){% else %}Default::default(){% endif %}, // Invalid empty value
+            {% for other_field in fields %}
+            {% if other_field.name != field.name and not other_field.pk %}
+            {{ other_field.name | snake_case }}: {% if other_field.field_type == "String" %}"valid_value".to_string(){% else %}Default::default(){% endif %},
+            {% endif %}
+            {% endfor %}
+            ..Default::default()
+        }).await;
+        
+        assert!(result.is_err());
+        {% endif %}
+        {% endfor %}
+        
+        Ok(())
+    }
+    
+    {% if relationships %}
+    #[test_database]
+    async fn test_{{ name | snake_case }}_relationships() -> TestResult<()> {
+        let {{ name | snake_case }} = {{ name | pascal_case }}Factory::new().create().await?;
+        
+        {% for relationship in relationships %}
+        {% if relationship.type == "has_many" %}
+        // Test has_many relationship
+        let {{ relationship.related_model | snake_case | pluralize }} = {{ relationship.related_model | pascal_case }}Factory::new()
+            .for_{{ name | snake_case }}({{ name | snake_case }}.id)
+            .count(3)
+            .create().await?;
+            
+        let loaded_{{ relationship.related_model | snake_case | pluralize }} = {{ name | snake_case }}.{{ relationship.related_model | snake_case | pluralize }}().await?;
+        assert_eq!(loaded_{{ relationship.related_model | snake_case | pluralize }}.len(), 3);
+        {% endif %}
+        
+        {% if relationship.type == "belongs_to" %}
+        // Test belongs_to relationship  
+        let {{ relationship.related_model | snake_case }} = {{ relationship.related_model | pascal_case }}Factory::new().create().await?;
+        let {{ name | snake_case }} = {{ name | pascal_case }}Factory::new()
+            .{{ relationship.related_model | snake_case }}_id({{ relationship.related_model | snake_case }}.id)
+            .create().await?;
+            
+        let loaded_{{ relationship.related_model | snake_case }} = {{ name | snake_case }}.{{ relationship.related_model | snake_case }}().await?;
+        assert_eq!(loaded_{{ relationship.related_model | snake_case }}.id, {{ relationship.related_model | snake_case }}.id);
+        {% endif %}
+        {% endfor %}
+        
+        Ok(())
+    }
+    {% endif %}
+    
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-model-tests>>>
+}
+
+{% if has_controller %}
+mod {{ name | snake_case }}_controller_tests {
+    use super::*;
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-controller-tests>>>
+    
+    #[test_database]
+    async fn test_{{ name | snake_case }}_index() -> TestResult<()> {
+        let {{ name | snake_case | pluralize }} = {{ name | pascal_case }}Factory::new().count(5).create().await?;
+        
+        let response = TestClient::new()
+            .get("/api/{{ name | snake_case | pluralize }}")
+            .send()
+            .await?;
+            
+        response.assert_status(200)
+               .assert_json_length("data", 5);
+        
+        Ok(())
+    }
+
+    #[test_database] 
+    async fn test_{{ name | snake_case }}_show() -> TestResult<()> {
+        let {{ name | snake_case }} = {{ name | pascal_case }}Factory::new().create().await?;
+        
+        let response = TestClient::new()
+            .get(&format!("/api/{{ name | snake_case | pluralize }}/{}", {{ name | snake_case }}.id))
+            .send()
+            .await?;
+            
+        response.assert_status(200)
+               .assert_json_contains(json!({"id": {{ name | snake_case }}.id}));
+        
+        Ok(())
+    }
+
+    #[test_database]
+    async fn test_{{ name | snake_case }}_store() -> TestResult<()> {
+        let {{ name | snake_case }}_data = json!({
+            {% for field in fields %}
+            {% if not field.pk and field.field_type != "DateTime<Utc>" %}
+            "{{ field.name | snake_case }}": {% if field.field_type == "String" %}"test_value"{% else %}{% if field.field_type == "i32" %}42{% else %}{% if field.field_type == "bool" %}true{% else %}null{% endif %}{% endif %}{% endif %},
+            {% endif %}
+            {% endfor %}
+        });
+        
+        let response = TestClient::new()
+            .post("/api/{{ name | snake_case | pluralize }}")
+            .json(&{{ name | snake_case }}_data)
+            .send()
+            .await?;
+            
+        response.assert_status(201);
+        
+        // Verify created in database
+        assert_database_has("{{ name | snake_case | pluralize }}", |{{ name | snake_case }}: {{ name | pascal_case }}| {
+            {% for field in fields %}
+            {% if not field.pk and field.field_type == "String" %}
+            {{ name | snake_case }}.{{ field.name | snake_case }} == "test_value"{% if not loop.last %} &&{% endif %}
+            {% endif %}
+            {% endfor %}
+        }).await?;
+        
+        Ok(())
+    }
+
+    #[test_database]
+    async fn test_{{ name | snake_case }}_update() -> TestResult<()> {
+        let {{ name | snake_case }} = {{ name | pascal_case }}Factory::new().create().await?;
+        let update_data = json!({
+            {% for field in fields %}
+            {% if not field.pk and field.name != "created_at" and field.field_type != "DateTime<Utc>" %}
+            "{{ field.name | snake_case }}": {% if field.field_type == "String" %}"updated_value"{% else %}{% if field.field_type == "i32" %}100{% else %}{% if field.field_type == "bool" %}false{% else %}null{% endif %}{% endif %}{% endif %},
+            {% endif %}
+            {% endfor %}
+        });
+        
+        let response = TestClient::new()
+            .patch(&format!("/api/{{ name | snake_case | pluralize }}/{}", {{ name | snake_case }}.id))
+            .json(&update_data)
+            .send()
+            .await?;
+            
+        response.assert_status(200);
+        
+        Ok(())
+    }
+
+    #[test_database]
+    async fn test_{{ name | snake_case }}_destroy() -> TestResult<()> {
+        let {{ name | snake_case }} = {{ name | pascal_case }}Factory::new().create().await?;
+        
+        let response = TestClient::new()
+            .delete(&format!("/api/{{ name | snake_case | pluralize }}/{}", {{ name | snake_case }}.id))
+            .send()
+            .await?;
+            
+        response.assert_status(204);
+        
+        // Verify deleted from database
+        {% if soft_delete %}
+        assert_database_missing("{{ name | snake_case | pluralize }}", |{{ name | snake_case }}: {{ name | pascal_case }}| {
+            {{ name | snake_case }}.id == {{ name | snake_case }}.id && {{ name | snake_case }}.deleted_at.is_some()
+        }).await?;
+        {% else %}
+        assert_database_missing("{{ name | snake_case | pluralize }}", |{{ name | snake_case }}: {{ name | pascal_case }}| {
+            {{ name | snake_case }}.id == {{ name | snake_case }}.id
+        }).await?;
+        {% endif %}
+        
+        Ok(())
+    }
+    
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-controller-tests>>>
+}
+{% endif %}
+
+// Test factory for {{ name | pascal_case }}
+#[factory]
+pub struct {{ name | pascal_case }}Factory {
+    {% for field in fields %}
+    {% if not field.pk %}
+    pub {{ field.name | snake_case }}: {{ field.field_type }},
+    {% endif %}
+    {% endfor %}
+    {% if timestamps %}
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    {% endif %}
+    {% if soft_delete %}
+    pub deleted_at: Option<DateTime<Utc>>,
+    {% endif %}
+}
+
+impl {{ name | pascal_case }}Factory {
+    {% for relationship in relationships %}
+    {% if relationship.type == "belongs_to" %}
+    pub fn {{ relationship.related_model | snake_case }}_id(mut self, {{ relationship.related_model | snake_case }}_id: {% for field in fields %}{% if field.pk %}{{ field.field_type }}{% endif %}{% endfor %}) -> Self {
+        self.{{ relationship.related_model | snake_case }}_id = {{ relationship.related_model | snake_case }}_id;
+        self
+    }
+    
+    pub fn for_{{ relationship.related_model | snake_case }}(self, {{ relationship.related_model | snake_case }}: {{ relationship.related_model | pascal_case }}) -> Self {
+        self.{{ relationship.related_model | snake_case }}_id({{ relationship.related_model | snake_case }}.id)
+    }
+    {% endif %}
+    {% endfor %}
+}

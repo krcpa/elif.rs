@@ -1,0 +1,176 @@
+use elif_http::prelude::*;
+use elif_core::ServiceContainer;
+use crate::models::{{ name | snake_case }}::{{ name | pascal_case }};
+{% if validation %}
+use crate::requests::{{ name | snake_case }}::{ Create{{ name | pascal_case }}Request, Update{{ name | pascal_case }}Request };
+use crate::resources::{{ name | snake_case }}::{ {{ name | pascal_case }}Resource, {{ name | pascal_case }}Collection };
+{% endif %}
+use std::sync::Arc;
+
+#[controller]
+pub struct {{ name | pascal_case }}Controller {
+    container: Arc<ServiceContainer>,
+}
+
+impl {{ name | pascal_case }}Controller {
+    pub fn new(container: Arc<ServiceContainer>) -> Self {
+        Self { container }
+    }
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-index>>>
+    pub async fn index(&self, request: Request) -> Result<Response, HttpError> {
+        let query = {{ name | pascal_case }}::query(){% if relationships %}{% for relationship in relationships %}{% if relationship.type == "belongs_to" %}
+            .with("{{ relationship.related_model | snake_case }}"){% endif %}{% endfor %}{% endif %};
+        
+        let {{ name | snake_case | pluralize }} = query.paginate(request.per_page()).await
+            .map_err(|e| HttpError::internal_server_error(format!("Database error: {}", e)))?;
+        
+        {% if validation %}
+        Ok(Response::json({{ name | pascal_case }}Collection::new({{ name | snake_case | pluralize }})))
+        {% else %}
+        Ok(Response::json({{ name | snake_case | pluralize }}))
+        {% endif %}
+    }
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-index>>>
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-show>>>
+    pub async fn show(&self, request: Request) -> Result<Response, HttpError> {
+        let id = request.path_param("id")
+            .map_err(|_| HttpError::bad_request("Invalid ID parameter"))?;
+        
+        let {{ name | snake_case }} = {{ name | pascal_case }}::find(&id).await
+            .map_err(|e| HttpError::internal_server_error(format!("Database error: {}", e)))?
+            .ok_or_else(|| HttpError::not_found("{{ name | pascal_case }} not found"))?;
+        
+        {% if validation %}
+        Ok(Response::json({{ name | pascal_case }}Resource::new({{ name | snake_case }})))
+        {% else %}
+        Ok(Response::json({{ name | snake_case }}))
+        {% endif %}
+    }
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-show>>>
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-store>>>
+    pub async fn store(&self, mut request: Request) -> Result<Response, HttpError> {
+        {% if auth %}
+        let user = request.require_user()
+            .map_err(|_| HttpError::unauthorized("Authentication required"))?;
+        
+        {% if policy %}
+        user.can("create", {{ name | pascal_case }}::class())
+            .map_err(|_| HttpError::forbidden("Not authorized to create {{ name | pluralize | lower }}"))?;
+        {% endif %}
+        {% endif %}
+        
+        {% if validation %}
+        let data: Create{{ name | pascal_case }}Request = request.validate_json()
+            .map_err(|e| HttpError::unprocessable_entity(format!("Validation error: {}", e)))?;
+        {% else %}
+        let data: {{ name | pascal_case }} = request.json().await
+            .map_err(|e| HttpError::bad_request(format!("Invalid JSON: {}", e)))?;
+        {% endif %}
+        
+        let {{ name | snake_case }} = {{ name | pascal_case }} {
+            {% for field in fields %}
+            {% if not field.pk %}
+            {{ field.name | snake_case }}: {% if validation %}data.{{ field.name | snake_case }}{% else %}data.{{ field.name | snake_case }}{% endif %},
+            {% endif %}
+            {% endfor %}
+            {% if timestamps %}
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            {% endif %}
+            {% if soft_delete %}
+            deleted_at: None,
+            {% endif %}
+        };
+
+        let saved_{{ name | snake_case }} = {{ name | snake_case }}.save().await
+            .map_err(|e| HttpError::internal_server_error(format!("Database error: {}", e)))?;
+        
+        {% if validation %}
+        Ok(Response::json({{ name | pascal_case }}Resource::new(saved_{{ name | snake_case }})).status(201))
+        {% else %}
+        Ok(Response::json(saved_{{ name | snake_case }}).status(201))
+        {% endif %}
+    }
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-store>>>
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-update>>>
+    pub async fn update(&self, mut request: Request) -> Result<Response, HttpError> {
+        let id = request.path_param("id")
+            .map_err(|_| HttpError::bad_request("Invalid ID parameter"))?;
+        
+        {% if auth %}
+        let user = request.require_user()
+            .map_err(|_| HttpError::unauthorized("Authentication required"))?;
+        {% endif %}
+        
+        let mut {{ name | snake_case }} = {{ name | pascal_case }}::find(&id).await
+            .map_err(|e| HttpError::internal_server_error(format!("Database error: {}", e)))?
+            .ok_or_else(|| HttpError::not_found("{{ name | pascal_case }} not found"))?;
+        
+        {% if policy %}
+        user.can("update", &{{ name | snake_case }})
+            .map_err(|_| HttpError::forbidden("Not authorized to update this {{ name | lower }}"))?;
+        {% endif %}
+        
+        {% if validation %}
+        let data: Update{{ name | pascal_case }}Request = request.validate_json()
+            .map_err(|e| HttpError::unprocessable_entity(format!("Validation error: {}", e)))?;
+        {% else %}
+        let data: {{ name | pascal_case }} = request.json().await
+            .map_err(|e| HttpError::bad_request(format!("Invalid JSON: {}", e)))?;
+        {% endif %}
+        
+        // Update fields
+        {% for field in fields %}
+        {% if not field.pk and field.name != "created_at" %}
+        {{ name | snake_case }}.{{ field.name | snake_case }} = {% if validation %}data.{{ field.name | snake_case }}{% else %}data.{{ field.name | snake_case }}{% endif %};
+        {% endif %}
+        {% endfor %}
+        {% if timestamps %}
+        {{ name | snake_case }}.updated_at = chrono::Utc::now();
+        {% endif %}
+
+        let updated_{{ name | snake_case }} = {{ name | snake_case }}.save().await
+            .map_err(|e| HttpError::internal_server_error(format!("Database error: {}", e)))?;
+        
+        {% if validation %}
+        Ok(Response::json({{ name | pascal_case }}Resource::new(updated_{{ name | snake_case }})))
+        {% else %}
+        Ok(Response::json(updated_{{ name | snake_case }}))
+        {% endif %}
+    }
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-update>>>
+
+    // <<<ELIF:BEGIN agent-editable:{{ name | snake_case }}-destroy>>>
+    pub async fn destroy(&self, request: Request) -> Result<Response, HttpError> {
+        let id = request.path_param("id")
+            .map_err(|_| HttpError::bad_request("Invalid ID parameter"))?;
+        
+        {% if auth %}
+        let user = request.require_user()
+            .map_err(|_| HttpError::unauthorized("Authentication required"))?;
+        {% endif %}
+        
+        let {{ name | snake_case }} = {{ name | pascal_case }}::find(&id).await
+            .map_err(|e| HttpError::internal_server_error(format!("Database error: {}", e)))?
+            .ok_or_else(|| HttpError::not_found("{{ name | pascal_case }} not found"))?;
+        
+        {% if policy %}
+        user.can("delete", &{{ name | snake_case }})
+            .map_err(|_| HttpError::forbidden("Not authorized to delete this {{ name | lower }}"))?;
+        {% endif %}
+        
+        {% if soft_delete %}
+        {{ name | snake_case }}.soft_delete().await
+        {% else %}
+        {{ name | snake_case }}.delete().await
+        {% endif %}
+            .map_err(|e| HttpError::internal_server_error(format!("Database error: {}", e)))?;
+        
+        Ok(Response::no_content())
+    }
+    // <<<ELIF:END agent-editable:{{ name | snake_case }}-destroy>>>
+}
