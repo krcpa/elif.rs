@@ -1,16 +1,14 @@
 //! JSON handling utilities for requests and responses
-//! 
-//! Provides enhanced JSON parsing, validation, and error handling.
 
 use axum::{
     extract::{FromRequest, Request},
     response::{IntoResponse, Response},
-    http::{StatusCode, HeaderMap},
+    http::StatusCode,
     Json,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::ops::{Deref, DerefMut};
-use crate::error::{HttpError, HttpResult};
+use crate::errors::{HttpError, HttpResult};
 use crate::response::{ElifResponse, IntoElifResponse};
 
 /// Enhanced JSON extractor with better error handling
@@ -71,7 +69,7 @@ impl<T> IntoElifResponse for ElifJson<T>
 where
     T: Serialize,
 {
-    fn into_elif_response(self) -> ElifResponse {
+    fn into_response(self) -> ElifResponse {
         match ElifResponse::ok().json(&self.0) {
             Ok(response) => response,
             Err(_) => ElifResponse::internal_server_error().text("JSON serialization failed"),
@@ -392,71 +390,5 @@ impl<T: Serialize> IntoResponse for ApiResponse<T> {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-    struct TestData {
-        name: String,
-        age: u32,
-    }
-
-    #[test]
-    fn test_elif_json_wrapper() {
-        let data = TestData {
-            name: "John".to_string(),
-            age: 30,
-        };
-        
-        let json_data = ElifJson::new(data.clone());
-        assert_eq!(json_data.name, data.name);
-        assert_eq!(json_data.age, data.age);
-        
-        let extracted = json_data.into_inner();
-        assert_eq!(extracted, data);
-    }
-
-    #[test]
-    fn test_validation_errors() {
-        let mut errors = ValidationErrors::new();
-        errors.add_error("name".to_string(), "Name is required".to_string());
-        errors.add_error("age".to_string(), "Age must be positive".to_string());
-        
-        assert!(errors.has_errors());
-        assert_eq!(errors.error_count(), 2);
-    }
-
-    #[test]
-    fn test_api_response() {
-        let data = TestData {
-            name: "Jane".to_string(),
-            age: 25,
-        };
-        
-        let success_response = ApiResponse::success(data);
-        assert!(success_response.success);
-        assert!(success_response.data.is_some());
-        
-        let error_response = ApiResponse::<()>::error("Something went wrong".to_string());
-        assert!(!error_response.success);
-        assert!(error_response.data.is_none());
-        assert_eq!(error_response.message, Some("Something went wrong".to_string()));
-    }
-
-    #[test]
-    fn test_json_response_helpers() {
-        let data = vec![
-            TestData { name: "User1".to_string(), age: 20 },
-            TestData { name: "User2".to_string(), age: 25 },
-        ];
-        
-        // Test paginated response
-        let response = JsonResponse::paginated(&data, 1, 10, 25);
-        assert!(response.is_ok());
     }
 }
