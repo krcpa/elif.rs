@@ -3,6 +3,7 @@
 use std::sync::OnceLock;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
 use chrono::{DateTime, Utc, Duration};
 use serde_json::{json, Value};
 
@@ -39,8 +40,8 @@ pub fn fake_email() -> String {
     let names = ["alice", "bob", "charlie", "diana", "eve", "frank", "grace", "henry", "ivy", "jack"];
     let domains = ["example.com", "test.org", "demo.net", "sample.io", "fake.dev"];
     
-    let name = names[random_range(0, names.len() as i32 - 1) as usize];
-    let domain = domains[random_range(0, domains.len() as i32 - 1) as usize];
+    let name = RNG.with(|rng| names.choose(&mut *rng.borrow_mut()).unwrap());
+    let domain = RNG.with(|rng| domains.choose(&mut *rng.borrow_mut()).unwrap());
     let number = random_range(1, 999);
     
     format!("{}{:03}@{}", name, number, domain)
@@ -54,7 +55,7 @@ pub fn fake_first_name() -> String {
         "Uma", "Victor", "Willow", "Xander", "Yara", "Zoe", "Aaron", "Bella", "Connor", "Delia",
     ];
     
-    names[random_range(0, names.len() as i32 - 1) as usize].to_string()
+    RNG.with(|rng| names.choose(&mut *rng.borrow_mut()).unwrap().to_string())
 }
 
 /// Generate a fake last name
@@ -65,7 +66,7 @@ pub fn fake_last_name() -> String {
         "Williams", "Xavier", "Young", "Zhang", "Adams", "Bell", "Clark", "Duncan", "Edwards", "Ford",
     ];
     
-    names[random_range(0, names.len() as i32 - 1) as usize].to_string()
+    RNG.with(|rng| names.choose(&mut *rng.borrow_mut()).unwrap().to_string())
 }
 
 /// Generate a fake full name
@@ -78,8 +79,8 @@ pub fn fake_company() -> String {
     let prefixes = ["Acme", "Global", "United", "Premium", "Elite", "Advanced", "Dynamic", "Smart"];
     let suffixes = ["Corp", "Inc", "LLC", "Solutions", "Systems", "Technologies", "Enterprises", "Group"];
     
-    let prefix = prefixes[random_range(0, prefixes.len() as i32 - 1) as usize];
-    let suffix = suffixes[random_range(0, suffixes.len() as i32 - 1) as usize];
+    let prefix = RNG.with(|rng| prefixes.choose(&mut *rng.borrow_mut()).unwrap());
+    let suffix = RNG.with(|rng| suffixes.choose(&mut *rng.borrow_mut()).unwrap());
     
     format!("{} {}", prefix, suffix)
 }
@@ -101,7 +102,7 @@ pub fn fake_address() -> String {
         "Hill Ave", "Lake Dr", "Forest Ln", "Garden St", "Valley Rd", "Spring Ave", "Sunset Blvd",
     ];
     
-    let street = streets[random_range(0, streets.len() as i32 - 1) as usize];
+    let street = RNG.with(|rng| streets.choose(&mut *rng.borrow_mut()).unwrap());
     
     format!("{} {}", street_numbers, street)
 }
@@ -113,7 +114,7 @@ pub fn fake_city() -> String {
         "Richmond", "Columbia", "Austin", "Denver", "Phoenix", "Portland", "Seattle", "Boston",
     ];
     
-    cities[random_range(0, cities.len() as i32 - 1) as usize].to_string()
+    RNG.with(|rng| cities.choose(&mut *rng.borrow_mut()).unwrap().to_string())
 }
 
 /// Generate a fake state/province
@@ -123,7 +124,7 @@ pub fn fake_state() -> String {
         "North Carolina", "Michigan", "New Jersey", "Virginia", "Washington", "Arizona", "Massachusetts",
     ];
     
-    states[random_range(0, states.len() as i32 - 1) as usize].to_string()
+    RNG.with(|rng| states.choose(&mut *rng.borrow_mut()).unwrap().to_string())
 }
 
 /// Generate a fake postal code
@@ -138,7 +139,7 @@ pub fn fake_country() -> String {
         "Australia", "Japan", "South Korea", "Brazil", "Mexico", "India", "China", "Russia",
     ];
     
-    countries[random_range(0, countries.len() as i32 - 1) as usize].to_string()
+    RNG.with(|rng| countries.choose(&mut *rng.borrow_mut()).unwrap().to_string())
 }
 
 /// Generate a fake sentence
@@ -147,9 +148,9 @@ pub fn fake_sentence() -> String {
     let verbs = ["creates", "updates", "processes", "manages", "handles", "provides"];
     let objects = ["data", "information", "content", "resources", "functionality", "capabilities"];
     
-    let subject = subjects[random_range(0, subjects.len() as i32 - 1) as usize];
-    let verb = verbs[random_range(0, verbs.len() as i32 - 1) as usize];
-    let object = objects[random_range(0, objects.len() as i32 - 1) as usize];
+    let subject = RNG.with(|rng| subjects.choose(&mut *rng.borrow_mut()).unwrap());
+    let verb = RNG.with(|rng| verbs.choose(&mut *rng.borrow_mut()).unwrap());
+    let object = RNG.with(|rng| objects.choose(&mut *rng.borrow_mut()).unwrap());
     
     format!("{} {} {}.", subject, verb, object)
 }
@@ -168,10 +169,10 @@ pub fn fake_url() -> String {
     let domains = ["example.com", "test.org", "demo.net", "sample.io", "fake.dev"];
     let paths = ["/", "/home", "/dashboard", "/profile", "/settings", "/api/v1"];
     
-    let protocol = protocols[random_range(0, protocols.len() as i32 - 1) as usize];
-    let subdomain = subdomains[random_range(0, subdomains.len() as i32 - 1) as usize];
-    let domain = domains[random_range(0, domains.len() as i32 - 1) as usize];
-    let path = paths[random_range(0, paths.len() as i32 - 1) as usize];
+    let protocol = RNG.with(|rng| protocols.choose(&mut *rng.borrow_mut()).unwrap());
+    let subdomain = RNG.with(|rng| subdomains.choose(&mut *rng.borrow_mut()).unwrap());
+    let domain = RNG.with(|rng| domains.choose(&mut *rng.borrow_mut()).unwrap());
+    let path = RNG.with(|rng| paths.choose(&mut *rng.borrow_mut()).unwrap());
     
     format!("{}://{}.{}{}", protocol, subdomain, domain, path)
 }
@@ -181,8 +182,8 @@ pub fn fake_username() -> String {
     let adjectives = ["cool", "super", "awesome", "great", "amazing", "fantastic"];
     let nouns = ["user", "coder", "dev", "ninja", "master", "guru"];
     
-    let adjective = adjectives[random_range(0, adjectives.len() as i32 - 1) as usize];
-    let noun = nouns[random_range(0, nouns.len() as i32 - 1) as usize];
+    let adjective = RNG.with(|rng| adjectives.choose(&mut *rng.borrow_mut()).unwrap());
+    let noun = RNG.with(|rng| nouns.choose(&mut *rng.borrow_mut()).unwrap());
     let number = random_range(1, 999);
     
     format!("{}{}{}", adjective, noun, number)
@@ -238,7 +239,7 @@ pub fn fake_rating() -> i32 {
 /// Generate a fake status from common options
 pub fn fake_status() -> String {
     let statuses = ["active", "inactive", "pending", "suspended", "verified", "draft", "published"];
-    statuses[random_range(0, statuses.len() as i32 - 1) as usize].to_string()
+    RNG.with(|rng| statuses.choose(&mut *rng.borrow_mut()).unwrap().to_string())
 }
 
 /// Generate fake JSON data with common fields
