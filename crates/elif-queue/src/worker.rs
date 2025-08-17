@@ -183,7 +183,6 @@ impl<B: QueueBackend + 'static> Worker<B> {
         info!("Starting worker with graceful shutdown support");
         
         let mut poll_interval = interval(*self.config.get_poll_interval());
-        let mut active_jobs = 0u32;
         let mut shutting_down = false;
         
         loop {
@@ -203,7 +202,6 @@ impl<B: QueueBackend + 'static> Worker<B> {
                             let queue = self.queue.clone();
                             let registry = self.registry.clone();
                             let job_timeout = *self.config.get_default_timeout();
-                            active_jobs += 1;
                             
                             // Process job in background
                             tokio::spawn(async move {
@@ -262,6 +260,7 @@ impl<B: QueueBackend + 'static> Worker<B> {
                     shutting_down = true;
                     
                     // Wait for active jobs to complete
+                    let active_jobs = *self.config.get_max_workers() - self.concurrency_limiter.available_permits();
                     info!("Waiting for {} active jobs to complete", active_jobs);
                     while self.concurrency_limiter.available_permits() < *self.config.get_max_workers() {
                         tokio::time::sleep(Duration::from_millis(100)).await;

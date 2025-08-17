@@ -34,6 +34,174 @@ impl RedisBackend {
         Ok(backend)
     }
     
+    /// Lua script for atomic enqueue operation
+    const ENQUEUE_SCRIPT: &'static str = r#"
+        local job_key = KEYS[1]
+        local priority_key = KEYS[2]
+        local delayed_key = KEYS[3]
+        local state_key = KEYS[4]
+        local job_data = ARGV[1]
+        local score = tonumber(ARGV[2])
+        local is_ready = ARGV[3] == '1'
+        local job_id = ARGV[4]
+        
+        -- Store job data
+        redis.call('SET', job_key, job_data)
+        
+        -- Add to appropriate queue
+        if is_ready then
+            redis.call('ZADD', priority_key, score, job_data)
+        else
+            redis.call('ZADD', delayed_key, score, job_data)
+        end
+        
+        -- Add to state tracking
+        redis.call('SADD', state_key, job_id)
+        
+        return 'OK'
+    "#;
+    
+    /// Lua script for atomic dequeue operation
+    const DEQUEUE_SCRIPT: &'static str = r#"
+        local priority_key = KEYS[1]
+        local job_key_prefix = KEYS[2]
+        local pending_state_key = KEYS[3]
+        local processing_state_key = KEYS[4]
+        
+        -- Get highest priority job
+        local result = redis.call('ZPOPMAX', priority_key, 1)
+        if #result == 0 then
+            return nil
+        end
+        
+        local job_data = result[1]
+        local job_obj = cjson.decode(job_data)
+        local job_id = job_obj.id
+        
+        -- Update job state to processing
+        job_obj.state = 'Processing'
+        job_obj.updated_at = ARGV[1]
+        local updated_data = cjson.encode(job_obj)
+        
+        -- Store updated job
+        local job_key = job_key_prefix .. job_id
+        redis.call('SET', job_key, updated_data)
+        
+        -- Update state tracking
+        redis.call('SREM', pending_state_key, job_id)
+        redis.call('SADD', processing_state_key, job_id)
+        
+        return updated_data
+    "#;
+    
+    /// Lua script for atomic complete operation
+    const COMPLETE_SCRIPT: &'static str = r#"
+        local job_key = KEYS[1]
+        local priority_key = KEYS[2]
+        local delayed_key = KEYS[3]
+        local processing_state_key = KEYS[4]
+        local completed_state_key = KEYS[5]
+        local failed_state_key = KEYS[6]
+        local dead_state_key = KEYS[7]
+        
+        local job_id = ARGV[1]
+        local success = ARGV[2] == '1'
+        local error_message = ARGV[3]
+        local now = ARGV[4]
+        local retry_score = tonumber(ARGV[5] or '0')
+        local is_delayed_retry = ARGV[6] == '1'
+        
+        -- Get current job
+        local job_data = redis.call('GET', job_key)
+        if not job_data then
+            return {err = 'Job not found'}
+        end
+        
+        local job_obj = cjson.decode(job_data)
+        local new_state_key
+        
+        if success then
+            -- Mark as completed
+            job_obj.state = 'Completed'
+            job_obj.completed_at = now
+            new_state_key = completed_state_key
+        else
+            -- Mark as failed and handle retry
+            job_obj.attempts = (job_obj.attempts or 0) + 1
+            job_obj.error_message = error_message
+            job_obj.updated_at = now
+            
+            if job_obj.attempts < job_obj.max_retries then
+                -- Retry the job
+                job_obj.state = 'Failed'
+                new_state_key = failed_state_key
+                local updated_data = cjson.encode(job_obj)
+                
+                -- Add back to appropriate queue
+                if is_delayed_retry then
+                    redis.call('ZADD', delayed_key, retry_score, updated_data)
+                else
+                    redis.call('ZADD', priority_key, retry_score, updated_data)
+                end
+            else
+                -- Job is dead
+                job_obj.state = 'Dead'
+                new_state_key = dead_state_key
+            end
+        end
+        
+        -- Update job in storage
+        local final_data = cjson.encode(job_obj)
+        redis.call('SET', job_key, final_data)
+        
+        -- Update state tracking
+        redis.call('SREM', processing_state_key, job_id)
+        redis.call('SADD', new_state_key, job_id)
+        
+        return 'OK'
+    "#;
+    
+    /// Lua script for processing delayed jobs atomically
+    const PROCESS_DELAYED_SCRIPT: &'static str = r#"
+        local delayed_key = KEYS[1]
+        local priority_key = KEYS[2]
+        local now = tonumber(ARGV[1])
+        
+        -- Get ready jobs from delayed queue
+        local ready_jobs = redis.call('ZRANGEBYSCORE', delayed_key, 0, now)
+        
+        for i, job_data in ipairs(ready_jobs) do
+            -- Remove this specific job from delayed queue (not by score range!)
+            local removed = redis.call('ZREM', delayed_key, job_data)
+            
+            -- Only process if we successfully removed it (prevents race conditions)
+            if removed > 0 then
+                -- Add to priority queue with calculated score
+                local job_obj = cjson.decode(job_data)
+                local priority_score = 0
+                
+                -- Calculate priority score
+                if job_obj.priority == 'Critical' then
+                    priority_score = 1000000
+                elseif job_obj.priority == 'High' then
+                    priority_score = 100000
+                elseif job_obj.priority == 'Normal' then
+                    priority_score = 10000
+                else
+                    priority_score = 1000
+                end
+                
+                -- Subtract timestamp to ensure earlier jobs come first within same priority
+                local timestamp = job_obj.run_at and job_obj.run_at.timestamp_millis or 0
+                local final_score = priority_score - (timestamp / 1000000)
+                
+                redis.call('ZADD', priority_key, final_score, job_data)
+            end
+        end
+        
+        return #ready_jobs
+    "#;
+    
     /// Ensure we have a valid connection
     async fn ensure_connection(&self) -> QueueResult<()> {
         let mut pool = self.connection_pool.write().await;
@@ -120,47 +288,15 @@ impl RedisBackend {
         let priority_key = self.get_priority_queue_key();
         let now = Utc::now().timestamp_millis() as f64;
         
-        // Get all jobs ready to be processed
-        let ready_jobs: Vec<(String, f64)> = conn
-            .zrangebyscore_withscores(&delayed_key, 0.0, now)
+        // Execute atomic process delayed jobs script
+        let processed_count: i32 = conn
+            .eval(
+                Self::PROCESS_DELAYED_SCRIPT,
+                &[delayed_key, priority_key],
+                &[now.to_string()]
+            )
             .await
-            .map_err(|e| QueueError::Backend(format!("Failed to get delayed jobs: {}", e)))?;
-        
-        if ready_jobs.is_empty() {
-            return Ok(());
-        }
-        
-        // Move jobs to priority queue and update their state
-        for (job_data, _score) in ready_jobs {
-            let mut job = self.deserialize_job(&job_data)?;
-            
-            if job.state() == &JobState::Pending || job.state() == &JobState::Failed {
-                let new_score = self.calculate_score(&job);
-                
-                // Add to priority queue
-                let _: () = conn
-                    .zadd(&priority_key, job_data.clone(), new_score)
-                    .await
-                    .map_err(|e| QueueError::Backend(format!("Failed to add job to priority queue: {}", e)))?;
-                
-                // Update job in storage (if needed, job state might already be correct)
-                let job_key = self.get_job_key(job.id());
-                let serialized = self.serialize_job(&job)?;
-                let _: () = conn
-                    .set(&job_key, serialized)
-                    .await
-                    .map_err(|e| QueueError::Backend(format!("Failed to update job: {}", e)))?;
-            }
-        }
-        
-        // Remove processed jobs from delayed queue
-        let job_scores: Vec<f64> = ready_jobs.iter().map(|(_, score)| *score).collect();
-        if !job_scores.is_empty() {
-            let _: () = conn
-                .zremrangebyscore(&delayed_key, 0.0, now)
-                .await
-                .map_err(|e| QueueError::Backend(format!("Failed to remove delayed jobs: {}", e)))?;
-        }
+            .map_err(|e| QueueError::Backend(format!("Failed to process delayed jobs atomically: {}", e)))?;
         
         Ok(())
     }
@@ -172,39 +308,28 @@ impl QueueBackend for RedisBackend {
         let mut conn = self.get_connection().await?;
         let job_id = job.id();
         let job_key = self.get_job_key(job_id);
+        let priority_key = self.get_priority_queue_key();
+        let delayed_key = self.get_delayed_key();
+        let state_key = self.get_state_key(job.state());
         let serialized = self.serialize_job(&job)?;
         
-        // Store job data
-        let _: () = conn
-            .set(&job_key, &serialized)
-            .await
-            .map_err(|e| QueueError::Backend(format!("Failed to store job: {}", e)))?;
-        
-        // Add to appropriate queue
-        if job.is_ready() {
-            // Add to priority queue
-            let priority_key = self.get_priority_queue_key();
-            let score = self.calculate_score(&job);
-            let _: () = conn
-                .zadd(&priority_key, &serialized, score)
-                .await
-                .map_err(|e| QueueError::Backend(format!("Failed to add job to priority queue: {}", e)))?;
+        let score = if job.is_ready() {
+            self.calculate_score(&job)
         } else {
-            // Add to delayed queue
-            let delayed_key = self.get_delayed_key();
-            let score = job.run_at().timestamp_millis() as f64;
-            let _: () = conn
-                .zadd(&delayed_key, &serialized, score)
-                .await
-                .map_err(|e| QueueError::Backend(format!("Failed to add job to delayed queue: {}", e)))?;
-        }
+            job.run_at().timestamp_millis() as f64
+        };
         
-        // Add to state list
-        let state_key = self.get_state_key(job.state());
-        let _: () = conn
-            .sadd(&state_key, job_id.to_string())
+        let is_ready = if job.is_ready() { "1" } else { "0" };
+        
+        // Execute atomic enqueue script
+        let _: String = conn
+            .eval(
+                Self::ENQUEUE_SCRIPT,
+                &[job_key, priority_key, delayed_key, state_key],
+                &[serialized, score.to_string(), is_ready.to_string(), job_id.to_string()]
+            )
             .await
-            .map_err(|e| QueueError::Backend(format!("Failed to add job to state list: {}", e)))?;
+            .map_err(|e| QueueError::Backend(format!("Failed to enqueue job atomically: {}", e)))?;
         
         Ok(job_id)
     }
@@ -215,117 +340,92 @@ impl QueueBackend for RedisBackend {
         
         let mut conn = self.get_connection().await?;
         let priority_key = self.get_priority_queue_key();
+        let job_key_prefix = self.get_key("");
+        let pending_state_key = self.get_state_key(&JobState::Pending);
+        let processing_state_key = self.get_state_key(&JobState::Processing);
+        let now = Utc::now().to_rfc3339();
         
-        // Get highest priority job
-        let result: Vec<String> = conn
-            .zpopmax(&priority_key, 1)
+        // Execute atomic dequeue script
+        let result: Option<String> = conn
+            .eval(
+                Self::DEQUEUE_SCRIPT,
+                &[priority_key, job_key_prefix, pending_state_key, processing_state_key],
+                &[now]
+            )
             .await
-            .map_err(|e| QueueError::Backend(format!("Failed to dequeue job: {}", e)))?;
+            .map_err(|e| QueueError::Backend(format!("Failed to dequeue job atomically: {}", e)))?;
         
-        if result.is_empty() {
-            return Ok(None);
+        match result {
+            Some(job_data) => {
+                let job = self.deserialize_job(&job_data)?;
+                Ok(Some(job))
+            }
+            None => Ok(None)
         }
-        
-        let job_data = &result[0];
-        let mut job = self.deserialize_job(job_data)?;
-        let job_id = job.id();
-        
-        // Update job state
-        let old_state = job.state().clone();
-        job.mark_processing();
-        
-        // Update job in storage
-        let job_key = self.get_job_key(job_id);
-        let serialized = self.serialize_job(&job)?;
-        let _: () = conn
-            .set(&job_key, serialized)
-            .await
-            .map_err(|e| QueueError::Backend(format!("Failed to update job state: {}", e)))?;
-        
-        // Update state lists
-        let old_state_key = self.get_state_key(&old_state);
-        let new_state_key = self.get_state_key(job.state());
-        
-        let _: () = conn
-            .srem(&old_state_key, job_id.to_string())
-            .await
-            .map_err(|e| QueueError::Backend(format!("Failed to remove from old state list: {}", e)))?;
-        
-        let _: () = conn
-            .sadd(&new_state_key, job_id.to_string())
-            .await
-            .map_err(|e| QueueError::Backend(format!("Failed to add to new state list: {}", e)))?;
-        
-        Ok(Some(job))
     }
     
     async fn complete(&self, job_id: JobId, result: JobResult<()>) -> QueueResult<()> {
         let mut conn = self.get_connection().await?;
         let job_key = self.get_job_key(job_id);
+        let priority_key = self.get_priority_queue_key();
+        let delayed_key = self.get_delayed_key();
+        let processing_state_key = self.get_state_key(&JobState::Processing);
+        let completed_state_key = self.get_state_key(&JobState::Completed);
+        let failed_state_key = self.get_state_key(&JobState::Failed);
+        let dead_state_key = self.get_state_key(&JobState::Dead);
         
-        // Get current job
-        let job_data: Option<String> = conn
-            .get(&job_key)
-            .await
-            .map_err(|e| QueueError::Backend(format!("Failed to get job: {}", e)))?;
+        let success = result.is_ok();
+        let error_message = match &result {
+            Ok(_) => String::new(),
+            Err(e) => e.to_string(),
+        };
+        let now = Utc::now().to_rfc3339();
         
-        let job_data = job_data.ok_or_else(|| QueueError::JobNotFound(job_id.to_string()))?;
-        let mut job = self.deserialize_job(&job_data)?;
-        let old_state = job.state().clone();
-        
-        match result {
-            Ok(_) => {
-                job.mark_completed();
-            }
-            Err(error) => {
-                let error_message = error.to_string();
-                job.mark_failed(error_message);
+        // For failed jobs, we need to calculate retry parameters
+        let (retry_score, is_delayed_retry) = if result.is_err() {
+            // We need to get the job first to calculate retry parameters
+            let job_data: Option<String> = conn
+                .get(&job_key)
+                .await
+                .map_err(|e| QueueError::Backend(format!("Failed to get job for retry calculation: {}", e)))?;
+            
+            if let Some(data) = job_data {
+                let mut job = self.deserialize_job(&data)?;
+                job.mark_failed(error_message.clone()); // This increments attempts and sets retry time
                 
-                // If job should be retried, add it back to appropriate queue
-                if job.state() == &JobState::Failed {
-                    if job.run_at() <= Utc::now() {
-                        // Add to priority queue
-                        let priority_key = self.get_priority_queue_key();
-                        let score = self.calculate_score(&job);
-                        let serialized = self.serialize_job(&job)?;
-                        let _: () = conn
-                            .zadd(&priority_key, &serialized, score)
-                            .await
-                            .map_err(|e| QueueError::Backend(format!("Failed to re-queue job: {}", e)))?;
+                if job.attempts() < job.max_retries() {
+                    let score = if job.run_at() <= Utc::now() {
+                        (self.calculate_score(&job), false)
                     } else {
-                        // Add to delayed queue
-                        let delayed_key = self.get_delayed_key();
-                        let score = job.run_at().timestamp_millis() as f64;
-                        let serialized = self.serialize_job(&job)?;
-                        let _: () = conn
-                            .zadd(&delayed_key, &serialized, score)
-                            .await
-                            .map_err(|e| QueueError::Backend(format!("Failed to delay retry job: {}", e)))?;
-                    }
+                        (job.run_at().timestamp_millis() as f64, true)
+                    };
+                    score
+                } else {
+                    (0.0, false) // Job will be marked as dead
                 }
+            } else {
+                (0.0, false)
             }
-        }
+        } else {
+            (0.0, false)
+        };
         
-        // Update job in storage
-        let serialized = self.serialize_job(&job)?;
-        let _: () = conn
-            .set(&job_key, serialized)
+        // Execute atomic complete script
+        let _: String = conn
+            .eval(
+                Self::COMPLETE_SCRIPT,
+                &[job_key, priority_key, delayed_key, processing_state_key, completed_state_key, failed_state_key, dead_state_key],
+                &[
+                    job_id.to_string(),
+                    if success { "1" } else { "0" }.to_string(),
+                    error_message,
+                    now,
+                    retry_score.to_string(),
+                    if is_delayed_retry { "1" } else { "0" }.to_string()
+                ]
+            )
             .await
-            .map_err(|e| QueueError::Backend(format!("Failed to update completed job: {}", e)))?;
-        
-        // Update state lists
-        let old_state_key = self.get_state_key(&old_state);
-        let new_state_key = self.get_state_key(job.state());
-        
-        let _: () = conn
-            .srem(&old_state_key, job_id.to_string())
-            .await
-            .map_err(|e| QueueError::Backend(format!("Failed to remove from old state list: {}", e)))?;
-        
-        let _: () = conn
-            .sadd(&new_state_key, job_id.to_string())
-            .await
-            .map_err(|e| QueueError::Backend(format!("Failed to add to new state list: {}", e)))?;
+            .map_err(|e| QueueError::Backend(format!("Failed to complete job atomically: {}", e)))?;
         
         Ok(())
     }
@@ -422,18 +522,36 @@ impl QueueBackend for RedisBackend {
     async fn clear(&self) -> QueueResult<()> {
         let mut conn = self.get_connection().await?;
         
-        // Get all keys with our prefix
+        // Use SCAN to iterate through keys with our prefix to avoid blocking Redis
         let pattern = format!("{}:*", self.config.key_prefix);
-        let keys: Vec<String> = conn
-            .keys(&pattern)
-            .await
-            .map_err(|e| QueueError::Backend(format!("Failed to get keys: {}", e)))?;
+        let mut cursor: u64 = 0;
+        let mut all_keys: Vec<String> = Vec::new();
         
-        if !keys.is_empty() {
-            let _: () = conn
-                .del(keys)
+        // Scan through all keys in batches
+        loop {
+            let (new_cursor, keys): (u64, Vec<String>) = conn
+                .scan_match(cursor, &pattern, Some(100)) // Process 100 keys at a time
                 .await
-                .map_err(|e| QueueError::Backend(format!("Failed to clear queue: {}", e)))?;
+                .map_err(|e| QueueError::Backend(format!("Failed to scan keys: {}", e)))?;
+            
+            all_keys.extend(keys);
+            cursor = new_cursor;
+            
+            // SCAN returns 0 when iteration is complete
+            if cursor == 0 {
+                break;
+            }
+        }
+        
+        // Delete all found keys in batches to avoid large commands
+        const BATCH_SIZE: usize = 100;
+        for chunk in all_keys.chunks(BATCH_SIZE) {
+            if !chunk.is_empty() {
+                let _: () = conn
+                    .del(chunk)
+                    .await
+                    .map_err(|e| QueueError::Backend(format!("Failed to clear queue batch: {}", e)))?;
+            }
         }
         
         Ok(())
@@ -673,6 +791,111 @@ mod tests {
         assert_eq!(stats.completed_jobs, 1);
         assert_eq!(stats.processing_jobs, 0);
         assert_eq!(stats.pending_jobs, 0);
+        
+        // Clean up
+        backend.clear().await.unwrap();
+    }
+    
+    #[tokio::test]
+    #[ignore] // Requires Redis server
+    async fn test_redis_atomicity_guarantees() {
+        let backend = create_test_backend().await;
+        
+        // Test 1: Enqueue is atomic - job should exist in storage AND queue
+        let job = TestJob { id: 100, message: "atomicity test".to_string() };
+        let entry = JobEntry::new(job, Some(Priority::High), None).unwrap();
+        let job_id = backend.enqueue(entry).await.unwrap();
+        
+        // Verify job was stored and queued atomically
+        let stored_job = backend.get_job(job_id).await.unwrap().unwrap();
+        assert_eq!(stored_job.priority(), Priority::High);
+        assert_eq!(stored_job.state(), &JobState::Pending);
+        
+        // Test 2: Dequeue is atomic - job should be removed from queue AND updated in storage
+        let dequeued = backend.dequeue().await.unwrap().unwrap();
+        assert_eq!(dequeued.id(), job_id);
+        assert_eq!(dequeued.state(), &JobState::Processing);
+        
+        // Verify the stored job was also updated
+        let stored_job = backend.get_job(job_id).await.unwrap().unwrap();
+        assert_eq!(stored_job.state(), &JobState::Processing);
+        
+        // Test 3: Complete is atomic - job state and queue state are updated together
+        backend.complete(job_id, Ok(())).await.unwrap();
+        
+        let completed_job = backend.get_job(job_id).await.unwrap().unwrap();
+        assert_eq!(completed_job.state(), &JobState::Completed);
+        
+        // Test 4: Failed job retry is atomic
+        let job2 = TestJob { id: 101, message: "retry test".to_string() };
+        let entry2 = JobEntry::new(job2, Some(Priority::Normal), None).unwrap();
+        let job_id2 = backend.enqueue(entry2).await.unwrap();
+        
+        // Dequeue and fail the job
+        let _dequeued = backend.dequeue().await.unwrap().unwrap();
+        let error = Box::new(std::io::Error::new(std::io::ErrorKind::Other, "test failure"));
+        backend.complete(job_id2, Err(error)).await.unwrap();
+        
+        // Job should be marked as failed and available for retry
+        let failed_job = backend.get_job(job_id2).await.unwrap().unwrap();
+        assert_eq!(failed_job.state(), &JobState::Failed);
+        assert_eq!(failed_job.attempts(), 1);
+        
+        // Should be available for retry
+        let retry_job = backend.dequeue().await.unwrap().unwrap();
+        assert_eq!(retry_job.id(), job_id2);
+        assert_eq!(retry_job.attempts(), 1);
+        
+        // Clean up
+        backend.clear().await.unwrap();
+    }
+    
+    #[tokio::test]
+    #[ignore] // Requires Redis server
+    async fn test_redis_concurrent_delayed_job_processing() {
+        let backend = create_test_backend().await;
+        
+        // Create multiple delayed jobs that become ready at the same time
+        let now = Utc::now();
+        for i in 1..=5 {
+            let job = TestJob { id: i, message: format!("concurrent delayed job {}", i) };
+            // Create job with delay in the past so it's immediately ready
+            let entry = JobEntry::new(job, Some(Priority::Normal), Some(Duration::from_millis(1))).unwrap();
+            backend.enqueue(entry).await.unwrap();
+        }
+        
+        // Wait briefly to ensure jobs are ready
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        
+        // Simulate concurrent workers calling process_delayed_jobs
+        let backend = Arc::new(backend);
+        let b1 = backend.clone();
+        let b2 = backend.clone();
+        let b3 = backend.clone();
+        
+        // Run three workers concurrently
+        let (result1, result2, result3) = tokio::join!(
+            b1.process_delayed_jobs(),
+            b2.process_delayed_jobs(), 
+            b3.process_delayed_jobs()
+        );
+        
+        // All should succeed
+        result1.unwrap();
+        result2.unwrap(); 
+        result3.unwrap();
+        
+        // Verify all jobs were processed exactly once (no duplicates or losses)
+        let mut processed_jobs = Vec::new();
+        while let Some(job) = backend.dequeue().await.unwrap() {
+            processed_jobs.push(job.payload.get("id").unwrap().as_u64().unwrap() as u32);
+        }
+        
+        // Should have exactly 5 jobs, no duplicates, no losses
+        processed_jobs.sort();
+        assert_eq!(processed_jobs.len(), 5);
+        let expected: Vec<u32> = (1..=5).collect();
+        assert_eq!(processed_jobs, expected);
         
         // Clean up
         backend.clear().await.unwrap();
