@@ -70,10 +70,12 @@ use chrono::{DateTime, Utc};
 pub mod backends;
 pub mod config;
 pub mod worker;
+pub mod scheduler;
 
 pub use backends::*;
 pub use config::*;
 pub use worker::*;
+pub use scheduler::*;
 
 /// Job execution errors
 #[derive(Error, Debug)]
@@ -281,6 +283,15 @@ impl JobEntry {
             let delay = Duration::from_secs(1 << self.attempts.min(6));
             self.run_at = Utc::now() + chrono::Duration::from_std(delay).unwrap();
         }
+    }
+    
+    /// Reset job for retry (used for dead letter queue reprocessing)
+    pub(crate) fn reset_for_retry(&mut self) {
+        self.attempts = 0;
+        self.state = JobState::Pending;
+        self.run_at = Utc::now();
+        self.last_error = None;
+        self.processed_at = None;
     }
 }
 
