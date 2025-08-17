@@ -132,18 +132,12 @@ impl TemplateEngine {
 
     /// Validate template syntax
     pub fn validate_template(&self, template_str: &str, template_name: Option<&str>) -> Result<(), EmailError> {
-        let mut tera = self.tera.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
+        // Create a temporary Tera instance to test template parsing without affecting the main engine
+        let mut temp_tera = Tera::default();
+        let temp_name = "__validation_template__";
         
-        // For validation, we just try to compile the template - we don't need to render it
-        // Since render_str requires variables to exist, let's just try to create an empty template
-        let template_name_internal = template_name.unwrap_or("__validation_template");
-        
-        match tera.add_raw_template(template_name_internal, template_str) {
-            Ok(_) => {
-                // Remove the template after validation to avoid polluting the engine
-                let _ = tera.templates.remove(template_name_internal);
-                Ok(())
-            },
+        match temp_tera.add_raw_template(temp_name, template_str) {
+            Ok(_) => Ok(()),
             Err(e) => {
                 let context_info = if let Some(name) = template_name {
                     format!("template '{}': {}", name, e)
@@ -670,17 +664,23 @@ mod tests {
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
-        // Valid template should validate
-        let result = engine.validate_template("Hello {{ name }}", Some("valid"));
-        if let Err(e) = &result {
-            println!("Template validation error: {}", e);
-        }
-        assert!(result.is_ok());
+        // Valid template with no variables should validate
+        assert!(engine.validate_template("Hello world!", Some("valid")).is_ok());
 
-        // Invalid template syntax
+        // Valid template with variables should validate (syntax check only)
+        assert!(engine.validate_template("Hello {{ name }}!", Some("valid_with_vars")).is_ok());
+
+        // Valid template with conditionals should validate
+        assert!(engine.validate_template("{% if user %}Hello {{ user.name }}{% endif %}", Some("valid_conditional")).is_ok());
+
+        // Invalid template syntax should fail
         let result = engine.validate_template("Hello {{ invalid_syntax", Some("invalid"));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Invalid template 'invalid'"));
+
+        // Invalid template with bad syntax should fail  
+        let result = engine.validate_template("{% if unclosed", Some("invalid2"));
+        assert!(result.is_err());
     }
 
     #[test]
