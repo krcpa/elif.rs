@@ -129,9 +129,8 @@ impl ServiceRegistry {
         
         match services.get(&type_id)? {
             ServiceEntry::Instance(instance) => {
-                let any_ref = instance.as_ref();
-                let service_ref = any_ref.downcast_ref::<T>()?;
-                Some(Arc::new(service_ref.clone()))
+                // Clone the Arc itself, not the service - this maintains singleton behavior
+                instance.clone().downcast::<T>().ok()
             }
             ServiceEntry::Factory(factory) => {
                 let instance = factory();
@@ -191,5 +190,135 @@ impl ServiceRegistry {
 impl Default for ServiceRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::foundation::traits::Service;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    
+    #[derive(Debug, Clone)]
+    struct TestService {
+        id: usize,
+        counter: Arc<AtomicUsize>,
+    }
+    
+    impl TestService {
+        fn new() -> Self {
+            static COUNTER: AtomicUsize = AtomicUsize::new(0);
+            Self {
+                id: COUNTER.fetch_add(1, Ordering::SeqCst),
+                counter: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+        
+        fn increment(&self) -> usize {
+            self.counter.fetch_add(1, Ordering::SeqCst) + 1
+        }
+        
+        fn get_count(&self) -> usize {
+            self.counter.load(Ordering::SeqCst)
+        }
+    }
+    
+    impl crate::foundation::traits::FrameworkComponent for TestService {}
+    
+    impl Service for TestService {}
+    
+    #[test]
+    fn test_singleton_behavior() {
+        let mut registry = ServiceRegistry::new();
+        let service = TestService::new();
+        let original_id = service.id;
+        
+        // Register as singleton
+        registry.register_singleton(service).unwrap();
+        
+        // Resolve multiple times
+        let instance1 = registry.resolve::<TestService>().unwrap();
+        let instance2 = registry.resolve::<TestService>().unwrap();
+        let instance3 = registry.resolve::<TestService>().unwrap();
+        
+        // All instances should have the same ID (same original service)
+        assert_eq!(instance1.id, original_id);
+        assert_eq!(instance2.id, original_id);
+        assert_eq!(instance3.id, original_id);
+        
+        // Increment counter on one instance
+        let count1 = instance1.increment();
+        assert_eq!(count1, 1);
+        
+        // Other instances should see the same count (shared state)
+        assert_eq!(instance2.get_count(), 1);
+        assert_eq!(instance3.get_count(), 1);
+        
+        // Increment on another instance
+        let count2 = instance2.increment();
+        assert_eq!(count2, 2);
+        
+        // All should see the updated count
+        assert_eq!(instance1.get_count(), 2);
+        assert_eq!(instance3.get_count(), 2);
+    }
+    
+    #[test]
+    fn test_singleton_arc_sharing() {
+        let mut registry = ServiceRegistry::new();
+        let service = TestService::new();
+        
+        registry.register_singleton(service).unwrap();
+        
+        // Resolve multiple times
+        let instance1 = registry.resolve::<TestService>().unwrap();
+        let instance2 = registry.resolve::<TestService>().unwrap();
+        
+        // The Arc pointers should be the same (true singleton)
+        assert!(Arc::ptr_eq(&instance1, &instance2));
+    }
+    
+    #[test]
+    fn test_transient_behavior() {
+        let mut registry = ServiceRegistry::new();
+        
+        // Register transient factory
+        registry.register_transient::<TestService>(Box::new(|| TestService::new())).unwrap();
+        
+        // Resolve multiple times
+        let instance1 = registry.resolve::<TestService>().unwrap();
+        let instance2 = registry.resolve::<TestService>().unwrap();
+        
+        // Each instance should have different IDs (new instances)
+        assert_ne!(instance1.id, instance2.id);
+        
+        // The Arc pointers should be different (different instances)
+        assert!(!Arc::ptr_eq(&instance1, &instance2));
+        
+        // Increment on one should not affect the other
+        instance1.increment();
+        assert_eq!(instance1.get_count(), 1);
+        assert_eq!(instance2.get_count(), 0);
+    }
+    
+    #[test]
+    fn test_service_registry_operations() {
+        let mut registry = ServiceRegistry::new();
+        let service = TestService::new();
+        
+        // Initially empty
+        assert!(!registry.contains::<TestService>());
+        assert_eq!(registry.service_count(), 0);
+        
+        // Register service
+        registry.register_singleton(service).unwrap();
+        
+        // Should now contain the service
+        assert!(registry.contains::<TestService>());
+        assert_eq!(registry.service_count(), 1);
+        
+        // Should be able to resolve
+        let resolved = registry.resolve::<TestService>().unwrap();
+        assert_eq!(resolved.service_id(), "elif_core::container::registry::tests::TestService");
     }
 }
