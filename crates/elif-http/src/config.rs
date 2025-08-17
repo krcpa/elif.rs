@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use elif_core::app_config::{AppConfigTrait, ConfigError, ConfigSource};
+use elif_core::{AppConfigTrait, ConfigError, ConfigSource};
 use std::collections::HashMap;
 use std::env;
 
@@ -96,40 +96,25 @@ impl AppConfigTrait for HttpConfig {
     fn validate(&self) -> Result<(), ConfigError> {
         // Validate timeout values
         if self.request_timeout_secs == 0 {
-            return Err(ConfigError::ValidationFailed {
-                field: "request_timeout_secs".to_string(),
-                reason: "Request timeout must be greater than 0".to_string(),
-            });
+            return Err(ConfigError::validation_failed("Request timeout must be greater than 0"));
         }
 
         if self.keep_alive_timeout_secs == 0 {
-            return Err(ConfigError::ValidationFailed {
-                field: "keep_alive_timeout_secs".to_string(),
-                reason: "Keep-alive timeout must be greater than 0".to_string(),
-            });
+            return Err(ConfigError::validation_failed("Keep-alive timeout must be greater than 0"));
         }
 
         if self.shutdown_timeout_secs == 0 {
-            return Err(ConfigError::ValidationFailed {
-                field: "shutdown_timeout_secs".to_string(),
-                reason: "Shutdown timeout must be greater than 0".to_string(),
-            });
+            return Err(ConfigError::validation_failed("Shutdown timeout must be greater than 0"));
         }
 
         // Validate request size limits
         if self.max_request_size == 0 {
-            return Err(ConfigError::ValidationFailed {
-                field: "max_request_size".to_string(),
-                reason: "Maximum request size must be greater than 0".to_string(),
-            });
+            return Err(ConfigError::validation_failed("Maximum request size must be greater than 0"));
         }
 
         // Validate health check path
         if self.health_check_path.is_empty() || !self.health_check_path.starts_with('/') {
-            return Err(ConfigError::ValidationFailed {
-                field: "health_check_path".to_string(),
-                reason: "Health check path must be non-empty and start with '/'".to_string(),
-            });
+            return Err(ConfigError::validation_failed("Health check path must be non-empty and start with '/'"));
         }
 
         Ok(())

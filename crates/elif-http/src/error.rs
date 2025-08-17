@@ -270,8 +270,8 @@ impl IntoResponse for HttpError {
 }
 
 // Convert from elif-core ConfigError
-impl From<elif_core::app_config::ConfigError> for HttpError {
-    fn from(err: elif_core::app_config::ConfigError) -> Self {
+impl From<elif_core::ConfigError> for HttpError {
+    fn from(err: elif_core::ConfigError) -> Self {
         HttpError::ConfigError { 
             message: err.to_string() 
         }

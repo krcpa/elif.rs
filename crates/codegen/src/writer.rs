@@ -48,7 +48,7 @@ impl CodeWriter {
     fn merge_with_markers(&self, existing: &str, new_content: &str) -> Result<String, ElifError> {
         let marker_regex = regex::Regex::new(
             r"// <<<ELIF:BEGIN agent-editable:([^>]+)>>>(.*?)// <<<ELIF:END agent-editable:[^>]+>>>"
-        ).map_err(|e| ElifError::Template(format!("Regex error: {}", e)))?;
+        ).map_err(|e| ElifError::Template { message: format!("Regex error: {}", e) })?;
         
         let mut markers = std::collections::HashMap::new();
         

@@ -54,7 +54,7 @@ impl<'a> ResourceGenerator<'a> {
     pub fn generate_migration(&self) -> Result<(), ElifError> {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| ElifError::Codegen(format!("Time error: {}", e)))?
+            .map_err(|e| ElifError::Codegen { message: format!("Time error: {}", e) })?
             .as_secs();
         
         let migration_path = self.project_root

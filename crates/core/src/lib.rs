@@ -15,9 +15,13 @@ pub use config::*;
 pub use providers::*;
 pub use specs::*;
 
+// Specific re-exports to maintain compatibility
+pub use config::validation::ConfigError;
+pub use config::sources::ConfigSource;
+pub use config::app_config::{AppConfig, AppConfigTrait, Environment};
+
 // Legacy re-exports for backward compatibility
 pub use errors::CoreError as ElifError;
-pub use config::AppConfig;
 pub use container::Container;
 pub use modules::{Module, ModuleRegistry, ModuleLoader};
 
