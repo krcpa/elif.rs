@@ -1,6 +1,7 @@
 use elif_core::ElifError;
 use elif_orm::{SeederManager, Environment, factory_registry_mut};
 use sqlx::postgres::PgPoolOptions;
+use url::Url;
 
 pub async fn seed(env: Option<String>, force: bool, verbose: bool) -> Result<(), ElifError> {
     let database_url = std::env::var("DATABASE_URL")
@@ -146,15 +147,17 @@ pub async fn factory_test(count: usize) -> Result<(), ElifError> {
     Ok(())
 }
 
-fn mask_database_url(url: &str) -> String {
-    if let Some(at_pos) = url.rfind('@') {
-        if let Some(colon_pos) = url[..at_pos].rfind(':') {
-            let mut masked = url.to_string();
-            masked.replace_range(colon_pos + 1..at_pos, "****");
-            return masked;
+fn mask_database_url(url_str: &str) -> String {
+    if let Ok(mut url) = Url::parse(url_str) {
+        if url.password().is_some() {
+            // The unwrap is safe because we've just checked that there is a password.
+            url.set_password(Some("****")).unwrap();
         }
+        url.to_string()
+    } else {
+        // Fallback for invalid URLs, though this should ideally not happen with valid DATABASE_URL.
+        url_str.to_string()
     }
-    url.to_string()
 }
 
 #[cfg(test)]
@@ -168,7 +171,15 @@ mod tests {
         assert_eq!(masked, "postgresql://user:****@localhost:5432/database");
         
         let url_no_password = "postgresql://localhost:5432/database";
-        let masked = mask_database_url(url_no_password);
-        assert_eq!(masked, "postgresql://localhost:5432/database");
+        let masked_no_pw = mask_database_url(url_no_password);
+        assert_eq!(masked_no_pw, "postgresql://localhost:5432/database");
+
+        let url_user_only = "postgresql://user@localhost:5432/database";
+        let masked_user_only = mask_database_url(url_user_only);
+        assert_eq!(masked_user_only, "postgresql://user@localhost:5432/database");
+
+        let url_invalid = "not a valid url";
+        let masked_invalid = mask_database_url(url_invalid);
+        assert_eq!(masked_invalid, "not a valid url");
     }
 }
