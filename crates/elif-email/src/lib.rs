@@ -18,15 +18,22 @@ pub mod tracking;
 pub mod mailable;
 pub mod validation;
 pub mod compression;
+pub mod queue;
+
+#[cfg(feature = "integration-examples")]
+pub mod integration_example;
 
 pub use config::*;
 pub use error::*;
 pub use mailable::*;
 pub use providers::*;
+#[cfg(test)]
+pub use providers::{MockEmailProvider, PanickingEmailProvider};
 pub use templates::*;
 pub use tracking::*;
 pub use validation::*;
 pub use compression::*;
+pub use queue::*;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

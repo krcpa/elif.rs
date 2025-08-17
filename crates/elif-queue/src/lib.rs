@@ -252,6 +252,11 @@ impl JobEntry {
         self.run_at
     }
     
+    /// Get job payload
+    pub fn payload(&self) -> &serde_json::Value {
+        &self.payload
+    }
+    
     /// Check if job is ready to be processed
     pub fn is_ready(&self) -> bool {
         matches!(self.state, JobState::Pending | JobState::Failed) && self.run_at <= Utc::now()

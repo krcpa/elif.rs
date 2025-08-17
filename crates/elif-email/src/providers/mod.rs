@@ -6,8 +6,77 @@ pub use smtp::*;
 pub use sendgrid::*;
 pub use mailgun::*;
 
+
 use crate::{Email, EmailError, EmailResult, EmailProvider};
 use std::sync::Arc;
+
+// Test providers for internal testing
+#[cfg(test)]
+#[derive(Debug)]
+pub struct MockEmailProvider {
+    name: String,
+}
+
+#[cfg(test)]
+impl MockEmailProvider {
+    pub fn new() -> Self {
+        Self {
+            name: "mock".to_string(),
+        }
+    }
+}
+
+#[cfg(test)]
+#[async_trait::async_trait]
+impl EmailProvider for MockEmailProvider {
+    fn provider_name(&self) -> &'static str {
+        "mock"
+    }
+
+    async fn send(&self, email: &Email) -> Result<EmailResult, EmailError> {
+        Ok(EmailResult {
+            email_id: email.id,
+            message_id: "mock-123".to_string(),
+            sent_at: chrono::Utc::now(),
+            provider: "mock".to_string(),
+        })
+    }
+
+    async fn validate_config(&self) -> Result<(), EmailError> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug)]
+pub struct PanickingEmailProvider {
+    name: String,
+}
+
+#[cfg(test)]
+impl PanickingEmailProvider {
+    pub fn new() -> Self {
+        Self {
+            name: "panicking".to_string(),
+        }
+    }
+}
+
+#[cfg(test)]
+#[async_trait::async_trait]
+impl EmailProvider for PanickingEmailProvider {
+    fn provider_name(&self) -> &'static str {
+        "panicking"
+    }
+
+    async fn send(&self, _email: &Email) -> Result<EmailResult, EmailError> {
+        panic!("This provider always panics!");
+    }
+
+    async fn validate_config(&self) -> Result<(), EmailError> {
+        Ok(())
+    }
+}
 
 /// Email provider manager that handles multiple providers
 #[derive(Clone)]
