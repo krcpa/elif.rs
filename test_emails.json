@@ -1,0 +1,34 @@
+[
+  {
+    "id": "email_1755437267336850",
+    "timestamp": "2025-08-17T13:27:47.337069Z",
+    "to": "admin@example.com",
+    "from": "test@elif.rs",
+    "subject": "HTML Test",
+    "body_text": null,
+    "body_html": null,
+    "headers": {
+      "To": "admin@example.com",
+      "Subject": "HTML Test",
+      "From": "test@elif.rs"
+    },
+    "template": null,
+    "context": null
+  },
+  {
+    "id": "email_1755437250994015",
+    "timestamp": "2025-08-17T13:27:30.994235Z",
+    "to": "user@example.com",
+    "from": "test@elif.rs",
+    "subject": "Test Email",
+    "body_text": null,
+    "body_html": null,
+    "headers": {
+      "From": "test@elif.rs",
+      "To": "user@example.com",
+      "Subject": "Test Email"
+    },
+    "template": null,
+    "context": null
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "id": "email_1755437267336850",
+  "timestamp": "2025-08-17T13:27:47.337069Z",
+  "to": "admin@example.com",
+  "from": "test@elif.rs",
+  "subject": "HTML Test",
+  "body_text": null,
+  "body_html": "<h1>HTML Email</h1><p>This is a <strong>test</strong> HTML email.</p>",
+  "headers": {
+    "To": "admin@example.com",
+    "From": "test@elif.rs",
+    "Subject": "HTML Test"
+  },
+  "template": null,
+  "context": null
+}

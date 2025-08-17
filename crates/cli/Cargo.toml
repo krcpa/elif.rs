@@ -24,6 +24,7 @@ elif-orm = { version = "0.6.0", path = "../orm" }
 elif-openapi = { version = "0.1.0", path = "../elif-openapi" }
 sqlx = { workspace = true }
 clap = { workspace = true }
+serde = { workspace = true }
 serde_yaml = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }

@@ -472,6 +472,12 @@ enum EmailCommands {
         #[arg(long)]
         non_interactive: bool,
     },
+    
+    /// Email testing and inspection commands
+    Test {
+        #[command(subcommand)]
+        test_command: EmailTestCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -576,6 +582,83 @@ enum EmailTrackCommands {
         /// Group by (day, hour, provider, template)
         #[arg(long, default_value = "day")]
         group_by: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum EmailTestCommands {
+    /// Capture emails to filesystem for testing
+    Capture {
+        /// Enable filesystem email capture
+        #[arg(long)]
+        enable: bool,
+        
+        /// Disable filesystem email capture
+        #[arg(long)]
+        disable: bool,
+        
+        /// Custom capture directory
+        #[arg(long)]
+        dir: Option<String>,
+    },
+    
+    /// List captured emails
+    List {
+        /// Show detailed email information
+        #[arg(long, short)]
+        detailed: bool,
+        
+        /// Filter by recipient email
+        #[arg(long)]
+        to: Option<String>,
+        
+        /// Filter by subject
+        #[arg(long)]
+        subject: Option<String>,
+        
+        /// Number of emails to show (latest first)
+        #[arg(long, short, default_value = "10")]
+        limit: usize,
+    },
+    
+    /// Show specific captured email
+    Show {
+        /// Email ID or index
+        email_id: String,
+        
+        /// Show raw email content
+        #[arg(long)]
+        raw: bool,
+        
+        /// Show only specific part (headers, text, html, attachments)
+        #[arg(long)]
+        part: Option<String>,
+    },
+    
+    /// Clear captured emails
+    Clear {
+        /// Clear all captured emails
+        #[arg(long)]
+        all: bool,
+        
+        /// Clear emails older than N days
+        #[arg(long)]
+        older_than: Option<u32>,
+    },
+    
+    /// Export captured emails
+    Export {
+        /// Export format (json, csv, mbox)
+        #[arg(long, default_value = "json")]
+        format: String,
+        
+        /// Output file path
+        #[arg(long)]
+        output: Option<String>,
+        
+        /// Include email bodies in export
+        #[arg(long)]
+        include_body: bool,
     },
 }
 
@@ -983,6 +1066,50 @@ async fn main() -> Result<(), ElifError> {
                         non_interactive,
                     };
                     email::setup(args).await?;
+                }
+                EmailCommands::Test { test_command } => {
+                    match test_command {
+                        EmailTestCommands::Capture { enable, disable, dir } => {
+                            let args = email::EmailCaptureArgs {
+                                enable,
+                                disable,
+                                dir,
+                            };
+                            email::test_capture(args).await?;
+                        }
+                        EmailTestCommands::List { detailed, to, subject, limit } => {
+                            let args = email::EmailTestListArgs {
+                                detailed,
+                                to,
+                                subject,
+                                limit,
+                            };
+                            email::test_list(args).await?;
+                        }
+                        EmailTestCommands::Show { email_id, raw, part } => {
+                            let args = email::EmailTestShowArgs {
+                                email_id,
+                                raw,
+                                part,
+                            };
+                            email::test_show(args).await?;
+                        }
+                        EmailTestCommands::Clear { all, older_than } => {
+                            let args = email::EmailTestClearArgs {
+                                all,
+                                older_than,
+                            };
+                            email::test_clear(args).await?;
+                        }
+                        EmailTestCommands::Export { format, output, include_body } => {
+                            let args = email::EmailTestExportArgs {
+                                format,
+                                output,
+                                include_body,
+                            };
+                            email::test_export(args).await?;
+                        }
+                    }
                 }
             }
         }
