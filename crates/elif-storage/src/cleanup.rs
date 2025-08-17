@@ -294,9 +294,13 @@ impl TempFile {
 impl Drop for TempFile {
     fn drop(&mut self) {
         if !self.keep_on_drop && self.path.exists() {
-            if let Err(e) = std::fs::remove_file(&self.path) {
-                warn!("Failed to cleanup temporary file {}: {}", self.path.display(), e);
-            }
+            let path_to_delete = self.path.clone();
+            // Use spawn_blocking to avoid blocking the async runtime
+            tokio::task::spawn_blocking(move || {
+                if let Err(e) = std::fs::remove_file(&path_to_delete) {
+                    warn!("Failed to cleanup temporary file {}: {}", path_to_delete.display(), e);
+                }
+            });
         }
     }
 }
@@ -357,6 +361,9 @@ mod tests {
         // Drop the temp file - it should be cleaned up
         drop(temp_file);
         
+        // Since cleanup is async, wait a bit for it to complete
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        
         // File should be deleted
         assert!(!path.exists());
     }
@@ -388,6 +395,10 @@ mod tests {
         assert_eq!(path.extension().unwrap(), "txt");
         
         drop(temp_file);
+        
+        // Since cleanup is async, wait a bit for it to complete
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        
         assert!(!path.exists());
     }
 }
