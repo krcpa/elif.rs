@@ -171,29 +171,32 @@ impl RedisBackend {
         local ready_jobs = redis.call('ZRANGEBYSCORE', delayed_key, 0, now)
         
         for i, job_data in ipairs(ready_jobs) do
-            -- Remove from delayed queue
-            redis.call('ZREM', delayed_key, job_data)
+            -- Remove this specific job from delayed queue (not by score range!)
+            local removed = redis.call('ZREM', delayed_key, job_data)
             
-            -- Add to priority queue with calculated score
-            local job_obj = cjson.decode(job_data)
-            local priority_score = 0
-            
-            -- Calculate priority score
-            if job_obj.priority == 'Critical' then
-                priority_score = 1000000
-            elseif job_obj.priority == 'High' then
-                priority_score = 100000
-            elseif job_obj.priority == 'Normal' then
-                priority_score = 10000
-            else
-                priority_score = 1000
+            -- Only process if we successfully removed it (prevents race conditions)
+            if removed > 0 then
+                -- Add to priority queue with calculated score
+                local job_obj = cjson.decode(job_data)
+                local priority_score = 0
+                
+                -- Calculate priority score
+                if job_obj.priority == 'Critical' then
+                    priority_score = 1000000
+                elseif job_obj.priority == 'High' then
+                    priority_score = 100000
+                elseif job_obj.priority == 'Normal' then
+                    priority_score = 10000
+                else
+                    priority_score = 1000
+                end
+                
+                -- Subtract timestamp to ensure earlier jobs come first within same priority
+                local timestamp = job_obj.run_at and job_obj.run_at.timestamp_millis or 0
+                local final_score = priority_score - (timestamp / 1000000)
+                
+                redis.call('ZADD', priority_key, final_score, job_data)
             end
-            
-            -- Subtract timestamp to ensure earlier jobs come first within same priority
-            local timestamp = job_obj.run_at and job_obj.run_at.timestamp_millis or 0
-            local final_score = priority_score - (timestamp / 1000000)
-            
-            redis.call('ZADD', priority_key, final_score, job_data)
         end
         
         return #ready_jobs
@@ -696,6 +699,57 @@ mod tests {
         let retry_job = backend.dequeue().await.unwrap().unwrap();
         assert_eq!(retry_job.id(), job_id2);
         assert_eq!(retry_job.attempts(), 1);
+        
+        // Clean up
+        backend.clear().await.unwrap();
+    }
+    
+    #[tokio::test]
+    #[ignore] // Requires Redis server
+    async fn test_redis_concurrent_delayed_job_processing() {
+        let backend = create_test_backend().await;
+        
+        // Create multiple delayed jobs that become ready at the same time
+        let now = Utc::now();
+        for i in 1..=5 {
+            let job = TestJob { id: i, message: format!("concurrent delayed job {}", i) };
+            // Create job with delay in the past so it's immediately ready
+            let entry = JobEntry::new(job, Some(Priority::Normal), Some(Duration::from_millis(1))).unwrap();
+            backend.enqueue(entry).await.unwrap();
+        }
+        
+        // Wait briefly to ensure jobs are ready
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        
+        // Simulate concurrent workers calling process_delayed_jobs
+        let backend = Arc::new(backend);
+        let b1 = backend.clone();
+        let b2 = backend.clone();
+        let b3 = backend.clone();
+        
+        // Run three workers concurrently
+        let (result1, result2, result3) = tokio::join!(
+            b1.process_delayed_jobs(),
+            b2.process_delayed_jobs(), 
+            b3.process_delayed_jobs()
+        );
+        
+        // All should succeed
+        result1.unwrap();
+        result2.unwrap(); 
+        result3.unwrap();
+        
+        // Verify all jobs were processed exactly once (no duplicates or losses)
+        let mut processed_jobs = Vec::new();
+        while let Some(job) = backend.dequeue().await.unwrap() {
+            processed_jobs.push(job.payload.get("id").unwrap().as_u64().unwrap() as u32);
+        }
+        
+        // Should have exactly 5 jobs, no duplicates, no losses
+        processed_jobs.sort();
+        assert_eq!(processed_jobs.len(), 5);
+        let expected: Vec<u32> = (1..=5).collect();
+        assert_eq!(processed_jobs, expected);
         
         // Clean up
         backend.clear().await.unwrap();
