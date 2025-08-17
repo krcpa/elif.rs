@@ -88,9 +88,8 @@ impl UserStore {
 }
 
 // Global store for tests (in practice this would be dependency injected)
-lazy_static::lazy_static! {
-    static ref USER_STORE: Arc<UserStore> = Arc::new(UserStore::new());
-}
+use once_cell::sync::Lazy;
+static USER_STORE: Lazy<Arc<UserStore>> = Lazy::new(|| Arc::new(UserStore::new()));
 
 // Test handlers
 async fn get_users(_request: ElifRequest) -> HttpResult<ElifResponse> {

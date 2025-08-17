@@ -48,4 +48,4 @@ orm = []
 [dev-dependencies]
 tokio-test = "0.4"
 tracing-test = "0.2"
-lazy_static = "1.4"
+once_cell = "1.21"
