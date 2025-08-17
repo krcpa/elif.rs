@@ -466,6 +466,73 @@ impl QueueBackend for RedisBackend {
         
         Ok(stats)
     }
+    
+    /// Atomic requeue implementation for Redis using Lua script
+    async fn requeue_job(&self, job_id: JobId, mut job: JobEntry) -> QueueResult<bool> {
+        let mut conn = self.get_connection().await?;
+        
+        let job_key = format!("{}:job:{}", self.config.key_prefix, job_id);
+        let dead_state_key = format!("{}:state:Dead", self.config.key_prefix);
+        let pending_state_key = format!("{}:state:Pending", self.config.key_prefix);
+        let priority_key = format!("{}:priority:{:?}", self.config.key_prefix, job.priority());
+        
+        // Lua script for atomic requeue operation
+        let script = r#"
+            local job_key = KEYS[1]
+            local dead_state_key = KEYS[2]
+            local pending_state_key = KEYS[3]
+            local priority_key = KEYS[4]
+            local job_id = ARGV[1]
+            local updated_job = ARGV[2]
+            
+            -- Check if job exists and is in dead state
+            local exists = redis.call('EXISTS', job_key)
+            if exists == 0 then
+                return 0  -- Job not found
+            end
+            
+            local in_dead_state = redis.call('SISMEMBER', dead_state_key, job_id)
+            if in_dead_state == 0 then
+                return -1  -- Job exists but not in dead state
+            end
+            
+            -- Atomically move job from dead to pending state
+            redis.call('SREM', dead_state_key, job_id)
+            redis.call('SADD', pending_state_key, job_id)
+            
+            -- Update job data
+            redis.call('SET', job_key, updated_job)
+            
+            -- Add to priority queue for processing
+            local now = redis.call('TIME')
+            local timestamp = now[1] + now[2] / 1000000
+            redis.call('ZADD', priority_key, timestamp, job_id)
+            
+            return 1  -- Success
+        "#;
+        
+        // Reset job for retry
+        job.reset_for_retry();
+        let serialized_job = self.serialize_job(&job)?;
+        
+        let result: i32 = redis::Script::new(script)
+            .key(&job_key)
+            .key(&dead_state_key)
+            .key(&pending_state_key)
+            .key(&priority_key)
+            .arg(job_id.to_string())
+            .arg(&serialized_job)
+            .invoke_async(&mut conn)
+            .await
+            .map_err(|e| QueueError::Backend(format!("Failed to requeue job atomically: {}", e)))?;
+            
+        match result {
+            1 => Ok(true),   // Success
+            0 => Ok(false),  // Job not found
+            -1 => Ok(false), // Job not in dead state
+            _ => Err(QueueError::Backend("Unexpected result from requeue script".to_string())),
+        }
+    }
 }
 
 #[cfg(test)]

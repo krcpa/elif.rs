@@ -293,6 +293,32 @@ impl JobEntry {
         self.last_error = None;
         self.processed_at = None;
     }
+    
+    /// Create a new job entry with explicit job type (for scheduled jobs)
+    pub(crate) fn new_with_job_type(
+        job_type: String,
+        payload: serde_json::Value,
+        priority: Option<Priority>,
+        delay: Option<Duration>,
+        max_retries: u32,
+    ) -> QueueResult<Self> {
+        let now = Utc::now();
+        let run_at = delay.map(|d| now + chrono::Duration::from_std(d).unwrap()).unwrap_or(now);
+        
+        Ok(JobEntry {
+            id: Uuid::new_v4(),
+            job_type,
+            payload,
+            priority: priority.unwrap_or_default(),
+            state: JobState::Pending,
+            attempts: 0,
+            max_retries,
+            created_at: now,
+            run_at,
+            processed_at: None,
+            last_error: None,
+        })
+    }
 }
 
 /// Core queue backend trait that all queue implementations must implement
@@ -321,6 +347,19 @@ pub trait QueueBackend: Send + Sync {
     
     /// Get queue statistics
     async fn stats(&self) -> QueueResult<QueueStats>;
+    
+    /// Atomically requeue a job (remove old and enqueue new)
+    /// Default implementation is non-atomic for backward compatibility
+    async fn requeue_job(&self, job_id: JobId, mut job: JobEntry) -> QueueResult<bool> {
+        // Non-atomic fallback implementation
+        if self.remove_job(job_id).await? {
+            job.reset_for_retry();
+            self.enqueue(job).await?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
 }
 
 /// Queue statistics

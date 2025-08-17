@@ -67,13 +67,13 @@ impl CronExpression {
     
     /// Get the next run time after the given datetime
     pub fn next_run_time(&self, after: DateTime<Utc>) -> Option<DateTime<Utc>> {
-        self.schedule.as_ref()?.upcoming(chrono::Utc).next()
+        self.schedule.as_ref()?.after(&after).next()
     }
     
     /// Get the next N run times after the given datetime
     pub fn next_run_times(&self, after: DateTime<Utc>, count: usize) -> Vec<DateTime<Utc>> {
         self.schedule.as_ref()
-            .map(|s| s.upcoming(chrono::Utc).take(count).collect())
+            .map(|s| s.after(&after).take(count).collect())
             .unwrap_or_default()
     }
     
@@ -304,15 +304,13 @@ impl ScheduledJob {
     
     /// Create a job entry for execution
     pub fn create_job_entry(&self) -> QueueResult<JobEntry> {
-        // Create a temporary job struct for JobEntry::new
-        let job_data = ScheduledJobWrapper {
-            job_type: self.job_type.clone(),
-            payload: self.payload.clone(),
-            max_retries: self.retry_strategy.max_attempts(),
-            timeout: self.timeout,
-        };
-        
-        JobEntry::new(job_data, Some(self.priority), None)
+        JobEntry::new_with_job_type(
+            self.job_type.clone(),
+            self.payload.clone(),
+            Some(self.priority),
+            None, // No delay - execute immediately
+            self.retry_strategy.max_attempts(),
+        )
     }
 }
 
@@ -459,15 +457,10 @@ impl<B: crate::QueueBackend + 'static> JobScheduler<B> {
     
     /// Requeue a dead job (reset attempts and change to Pending state)
     pub async fn requeue_dead_job(&self, job_id: crate::JobId) -> QueueResult<bool> {
-        if let Some(mut job) = self.backend.get_job(job_id).await? {
+        if let Some(job) = self.backend.get_job(job_id).await? {
             if job.state() == &crate::JobState::Dead {
-                // Reset the job for retry
-                job.reset_for_retry();
-                
-                // Remove old job and enqueue the reset one
-                self.backend.remove_job(job_id).await?;
-                self.backend.enqueue(job).await?;
-                Ok(true)
+                // Use atomic requeue operation
+                self.backend.requeue_job(job_id, job).await
             } else {
                 Ok(false)
             }

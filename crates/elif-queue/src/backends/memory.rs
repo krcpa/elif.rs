@@ -247,6 +247,37 @@ impl QueueBackend for MemoryBackend {
     async fn stats(&self) -> QueueResult<QueueStats> {
         Ok(self.stats.read().clone())
     }
+    
+    /// Atomic requeue implementation for memory backend
+    async fn requeue_job(&self, job_id: JobId, _job: JobEntry) -> QueueResult<bool> {
+        // For memory backend, we can make this atomic using the DashMap's atomic operations
+        if let Some(mut existing_job) = self.jobs.get_mut(&job_id) {
+            if existing_job.state() == &JobState::Dead {
+                // Reset the job for retry
+                existing_job.reset_for_retry();
+                
+                // Add back to pending queue if it's ready
+                if existing_job.is_ready() {
+                    let priority_entry = PriorityJobEntry {
+                        entry: existing_job.clone(),
+                        enqueue_time: Instant::now(),
+                    };
+                    self.pending_queue.write().push(priority_entry);
+                }
+                
+                // Update stats - move from dead back to pending
+                let mut stats = self.stats.write();
+                stats.dead_jobs = stats.dead_jobs.saturating_sub(1);
+                stats.pending_jobs = stats.pending_jobs.saturating_add(1);
+                
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Ok(false)
+        }
+    }
 }
 
 #[cfg(test)]
