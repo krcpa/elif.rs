@@ -1,7 +1,7 @@
 use crate::{
     config::TemplateConfig,
     error::EmailError,
-    templates::{EmailTemplate, RenderedEmail, TemplateContext, helpers},
+    templates::{EmailTemplate, RenderedEmail, TemplateContext, TemplateDebugInfo, helpers},
 };
 use handlebars::{Handlebars, no_escape};
 use std::{
@@ -9,8 +9,9 @@ use std::{
     fs,
     path::Path,
     sync::RwLock,
+    time::SystemTime,
 };
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Email template engine using Handlebars
 pub struct TemplateEngine {
@@ -19,6 +20,10 @@ pub struct TemplateEngine {
     templates: RwLock<HashMap<String, EmailTemplate>>,
     layouts: RwLock<HashMap<String, String>>,
     partials: RwLock<HashMap<String, String>>,
+    // Template file cache with modification times
+    template_file_cache: RwLock<HashMap<String, (SystemTime, String)>>,
+    layout_file_cache: RwLock<HashMap<String, (SystemTime, String)>>,
+    partial_file_cache: RwLock<HashMap<String, (SystemTime, String)>>,
 }
 
 impl TemplateEngine {
@@ -38,6 +43,9 @@ impl TemplateEngine {
             templates: RwLock::new(HashMap::new()),
             layouts: RwLock::new(HashMap::new()),
             partials: RwLock::new(HashMap::new()),
+            template_file_cache: RwLock::new(HashMap::new()),
+            layout_file_cache: RwLock::new(HashMap::new()),
+            partial_file_cache: RwLock::new(HashMap::new()),
         };
 
         // Load templates, layouts, and partials from filesystem if directories exist
@@ -82,6 +90,14 @@ impl TemplateEngine {
             EmailError::template("Failed to acquire write lock on layouts")
         })?;
 
+        let mut cache = if self.config.enable_cache {
+            Some(self.layout_file_cache.write().map_err(|_| {
+                EmailError::template("Failed to acquire write lock on layout file cache")
+            })?)
+        } else {
+            None
+        };
+
         for entry in entries {
             let entry = entry?;
             let path = entry.path();
@@ -91,10 +107,45 @@ impl TemplateEngine {
                     .and_then(|s| s.to_str())
                     .ok_or_else(|| EmailError::template(format!("Invalid layout filename: {:?}", path)))?;
                 
-                let content = fs::read_to_string(&path)?;
-                layouts.insert(name.to_string(), content);
-                
-                debug!("Loaded layout: {}", name);
+                let path_str = path.to_string_lossy().to_string();
+                let should_load = if self.config.enable_cache {
+                    if let (Some(cache), Ok(metadata)) = (cache.as_ref(), fs::metadata(&path)) {
+                        if let (Ok(modified), Some((cached_time, _))) = (metadata.modified(), cache.get(&path_str)) {
+                            // Only load if file has been modified since last cache
+                            modified > *cached_time
+                        } else {
+                            // File not in cache or metadata error, load it
+                            true
+                        }
+                    } else {
+                        true
+                    }
+                } else {
+                    // No caching, always load
+                    true
+                };
+
+                if should_load {
+                    let content = fs::read_to_string(&path)?;
+                    layouts.insert(name.to_string(), content.clone());
+                    
+                    // Update cache if enabled
+                    if let (Some(cache), Ok(metadata)) = (cache.as_mut(), fs::metadata(&path)) {
+                        if let Ok(modified) = metadata.modified() {
+                            cache.insert(path_str, (modified, content));
+                        }
+                    }
+                    
+                    debug!("Loaded layout: {}", name);
+                } else {
+                    // Use cached content
+                    if let Some(cache) = cache.as_ref() {
+                        if let Some((_, cached_content)) = cache.get(&path_str) {
+                            layouts.insert(name.to_string(), cached_content.clone());
+                            debug!("Using cached layout: {}", name);
+                        }
+                    }
+                }
             }
         }
 
@@ -253,9 +304,11 @@ impl TemplateEngine {
 
         // Render HTML content
         let html_content = if let Some(html_template) = &template.html_template {
-            let rendered_html = self.handlebars.render_template(html_template, &extended_context)?;
+            // Check if template uses {% extends %} syntax
+            let processed_template = self.process_template_inheritance(html_template, &extended_context)?;
+            let rendered_html = self.handlebars.render_template(&processed_template, &extended_context)?;
             
-            // Apply layout if specified
+            // Apply layout if specified (fallback for old layout system)
             if let Some(layout_name) = &template.layout {
                 let layout = self.get_layout(layout_name)?;
                 let mut layout_context = extended_context.clone();
@@ -295,6 +348,74 @@ impl TemplateEngine {
             .ok_or_else(|| EmailError::template(format!("Layout '{}' not found", name)))
     }
 
+    /// Process template inheritance using {% extends %} syntax
+    fn process_template_inheritance(&self, template: &str, _context: &TemplateContext) -> Result<String, EmailError> {
+        use regex::Regex;
+        
+        // Check if template has {% extends %} directive
+        let extends_regex = Regex::new(r#"^\s*\{%\s*extends\s+["']([^"']+)["']\s*%\}\s*"#)
+            .map_err(|e| EmailError::template(format!("Failed to compile regex: {}", e)))?;
+        
+        if let Some(captures) = extends_regex.captures(template) {
+            let parent_name = captures.get(1)
+                .ok_or_else(|| EmailError::template("Invalid extends syntax"))?
+                .as_str();
+            
+            // Remove the extends directive from the template
+            let child_template = extends_regex.replace(template, "").to_string();
+            
+            // Get parent layout
+            let parent_layout = self.get_layout(parent_name)?;
+            
+            // Process template blocks
+            self.process_template_blocks(&parent_layout, &child_template)
+        } else {
+            // No inheritance, return template as-is
+            Ok(template.to_string())
+        }
+    }
+
+    /// Process template blocks for inheritance
+    fn process_template_blocks(&self, parent: &str, child: &str) -> Result<String, EmailError> {
+        use regex::Regex;
+        use std::collections::HashMap;
+        
+        // Extract blocks from child template
+        let block_regex = Regex::new(r#"\{%\s*block\s+(\w+)\s*%\}(.*?)\{%\s*endblock\s*%\}"#)
+            .map_err(|e| EmailError::template(format!("Failed to compile block regex: {}", e)))?;
+        
+        let mut child_blocks = HashMap::new();
+        for captures in block_regex.captures_iter(child) {
+            let block_name = captures.get(1)
+                .ok_or_else(|| EmailError::template("Invalid block syntax"))?
+                .as_str();
+            let block_content = captures.get(2)
+                .ok_or_else(|| EmailError::template("Invalid block content"))?
+                .as_str();
+            
+            child_blocks.insert(block_name.to_string(), block_content.trim().to_string());
+        }
+        
+        // Replace blocks in parent template
+        let mut result = parent.to_string();
+        for (block_name, block_content) in child_blocks {
+            let block_pattern = format!(r#"\{{\{{\s*block\s+{}\s*\}}\}}(.*?)\{{\{{\s*endblock\s*\}}\}}"#, block_name);
+            let block_regex = Regex::new(&block_pattern)
+                .map_err(|e| EmailError::template(format!("Failed to compile replacement regex: {}", e)))?;
+            
+            // Replace with child content
+            result = block_regex.replace_all(&result, &block_content).to_string();
+        }
+        
+        // Handle default block syntax for handlebars
+        let default_block_regex = Regex::new(r#"\{%\s*block\s+(\w+)\s*%\}(.*?)\{%\s*endblock\s*%\}"#)
+            .map_err(|e| EmailError::template(format!("Failed to compile default block regex: {}", e)))?;
+        
+        result = default_block_regex.replace_all(&result, r#"{{$2}}"#).to_string();
+        
+        Ok(result)
+    }
+
     /// List available templates
     pub fn list_templates(&self) -> Result<Vec<String>, EmailError> {
         let templates = self.templates.read().map_err(|_| {
@@ -328,6 +449,30 @@ impl TemplateEngine {
             partials.clear();
         }
 
+        // Clear file caches if caching is enabled
+        if self.config.enable_cache {
+            {
+                let mut cache = self.template_file_cache.write().map_err(|_| {
+                    EmailError::template("Failed to acquire write lock on template file cache")
+                })?;
+                cache.clear();
+            }
+            
+            {
+                let mut cache = self.layout_file_cache.write().map_err(|_| {
+                    EmailError::template("Failed to acquire write lock on layout file cache")
+                })?;
+                cache.clear();
+            }
+
+            {
+                let mut cache = self.partial_file_cache.write().map_err(|_| {
+                    EmailError::template("Failed to acquire write lock on partial file cache")
+                })?;
+                cache.clear();
+            }
+        }
+
         // Reload from filesystem
         self.load_from_filesystem()?;
         
@@ -342,6 +487,221 @@ impl TemplateEngine {
     {
         self.handlebars.register_helper(name, Box::new(helper));
         Ok(())
+    }
+
+    /// Check if any template files need to be reloaded
+    pub fn check_for_changes(&mut self) -> Result<bool, EmailError> {
+        if !self.config.enable_cache {
+            // If caching is disabled, always return true to force reload
+            return Ok(true);
+        }
+
+        let mut has_changes = false;
+
+        // Check template files
+        if let Ok(entries) = fs::read_dir(&self.config.templates_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Ok(metadata) = fs::metadata(&path) {
+                    if let Ok(modified) = metadata.modified() {
+                        let path_str = path.to_string_lossy().to_string();
+                        if let Ok(cache) = self.template_file_cache.read() {
+                            if let Some((cached_time, _)) = cache.get(&path_str) {
+                                if modified > *cached_time {
+                                    has_changes = true;
+                                    break;
+                                }
+                            } else {
+                                // New file not in cache
+                                has_changes = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check layout files
+        if !has_changes {
+            if let Ok(entries) = fs::read_dir(&self.config.layouts_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Ok(metadata) = fs::metadata(&path) {
+                        if let Ok(modified) = metadata.modified() {
+                            let path_str = path.to_string_lossy().to_string();
+                            if let Ok(cache) = self.layout_file_cache.read() {
+                                if let Some((cached_time, _)) = cache.get(&path_str) {
+                                    if modified > *cached_time {
+                                        has_changes = true;
+                                        break;
+                                    }
+                                } else {
+                                    // New file not in cache
+                                    has_changes = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check partial files
+        if !has_changes {
+            if let Ok(entries) = fs::read_dir(&self.config.partials_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Ok(metadata) = fs::metadata(&path) {
+                        if let Ok(modified) = metadata.modified() {
+                            let path_str = path.to_string_lossy().to_string();
+                            if let Ok(cache) = self.partial_file_cache.read() {
+                                if let Some((cached_time, _)) = cache.get(&path_str) {
+                                    if modified > *cached_time {
+                                        has_changes = true;
+                                        break;
+                                    }
+                                } else {
+                                    // New file not in cache
+                                    has_changes = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(has_changes)
+    }
+
+    /// Hot-reload templates if there are changes
+    pub fn hot_reload(&mut self) -> Result<bool, EmailError> {
+        if self.check_for_changes()? {
+            debug!("Template changes detected, reloading...");
+            self.reload()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Force reload all templates regardless of cache
+    pub fn force_reload(&mut self) -> Result<(), EmailError> {
+        debug!("Force reloading all templates...");
+        self.reload()
+    }
+
+    /// Validate a template string for syntax errors
+    pub fn validate_template(&self, template: &str, template_name: Option<&str>) -> Result<(), EmailError> {
+        // Try to compile the template to check for syntax errors
+        match self.handlebars.render_template(template, &HashMap::<String, serde_json::Value>::new()) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let context = if let Some(name) = template_name {
+                    format!("template '{}': {}", name, e)
+                } else {
+                    format!("template: {}", e)
+                };
+                Err(EmailError::template(format!("Invalid {}", context)))
+            }
+        }
+    }
+
+    /// Validate all loaded templates
+    pub fn validate_all_templates(&self) -> Result<Vec<String>, EmailError> {
+        let mut errors = Vec::new();
+        
+        // Validate templates
+        let templates = self.templates.read().map_err(|_| {
+            EmailError::template("Failed to acquire read lock on templates")
+        })?;
+
+        for (name, template) in templates.iter() {
+            // Validate HTML template
+            if let Some(html) = &template.html_template {
+                if let Err(e) = self.validate_template(html, Some(&format!("{} (HTML)", name))) {
+                    errors.push(e.to_string());
+                }
+            }
+
+            // Validate text template
+            if let Some(text) = &template.text_template {
+                if let Err(e) = self.validate_template(text, Some(&format!("{} (Text)", name))) {
+                    errors.push(e.to_string());
+                }
+            }
+
+            // Validate subject template
+            if let Some(subject) = &template.subject_template {
+                if let Err(e) = self.validate_template(subject, Some(&format!("{} (Subject)", name))) {
+                    errors.push(e.to_string());
+                }
+            }
+        }
+
+        // Validate layouts
+        let layouts = self.layouts.read().map_err(|_| {
+            EmailError::template("Failed to acquire read lock on layouts")
+        })?;
+
+        for (name, layout) in layouts.iter() {
+            if let Err(e) = self.validate_template(layout, Some(&format!("layout '{}'", name))) {
+                errors.push(e.to_string());
+            }
+        }
+
+        // Validate partials
+        let partials = self.partials.read().map_err(|_| {
+            EmailError::template("Failed to acquire read lock on partials")
+        })?;
+
+        for (name, partial) in partials.iter() {
+            if let Err(e) = self.validate_template(partial, Some(&format!("partial '{}'", name))) {
+                errors.push(e.to_string());
+            }
+        }
+
+        Ok(errors)
+    }
+
+    /// Get detailed template information for debugging
+    pub fn get_template_info(&self, template_name: &str) -> Result<TemplateDebugInfo, EmailError> {
+        let templates = self.templates.read().map_err(|_| {
+            EmailError::template("Failed to acquire read lock on templates")
+        })?;
+
+        let template = templates.get(template_name)
+            .ok_or_else(|| EmailError::template(format!("Template '{}' not found", template_name)))?;
+
+        Ok(TemplateDebugInfo {
+            name: template.name.clone(),
+            has_html: template.html_template.is_some(),
+            has_text: template.text_template.is_some(),
+            has_subject: template.subject_template.is_some(),
+            layout: template.layout.clone(),
+            metadata: template.metadata.clone(),
+            html_content: template.html_template.clone(),
+            text_content: template.text_template.clone(),
+            subject_content: template.subject_template.clone(),
+        })
+    }
+
+    /// List all validation errors in a human-readable format
+    pub fn get_validation_report(&self) -> Result<String, EmailError> {
+        let errors = self.validate_all_templates()?;
+        
+        if errors.is_empty() {
+            Ok("✅ All templates are valid".to_string())
+        } else {
+            let mut report = format!("❌ Found {} validation error(s):\n\n", errors.len());
+            for (i, error) in errors.iter().enumerate() {
+                report.push_str(&format!("{}. {}\n", i + 1, error));
+            }
+            Ok(report)
+        }
     }
 }
 
