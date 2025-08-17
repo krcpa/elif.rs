@@ -188,14 +188,11 @@ impl SmtpProvider {
     fn build_message_with_inline_attachments(&self, message_builder: lettre::message::MessageBuilder, email: &Email, inline_attachments: &[&crate::Attachment], regular_attachments: &[&crate::Attachment]) -> Result<Message, EmailError> {
         // Structure: multipart/mixed
         //   - multipart/related (for HTML + inline images)
-        //     - multipart/alternative (for text + HTML)
-        //       - text/plain
-        //       - text/html
-        //     - inline attachments
+        //     - multipart/alternative (for text + HTML) or single part
         //   - regular attachments
-        
-        // Build the text/HTML alternative part
-        let mut content_part = match (&email.html_body, &email.text_body) {
+
+        // Build the content part (either single part or alternative)
+        let content_part = match (&email.html_body, &email.text_body) {
             (Some(html), Some(text)) => {
                 MultiPart::alternative()
                     .singlepart(SinglePart::plain(text.clone()))
@@ -214,54 +211,21 @@ impl SmtpProvider {
             }
         };
 
-        // If we only have HTML (no text), we can use related directly instead of alternative
-        let related_part = if email.text_body.is_none() && email.html_body.is_some() {
-            let mut related = MultiPart::related()
-                .singlepart(SinglePart::html(email.html_body.as_ref().unwrap().clone()));
+        // Build multipart/related containing the content + inline attachments
+        let mut related_part = MultiPart::related().multipart(content_part);
+        
+        // Add inline attachments
+        for attachment in inline_attachments {
+            let lettre_attachment = LettreAttachment::new(attachment.filename.clone())
+                .body(
+                    attachment.content.clone(),
+                    attachment.content_type.parse().unwrap_or_else(|_| "application/octet-stream".parse().unwrap())
+                );
             
-            // Add inline attachments
-            for attachment in inline_attachments {
-                let mut lettre_attachment = LettreAttachment::new(attachment.filename.clone())
-                    .body(
-                        attachment.content.clone(),
-                        attachment.content_type.parse().unwrap_or_else(|_| "application/octet-stream".parse().unwrap())
-                    );
-                
-                // Set Content-ID for inline attachments
-                // Note: lettre 0.11 has limited support for Content-ID headers
-                // This is a known limitation that will be addressed in future versions
-                if let Some(_content_id) = &attachment.content_id {
-                    // For now, we'll rely on the multipart structure for inline attachments
-                    // The email client should be able to handle this based on the multipart/related structure
-                }
-                
-                related = related.singlepart(lettre_attachment);
-            }
-            related
-        } else {
-            // Build multipart/related containing the alternative part + inline attachments
-            let mut related = MultiPart::related().multipart(content_part);
-            
-            // Add inline attachments
-            for attachment in inline_attachments {
-                let mut lettre_attachment = LettreAttachment::new(attachment.filename.clone())
-                    .body(
-                        attachment.content.clone(),
-                        attachment.content_type.parse().unwrap_or_else(|_| "application/octet-stream".parse().unwrap())
-                    );
-                
-                // Set Content-ID for inline attachments
-                // Note: lettre 0.11 has limited support for Content-ID headers
-                // This is a known limitation that will be addressed in future versions
-                if let Some(_content_id) = &attachment.content_id {
-                    // For now, we'll rely on the multipart structure for inline attachments
-                    // The email client should be able to handle this based on the multipart/related structure
-                }
-                
-                related = related.singlepart(lettre_attachment);
-            }
-            related
-        };
+            // Note: lettre 0.11 has limited support for Content-ID headers.
+            // This is a known limitation. The multipart/related structure is key.
+            related_part = related_part.singlepart(lettre_attachment);
+        }
 
         // If we have regular attachments, wrap in multipart/mixed
         let final_multipart = if !regular_attachments.is_empty() {
@@ -279,7 +243,7 @@ impl SmtpProvider {
             }
             mixed
         } else {
-            // No regular attachments, just use the related part as multipart/mixed
+            // No regular attachments, just use the related part.
             MultiPart::mixed().multipart(related_part)
         };
 

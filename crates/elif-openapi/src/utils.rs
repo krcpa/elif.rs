@@ -472,7 +472,7 @@ impl OpenApiUtils {
                 }
             }
             Some("number") => {
-                Ok(Value::Number(serde_json::Number::from_f64(3.14).unwrap()))
+                Ok(Value::Number(serde_json::Number::from_f64(std::f64::consts::PI).unwrap()))
             }
             Some("boolean") => Ok(Value::Bool(true)),
             _ => {
