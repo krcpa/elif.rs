@@ -1,0 +1,46 @@
+[package]
+name = "elif-queue"
+version = "0.1.0"
+edition = "2021"
+description = "Background job queue system for elif.rs framework"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/krcpa/elif.rs"
+
+[dependencies]
+# Core dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+async-trait = "0.1"
+thiserror = "1.0"
+tracing = "0.1"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Memory backend dependencies
+dashmap = "5.0"
+parking_lot = "0.12"
+tokio-util = "0.7"
+
+# Async utilities
+futures = "0.3"
+
+# Redis backend (optional)
+redis = { version = "0.23", features = ["tokio-comp", "connection-manager"], optional = true }
+
+# Configuration and core
+elif-core = { path = "../core" }
+service-builder = "0.3.0"
+
+[features]
+default = ["memory"]
+memory = []
+redis-backend = ["redis"]
+all = ["memory", "redis-backend"]
+
+[dev-dependencies]
+tokio-test = "0.4"
+criterion = "0.5"
+tempfile = "3.0"

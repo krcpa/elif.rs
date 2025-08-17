@@ -1055,6 +1055,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "elif-queue"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "criterion",
+ "dashmap",
+ "elif-core 0.3.0",
+ "futures",
+ "parking_lot",
+ "redis",
+ "serde",
+ "serde_json",
+ "service-builder 0.3.0",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "elif-security"
 version = "0.2.3"
 dependencies = [
