@@ -535,32 +535,37 @@ pub mod cron_presets {
 /// Cancellation token for cooperative job cancellation
 #[derive(Debug, Clone)]
 pub struct CancellationToken {
-    inner: Arc<std::sync::atomic::AtomicBool>,
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
+    notify: Arc<tokio::sync::Notify>,
 }
 
 impl CancellationToken {
     /// Create a new cancellation token
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            notify: Arc::new(tokio::sync::Notify::new()),
         }
     }
     
     /// Cancel the operation
     pub fn cancel(&self) {
-        self.inner.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.notify.notify_waiters();
     }
     
     /// Check if cancellation was requested
     pub fn is_cancelled(&self) -> bool {
-        self.inner.load(std::sync::atomic::Ordering::SeqCst)
+        self.cancelled.load(std::sync::atomic::Ordering::SeqCst)
     }
     
-    /// Wait for cancellation signal
+    /// Wait for cancellation signal efficiently using async notification
     pub async fn wait_for_cancellation(&self) {
-        while !self.is_cancelled() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        if self.is_cancelled() {
+            return;
         }
+        
+        self.notify.notified().await;
     }
     
     /// Create a future that completes when cancelled
@@ -1082,20 +1087,50 @@ mod tests {
         assert!(scheduler.get_schedule("test_schedule").is_none());
     }
     
-    #[test]
-    fn test_cancellation_token() {
+    #[tokio::test]
+    async fn test_cancellation_token() {
         let token = CancellationToken::new();
         
         // Initially not cancelled
         assert!(!token.is_cancelled());
         
-        // Cancel the token
+        // Test wait_for_cancellation completes when already cancelled
         token.cancel();
         assert!(token.is_cancelled());
+        
+        // Should complete immediately since already cancelled
+        token.wait_for_cancellation().await;
         
         // Test cloning preserves state
         let cloned = token.clone();
         assert!(cloned.is_cancelled());
+        cloned.wait_for_cancellation().await; // Should also complete immediately
+    }
+    
+    #[tokio::test]
+    async fn test_cancellation_token_async_notification() {
+        let token = CancellationToken::new();
+        let token_clone = token.clone();
+        
+        // Spawn a task that waits for cancellation
+        let wait_task = tokio::spawn(async move {
+            token_clone.wait_for_cancellation().await;
+            "cancelled"
+        });
+        
+        // Give the wait task a moment to start waiting
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        
+        // The task should still be running (not completed yet)
+        assert!(!wait_task.is_finished());
+        
+        // Cancel the token - this should wake up the waiting task
+        token.cancel();
+        
+        // The task should complete quickly now
+        let result = tokio::time::timeout(Duration::from_millis(100), wait_task).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().unwrap(), "cancelled");
     }
     
     #[test]
