@@ -489,7 +489,7 @@ pub mod cron_presets {
     
     /// Every minute
     pub fn every_minute() -> CronExpression {
-        CronExpression::new("0 * * * * *").unwrap()
+        CronExpression::new("0 * * * * *").expect("Invalid 'every_minute' cron preset")
     }
     
     /// Every 5 minutes
