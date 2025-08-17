@@ -167,6 +167,11 @@ impl FactoryRegistry {
         // TODO: Implementation depends on how we handle the generic constraint
         Err(OrmError::Validation("Registry create not yet implemented".to_string()))
     }
+    
+    /// Get the number of registered factories
+    pub fn factory_count(&self) -> usize {
+        self.factories.len()
+    }
 }
 
 /// Global factory registry instance

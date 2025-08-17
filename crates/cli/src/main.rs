@@ -83,6 +83,12 @@ enum Commands {
         migrate_command: MigrateCommands,
     },
     
+    /// Database seeding and factory management
+    Db {
+        #[command(subcommand)]
+        db_command: DbCommands,
+    },
+    
     /// Authentication management
     Auth {
         #[command(subcommand)]
@@ -229,6 +235,46 @@ enum MigrateCommands {
     
     /// Show migration status
     Status,
+}
+
+#[derive(Subcommand)]
+enum DbCommands {
+    /// Run database seeders
+    Seed {
+        /// Environment to run seeders for (development, testing, staging, production)
+        #[arg(long, short)]
+        env: Option<String>,
+        
+        /// Force run seeders in production environment
+        #[arg(long)]
+        force: bool,
+        
+        /// Show verbose output during seeding
+        #[arg(long, short)]
+        verbose: bool,
+    },
+    
+    /// Show factory system status
+    Factory {
+        #[command(subcommand)]
+        factory_command: FactoryCommands,
+    },
+    
+    /// Show seeding system status
+    Status,
+}
+
+#[derive(Subcommand)]
+enum FactoryCommands {
+    /// Show factory system status
+    Status,
+    
+    /// Test factory system with sample data generation
+    Test {
+        /// Number of sample records to generate
+        #[arg(long, short, default_value = "3")]
+        count: usize,
+    },
 }
 
 #[derive(Subcommand)]
@@ -518,6 +564,26 @@ async fn main() -> Result<(), ElifError> {
                 }
                 MigrateCommands::Status => {
                     migrate::status().await?;
+                }
+            }
+        }
+        Commands::Db { db_command } => {
+            match db_command {
+                DbCommands::Seed { env, force, verbose } => {
+                    database::seed(env, force, verbose).await?;
+                }
+                DbCommands::Factory { factory_command } => {
+                    match factory_command {
+                        FactoryCommands::Status => {
+                            database::factory_status().await?;
+                        }
+                        FactoryCommands::Test { count } => {
+                            database::factory_test(count).await?;
+                        }
+                    }
+                }
+                DbCommands::Status => {
+                    database::seed_status().await?;
                 }
             }
         }
