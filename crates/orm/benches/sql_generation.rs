@@ -5,6 +5,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use elif_orm::query::QueryBuilder;
 use std::collections::HashMap;
+use once_cell::sync::Lazy;
+use std::sync::RwLock;
 
 fn bench_basic_sql_generation(c: &mut Criterion) {
     let mut group = c.benchmark_group("basic_sql_generation");
@@ -135,28 +137,31 @@ fn bench_parameter_placeholder_generation(c: &mut Criterion) {
             BenchmarkId::new("cached_placeholders", param_count),
             &param_count,
             |b, &param_count| {
-                // Simulate caching common placeholder patterns
-                static mut CACHE: Option<HashMap<usize, String>> = None;
+                // Use thread-safe caching with once_cell::sync::Lazy
+                static CACHE: Lazy<RwLock<HashMap<usize, String>>> = Lazy::new(|| {
+                    RwLock::new(HashMap::new())
+                });
                 
                 b.iter(|| {
-                    let cache = unsafe {
-                        if CACHE.is_none() {
-                            CACHE = Some(HashMap::new());
+                    // Try to read from cache first
+                    if let Ok(cache_read) = CACHE.read() {
+                        if let Some(cached) = cache_read.get(&param_count) {
+                            return black_box(cached.clone());
                         }
-                        CACHE.as_mut().unwrap()
-                    };
-                    
-                    if let Some(cached) = cache.get(&param_count) {
-                        black_box(cached.clone())
-                    } else {
-                        let mut placeholders = Vec::with_capacity(param_count);
-                        for i in 1..=param_count {
-                            placeholders.push(format!("${}", i));
-                        }
-                        let result = placeholders.join(", ");
-                        cache.insert(param_count, result.clone());
-                        black_box(result)
                     }
+                    
+                    // Generate new placeholders and cache them
+                    let mut placeholders = Vec::with_capacity(param_count);
+                    for i in 1..=param_count {
+                        placeholders.push(format!("${}", i));
+                    }
+                    let result = placeholders.join(", ");
+                    
+                    if let Ok(mut cache_write) = CACHE.write() {
+                        cache_write.insert(param_count, result.clone());
+                    }
+                    
+                    black_box(result)
                 })
             },
         );

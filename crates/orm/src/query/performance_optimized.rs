@@ -43,6 +43,21 @@ impl<M> QueryBuilder<M> {
         placeholders
     }
 
+    /// Generate sequential parameter placeholders starting from a specific index
+    /// Used for proper parameter ordering in complex queries
+    pub fn generate_sequential_placeholders(start_index: usize, count: usize) -> String {
+        if count == 0 {
+            return String::new();
+        }
+
+        let placeholders = (start_index..start_index + count)
+            .map(|i| format!("${}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        placeholders
+    }
+
     /// Optimized SQL generation with pre-allocated capacity
     pub fn to_sql_optimized(&self) -> String {
         // Pre-calculate approximate SQL length to reduce allocations
@@ -89,8 +104,9 @@ impl<M> QueryBuilder<M> {
         length
     }
 
-    /// Build SELECT SQL with optimized string operations
+    /// Build SELECT SQL with optimized string operations and correct parameter indexing
     fn build_select_sql_optimized(&self, sql: &mut String) {
+        let mut param_counter = 1usize;
         // SELECT clause
         if self.distinct {
             sql.push_str("SELECT DISTINCT ");
@@ -185,7 +201,9 @@ impl<M> QueryBuilder<M> {
                             sql.push_str(" IN (");
                             let placeholder_count = condition.values.len();
                             if placeholder_count > 0 {
-                                sql.push_str(&Self::generate_placeholders_cached(placeholder_count));
+                                let placeholders = Self::generate_sequential_placeholders(param_counter, placeholder_count);
+                                sql.push_str(&placeholders);
+                                param_counter += placeholder_count;
                             }
                             sql.push(')');
                             continue; // Skip the normal parameter handling
@@ -194,7 +212,9 @@ impl<M> QueryBuilder<M> {
                             sql.push_str(" NOT IN (");
                             let placeholder_count = condition.values.len();
                             if placeholder_count > 0 {
-                                sql.push_str(&Self::generate_placeholders_cached(placeholder_count));
+                                let placeholders = Self::generate_sequential_placeholders(param_counter, placeholder_count);
+                                sql.push_str(&placeholders);
+                                param_counter += placeholder_count;
                             }
                             sql.push(')');
                             continue; // Skip the normal parameter handling
@@ -208,7 +228,8 @@ impl<M> QueryBuilder<M> {
                             continue;
                         },
                         super::types::QueryOperator::Between => {
-                            sql.push_str(" BETWEEN $1 AND $2");
+                            sql.push_str(&format!(" BETWEEN ${} AND ${}", param_counter, param_counter + 1));
+                            param_counter += 2;
                             continue;
                         },
                         super::types::QueryOperator::Raw => {
@@ -224,7 +245,8 @@ impl<M> QueryBuilder<M> {
                     }
                     
                     // Add parameter placeholder for regular operators
-                    sql.push_str("$1"); // Simplified for now
+                    sql.push_str(&format!("${}", param_counter));
+                    param_counter += 1;
                 }
             }
         }
@@ -248,7 +270,17 @@ impl<M> QueryBuilder<M> {
                     sql.push_str(" AND ");
                 }
                 sql.push_str(&condition.column);
-                // Simplified HAVING clause handling for now
+                
+                // Handle HAVING operators with proper parameter indexing
+                match condition.operator {
+                    super::types::QueryOperator::Equal => sql.push_str(" = "),
+                    super::types::QueryOperator::GreaterThan => sql.push_str(" > "),
+                    super::types::QueryOperator::LessThan => sql.push_str(" < "),
+                    _ => sql.push_str(" = "), // Default to equals
+                }
+                
+                sql.push_str(&format!("${}", param_counter));
+                param_counter += 1;
             }
         }
 
