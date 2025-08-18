@@ -111,4 +111,4 @@ pub trait ModelExtensions: Model + CrudOperations {
 
 // Implement ModelExtensions for all types that implement Model + CrudOperations
 impl<T: Model + CrudOperations> ModelExtensions for T {}
-// <<<ELIF:END agent-editable:model_extensions-->>
+// <<<ELIF:END agent-editable:model_extensions>>>
