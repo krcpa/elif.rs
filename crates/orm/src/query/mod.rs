@@ -11,6 +11,7 @@ pub mod pagination;
 pub mod upsert;
 pub mod execution;
 pub mod performance;
+pub mod performance_optimized;
 pub mod with;
 
 // Re-export main types and builder
@@ -18,6 +19,7 @@ pub use types::*;
 pub use builder::QueryBuilder;
 pub use upsert::UpsertBuilder;
 pub use with::{QueryBuilderWithMethods, QueryBuilderWithEagerLoading};
+pub use performance_optimized::{acquire_query_builder, release_query_builder, QueryBuilderPool};
 
 // Import SQL generation methods to make them available when using QueryBuilder
 pub use crate::sql::generation;

@@ -277,4 +277,23 @@ impl MigrationRunner {
             self.manager.config().migrations_table
         )
     }
+
+    /// Get migration status for all migrations (applied and pending)
+    pub async fn get_migration_status(&self) -> OrmResult<Vec<(Migration, bool)>> {
+        // Load all migrations from files
+        let all_migrations = self.manager.load_migrations().await?;
+        
+        // Get applied migrations from database
+        let applied_migrations = self.get_applied_migrations().await?;
+        let applied_ids: HashSet<String> = applied_migrations.into_iter().map(|m| m.id).collect();
+        
+        // Map migrations to their status
+        let mut status_list = Vec::new();
+        for migration in all_migrations {
+            let is_applied = applied_ids.contains(&migration.id);
+            status_list.push((migration, is_applied));
+        }
+        
+        Ok(status_list)
+    }
 }

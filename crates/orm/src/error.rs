@@ -45,6 +45,8 @@ pub enum ModelError {
     Configuration(String),
     /// Invalid key error
     InvalidKey(String),
+    /// Column not found error
+    ColumnNotFound(String),
 }
 
 impl fmt::Display for ModelError {
@@ -64,6 +66,7 @@ impl fmt::Display for ModelError {
             ModelError::Event(msg) => write!(f, "Event error: {}", msg),
             ModelError::Configuration(msg) => write!(f, "Configuration error: {}", msg),
             ModelError::InvalidKey(msg) => write!(f, "Invalid key error: {}", msg),
+            ModelError::ColumnNotFound(column) => write!(f, "Column not found: {}", column),
         }
     }
 }
