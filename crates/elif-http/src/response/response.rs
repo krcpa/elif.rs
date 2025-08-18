@@ -52,10 +52,15 @@ impl ElifResponse {
         }
     }
 
-    /// Set response status code
+    /// Set response status code (consuming)
     pub fn status(mut self, status: StatusCode) -> Self {
         self.status = status;
         self
+    }
+
+    /// Set response status code (borrowing - for middleware use)
+    pub fn set_status(&mut self, status: StatusCode) {
+        self.status = status;
     }
 
     /// Get response status code
@@ -63,7 +68,7 @@ impl ElifResponse {
         self.status
     }
 
-    /// Add header to response
+    /// Add header to response (consuming)
     pub fn header<K, V>(mut self, key: K, value: V) -> HttpResult<Self>
     where
         K: TryInto<HeaderName>,
@@ -80,24 +85,56 @@ impl ElifResponse {
         Ok(self)
     }
 
-    /// Set Content-Type header
+    /// Add header to response (borrowing - for middleware use)
+    pub fn add_header<K, V>(&mut self, key: K, value: V) -> HttpResult<()>
+    where
+        K: TryInto<HeaderName>,
+        K::Error: std::fmt::Display,
+        V: TryInto<HeaderValue>,
+        V::Error: std::fmt::Display,
+    {
+        let header_name = key.try_into()
+            .map_err(|e| HttpError::internal(format!("Invalid header name: {}", e)))?;
+        let header_value = value.try_into()
+            .map_err(|e| HttpError::internal(format!("Invalid header value: {}", e)))?;
+        
+        self.headers.insert(header_name, header_value);
+        Ok(())
+    }
+
+    /// Set Content-Type header (consuming)
     pub fn content_type(self, content_type: &str) -> HttpResult<Self> {
         self.header("content-type", content_type)
     }
 
-    /// Set response body as text
+    /// Set Content-Type header (borrowing - for middleware use)
+    pub fn set_content_type(&mut self, content_type: &str) -> HttpResult<()> {
+        self.add_header("content-type", content_type)
+    }
+
+    /// Set response body as text (consuming)
     pub fn text<S: Into<String>>(mut self, text: S) -> Self {
         self.body = ResponseBody::Text(text.into());
         self
     }
 
-    /// Set response body as bytes
+    /// Set response body as text (borrowing - for middleware use)
+    pub fn set_text<S: Into<String>>(&mut self, text: S) {
+        self.body = ResponseBody::Text(text.into());
+    }
+
+    /// Set response body as bytes (consuming)
     pub fn bytes(mut self, bytes: Bytes) -> Self {
         self.body = ResponseBody::Bytes(bytes);
         self
     }
 
-    /// Set response body as JSON
+    /// Set response body as bytes (borrowing - for middleware use)
+    pub fn set_bytes(&mut self, bytes: Bytes) {
+        self.body = ResponseBody::Bytes(bytes);
+    }
+
+    /// Set response body as JSON (consuming)
     pub fn json<T: Serialize>(mut self, data: &T) -> HttpResult<Self> {
         let json_value = serde_json::to_value(data)
             .map_err(|e| HttpError::internal(format!("JSON serialization failed: {}", e)))?;
@@ -105,10 +142,23 @@ impl ElifResponse {
         Ok(self)
     }
 
-    /// Set response body as raw JSON value
+    /// Set response body as JSON (borrowing - for middleware use)
+    pub fn set_json<T: Serialize>(&mut self, data: &T) -> HttpResult<()> {
+        let json_value = serde_json::to_value(data)
+            .map_err(|e| HttpError::internal(format!("JSON serialization failed: {}", e)))?;
+        self.body = ResponseBody::Json(json_value);
+        Ok(())
+    }
+
+    /// Set response body as raw JSON value (consuming)
     pub fn json_value(mut self, value: serde_json::Value) -> Self {
         self.body = ResponseBody::Json(value);
         self
+    }
+
+    /// Set response body as raw JSON value (borrowing - for middleware use)
+    pub fn set_json_value(&mut self, value: serde_json::Value) {
+        self.body = ResponseBody::Json(value);
     }
 
     /// Build the response
@@ -388,5 +438,81 @@ mod tests {
     fn test_status_code_getter() {
         let response = ElifResponse::created();
         assert_eq!(response.status_code(), StatusCode::CREATED);
+    }
+
+    #[test]
+    fn test_borrowing_api_headers() {
+        let mut response = ElifResponse::ok();
+        
+        // Test borrowing header methods
+        response.add_header("x-custom-header", "test-value").unwrap();
+        response.set_content_type("application/json").unwrap();
+        
+        let built_response = response.build().unwrap();
+        let headers = built_response.headers();
+        
+        assert!(headers.contains_key("x-custom-header"));
+        assert_eq!(headers.get("x-custom-header").unwrap(), "test-value");
+        assert_eq!(headers.get("content-type").unwrap(), "application/json");
+    }
+
+    #[test]
+    fn test_borrowing_api_body() {
+        let mut response = ElifResponse::ok();
+        
+        // Test borrowing body methods
+        response.set_text("Hello World");
+        assert_eq!(response.status_code(), StatusCode::OK);
+        
+        // Test JSON setting
+        let mut json_response = ElifResponse::ok();
+        let data = json!({"message": "Hello"});
+        json_response.set_json_value(data.clone());
+        
+        // Verify the body was set correctly
+        match &json_response.body {
+            ResponseBody::Json(value) => assert_eq!(*value, data),
+            _ => panic!("Expected JSON body"),
+        }
+    }
+
+    #[test]
+    fn test_borrowing_api_status() {
+        let mut response = ElifResponse::ok();
+        
+        // Test borrowing status method
+        response.set_status(StatusCode::CREATED);
+        assert_eq!(response.status_code(), StatusCode::CREATED);
+        
+        // Test multiple modifications
+        response.set_status(StatusCode::ACCEPTED);
+        response.set_text("Updated");
+        
+        assert_eq!(response.status_code(), StatusCode::ACCEPTED);
+    }
+
+    #[test] 
+    fn test_borrowing_api_middleware_pattern() {
+        // Test the pattern that caused issues in middleware v2
+        let mut response = ElifResponse::ok().text("Original");
+        
+        // Simulate middleware adding headers iteratively
+        let headers = vec![
+            ("x-middleware-1", "executed"),
+            ("x-middleware-2", "processed"), 
+            ("x-custom", "value"),
+        ];
+        
+        for (name, value) in headers {
+            // This should work without ownership issues
+            response.add_header(name, value).unwrap();
+        }
+        
+        let built = response.build().unwrap();
+        let response_headers = built.headers();
+        
+        assert!(response_headers.contains_key("x-middleware-1"));
+        assert!(response_headers.contains_key("x-middleware-2")); 
+        assert!(response_headers.contains_key("x-custom"));
     }
 }
