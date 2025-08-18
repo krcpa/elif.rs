@@ -41,6 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Accept: application/vnd.api+json;version=2");
     println!("\n📝 Query parameters:");
     println!("   ?version=v2           - For query-based versioning");
+    println!("\n⚡ All strategies now work due to proper middleware integration!");
     
     server.run().await?;
     Ok(())

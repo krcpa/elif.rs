@@ -72,7 +72,8 @@ pub use middleware::{
     // Versioning middleware
     versioning::{
         VersioningMiddleware, VersioningConfig, VersionStrategy, ApiVersion, VersionInfo,
-        versioning_middleware, default_versioning_middleware, RequestVersionExt
+        VersioningLayer, VersioningService,
+        versioning_middleware, versioning_layer, default_versioning_middleware, RequestVersionExt
     },
 };
 

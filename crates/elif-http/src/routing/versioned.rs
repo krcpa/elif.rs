@@ -132,11 +132,17 @@ where
             final_router = final_router.nest(&version_path, version_router);
         }
 
-        // Add versioning middleware
-        // Note: This is a simplified approach. In a real implementation,
-        // you'd convert the middleware to an Axum layer
+        // Apply versioning middleware layer - this is critical!
+        // This ensures that version detection and response headers work for ALL strategies
+        let versioning_layer = crate::middleware::versioning::versioning_layer(self.versioning_config);
         
-        final_router
+        // Convert to axum router and apply the layer
+        let axum_router = final_router.into_axum_router();
+        let layered_router = axum_router.layer(versioning_layer);
+        
+        // Convert back to elif Router
+        // Note: This creates a new Router with the layered axum router
+        Router::new().merge_axum(layered_router)
     }
 
     /// Create a router builder for a specific version

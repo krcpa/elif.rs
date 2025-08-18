@@ -7,6 +7,10 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use service_builder::builder;
+use tower::{Layer, Service};
+use std::task::{Context, Poll};
+use std::pin::Pin;
+use std::future::Future;
 
 /// API versioning strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -287,9 +291,239 @@ impl Middleware for VersioningMiddleware {
     }
 }
 
+/// Tower Layer implementation for VersioningMiddleware
+#[derive(Debug, Clone)]
+pub struct VersioningLayer {
+    config: VersioningConfig,
+}
+
+impl VersioningLayer {
+    /// Create a new versioning layer
+    pub fn new(config: VersioningConfig) -> Self {
+        Self { config }
+    }
+}
+
+impl<S> Layer<S> for VersioningLayer {
+    type Service = VersioningService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        VersioningService {
+            inner,
+            config: self.config.clone(),
+        }
+    }
+}
+
+/// Tower Service implementation for versioning
+#[derive(Debug, Clone)]
+pub struct VersioningService<S> {
+    inner: S,
+    config: VersioningConfig,
+}
+
+impl<S> Service<axum::extract::Request> for VersioningService<S>
+where
+    S: Service<axum::extract::Request, Response = axum::response::Response> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    S::Error: Into<Box<dyn std::error::Error + Send + Sync>> + 'static,
+{
+    type Response = axum::response::Response;
+    type Error = S::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut request: axum::extract::Request) -> Self::Future {
+        let config = self.config.clone();
+        let mut inner = self.inner.clone();
+        
+        Box::pin(async move {
+            // Extract version from request
+            let extracted_version = Self::extract_version_from_request(&config, &request)?;
+            let version_info = Self::resolve_version(&config, extracted_version)?;
+            
+            // Store version info in request extensions
+            request.extensions_mut().insert(version_info.clone());
+            
+            // Call the inner service
+            let mut response = inner.call(request).await?;
+            
+            // Add versioning headers to response
+            Self::add_version_headers(&config, &version_info, &mut response);
+            
+            Ok(response)
+        })
+    }
+}
+
+impl<S> VersioningService<S> {
+    /// Extract version from request based on strategy
+    fn extract_version_from_request(
+        config: &VersioningConfig,
+        request: &axum::extract::Request,
+    ) -> Result<Option<String>, axum::response::Response> {
+        let extracted = match &config.strategy {
+            VersionStrategy::UrlPath => {
+                // Extract version from URL path (e.g., /api/v1/users -> v1)
+                let path = request.uri().path();
+                if let Ok(regex) = regex::Regex::new(r"/api/v?(\d+(?:\.\d+)?)/") {
+                    if let Some(captures) = regex.captures(path) {
+                        if let Some(version) = captures.get(1) {
+                            Some(format!("v{}", version.as_str()))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            },
+            VersionStrategy::Header(header_name) => {
+                request.headers()
+                    .get(header_name)
+                    .and_then(|h| h.to_str().ok())
+                    .map(|s| s.to_string())
+            },
+            VersionStrategy::QueryParam(param_name) => {
+                // Parse query parameters from URI
+                if let Some(query) = request.uri().query() {
+                    if let Ok(params) = serde_urlencoded::from_str::<HashMap<String, String>>(query) {
+                        params.get(param_name).map(|s| s.to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            },
+            VersionStrategy::AcceptHeader => {
+                if let Some(accept) = request.headers().get("accept") {
+                    if let Ok(accept_str) = accept.to_str() {
+                        // Parse Accept header for version (e.g., application/vnd.api+json;version=1)
+                        if let Ok(regex) = regex::Regex::new(r"version=([^;,\s]+)") {
+                            if let Some(captures) = regex.captures(accept_str) {
+                                if let Some(version) = captures.get(1) {
+                                    Some(format!("v{}", version.as_str()))
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        };
+        
+        Ok(extracted)
+    }
+
+    /// Resolve version to API version configuration
+    fn resolve_version(
+        config: &VersioningConfig,
+        requested_version: Option<String>,
+    ) -> Result<VersionInfo, axum::response::Response> {
+        let version_key = if let Some(version) = requested_version {
+            if config.versions.contains_key(&version) {
+                version
+            } else if config.strict_validation {
+                let error_response = axum::response::Response::builder()
+                    .status(400)
+                    .body(axum::body::Body::from(format!("Unsupported API version: {}", version)))
+                    .unwrap();
+                return Err(error_response);
+            } else if let Some(default) = &config.default_version {
+                default.clone()
+            } else {
+                let error_response = axum::response::Response::builder()
+                    .status(400)
+                    .body(axum::body::Body::from("No valid API version specified and no default available"))
+                    .unwrap();
+                return Err(error_response);
+            }
+        } else if let Some(default) = &config.default_version {
+            default.clone()
+        } else {
+            let error_response = axum::response::Response::builder()
+                .status(400)
+                .body(axum::body::Body::from("API version is required"))
+                .unwrap();
+            return Err(error_response);
+        };
+
+        let api_version = config.versions.get(&version_key)
+            .ok_or_else(|| {
+                axum::response::Response::builder()
+                    .status(500)
+                    .body(axum::body::Body::from(format!("Version configuration not found: {}", version_key)))
+                    .unwrap()
+            })?;
+
+        Ok(VersionInfo {
+            version: version_key,
+            is_deprecated: api_version.deprecated,
+            api_version: api_version.clone(),
+        })
+    }
+
+    /// Add version headers to response
+    fn add_version_headers(
+        config: &VersioningConfig,
+        version_info: &VersionInfo,
+        response: &mut axum::response::Response,
+    ) {
+        let headers = response.headers_mut();
+        
+        // Add current version header
+        headers.insert("X-Api-Version", version_info.version.parse().unwrap());
+        
+        // Add API version support information
+        if let Some(default_version) = &config.default_version {
+            headers.insert("X-Api-Default-Version", default_version.parse().unwrap());
+        }
+        
+        // Add supported versions list
+        let supported_versions: Vec<String> = config.versions.keys().cloned().collect();
+        if !supported_versions.is_empty() {
+            let versions_str = supported_versions.join(",");
+            headers.insert("X-Api-Supported-Versions", versions_str.parse().unwrap());
+        }
+        
+        // Add deprecation headers if needed
+        if config.include_deprecation_headers && version_info.is_deprecated {
+            headers.insert("Deprecation", "true".parse().unwrap());
+            
+            if let Some(message) = &version_info.api_version.deprecation_message {
+                headers.insert("Warning", format!("299 - \"{}\"", message).parse().unwrap());
+            }
+            
+            if let Some(sunset) = &version_info.api_version.sunset_date {
+                headers.insert("Sunset", sunset.parse().unwrap());
+            }
+        }
+    }
+}
+
 /// Convenience functions for creating versioning middleware
 pub fn versioning_middleware(config: VersioningConfig) -> VersioningMiddleware {
     VersioningMiddleware::new(config)
+}
+
+/// Create versioning layer for use with axum routers
+pub fn versioning_layer(config: VersioningConfig) -> VersioningLayer {
+    VersioningLayer::new(config)
 }
 
 /// Create versioning middleware with default configuration

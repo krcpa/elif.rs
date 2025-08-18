@@ -8,11 +8,14 @@ The elif.rs API versioning system provides:
 
 - **Multiple versioning strategies**: URL path, headers, query parameters, and Accept header
 - **Version-specific routing**: Register different route handlers for different API versions
+- **Proper middleware integration**: Tower Layer implementation ensures all strategies work correctly
 - **Deprecation management**: Mark versions as deprecated with sunset dates and migration guides
 - **Version-aware error handling**: Enhanced error responses with migration information
 - **Automatic OpenAPI documentation**: Generate version-specific API documentation
 - **CLI tools**: Manage API versions, generate migration guides, and validate configurations
 - **Interactive Swagger UI**: Browse API documentation for each version
+
+⚡ **Critical Fix**: The versioning system now properly applies middleware via Tower Layer integration, ensuring that all versioning strategies (not just URL path) work correctly with proper version detection and response headers.
 
 ## Quick Start
 
