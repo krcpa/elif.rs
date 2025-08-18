@@ -2,6 +2,7 @@
 
 use super::connection::WebSocketConnection;
 use super::types::{ConnectionId, ConnectionState, WebSocketMessage, WebSocketResult};
+use super::channel::{ChannelManager, ChannelId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -24,6 +25,8 @@ pub enum ConnectionEvent {
 pub struct ConnectionRegistry {
     /// Active connections
     connections: Arc<RwLock<HashMap<ConnectionId, Arc<WebSocketConnection>>>>,
+    /// Channel manager for channel-based messaging
+    channel_manager: Arc<ChannelManager>,
     /// Event subscribers (for future extensibility)
     event_handlers: Arc<RwLock<Vec<Box<dyn Fn(ConnectionEvent) + Send + Sync>>>>,
 }
@@ -33,8 +36,23 @@ impl ConnectionRegistry {
     pub fn new() -> Self {
         Self {
             connections: Arc::new(RwLock::new(HashMap::new())),
+            channel_manager: Arc::new(ChannelManager::new()),
             event_handlers: Arc::new(RwLock::new(Vec::new())),
         }
+    }
+
+    /// Create a new connection registry with existing channel manager
+    pub fn with_channel_manager(channel_manager: Arc<ChannelManager>) -> Self {
+        Self {
+            connections: Arc::new(RwLock::new(HashMap::new())),
+            channel_manager,
+            event_handlers: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    /// Get the channel manager
+    pub fn channel_manager(&self) -> &Arc<ChannelManager> {
+        &self.channel_manager
     }
 
     /// Add a connection to the registry
@@ -62,6 +80,10 @@ impl ConnectionRegistry {
 
         if let Some(conn) = &connection {
             let state = conn.state().await;
+            
+            // Clean up channel memberships
+            self.channel_manager.leave_all_channels(id).await;
+            
             info!("Removed connection from registry: {} (state: {:?})", id, state);
             self.emit_event(ConnectionEvent::Disconnected(id, state)).await;
         }
@@ -159,6 +181,62 @@ impl ConnectionRegistry {
     /// Broadcast a binary message to all active connections
     pub async fn broadcast_binary<T: Into<Vec<u8>>>(&self, data: T) -> BroadcastResult {
         self.broadcast(WebSocketMessage::binary(data)).await
+    }
+
+    /// Send a message to a specific channel
+    pub async fn send_to_channel(
+        &self,
+        channel_id: ChannelId,
+        sender_id: ConnectionId,
+        message: WebSocketMessage,
+    ) -> WebSocketResult<BroadcastResult> {
+        // Get the member IDs from the channel manager
+        let member_ids = self.channel_manager
+            .send_to_channel(channel_id, sender_id, message.clone())
+            .await?;
+
+        // Broadcast to all channel members
+        let mut results = BroadcastResult::new();
+        
+        for member_id in member_ids {
+            if let Some(connection) = self.get_connection(member_id).await {
+                if connection.is_active().await {
+                    match connection.send(message.clone()).await {
+                        Ok(_) => results.success_count += 1,
+                        Err(e) => {
+                            results.failed_connections.push((member_id, e));
+                        }
+                    }
+                } else {
+                    results.inactive_connections.push(member_id);
+                }
+            } else {
+                // Connection not in registry but still in channel - clean up
+                let _ = self.channel_manager.leave_channel(channel_id, member_id).await;
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Send a text message to a specific channel
+    pub async fn send_text_to_channel<T: Into<String>>(
+        &self,
+        channel_id: ChannelId,
+        sender_id: ConnectionId,
+        text: T,
+    ) -> WebSocketResult<BroadcastResult> {
+        self.send_to_channel(channel_id, sender_id, WebSocketMessage::text(text)).await
+    }
+
+    /// Send a binary message to a specific channel
+    pub async fn send_binary_to_channel<T: Into<Vec<u8>>>(
+        &self,
+        channel_id: ChannelId,
+        sender_id: ConnectionId,
+        data: T,
+    ) -> WebSocketResult<BroadcastResult> {
+        self.send_to_channel(channel_id, sender_id, WebSocketMessage::binary(data)).await
     }
 
     /// Close a specific connection

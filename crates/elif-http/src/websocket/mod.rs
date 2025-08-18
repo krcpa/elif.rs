@@ -8,6 +8,7 @@ pub mod registry;
 pub mod server;
 pub mod types;
 pub mod handler;
+pub mod channel;
 
 // Re-export main types
 pub use connection::WebSocketConnection;
@@ -18,3 +19,7 @@ pub use types::{
     ConnectionId, ConnectionState,
 };
 pub use handler::{WebSocketHandler, WebSocketUpgrade, SimpleWebSocketHandler};
+pub use channel::{
+    Channel, ChannelId, ChannelManager, ChannelType, ChannelPermissions, ChannelMetadata,
+    ChannelMessage, ChannelMember, ChannelEvent, ChannelStats, ChannelManagerStats,
+};
