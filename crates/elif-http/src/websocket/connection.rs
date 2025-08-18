@@ -315,7 +315,7 @@ impl WebSocketConnection {
 
         // Connection cleanup
         let mut state_lock = state.write().await;
-        if *state_lock != ConnectionState::Failed("".to_string()) {
+        if !matches!(*state_lock, ConnectionState::Failed(_)) {
             *state_lock = ConnectionState::Closed;
         }
         
