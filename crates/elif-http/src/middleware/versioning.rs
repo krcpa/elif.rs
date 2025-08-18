@@ -11,6 +11,16 @@ use tower::{Layer, Service};
 use std::task::{Context, Poll};
 use std::pin::Pin;
 use std::future::Future;
+use once_cell::sync::Lazy;
+
+// Static regex patterns compiled once for performance
+static URL_PATH_VERSION_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
+    regex::Regex::new(r"/api/v?(\d+(?:\.\d+)?)/").expect("Invalid URL path version regex")
+});
+
+static ACCEPT_HEADER_VERSION_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
+    regex::Regex::new(r"version=([^;,\s]+)").expect("Invalid Accept header version regex")
+});
 
 /// API versioning strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,10 +170,7 @@ impl VersioningMiddleware {
             VersionStrategy::UrlPath => {
                 // Extract version from URL path (e.g., /api/v1/users -> v1)
                 let path = request.uri().path();
-                if let Some(captures) = regex::Regex::new(r"/api/v?(\d+(?:\.\d+)?)/")
-                    .map_err(|e| HttpError::internal(format!("Version regex error: {}", e)))?
-                    .captures(path) 
-                {
+                if let Some(captures) = URL_PATH_VERSION_REGEX.captures(path) {
                     if let Some(version) = captures.get(1) {
                         return Ok(Some(format!("v{}", version.as_str())));
                     }
@@ -190,10 +197,7 @@ impl VersioningMiddleware {
                 if let Some(accept) = request.headers().get("accept") {
                     if let Ok(accept_str) = accept.to_str() {
                         // Parse Accept header for version (e.g., application/vnd.api+json;version=1)
-                        if let Some(captures) = regex::Regex::new(r"version=([^;,\s]+)")
-                            .map_err(|e| HttpError::internal(format!("Version regex error: {}", e)))?
-                            .captures(accept_str)
-                        {
+                        if let Some(captures) = ACCEPT_HEADER_VERSION_REGEX.captures(accept_str) {
                             if let Some(version) = captures.get(1) {
                                 return Ok(Some(format!("v{}", version.as_str())));
                             }
@@ -409,17 +413,21 @@ impl<S> VersioningService<S> {
         config: &VersioningConfig,
         request: &axum::extract::Request,
     ) -> Result<Option<String>, axum::response::Response> {
+        // Local static regex definitions for better encapsulation and performance
+        static URL_PATH_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
+            regex::Regex::new(r"/api/v?(\d+(?:\.\d+)?)/").expect("Failed to compile URL path regex")
+        });
+        static ACCEPT_HEADER_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
+            regex::Regex::new(r"version=([^;,\s]+)").expect("Failed to compile Accept header regex")
+        });
+        
         let extracted = match &config.strategy {
             VersionStrategy::UrlPath => {
                 // Extract version from URL path (e.g., /api/v1/users -> v1)
                 let path = request.uri().path();
-                if let Ok(regex) = regex::Regex::new(r"/api/v?(\d+(?:\.\d+)?)/") {
-                    if let Some(captures) = regex.captures(path) {
-                        if let Some(version) = captures.get(1) {
-                            Some(format!("v{}", version.as_str()))
-                        } else {
-                            None
-                        }
+                if let Some(captures) = URL_PATH_REGEX.captures(path) {
+                    if let Some(version) = captures.get(1) {
+                        Some(format!("v{}", version.as_str()))
                     } else {
                         None
                     }
@@ -449,13 +457,9 @@ impl<S> VersioningService<S> {
                 if let Some(accept) = request.headers().get("accept") {
                     if let Ok(accept_str) = accept.to_str() {
                         // Parse Accept header for version (e.g., application/vnd.api+json;version=1)
-                        if let Ok(regex) = regex::Regex::new(r"version=([^;,\s]+)") {
-                            if let Some(captures) = regex.captures(accept_str) {
-                                if let Some(version) = captures.get(1) {
-                                    Some(format!("v{}", version.as_str()))
-                                } else {
-                                    None
-                                }
+                        if let Some(captures) = ACCEPT_HEADER_REGEX.captures(accept_str) {
+                            if let Some(version) = captures.get(1) {
+                                Some(format!("v{}", version.as_str()))
                             } else {
                                 None
                             }

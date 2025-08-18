@@ -123,16 +123,26 @@ impl VersionedErrorBuilder {
         // Add JSON body
         response = response.json(&versioned_error)?;
         
-        // Add deprecation headers if needed
+        // Add deprecation headers if needed using safe header handling
         if version_info.is_deprecated {
+            // Use safe header parsing for static values
             response = response.header("Deprecation", "true")?;
             
+            // Handle dynamic warning message safely
             if let Some(message) = &version_info.api_version.deprecation_message {
-                response = response.header("Warning", format!("299 - \"{}\"", message))?;
+                let warning_value = format!("299 - \"{}\"", message);
+                // Only add header if it can be parsed successfully
+                if warning_value.parse::<axum::http::HeaderValue>().is_ok() {
+                    response = response.header("Warning", warning_value)?;
+                }
             }
             
+            // Handle dynamic sunset date safely
             if let Some(sunset) = &version_info.api_version.sunset_date {
-                response = response.header("Sunset", sunset)?;
+                // Only add header if it can be parsed successfully  
+                if sunset.parse::<axum::http::HeaderValue>().is_ok() {
+                    response = response.header("Sunset", sunset)?;
+                }
             }
         }
 
