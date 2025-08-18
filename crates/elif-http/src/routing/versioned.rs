@@ -17,8 +17,8 @@ use std::future::Future;
 use service_builder::builder;
 
 /// Versioned router that handles multiple API versions
-#[builder]
 #[derive(Debug)]
+#[builder]
 pub struct VersionedRouter<S = ()> 
 where 
     S: Clone + Send + Sync + 'static,
@@ -241,9 +241,9 @@ pub fn path_versioned_router<S>() -> VersionedRouter<S>
 where 
     S: Clone + Send + Sync + 'static,
 {
-    VersionedRouter::build()
+    VersionedRouter::builder()
         .strategy(crate::middleware::versioning::VersionStrategy::UrlPath)
-        .build_with_defaults()
+        .build().unwrap()
 }
 
 /// Create a versioned router with header strategy
@@ -251,9 +251,9 @@ pub fn header_versioned_router<S>(header_name: &str) -> VersionedRouter<S>
 where 
     S: Clone + Send + Sync + 'static,
 {
-    VersionedRouter::build()
+    VersionedRouter::builder()
         .strategy(crate::middleware::versioning::VersionStrategy::Header(header_name.to_string()))
-        .build_with_defaults()
+        .build().unwrap()
 }
 
 #[cfg(test)]

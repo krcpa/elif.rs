@@ -43,8 +43,8 @@ pub struct ApiVersion {
 }
 
 /// API versioning middleware configuration
-#[builder]
 #[derive(Debug, Clone)]
+#[builder]
 pub struct VersioningConfig {
     /// Available API versions
     #[builder(default)]
@@ -294,10 +294,15 @@ pub fn versioning_middleware(config: VersioningConfig) -> VersioningMiddleware {
 
 /// Create versioning middleware with default configuration
 pub fn default_versioning_middleware() -> VersioningMiddleware {
-    let mut config = VersioningConfig::build()
-        .strategy(VersionStrategy::UrlPath)
-        .default_version(Some("v1".to_string()))
-        .build_with_defaults();
+    let mut config = VersioningConfig {
+        versions: HashMap::new(),
+        strategy: VersionStrategy::UrlPath,
+        default_version: Some("v1".to_string()),
+        include_deprecation_headers: true,
+        version_header_name: "Api-Version".to_string(),
+        version_param_name: "version".to_string(),
+        strict_validation: true,
+    };
 
     // Add default v1 version
     config.add_version("v1".to_string(), ApiVersion {
@@ -359,11 +364,11 @@ mod tests {
 
     #[test]
     fn test_version_config_builder() {
-        let config = VersioningConfig::build()
+        let config = VersioningConfig::builder()
             .strategy(VersionStrategy::Header("X-Api-Version".to_string()))
             .default_version(Some("v2".to_string()))
             .strict_validation(false)
-            .build_with_defaults();
+            .build().unwrap();
 
         assert!(!config.strict_validation);
         assert_eq!(config.default_version, Some("v2".to_string()));
@@ -375,7 +380,7 @@ mod tests {
 
     #[test]
     fn test_version_deprecation() {
-        let mut config = VersioningConfig::build().build_with_defaults();
+        let mut config = VersioningConfig::builder().build().unwrap();
         
         config.add_version("v1".to_string(), ApiVersion {
             version: "v1".to_string(),
@@ -397,9 +402,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_url_path_version_extraction() {
-        let config = VersioningConfig::build()
+        let config = VersioningConfig::builder()
             .strategy(VersionStrategy::UrlPath)
-            .build_with_defaults();
+            .build().unwrap();
             
         let middleware = VersioningMiddleware::new(config);
         
