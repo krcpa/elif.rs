@@ -79,25 +79,24 @@ impl MiddlewarePipelineV2 {
         F: FnOnce(ElifRequest) -> Fut + Send + 'static,
         Fut: Future<Output = ElifResponse> + Send + 'static,
     {
-        // Simple implementation: process each middleware sequentially
-        // This is not the final implementation but will work for now
-        let mut current_request = request;
-        
-        // For now, we'll just call the handler directly and demonstrate the concept
-        // A full implementation would need more complex chaining
+        // If no middleware, call handler directly
         if self.middleware.is_empty() {
-            return handler(current_request).await;
+            return handler(request).await;
         }
         
-        // Simplified demonstration - just call first middleware with a dummy next
-        let middleware = &self.middleware[0];
-        let next = Next::new(move |req| {
-            Box::pin(async move {
-                handler(req).await
-            })
-        });
+        // Build the middleware chain from the inside out, starting with the handler
+        let mut next = Next::new(move |req| Box::pin(handler(req)));
         
-        middleware.handle(current_request, next).await
+        // Iterate through middleware in reverse order to build the chain
+        for middleware in self.middleware.iter().rev() {
+            // The 'next' from the previous iteration is moved into this new closure.
+            // This builds the chain of middleware calls from the inside out.
+            let current_middleware = middleware.clone();
+            next = Next::new(move |req| current_middleware.handle(req, next));
+        }
+        
+        // Execute the complete chain
+        next.run(request).await
     }
     
     /// Get number of middleware in pipeline
@@ -324,6 +323,85 @@ mod tests {
         }).await;
         
         assert_eq!(response.status_code(), axum::http::StatusCode::OK);
+    }
+    
+    #[tokio::test]
+    async fn test_middleware_chain_execution_order() {
+        /// Test middleware that tracks execution order
+        struct OrderTestMiddleware {
+            name: &'static str,
+        }
+        
+        impl OrderTestMiddleware {
+            fn new(name: &'static str) -> Self {
+                Self { name }
+            }
+        }
+        
+        impl Middleware for OrderTestMiddleware {
+            fn handle(&self, mut request: ElifRequest, next: Next) -> NextFuture<'static> {
+                let name = self.name;
+                Box::pin(async move {
+                    // Add execution order to request headers (before handler)
+                    let header_name = format!("x-before-{}", name.to_lowercase());
+                    request.headers.insert(
+                        header_name.parse::<axum::http::HeaderName>().unwrap(), 
+                        "executed".parse::<axum::http::HeaderValue>().unwrap()
+                    );
+                    
+                    // Call next middleware/handler
+                    let response = next.run(request).await;
+                    
+                    // Add execution order to response headers (after handler) 
+                    let response_header = format!("x-after-{}", name.to_lowercase());
+                    response.header(&response_header, "executed").unwrap_or(
+                        // If header addition fails, return original response  
+                        ElifResponse::ok().text("fallback")
+                    )
+                })
+            }
+            
+            fn name(&self) -> &'static str {
+                self.name
+            }
+        }
+        
+        // Create pipeline with multiple middleware
+        let pipeline = MiddlewarePipelineV2::new()
+            .add(OrderTestMiddleware::new("First"))
+            .add(OrderTestMiddleware::new("Second"))
+            .add(OrderTestMiddleware::new("Third"));
+        
+        let request = ElifRequest::new(
+            Method::GET,
+            "/test".parse().unwrap(),
+            HeaderMap::new(),
+        );
+        
+        let response = pipeline.execute(request, |req| {
+            Box::pin(async move {
+                // Verify all middleware ran before the handler
+                assert!(req.headers.contains_key("x-before-first"));
+                assert!(req.headers.contains_key("x-before-second"));
+                assert!(req.headers.contains_key("x-before-third"));
+                
+                ElifResponse::ok().text("Handler executed")
+            })
+        }).await;
+        
+        // Verify response and that all middleware ran after the handler
+        assert_eq!(response.status_code(), axum::http::StatusCode::OK);
+        
+        // Convert to axum response to check headers
+        let axum_response = response.into_axum_response();
+        let (parts, _body) = axum_response.into_parts();
+        assert!(parts.headers.contains_key("x-after-first"));
+        assert!(parts.headers.contains_key("x-after-second"));
+        assert!(parts.headers.contains_key("x-after-third"));
+        
+        // Verify pipeline info
+        assert_eq!(pipeline.len(), 3);
+        assert_eq!(pipeline.names(), vec!["First", "Second", "Third"]);
     }
     
     #[tokio::test]
