@@ -54,18 +54,11 @@ async fn main() {
     ).await.unwrap();
     println!("   ✅ Created private channel 'team-leads': {}", private_id);
 
-    // Create a protected channel
+    // Create a protected channel with secure password hashing
+    let protected_channel_type = ChannelType::protected_with_password("secret123").unwrap();
     let protected_id = channel_manager.create_channel(
         "secret-project".to_string(),
-        ChannelType::Protected { 
-            password_hash: {
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
-                let mut hasher = DefaultHasher::new();
-                "secret123".hash(&mut hasher);
-                hasher.finish().to_string()
-            }
-        },
+        protected_channel_type,
         Some(alice_id),
     ).await.unwrap();
     println!("   ✅ Created protected channel 'secret-project': {}", protected_id);

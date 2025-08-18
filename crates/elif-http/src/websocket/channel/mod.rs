@@ -47,6 +47,7 @@ pub mod channel;
 pub mod manager;
 pub mod message;
 pub mod events;
+pub mod password;
 
 #[cfg(test)]
 mod tests;

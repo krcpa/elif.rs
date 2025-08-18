@@ -187,20 +187,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_protected_channel() {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        "secret123".hash(&mut hasher);
-        let password_hash = hasher.finish().to_string();
-
         let manager = ChannelManager::new();
         let connection_id = ConnectionId::new();
 
-        // Create protected channel
+        // Create protected channel with secure password hashing
+        let channel_type = ChannelType::protected_with_password("secret123").unwrap();
         let channel_id = manager.create_channel(
             "protected-test".to_string(),
-            ChannelType::Protected { password_hash },
+            channel_type,
             None,
         ).await.unwrap();
 

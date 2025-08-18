@@ -45,6 +45,9 @@ chrono = { workspace = true }
 log = "0.4"
 service-builder = "0.3.0"
 
+# Security
+argon2 = "0.5"
+
 
 [features]
 default = []

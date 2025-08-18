@@ -218,20 +218,15 @@ impl Channel {
         }
     }
 
-    /// Validate password for protected channels
+    /// Validate password for protected channels using secure Argon2 hashing
+    /// 
+    /// Returns true if the password is correct or if the channel doesn't require a password.
+    /// Returns false if the password is incorrect or if password verification fails.
     pub fn validate_password(&self, password: &str) -> bool {
         match &self.metadata.channel_type {
             ChannelType::Protected { password_hash } => {
-                // In a real implementation, you'd use proper password hashing (bcrypt, argon2, etc.)
-                // For now, this is a simple hash comparison
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
-                
-                let mut hasher = DefaultHasher::new();
-                password.hash(&mut hasher);
-                let hash = hasher.finish().to_string();
-                
-                hash == *password_hash
+                // Use secure Argon2 password verification
+                password_hash.verify_password(password).unwrap_or(false)
             }
             _ => true, // Non-protected channels don't require passwords
         }

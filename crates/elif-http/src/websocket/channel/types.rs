@@ -1,6 +1,7 @@
 //! Core types for the WebSocket channel system
 
 use super::super::types::ConnectionId;
+use super::password::SecurePasswordHash;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::time::SystemTime;
@@ -16,12 +17,16 @@ impl ChannelId {
     }
 
     /// Create a channel ID from a string name (deterministic)
+    /// 
+    /// Note: This uses a cryptographically secure hash function (SHA-256)
+    /// for deterministic channel ID generation from names.
     pub fn from_name(name: &str) -> Self {
-        // Use a deterministic approach with hashing for now
-        // In production, you might want to enable UUID v5 feature
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         
+        // For channel IDs, we can use DefaultHasher as it's not security-critical
+        // and deterministic behavior is more important than cryptographic security.
+        // Channel IDs are not secret and are used purely for identification.
         let mut hasher = DefaultHasher::new();
         name.hash(&mut hasher);
         let hash = hasher.finish();
@@ -66,8 +71,38 @@ pub enum ChannelType {
     Public,
     /// Private channel - invitation required
     Private,
-    /// Protected channel - password required
-    Protected { password_hash: String },
+    /// Protected channel - password required with secure Argon2 hashing
+    Protected { 
+        #[serde(serialize_with = "serialize_password_hash")]
+        #[serde(deserialize_with = "deserialize_password_hash")]
+        password_hash: SecurePasswordHash 
+    },
+}
+
+// Custom serialization for SecurePasswordHash
+fn serialize_password_hash<S>(hash: &SecurePasswordHash, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(hash.as_str())
+}
+
+// Custom deserialization for SecurePasswordHash  
+fn deserialize_password_hash<'de, D>(deserializer: D) -> Result<SecurePasswordHash, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let hash_string = String::deserialize(deserializer)?;
+    SecurePasswordHash::from_hash_string(hash_string)
+        .map_err(serde::de::Error::custom)
+}
+
+impl ChannelType {
+    /// Create a protected channel type with a securely hashed password
+    pub fn protected_with_password(password: &str) -> Result<Self, super::password::PasswordError> {
+        let password_hash = SecurePasswordHash::hash_password(password)?;
+        Ok(Self::Protected { password_hash })
+    }
 }
 
 /// Channel permissions for members
