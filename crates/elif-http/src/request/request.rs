@@ -65,10 +65,50 @@ impl ElifRequest {
         self
     }
 
-    /// Set request body bytes
+    /// Set request body bytes (consuming)
     pub fn with_body(mut self, body: Bytes) -> Self {
         self.body_bytes = Some(body);
         self
+    }
+
+    /// Set request body bytes (borrowing - for middleware use)
+    pub fn set_body(&mut self, body: Bytes) {
+        self.body_bytes = Some(body);
+    }
+
+    /// Add header to request (for middleware use)
+    pub fn add_header<K, V>(&mut self, key: K, value: V) -> HttpResult<()>
+    where
+        K: TryInto<axum::http::HeaderName>,
+        K::Error: std::fmt::Display,
+        V: TryInto<axum::http::HeaderValue>, 
+        V::Error: std::fmt::Display,
+    {
+        let header_name = key.try_into()
+            .map_err(|e| HttpError::bad_request(format!("Invalid header name: {}", e)))?;
+        let header_value = value.try_into()
+            .map_err(|e| HttpError::bad_request(format!("Invalid header value: {}", e)))?;
+        
+        self.headers.insert(header_name, header_value);
+        Ok(())
+    }
+
+    /// Add path parameter (for middleware use)
+    pub fn add_path_param<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.path_params.insert(key.into(), value.into());
+    }
+
+    /// Add query parameter (for middleware use) 
+    pub fn add_query_param<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.query_params.insert(key.into(), value.into());
     }
 
     /// Get path parameter by name
@@ -346,5 +386,75 @@ mod tests {
         assert_eq!(request.method, method);
         assert_eq!(request.uri, uri);
         assert_eq!(request.body_bytes(), body.as_ref());
+    }
+
+    #[test]
+    fn test_borrowing_api_headers() {
+        let mut request = ElifRequest::new(
+            Method::GET,
+            "/test".parse().unwrap(),
+            HeaderMap::new(),
+        );
+        
+        // Test adding headers with borrowing API
+        request.add_header("x-middleware", "processed").unwrap();
+        request.add_header("x-custom", "value").unwrap();
+        
+        assert!(request.headers.contains_key("x-middleware"));
+        assert!(request.headers.contains_key("x-custom"));
+        assert_eq!(request.headers.get("x-middleware").unwrap(), "processed");
+    }
+
+    #[test]
+    fn test_borrowing_api_params() {
+        let mut request = ElifRequest::new(
+            Method::GET,
+            "/users/123?page=2".parse().unwrap(),
+            HeaderMap::new(),
+        );
+        
+        // Test adding parameters with borrowing API
+        request.add_path_param("id", "123");
+        request.add_path_param("section", "profile");
+        request.add_query_param("page", "2");
+        request.add_query_param("limit", "10");
+        
+        assert_eq!(request.path_param("id"), Some(&"123".to_string()));
+        assert_eq!(request.path_param("section"), Some(&"profile".to_string()));
+        assert_eq!(request.query_param("page"), Some(&"2".to_string()));
+        assert_eq!(request.query_param("limit"), Some(&"10".to_string()));
+    }
+
+    #[test]
+    fn test_borrowing_api_body() {
+        let mut request = ElifRequest::new(
+            Method::POST,
+            "/test".parse().unwrap(),
+            HeaderMap::new(),
+        );
+        
+        let body_data = Bytes::from("test body content");
+        request.set_body(body_data.clone());
+        
+        assert_eq!(request.body_bytes(), Some(&body_data));
+    }
+
+    #[test]
+    fn test_borrowing_api_middleware_pattern() {
+        let mut request = ElifRequest::new(
+            Method::GET,
+            "/api/users".parse().unwrap(),
+            HeaderMap::new(),
+        );
+        
+        // Simulate middleware adding context data
+        request.add_header("x-request-id", "req-123").unwrap();
+        request.add_path_param("user_id", "456");
+        request.add_query_param("enriched", "true");
+        
+        // Verify all modifications were applied
+        assert!(request.headers.contains_key("x-request-id"));
+        assert_eq!(request.path_param("user_id"), Some(&"456".to_string()));
+        assert_eq!(request.query_param("enriched"), Some(&"true".to_string()));
     }
 }
