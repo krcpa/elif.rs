@@ -214,12 +214,13 @@ impl AppConfigTrait for AppConfig {
     }
     
     fn validate(&self) -> Result<(), ConfigError> {
-        // Validate port range
-        if self.port > 65535 {
+        // Port is u16, so it's automatically within valid range (0-65535)
+        // Only validate that it's not 0 if needed, except in testing environment
+        if !self.environment.is_testing() && self.port == 0 {
             return Err(ConfigError::InvalidValue {
                 field: "port".to_string(),
                 value: self.port.to_string(),
-                expected: "port between 0 and 65535".to_string(),
+                expected: "port between 1 and 65535".to_string(),
             });
         }
         
@@ -281,5 +282,53 @@ impl AppConfigTrait for AppConfig {
         // Add other fields...
         
         sources
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_port_validation_in_testing_environment() {
+        // Port 0 should be allowed in testing environment
+        let mut config = AppConfig::testing();
+        config.port = 0;
+        assert!(config.validate().is_ok(), "Port 0 should be allowed in testing environment");
+    }
+
+    #[test]
+    fn test_port_validation_in_non_testing_environment() {
+        // Port 0 should not be allowed in development environment
+        let mut config = AppConfig::development();
+        config.port = 0;
+        assert!(config.validate().is_err(), "Port 0 should not be allowed in development environment");
+        
+        // Port 0 should not be allowed in production environment
+        let mut config = AppConfig::production();
+        config.port = 0;
+        assert!(config.validate().is_err(), "Port 0 should not be allowed in production environment");
+    }
+
+    #[test]
+    fn test_valid_port_numbers() {
+        // Valid ports should work in all environments
+        let mut config = AppConfig::development();
+        config.port = 3000;
+        assert!(config.validate().is_ok());
+
+        config = AppConfig::testing();
+        config.port = 8080;
+        assert!(config.validate().is_ok());
+
+        config = AppConfig::production();
+        config.port = 443;
+        // Note: Production config may fail validation due to other requirements (secret key, etc.)
+        // We only care about the port validation here
+        let result = config.validate();
+        // Extract port-specific errors
+        if let Err(ConfigError::InvalidValue { field, .. }) = result {
+            assert_ne!(field, "port", "Port validation should not fail for valid port numbers");
+        }
     }
 }

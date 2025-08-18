@@ -6,6 +6,7 @@
 pub mod pipeline;
 pub mod core;
 pub mod utils;
+pub mod v2;
 pub mod versioning;
 
 // Re-export core middleware functionality
