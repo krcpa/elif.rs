@@ -257,15 +257,33 @@ impl ChannelManager {
 
     /// Remove a connection from all channels (useful for cleanup on disconnect)
     pub async fn leave_all_channels(&self, connection_id: ConnectionId) -> Vec<ChannelId> {
+        // Acquire write lock once and remove all channel entries for this connection
         let channel_ids = {
-            let connection_channels = self.connection_channels.read().await;
-            connection_channels.get(&connection_id).cloned().unwrap_or_default()
+            let mut connection_channels = self.connection_channels.write().await;
+            connection_channels.remove(&connection_id).unwrap_or_default()
         };
 
         let mut left_channels = Vec::new();
+        
+        // Now handle cleanup for each channel without repeated lock acquisitions
         for channel_id in channel_ids {
-            if self.leave_channel(channel_id, connection_id).await.is_ok() {
-                left_channels.push(channel_id);
+            if let Some(channel) = self.get_channel(channel_id).await {
+                // Get member info before removal for event logging
+                let member = channel.get_member(connection_id).await;
+                let nickname = member.as_ref().and_then(|m| m.nickname.clone());
+                
+                // Remove member from channel
+                if channel.remove_member(connection_id).await.is_some() {
+                    left_channels.push(channel_id);
+                    
+                    info!("Connection {} left channel {}", connection_id, channel_id);
+                    self.emit_event(ChannelEvent::MemberLeft(channel_id, connection_id, nickname)).await;
+                    
+                    // Auto-delete empty channels (except those with explicit creators)
+                    if channel.is_empty().await && channel.metadata.created_by.is_none() {
+                        let _ = self.delete_channel(channel_id).await;
+                    }
+                }
             }
         }
 
@@ -318,10 +336,10 @@ impl ChannelManager {
 
     /// Get channel statistics for all channels
     pub async fn get_all_channel_stats(&self) -> Vec<ChannelStats> {
-        let channels = self.get_all_channels().await;
-        let mut stats = Vec::new();
+        let channels = self.channels.read().await;
+        let mut stats = Vec::with_capacity(channels.len());
         
-        for channel in channels {
+        for channel in channels.values() {
             stats.push(channel.stats().await);
         }
         
@@ -330,10 +348,10 @@ impl ChannelManager {
 
     /// Get public channels for discovery
     pub async fn get_public_channels(&self) -> Vec<ChannelStats> {
-        let channels = self.get_all_channels().await;
+        let channels = self.channels.read().await;
         let mut public_channels = Vec::new();
         
-        for channel in channels {
+        for channel in channels.values() {
             if matches!(channel.metadata.channel_type, ChannelType::Public) {
                 public_channels.push(channel.stats().await);
             }
