@@ -123,8 +123,7 @@ impl<R: DatabaseRow + ?Sized> DatabaseRowExt for R {
     where
         T: for<'de> serde::Deserialize<'de>,
     {
-        let db_value = self.get_by_name(column)
-            .map_err(|e| crate::error::ModelError::Database(e.to_string()))?;
+        let db_value = self.get_by_name(column)?;
         
         let json_value = db_value.to_json();
         serde_json::from_value(json_value)
@@ -147,7 +146,7 @@ impl<R: DatabaseRow + ?Sized> DatabaseRowExt for R {
                 }
             },
             Err(crate::error::ModelError::ColumnNotFound(_)) => Ok(None),
-            Err(e) => Err(crate::error::ModelError::Database(e.to_string())),
+            Err(e) => Err(e), // Preserve the original error type and information
         }
     }
 }
