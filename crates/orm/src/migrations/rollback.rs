@@ -79,7 +79,7 @@ impl MigrationRollback for MigrationRunner {
                 
                 // Execute DOWN SQL
                 if !migration.down_sql.trim().is_empty() {
-                    for statement in self.manager().split_sql_statements(&migration.down_sql) {
+                    for statement in self.manager().split_sql_statements(&migration.down_sql)? {
                         if !statement.trim().is_empty() {
                             sqlx::query(&statement).execute(&mut *transaction).await
                                 .map_err(|e| OrmError::Migration(format!(
@@ -145,7 +145,7 @@ impl MigrationRollback for MigrationRunner {
         
         // Execute DOWN SQL
         if !migration.down_sql.trim().is_empty() {
-            for statement in self.manager().split_sql_statements(&migration.down_sql) {
+            for statement in self.manager().split_sql_statements(&migration.down_sql)? {
                 if !statement.trim().is_empty() {
                     sqlx::query(&statement).execute(&mut *transaction).await
                         .map_err(|e| OrmError::Migration(format!(

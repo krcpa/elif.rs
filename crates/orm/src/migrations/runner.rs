@@ -84,7 +84,7 @@ impl MigrationRunner {
 
             // Execute migration SQL
             if !migration.up_sql.trim().is_empty() {
-                for statement in self.manager.split_sql_statements(&migration.up_sql) {
+                for statement in self.manager.split_sql_statements(&migration.up_sql)? {
                     if !statement.trim().is_empty() {
                         sqlx::query(&statement).execute(&mut *transaction).await
                             .map_err(|e| OrmError::Migration(format!(
@@ -147,7 +147,7 @@ impl MigrationRunner {
 
         // Execute migration SQL
         if !migration.up_sql.trim().is_empty() {
-            for statement in self.manager.split_sql_statements(&migration.up_sql) {
+            for statement in self.manager.split_sql_statements(&migration.up_sql)? {
                 if !statement.trim().is_empty() {
                     sqlx::query(&statement).execute(&mut *transaction).await
                         .map_err(|e| OrmError::Migration(format!(

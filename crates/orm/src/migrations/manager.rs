@@ -5,6 +5,8 @@
 use chrono::{DateTime, Utc};
 use std::fs;
 use std::path::{Path, PathBuf};
+use sqlparser::dialect::GenericDialect;
+use sqlparser::parser::Parser;
 
 use crate::error::{OrmError, OrmResult};
 use super::definitions::{Migration, MigrationConfig};
@@ -173,15 +175,30 @@ impl MigrationManager {
         )
     }
 
-    /// Split SQL statements for execution (simple implementation)
-    pub fn split_sql_statements(&self, sql: &str) -> Vec<String> {
-        // This is a simple implementation that splits on semicolons
-        // A more robust implementation would handle strings, comments, etc.
-        sql.split(';')
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(|s| format!("{};", s))
-            .collect()
+    /// Split SQL statements for execution using proper SQL parsing
+    pub fn split_sql_statements(&self, sql: &str) -> OrmResult<Vec<String>> {
+        let dialect = GenericDialect {};
+        let mut statements = Vec::new();
+        
+        // Parse all statements from the SQL string
+        match Parser::parse_sql(&dialect, sql) {
+            Ok(parsed_statements) => {
+                for stmt in parsed_statements {
+                    statements.push(format!("{};", stmt));
+                }
+                Ok(statements)
+            }
+            Err(e) => {
+                // If parsing fails, fall back to the original naive approach with a warning
+                tracing::warn!("SQL parsing failed, using naive semicolon splitting: {}", e);
+                let naive_statements = sql.split(';')
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| format!("{};", s))
+                    .collect();
+                Ok(naive_statements)
+            }
+        }
     }
 
     /// SQL to create the migrations tracking table
