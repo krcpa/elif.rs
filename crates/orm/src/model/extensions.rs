@@ -42,18 +42,19 @@ pub trait ModelExtensions: Model + CrudOperations {
         }
     }
 
-    /// Save this model instance (insert or update based on primary key)
     async fn save(&mut self, pool: &Pool<sqlx::Postgres>) -> ModelResult<()>
     where
-        Self: Sized,
+        Self: Sized + Clone,
     {
         if self.primary_key().is_some() && self.exists(pool).await? {
             // Update existing record
             self.update(pool).await
         } else {
-            // For new records, this is a placeholder implementation
-            // Real implementation will require derive macro support
-            Err(ModelError::Validation("Cannot save new model without primary key support from derive macro".to_string()))
+            // Create a new record. `create` takes ownership, so we clone.
+            let new_model = Self::create(pool, self.clone()).await?;
+            // Update self with the state from the database, including the new primary key.
+            *self = new_model;
+            Ok(())
         }
     }
 
