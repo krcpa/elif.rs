@@ -6,6 +6,7 @@
 pub mod pipeline;
 pub mod core;
 pub mod utils;
+pub mod v2;
 
 // Re-export core middleware functionality
 pub use pipeline::*;

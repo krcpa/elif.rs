@@ -214,12 +214,13 @@ impl AppConfigTrait for AppConfig {
     }
     
     fn validate(&self) -> Result<(), ConfigError> {
-        // Validate port range
-        if self.port > 65535 {
+        // Port is u16, so it's automatically within valid range (0-65535)
+        // Only validate that it's not 0 if needed
+        if self.port == 0 {
             return Err(ConfigError::InvalidValue {
                 field: "port".to_string(),
                 value: self.port.to_string(),
-                expected: "port between 0 and 65535".to_string(),
+                expected: "port between 1 and 65535".to_string(),
             });
         }
         
