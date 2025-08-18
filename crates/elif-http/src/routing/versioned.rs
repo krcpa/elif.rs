@@ -1,39 +1,26 @@
-use super::{Router, HttpMethod, RouteInfo, RouteRegistry};
+use super::router::Router;
 use crate::{
-    handlers::elif_handler,
     request::ElifRequest,
     response::IntoElifResponse,
     errors::HttpResult,
-    middleware::versioning::{VersioningConfig, VersioningMiddleware, ApiVersion},
-};
-use axum::{
-    Router as AxumRouter,
-    routing::{get, post, put, delete, patch},
-    middleware::from_fn,
+    middleware::versioning::{VersioningConfig, ApiVersion},
 };
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::future::Future;
-use service_builder::builder;
 
 /// Versioned router that handles multiple API versions
 #[derive(Debug)]
-#[builder]
 pub struct VersionedRouter<S = ()> 
 where 
     S: Clone + Send + Sync + 'static,
 {
     /// Version-specific routers
-    #[builder(default)]
     pub version_routers: HashMap<String, Router<S>>,
     /// Versioning configuration
-    #[builder(default)]
     pub versioning_config: VersioningConfig,
     /// Global router for non-versioned routes
-    #[builder(default)]
     pub global_router: Option<Router<S>>,
     /// Base API path (e.g., "/api")
-    #[builder(default = "\"/api\".to_string()")]
     pub base_path: String,
 }
 
@@ -45,7 +32,7 @@ where
     pub fn new() -> Self {
         Self {
             version_routers: HashMap::new(),
-            versioning_config: VersioningConfig::build().build_with_defaults(),
+            versioning_config: VersioningConfig::builder().build().unwrap(),
             global_router: None,
             base_path: "/api".to_string(),
         }
@@ -56,15 +43,13 @@ where
         self.version_routers.insert(version.to_string(), router);
         
         // Add version to config if not exists
-        if !self.versioning_config.versions.contains_key(version) {
-            self.versioning_config.add_version(version.to_string(), ApiVersion {
-                version: version.to_string(),
-                deprecated: false,
-                deprecation_message: None,
-                sunset_date: None,
-                is_default: self.version_routers.len() == 1, // First version is default
-            });
-        }
+        self.versioning_config.add_version(version.to_string(), ApiVersion {
+            version: version.to_string(),
+            deprecated: false,
+            deprecation_message: None,
+            sunset_date: None,
+            is_default: self.version_routers.len() == 1, // First version is default
+        });
         
         self
     }
@@ -81,23 +66,46 @@ where
 
     /// Set default version
     pub fn default_version(mut self, version: &str) -> Self {
-        // Mark all versions as non-default
-        for api_version in self.versioning_config.versions.values_mut() {
-            api_version.is_default = false;
-        }
+        let (versions, strategy, _, include_deprecation_headers, version_header_name, version_param_name, strict_validation) = self.versioning_config.clone_config();
         
-        // Mark specified version as default
-        if let Some(api_version) = self.versioning_config.versions.get_mut(version) {
-            api_version.is_default = true;
-        }
+        // Rebuild config with new default version
+        let mut new_config = VersioningConfig::builder()
+            .versions(versions)
+            .strategy(strategy)
+            .include_deprecation_headers(include_deprecation_headers)
+            .version_header_name(version_header_name)
+            .version_param_name(version_param_name)
+            .strict_validation(strict_validation)
+            .default_version(Some(version.to_string()))
+            .build().unwrap();
         
-        self.versioning_config.default_version = Some(version.to_string());
+        // Add the version if it doesn't exist
+        new_config.add_version(version.to_string(), ApiVersion {
+            version: version.to_string(),
+            deprecated: false,
+            deprecation_message: None,
+            sunset_date: None,
+            is_default: true,
+        });
+        
+        self.versioning_config = new_config;
         self
     }
 
     /// Set versioning strategy
     pub fn strategy(mut self, strategy: crate::middleware::versioning::VersionStrategy) -> Self {
-        self.versioning_config.strategy = strategy;
+        let (versions, _, default_version, include_deprecation_headers, version_header_name, version_param_name, strict_validation) = self.versioning_config.clone_config();
+        
+        // Rebuild config with new strategy
+        self.versioning_config = VersioningConfig::builder()
+            .versions(versions)
+            .strategy(strategy)
+            .include_deprecation_headers(include_deprecation_headers)
+            .version_header_name(version_header_name)
+            .version_param_name(version_param_name)
+            .strict_validation(strict_validation)
+            .default_version(default_version)
+            .build().unwrap();
         self
     }
 
@@ -118,7 +126,7 @@ where
 
         // Create versioned routes
         for (version, version_router) in self.version_routers {
-            let version_path = match self.versioning_config.strategy {
+            let version_path = match self.versioning_config.get_strategy() {
                 crate::middleware::versioning::VersionStrategy::UrlPath => {
                     format!("{}/{}", self.base_path, version)
                 },
@@ -239,7 +247,7 @@ pub fn versioned_router<S>() -> VersionedRouter<S>
 where 
     S: Clone + Send + Sync + 'static,
 {
-    VersionedRouter::new()
+    VersionedRouter::<S>::new()
 }
 
 /// Create a versioned router with URL path strategy
@@ -247,9 +255,14 @@ pub fn path_versioned_router<S>() -> VersionedRouter<S>
 where 
     S: Clone + Send + Sync + 'static,
 {
-    VersionedRouter::builder()
-        .strategy(crate::middleware::versioning::VersionStrategy::UrlPath)
-        .build().unwrap()
+    VersionedRouter::<S> {
+        version_routers: HashMap::new(),
+        versioning_config: VersioningConfig::builder()
+            .strategy(crate::middleware::versioning::VersionStrategy::UrlPath)
+            .build().unwrap(),
+        global_router: None,
+        base_path: "/api".to_string(),
+    }
 }
 
 /// Create a versioned router with header strategy
@@ -257,9 +270,14 @@ pub fn header_versioned_router<S>(header_name: &str) -> VersionedRouter<S>
 where 
     S: Clone + Send + Sync + 'static,
 {
-    VersionedRouter::builder()
-        .strategy(crate::middleware::versioning::VersionStrategy::Header(header_name.to_string()))
-        .build().unwrap()
+    VersionedRouter::<S> {
+        version_routers: HashMap::new(),
+        versioning_config: VersioningConfig::builder()
+            .strategy(crate::middleware::versioning::VersionStrategy::Header(header_name.to_string()))
+            .build().unwrap(),
+        global_router: None,
+        base_path: "/api".to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -279,7 +297,7 @@ mod tests {
         assert!(router.version_routers.contains_key("v1"));
         assert!(router.version_routers.contains_key("v2"));
         
-        let v1_version = router.versioning_config.versions.get("v1").unwrap();
+        let v1_version = router.versioning_config.get_version("v1").unwrap();
         assert!(v1_version.deprecated);
         assert_eq!(v1_version.deprecation_message, Some("Please use v2".to_string()));
     }

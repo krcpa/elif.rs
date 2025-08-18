@@ -78,7 +78,9 @@ mod tests {
             Box::pin(async move {
                 // Add a header to track middleware execution
                 let headers = request.headers_mut();
-                headers.insert("X-Middleware", self.name.parse().unwrap());
+                if let Ok(value) = self.name.parse() {
+                    headers.insert("X-Middleware", value);
+                }
                 Ok(request)
             })
         }
@@ -90,7 +92,9 @@ mod tests {
             Box::pin(async move {
                 // Add response header
                 let headers = response.headers_mut();
-                headers.insert("X-Response-Middleware", self.name.parse().unwrap());
+                if let Ok(value) = self.name.parse() {
+                    headers.insert("X-Response-Middleware", value);
+                }
                 response
             })
         }

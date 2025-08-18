@@ -47,7 +47,7 @@ pub struct ApiVersion {
 }
 
 /// API versioning middleware configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 #[builder]
 pub struct VersioningConfig {
     /// Available API versions
@@ -97,6 +97,39 @@ impl VersioningConfig {
         // Find the version marked as default
         self.versions.values().find(|v| v.is_default)
     }
+    
+    /// Get a specific version
+    pub fn get_version(&self, version: &str) -> Option<&ApiVersion> {
+        self.versions.get(version)
+    }
+    
+    /// Get the versioning strategy
+    pub fn get_strategy(&self) -> &VersionStrategy {
+        &self.strategy
+    }
+    
+    /// Get all versions
+    pub fn get_versions(&self) -> &HashMap<String, ApiVersion> {
+        &self.versions
+    }
+    
+    /// Get all versions as mutable reference
+    pub fn get_versions_mut(&mut self) -> &mut HashMap<String, ApiVersion> {
+        &mut self.versions
+    }
+    
+    /// Clone all configuration for rebuilding
+    pub fn clone_config(&self) -> (HashMap<String, ApiVersion>, VersionStrategy, Option<String>, bool, String, String, bool) {
+        (
+            self.versions.clone(),
+            self.strategy.clone(),
+            self.default_version.clone(),
+            self.include_deprecation_headers,
+            self.version_header_name.clone(),
+            self.version_param_name.clone(),
+            self.strict_validation,
+        )
+    }
 }
 
 /// Extracted version information from request
@@ -128,7 +161,7 @@ impl VersioningMiddleware {
                 // Extract version from URL path (e.g., /api/v1/users -> v1)
                 let path = request.uri().path();
                 if let Some(captures) = regex::Regex::new(r"/api/v?(\d+(?:\.\d+)?)/")
-                    .map_err(|e| HttpError::internal_server_error(format!("Version regex error: {}", e)))?
+                    .map_err(|e| HttpError::internal(format!("Version regex error: {}", e)))?
                     .captures(path) 
                 {
                     if let Some(version) = captures.get(1) {
@@ -158,7 +191,7 @@ impl VersioningMiddleware {
                     if let Ok(accept_str) = accept.to_str() {
                         // Parse Accept header for version (e.g., application/vnd.api+json;version=1)
                         if let Some(captures) = regex::Regex::new(r"version=([^;,\s]+)")
-                            .map_err(|e| HttpError::internal_server_error(format!("Version regex error: {}", e)))?
+                            .map_err(|e| HttpError::internal(format!("Version regex error: {}", e)))?
                             .captures(accept_str)
                         {
                             if let Some(version) = captures.get(1) {
@@ -191,7 +224,7 @@ impl VersioningMiddleware {
         };
 
         let api_version = self.config.versions.get(&version_key)
-            .ok_or_else(|| HttpError::internal_server_error(format!("Version configuration not found: {}", version_key)))?;
+            .ok_or_else(|| HttpError::internal(format!("Version configuration not found: {}", version_key)))?;
 
         Ok(VersionInfo {
             version: version_key,
@@ -201,23 +234,23 @@ impl VersioningMiddleware {
     }
 
     /// Add deprecation headers to response
-    fn add_deprecation_headers(&self, response: &mut ElifResponse, version_info: &VersionInfo) {
+    fn add_deprecation_headers(&self, mut response: ElifResponse, version_info: &VersionInfo) -> HttpResult<ElifResponse> {
         if self.config.include_deprecation_headers && version_info.is_deprecated {
-            let headers = response.headers_mut();
-            
             // Add deprecation header
-            headers.insert("Deprecation", "true".parse().unwrap());
+            response = response.header("Deprecation", "true")?;
             
             // Add warning message if available
             if let Some(message) = &version_info.api_version.deprecation_message {
-                headers.insert("Warning", format!("299 - \"{}\"", message).parse().unwrap());
+                response = response.header("Warning", format!("299 - \"{}\"", message))?;
             }
             
             // Add sunset date if available
             if let Some(sunset) = &version_info.api_version.sunset_date {
-                headers.insert("Sunset", sunset.parse().unwrap());
+                response = response.header("Sunset", sunset)?;
             }
         }
+        
+        Ok(response)
     }
 }
 
@@ -272,14 +305,18 @@ impl Middleware for VersioningMiddleware {
             
             // Add API version support information
             if let Some(default_version) = &config.default_version {
-                headers.insert("X-Api-Default-Version", default_version.parse().unwrap());
+                if let Ok(value) = default_version.parse() {
+                    headers.insert("X-Api-Default-Version", value);
+                }
             }
             
             // Add supported versions list
             let supported_versions: Vec<String> = config.versions.keys().cloned().collect();
             if !supported_versions.is_empty() {
                 let versions_str = supported_versions.join(",");
-                headers.insert("X-Api-Supported-Versions", versions_str.parse().unwrap());
+                if let Ok(value) = versions_str.parse() {
+                    headers.insert("X-Api-Supported-Versions", value);
+                }
             }
             
             response
@@ -494,30 +531,44 @@ impl<S> VersioningService<S> {
         let headers = response.headers_mut();
         
         // Add current version header
-        headers.insert("X-Api-Version", version_info.version.parse().unwrap());
+        if let Ok(value) = version_info.version.parse() {
+            headers.insert("X-Api-Version", value);
+        }
         
         // Add API version support information
         if let Some(default_version) = &config.default_version {
-            headers.insert("X-Api-Default-Version", default_version.parse().unwrap());
+            if let Ok(value) = default_version.parse() {
+                headers.insert("X-Api-Default-Version", value);
+            }
         }
         
         // Add supported versions list
         let supported_versions: Vec<String> = config.versions.keys().cloned().collect();
         if !supported_versions.is_empty() {
             let versions_str = supported_versions.join(",");
-            headers.insert("X-Api-Supported-Versions", versions_str.parse().unwrap());
+            if let Ok(value) = versions_str.parse() {
+                headers.insert("X-Api-Supported-Versions", value);
+            }
         }
         
         // Add deprecation headers if needed
         if config.include_deprecation_headers && version_info.is_deprecated {
-            headers.insert("Deprecation", "true".parse().unwrap());
+            // Use from_static for known static values
+            headers.insert("Deprecation", axum::http::HeaderValue::from_static("true"));
             
+            // Handle dynamic warning message safely
             if let Some(message) = &version_info.api_version.deprecation_message {
-                headers.insert("Warning", format!("299 - \"{}\"", message).parse().unwrap());
+                let warning_value = format!("299 - \"{}\"", message);
+                if let Ok(value) = warning_value.parse() {
+                    headers.insert("Warning", value);
+                }
             }
             
+            // Handle dynamic sunset date safely
             if let Some(sunset) = &version_info.api_version.sunset_date {
-                headers.insert("Sunset", sunset.parse().unwrap());
+                if let Ok(value) = sunset.parse() {
+                    headers.insert("Sunset", value);
+                }
             }
         }
     }
