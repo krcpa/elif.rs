@@ -6,6 +6,7 @@
 pub mod pipeline;
 pub mod core;
 pub mod utils;
+pub mod versioning;
 
 // Re-export core middleware functionality
 pub use pipeline::*;
@@ -15,6 +16,9 @@ pub use core::*;
 
 // Re-export utility middleware
 pub use utils::*;
+
+// Re-export versioning middleware
+pub use versioning::*;
 
 use axum::{extract::Request, response::Response};
 use std::future::Future;
@@ -74,7 +78,9 @@ mod tests {
             Box::pin(async move {
                 // Add a header to track middleware execution
                 let headers = request.headers_mut();
-                headers.insert("X-Middleware", self.name.parse().unwrap());
+                if let Ok(value) = self.name.parse() {
+                    headers.insert("X-Middleware", value);
+                }
                 Ok(request)
             })
         }
@@ -86,7 +92,9 @@ mod tests {
             Box::pin(async move {
                 // Add response header
                 let headers = response.headers_mut();
-                headers.insert("X-Response-Middleware", self.name.parse().unwrap());
+                if let Ok(value) = self.name.parse() {
+                    headers.insert("X-Response-Middleware", value);
+                }
                 response
             })
         }

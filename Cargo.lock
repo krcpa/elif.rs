@@ -1464,6 +1464,7 @@ dependencies = [
  "hyper 1.6.0",
  "log",
  "once_cell",
+ "regex",
  "serde",
  "serde_json",
  "serde_urlencoded",
