@@ -79,24 +79,20 @@ impl MiddlewarePipelineV2 {
         F: FnOnce(ElifRequest) -> Fut + Send + 'static,
         Fut: Future<Output = ElifResponse> + Send + 'static,
     {
-        // If no middleware, call handler directly
-        if self.middleware.is_empty() {
-            return handler(request).await;
-        }
-        
-        // Build the middleware chain from the inside out, starting with the handler
-        let mut next = Next::new(move |req| Box::pin(handler(req)));
-        
-        // Iterate through middleware in reverse order to build the chain
+        let mut chain = Box::new(move |req: ElifRequest| {
+            Box::pin(handler(req)) as NextFuture<'static>
+        }) as Box<dyn FnOnce(ElifRequest) -> NextFuture<'static> + Send>;
+
         for middleware in self.middleware.iter().rev() {
-            // The 'next' from the previous iteration is moved into this new closure.
-            // This builds the chain of middleware calls from the inside out.
-            let current_middleware = middleware.clone();
-            next = Next::new(move |req| current_middleware.handle(req, next));
+            let middleware = middleware.clone();
+            let next_handler = chain;
+            chain = Box::new(move |req: ElifRequest| {
+                let next = Next::new(next_handler);
+                middleware.handle(req, next)
+            });
         }
-        
-        // Execute the complete chain
-        next.run(request).await
+
+        chain(request).await
     }
     
     /// Get number of middleware in pipeline
@@ -318,9 +314,12 @@ mod tests {
         
         let response = pipeline.execute(request, |req| {
             Box::pin(async move {
-                // Assert that both middleware have executed by checking for the headers they add.
-                assert!(req.headers.contains_key("x-middleware-first"), "First middleware did not run");
-                assert!(req.headers.contains_key("x-middleware-second"), "Second middleware did not run");
+                // Verify both middleware executed by checking headers they added
+                assert!(req.headers.contains_key("x-middleware-first"), 
+                    "First middleware should have added header");
+                assert!(req.headers.contains_key("x-middleware-second"), 
+                    "Second middleware should have added header");
+                
                 ElifResponse::ok().text("Hello World")
             })
         }).await;
