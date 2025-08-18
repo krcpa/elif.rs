@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn test_json_detection() {
         let mut headers = HeaderMap::new();
-        headers.insert("content-type", "application/json".parse().unwrap());
+        headers.insert("content-type", axum::http::HeaderValue::from_static("application/json"));
 
         let request = ElifRequest::new(
             Method::POST,
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_bearer_token_extraction() {
         let mut headers = HeaderMap::new();
-        headers.insert("authorization", "Bearer abc123xyz".parse().unwrap());
+        headers.insert("authorization", axum::http::HeaderValue::from_static("Bearer abc123xyz"));
 
         let request = ElifRequest::new(
             Method::GET,
