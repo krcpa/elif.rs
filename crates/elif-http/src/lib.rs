@@ -23,6 +23,7 @@ pub mod handlers;
 pub mod logging;
 pub mod controller;
 pub mod testing;
+pub mod websocket;
 
 // Feature-gated modules
 #[cfg(feature = "auth")]
@@ -94,6 +95,17 @@ pub use testing::{
     create_test_container, TestContainerBuilder, TestServerBuilder,
     HttpAssertions, ErrorAssertions,
     get_test_port, test_socket_addr
+};
+
+// Re-export WebSocket types
+pub use websocket::{
+    // Core types
+    WebSocketMessage, WebSocketError, WebSocketResult, ConnectionId, ConnectionState,
+    WebSocketConfig, MessageType,
+    // Connection management
+    WebSocketConnection, ConnectionRegistry, ConnectionEvent,
+    // Server and handler
+    WebSocketServer, WebSocketHandler, WebSocketUpgrade, SimpleWebSocketHandler,
 };
 
 // Legacy compatibility re-exports
