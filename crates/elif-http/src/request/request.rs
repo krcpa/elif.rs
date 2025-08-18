@@ -77,7 +77,7 @@ impl ElifRequest {
     }
 
     /// Add header to request (for middleware use)
-    pub fn add_header<K, V>(&mut self, key: K, value: V) -> Result<(), Box<dyn std::error::Error>>
+    pub fn add_header<K, V>(&mut self, key: K, value: V) -> HttpResult<()>
     where
         K: TryInto<axum::http::HeaderName>,
         K::Error: std::fmt::Display,
@@ -85,9 +85,9 @@ impl ElifRequest {
         V::Error: std::fmt::Display,
     {
         let header_name = key.try_into()
-            .map_err(|e| format!("Invalid header name: {}", e))?;
+            .map_err(|e| HttpError::bad_request(format!("Invalid header name: {}", e)))?;
         let header_value = value.try_into()
-            .map_err(|e| format!("Invalid header value: {}", e))?;
+            .map_err(|e| HttpError::bad_request(format!("Invalid header value: {}", e)))?;
         
         self.headers.insert(header_name, header_value);
         Ok(())
