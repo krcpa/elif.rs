@@ -8,7 +8,7 @@ use std::sync::{Arc, RwLock};
 use serde_json::Value;
 use once_cell::sync::Lazy;
 use crate::error::{OrmError, OrmResult};
-use crate::model::Model;
+use crate::model::{Model, CrudOperations};
 
 pub mod traits;
 pub mod fake_data;

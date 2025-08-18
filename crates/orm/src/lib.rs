@@ -16,7 +16,6 @@
 //! - `transactions/` - Transaction lifecycle and isolation management
 //! - `query/` - Query building and execution
 //! - `sql/` - SQL generation and security
-//! - `conditions/` - WHERE clauses, JOINs, and ordering
 //! - `models/` - Model traits and CRUD operations
 //! - `relationships/` - Relationship system and loading
 //! - `loading/` - Eager/lazy loading strategies
@@ -29,7 +28,6 @@ pub mod connection;
 pub mod transactions;
 pub mod query;
 pub mod sql;
-pub mod conditions;
 pub mod models;
 pub mod relationships;
 pub mod loading;

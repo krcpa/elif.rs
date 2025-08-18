@@ -49,7 +49,20 @@ pub use registry::*;
 pub use constraints::*;
 
 // Re-export type-safe relationship types
-pub use containers::*;
+// Use the new modular containers
+pub use containers::{
+    RelationshipLoadingState,
+    RelationshipContainer,
+    TypeSafeRelationship,
+    HasOne,
+    HasMany,
+    BelongsTo,
+    ManyToMany,
+    MorphOne,
+    MorphMany,
+    TypeSafeRelationshipLoader,
+    type_safe_utils,
+};
 pub use hydration::*;
 pub use inference::*;
 pub use type_safe_eager_loading::*;

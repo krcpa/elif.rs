@@ -9,7 +9,6 @@ pub mod joins;
 pub mod ordering;
 pub mod pagination;
 pub mod upsert;
-pub mod sql_generation;
 pub mod execution;
 pub mod performance;
 pub mod with;
@@ -19,3 +18,6 @@ pub use types::*;
 pub use builder::QueryBuilder;
 pub use upsert::UpsertBuilder;
 pub use with::{QueryBuilderWithMethods, QueryBuilderWithEagerLoading};
+
+// Import SQL generation methods to make them available when using QueryBuilder
+pub use crate::sql::generation;
