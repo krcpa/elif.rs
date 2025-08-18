@@ -10,10 +10,12 @@
 pub mod params;
 pub mod router;
 pub mod group;
+pub mod versioned;
 
 pub use router::{Router as ElifRouter, Route, RouteBuilder};
 pub use params::{PathParams, RouteParam, ParamError, ParamType};
 pub use group::{RouteGroup, GroupBuilder};
+pub use versioned::{VersionedRouter, VersionedRouteBuilder, versioned_router, path_versioned_router, header_versioned_router};
 
 use axum::http::Method;
 use std::collections::HashMap;

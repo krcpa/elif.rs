@@ -144,6 +144,12 @@ enum Commands {
         #[command(subcommand)]
         email_command: EmailCommands,
     },
+    
+    /// API version management
+    Version {
+        #[command(subcommand)]
+        version_command: ApiVersionCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -668,6 +674,48 @@ enum EmailTestCommands {
 }
 
 #[derive(Subcommand)]
+enum ApiVersionCommands {
+    /// Create a new API version
+    Create {
+        /// Version identifier (e.g., v2, 1.0)
+        version: String,
+        
+        /// Optional description for the version
+        #[arg(long)]
+        description: Option<String>,
+    },
+    
+    /// Deprecate an API version
+    Deprecate {
+        /// Version to deprecate
+        version: String,
+        
+        /// Deprecation message
+        #[arg(long)]
+        message: Option<String>,
+        
+        /// Sunset date (ISO 8601 format)
+        #[arg(long)]
+        sunset_date: Option<String>,
+    },
+    
+    /// List all API versions
+    List,
+    
+    /// Generate migration guide between versions
+    Migrate {
+        /// Source version
+        from: String,
+        
+        /// Target version
+        to: String,
+    },
+    
+    /// Validate API version configuration
+    Validate,
+}
+
+#[derive(Subcommand)]
 enum MakeCommands {
     /// Generate a complete resource with model, controller, migration, tests, and policies
     Resource {
@@ -1115,6 +1163,25 @@ async fn main() -> Result<(), ElifError> {
                             email::test_export(args).await?;
                         }
                     }
+                }
+            }
+        }
+        Commands::Version { version_command } => {
+            match version_command {
+                ApiVersionCommands::Create { version, description } => {
+                    api_version::create_version(&version, description.clone()).await?;
+                }
+                ApiVersionCommands::Deprecate { version, message, sunset_date } => {
+                    api_version::deprecate_version(&version, message.clone(), sunset_date.clone()).await?;
+                }
+                ApiVersionCommands::List => {
+                    api_version::list_versions().await?;
+                }
+                ApiVersionCommands::Migrate { from, to } => {
+                    api_version::generate_migration_guide(&from, &to).await?;
+                }
+                ApiVersionCommands::Validate => {
+                    api_version::validate_versions().await?;
                 }
             }
         }

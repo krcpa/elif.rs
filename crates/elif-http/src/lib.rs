@@ -32,7 +32,7 @@ pub mod auth;
 // Main server API - NestJS-like experience
 pub use server::Server;
 pub use config::HttpConfig;
-pub use errors::{HttpError, HttpResult};
+pub use errors::{HttpError, HttpResult, VersionedError, VersionedErrorBuilder, VersionedErrorExt};
 
 // Re-export foundation types
 pub use foundation::{GenericHandler, IntoElifResponse, RequestExtractor, BoxFuture};
@@ -43,6 +43,8 @@ pub use routing::{
     ElifRouter, Route, RouteBuilder,
     PathParams, RouteParam, ParamError, ParamType,
     RouteGroup, GroupBuilder,
+    // Versioned routing
+    VersionedRouter, VersionedRouteBuilder, versioned_router, path_versioned_router, header_versioned_router,
 };
 
 // Re-export request/response types  
@@ -67,6 +69,11 @@ pub use middleware::{
     tracing::{TracingMiddleware, TracingConfig, RequestMetadata},
     timeout::{TimeoutMiddleware, TimeoutConfig, TimeoutInfo, apply_timeout},
     body_limit::{BodyLimitMiddleware, BodyLimitConfig, BodyLimitInfo, limit_body_size, limits},
+    // Versioning middleware
+    versioning::{
+        VersioningMiddleware, VersioningConfig, VersionStrategy, ApiVersion, VersionInfo,
+        versioning_middleware, default_versioning_middleware, RequestVersionExt
+    },
 };
 
 // Re-export authentication types (if auth feature is enabled)

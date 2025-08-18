@@ -6,6 +6,7 @@
 pub mod pipeline;
 pub mod core;
 pub mod utils;
+pub mod versioning;
 
 // Re-export core middleware functionality
 pub use pipeline::*;
@@ -15,6 +16,9 @@ pub use core::*;
 
 // Re-export utility middleware
 pub use utils::*;
+
+// Re-export versioning middleware
+pub use versioning::*;
 
 use axum::{extract::Request, response::Response};
 use std::future::Future;
