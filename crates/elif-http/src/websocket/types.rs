@@ -32,7 +32,7 @@ impl fmt::Display for ConnectionId {
 }
 
 /// WebSocket message types - clean API over tungstenite
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum WebSocketMessage {
     /// Text message
     Text(String),
@@ -47,7 +47,7 @@ pub enum WebSocketMessage {
 }
 
 /// Close frame information
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CloseFrame {
     pub code: u16,
     pub reason: String,
