@@ -1454,6 +1454,7 @@ dependencies = [
 name = "elif-http"
 version = "0.6.0"
 dependencies = [
+ "argon2",
  "axum",
  "axum-extra",
  "chrono",
@@ -5610,6 +5611,7 @@ dependencies = [
  "getrandom 0.3.3",
  "js-sys",
  "serde",
+ "sha1_smol",
  "wasm-bindgen",
 ]
 

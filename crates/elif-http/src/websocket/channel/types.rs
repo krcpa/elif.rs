@@ -18,37 +18,17 @@ impl ChannelId {
 
     /// Create a channel ID from a string name (deterministic)
     /// 
-    /// Note: This uses a cryptographically secure hash function (SHA-256)
-    /// for deterministic channel ID generation from names.
+    /// Uses UUID v5 with SHA-1 hashing to generate a stable, deterministic UUID
+    /// that will be the same across Rust versions and platforms.
     pub fn from_name(name: &str) -> Self {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+        // Use UUID v5 with a namespace for channel names
+        // Using OID namespace as it's appropriate for application-specific identifiers
+        const CHANNEL_NAMESPACE: Uuid = Uuid::from_bytes([
+            0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1,
+            0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
+        ]); // This is the standard OID namespace UUID
         
-        // For channel IDs, we can use DefaultHasher as it's not security-critical
-        // and deterministic behavior is more important than cryptographic security.
-        // Channel IDs are not secret and are used purely for identification.
-        let mut hasher = DefaultHasher::new();
-        name.hash(&mut hasher);
-        let hash = hasher.finish();
-        
-        // Convert hash to UUID bytes (simplified approach)
-        let bytes = [
-            ((hash >> 56) & 0xFF) as u8,
-            ((hash >> 48) & 0xFF) as u8,
-            ((hash >> 40) & 0xFF) as u8,
-            ((hash >> 32) & 0xFF) as u8,
-            ((hash >> 24) & 0xFF) as u8,
-            ((hash >> 16) & 0xFF) as u8,
-            ((hash >> 8) & 0xFF) as u8,
-            (hash & 0xFF) as u8,
-            0, 0, 0, 0, // padding
-            ((hash >> 28) & 0xFF) as u8,
-            ((hash >> 20) & 0xFF) as u8,
-            ((hash >> 12) & 0xFF) as u8,
-            ((hash >> 4) & 0xFF) as u8,
-        ];
-        
-        Self(Uuid::from_bytes(bytes))
+        Self(Uuid::new_v5(&CHANNEL_NAMESPACE, name.as_bytes()))
     }
 }
 

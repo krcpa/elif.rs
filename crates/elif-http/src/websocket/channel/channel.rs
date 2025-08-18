@@ -3,7 +3,7 @@
 use super::super::types::{ConnectionId, WebSocketError, WebSocketResult};
 use super::types::{ChannelId, ChannelMember, ChannelMetadata, ChannelPermissions, ChannelStats, ChannelType};
 use super::message::ChannelMessage;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::RwLock;
@@ -15,7 +15,7 @@ pub struct Channel {
     pub id: ChannelId,
     pub metadata: ChannelMetadata,
     members: Arc<RwLock<HashMap<ConnectionId, ChannelMember>>>,
-    message_history: Arc<RwLock<Vec<ChannelMessage>>>,
+    message_history: Arc<RwLock<VecDeque<ChannelMessage>>>,
 }
 
 impl Channel {
@@ -36,7 +36,7 @@ impl Channel {
             id,
             metadata,
             members: Arc::new(RwLock::new(HashMap::new())),
-            message_history: Arc::new(RwLock::new(Vec::new())),
+            message_history: Arc::new(RwLock::new(VecDeque::new())),
         }
     }
 
@@ -48,7 +48,7 @@ impl Channel {
             id,
             metadata,
             members: Arc::new(RwLock::new(HashMap::new())),
-            message_history: Arc::new(RwLock::new(Vec::new())),
+            message_history: Arc::new(RwLock::new(VecDeque::new())),
         }
     }
 
@@ -174,13 +174,13 @@ impl Channel {
     pub async fn add_message(&self, message: ChannelMessage) {
         let mut history = self.message_history.write().await;
         
-        // Add the message
-        history.push(message);
+        // Add the message to the back (newest)
+        history.push_back(message);
         
-        // Trim history if needed
+        // Trim history if needed - remove from front (oldest) efficiently
         if let Some(limit) = self.metadata.message_history_limit {
-            if history.len() > limit {
-                history.remove(0); // Remove oldest message
+            while history.len() > limit {
+                history.pop_front(); // O(1) operation with VecDeque
             }
         }
     }
@@ -189,13 +189,13 @@ impl Channel {
     pub async fn get_recent_messages(&self, count: usize) -> Vec<ChannelMessage> {
         let history = self.message_history.read().await;
         let start = history.len().saturating_sub(count);
-        history[start..].to_vec()
+        history.iter().skip(start).cloned().collect()
     }
 
     /// Get all message history
     pub async fn get_message_history(&self) -> Vec<ChannelMessage> {
         let history = self.message_history.read().await;
-        history.clone()
+        history.iter().cloned().collect()
     }
 
     /// Clear message history
