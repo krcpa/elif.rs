@@ -7,9 +7,10 @@ pub mod lifecycle;
 pub mod isolation;
 pub mod savepoints;
 
-// Re-export common types and traits
-pub use lifecycle::*;
-pub use isolation::*;
+// Re-export specific types to avoid conflicts
+pub use lifecycle::{Transaction, TransactionConfig};
+// Note: IsolationLevel is defined in lifecycle.rs, not isolation.rs
+pub use lifecycle::IsolationLevel;
 
 /// Transaction builder for configuring transaction options
 pub struct TransactionBuilder {
