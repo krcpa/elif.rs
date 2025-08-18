@@ -17,10 +17,16 @@ elif-core = { version = "0.4.0", path = "../core" }
 elif-auth = { version = "0.3.1", path = "../elif-auth", optional = true }
 
 # HTTP server
-axum = { workspace = true }
+axum = { workspace = true, features = ["ws"] }
 tower = { workspace = true }
 tower-http = { workspace = true }
 hyper = { workspace = true }
+
+# WebSocket server
+tokio-tungstenite = "0.23"
+tungstenite = "0.21"
+axum-extra = { version = "0.9", features = ["typed-header"] }
+futures-util = "0.3"
 
 # Async runtime
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal", "time", "sync", "net"] }

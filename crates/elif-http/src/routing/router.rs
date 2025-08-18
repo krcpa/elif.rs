@@ -210,6 +210,12 @@ where
             None
         }
     }
+
+    /// Add a raw Axum route while preserving router state (for internal use)
+    pub(crate) fn add_axum_route(mut self, path: &str, method_router: axum::routing::MethodRouter<S>) -> Self {
+        self.axum_router = self.axum_router.route(path, method_router);
+        self
+    }
 }
 
 impl<S> Default for Router<S>
