@@ -342,14 +342,21 @@ where
         
         Box::pin(async move {
             // Extract version from request
-            let extracted_version = Self::extract_version_from_request(&config, &request)?;
-            let version_info = Self::resolve_version(&config, extracted_version)?;
+            let extracted_version = match Self::extract_version_from_request(&config, &request) {
+                Ok(version) => version,
+                Err(error_response) => return Ok(error_response),
+            };
+            
+            let version_info = match Self::resolve_version(&config, extracted_version) {
+                Ok(info) => info,
+                Err(error_response) => return Ok(error_response),
+            };
             
             // Store version info in request extensions
             request.extensions_mut().insert(version_info.clone());
             
             // Call the inner service
-            let mut response = inner.call(request).await?;
+            let mut response = inner.call(request).await.map_err(|e| e)?;
             
             // Add versioning headers to response
             Self::add_version_headers(&config, &version_info, &mut response);
