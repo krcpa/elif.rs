@@ -176,15 +176,29 @@ impl ConnectionRegistry {
     pub async fn close_all_connections(&self) -> CloseAllResult {
         let connections = self.get_all_connections().await;
         let mut results = CloseAllResult::new();
+        let mut to_remove = Vec::new();
 
         for connection in connections {
             match connection.close().await {
                 Ok(_) => {
-                    self.remove_connection(connection.id).await;
+                    to_remove.push(connection.id);
                     results.closed_count += 1;
                 }
                 Err(e) => {
                     results.failed_connections.push((connection.id, e));
+                }
+            }
+        }
+
+        // Batch removal: remove all closed connections under a single write lock
+        if !to_remove.is_empty() {
+            let mut connections = self.connections.write().await;
+            for id in to_remove {
+                if let Some(conn) = connections.remove(&id) {
+                    let state = conn.state().await;
+                    info!("Removed connection from registry: {} (state: {:?})", id, state);
+                    // Note: We can't emit events here while holding the write lock
+                    // to avoid potential deadlocks. Consider restructuring if events are critical.
                 }
             }
         }
@@ -195,13 +209,26 @@ impl ConnectionRegistry {
     /// Clean up inactive connections
     pub async fn cleanup_inactive_connections(&self) -> usize {
         let connections = self.get_all_connections().await;
-        let mut cleaned_up = 0;
+        let mut to_remove = Vec::new();
 
+        // First pass: identify inactive connections
         for connection in connections {
             if connection.is_closed().await {
-                self.remove_connection(connection.id).await;
-                cleaned_up += 1;
-                debug!("Cleaned up inactive connection: {}", connection.id);
+                to_remove.push((connection.id, connection));
+            }
+        }
+
+        let cleaned_up = to_remove.len();
+
+        // Batch removal: remove all inactive connections under a single write lock
+        if !to_remove.is_empty() {
+            let mut registry_connections = self.connections.write().await;
+            for (id, connection) in to_remove {
+                if registry_connections.remove(&id).is_some() {
+                    debug!("Cleaned up inactive connection: {}", id);
+                    // Note: We can't emit Disconnected events here while holding the write lock
+                    // to avoid potential deadlocks. Consider restructuring if events are critical.
+                }
             }
         }
 
