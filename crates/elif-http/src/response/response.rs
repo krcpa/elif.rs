@@ -460,19 +460,30 @@ mod tests {
     fn test_borrowing_api_body() {
         let mut response = ElifResponse::ok();
         
-        // Test borrowing body methods
+        // Test borrowing text body method
         response.set_text("Hello World");
         assert_eq!(response.status_code(), StatusCode::OK);
+        match &response.body {
+            ResponseBody::Text(text) => assert_eq!(text, "Hello World"),
+            _ => panic!("Expected text body after calling set_text"),
+        }
         
-        // Test JSON setting
-        let mut json_response = ElifResponse::ok();
+        // Test borrowing bytes body method
+        let bytes_data = Bytes::from("binary data");
+        response.set_bytes(bytes_data.clone());
+        match &response.body {
+            ResponseBody::Bytes(bytes) => assert_eq!(bytes, &bytes_data),
+            _ => panic!("Expected bytes body after calling set_bytes"),
+        }
+        
+        // Test borrowing JSON body method
         let data = json!({"message": "Hello"});
-        json_response.set_json_value(data.clone());
+        response.set_json_value(data.clone());
         
         // Verify the body was set correctly
-        match &json_response.body {
+        match &response.body {
             ResponseBody::Json(value) => assert_eq!(*value, data),
-            _ => panic!("Expected JSON body"),
+            _ => panic!("Expected JSON body after calling set_json_value"),
         }
     }
 
