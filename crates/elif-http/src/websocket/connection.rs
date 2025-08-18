@@ -58,32 +58,7 @@ pub struct ConnectionStats {
 }
 
 impl WebSocketConnection {
-    /// Create a new WebSocket connection from an Axum WebSocket
-    pub fn new(config: WebSocketConfig) -> Self {
-        let id = ConnectionId::new();
-        let (sender, _receiver) = mpsc::unbounded_channel();
-        let state = Arc::new(RwLock::new(ConnectionState::Connected));
-        let metadata = Arc::new(RwLock::new(ConnectionMetadata {
-            connected_at: Instant::now(),
-            remote_addr: None,
-            user_agent: None,
-            custom: HashMap::new(),
-            stats: ConnectionStats::default(),
-        }));
-
-        let connection = Self {
-            id,
-            state,
-            metadata,
-            sender,
-            config,
-        };
-
-        info!("WebSocket connection created: {}", id);
-        connection
-    }
-
-    /// Create a new WebSocket connection from a TCP stream (for future use)
+    /// Create a new WebSocket connection from a TCP stream
     pub async fn from_stream<S>(
         stream: S,
         config: WebSocketConfig,
