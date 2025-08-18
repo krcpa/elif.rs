@@ -126,8 +126,8 @@ impl From<tungstenite::Message> for WebSocketMessage {
                 }))
             }
             tungstenite::Message::Frame(_) => {
-                // Raw frames are handled internally by tungstenite
-                Self::Binary(vec![])
+                // Raw frames are internal to tungstenite and should never reach application code
+                unreachable!("Raw frames should not be exposed by tungstenite's high-level API")
             }
         }
     }
