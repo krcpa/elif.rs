@@ -12,18 +12,18 @@ use std::sync::Arc;
 // use super::Middleware as OldMiddleware; // Import the old middleware trait
 
 /// Type alias for boxed future in Next
-type NextFuture = Pin<Box<dyn Future<Output = ElifResponse> + Send + 'static>>;
+type NextFuture<'a> = Pin<Box<dyn Future<Output = ElifResponse> + Send + 'a>>;
 
 /// Next represents the rest of the middleware chain
 pub struct Next {
-    handler: Box<dyn FnOnce(ElifRequest) -> NextFuture + Send>,
+    handler: Box<dyn FnOnce(ElifRequest) -> NextFuture<'static> + Send>,
 }
 
 impl Next {
     /// Create a new Next with a handler function
     pub fn new<F>(handler: F) -> Self
     where
-        F: FnOnce(ElifRequest) -> NextFuture + Send + 'static,
+        F: FnOnce(ElifRequest) -> NextFuture<'static> + Send + 'static,
     {
         Self {
             handler: Box::new(handler),
@@ -40,7 +40,7 @@ impl Next {
 /// Uses boxed futures to be dyn-compatible
 pub trait Middleware: Send + Sync {
     /// Handle the request and call the next middleware in the chain
-    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture;
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static>;
     
     /// Optional middleware name for debugging
     fn name(&self) -> &'static str {
@@ -124,19 +124,61 @@ impl Clone for MiddlewarePipelineV2 {
     }
 }
 
-// TODO: Backward compatibility adapter - disabled for now due to lifetime issues
-// Will be implemented in a future iteration
-// 
-// /// Backward compatibility adapter to wrap old middleware in the new trait
-// pub struct MiddlewareAdapter<T: OldMiddleware> {
-//     inner: T,
-// }
+/// Backward compatibility adapter to wrap old middleware in the new trait
+pub struct MiddlewareAdapter<T> {
+    inner: Arc<T>,
+}
+
+impl<T> MiddlewareAdapter<T> {
+    pub fn new(middleware: T) -> Self {
+        Self { inner: Arc::new(middleware) }
+    }
+}
+
+impl<T> Middleware for MiddlewareAdapter<T> 
+where 
+    T: super::Middleware + Send + Sync + 'static,
+{
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        let inner = self.inner.clone();
+        Box::pin(async move {
+            // Convert ElifRequest to axum Request for old middleware
+            let axum_request = request.into_axum_request();
+            
+            // Process request through old middleware
+            let processed_request = match inner.process_request(axum_request).await {
+                Ok(req) => req,
+                Err(response) => {
+                    // Old middleware returned early response, convert and return
+                    return ElifResponse::from_axum_response(response).await;
+                }
+            };
+            
+            // Convert back to ElifRequest and continue chain
+            let elif_request = ElifRequest::from_axum_request(processed_request).await;
+            let response = next.run(elif_request).await;
+            
+            // Convert response to axum Response for old middleware
+            let axum_response = response.into_axum_response();
+            
+            // Process response through old middleware
+            let processed_response = inner.process_response(axum_response).await;
+            
+            // Convert back to ElifResponse
+            ElifResponse::from_axum_response(processed_response).await
+        })
+    }
+    
+    fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+}
 
 /// Example logging middleware using the new pattern
 pub struct LoggingMiddleware;
 
 impl Middleware for LoggingMiddleware {
-    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
         Box::pin(async move {
             // Before request
             let start = std::time::Instant::now();
@@ -173,7 +215,7 @@ impl SimpleAuthMiddleware {
 }
 
 impl Middleware for SimpleAuthMiddleware {
-    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
         let required_token = self.required_token.clone();
         Box::pin(async move {
             // Extract token
@@ -243,7 +285,7 @@ mod tests {
     }
     
     impl Middleware for TestMiddleware {
-        fn handle(&self, mut request: ElifRequest, next: Next) -> NextFuture {
+        fn handle(&self, mut request: ElifRequest, next: Next) -> NextFuture<'static> {
             let name = self.name;
             Box::pin(async move {
                 // Add a custom header to track middleware execution
@@ -338,5 +380,57 @@ mod tests {
         let empty_pipeline = MiddlewarePipelineV2::new();
         assert_eq!(empty_pipeline.len(), 0);
         assert!(empty_pipeline.is_empty());
+    }
+    
+    #[tokio::test]
+    async fn test_backward_compatibility_adapter() {
+        use super::super::{Middleware as OldMiddleware, BoxFuture};
+        use axum::extract::Request;
+        use axum::response::Response;
+        use axum::body::Body;
+        
+        // Create a simple old-style middleware
+        struct OldTestMiddleware;
+        
+        impl OldMiddleware for OldTestMiddleware {
+            fn process_request<'a>(
+                &'a self, 
+                mut request: Request
+            ) -> BoxFuture<'a, Result<Request, Response>> {
+                Box::pin(async move {
+                    // Add a test header
+                    request.headers_mut().insert("x-old-middleware", "processed".parse().unwrap());
+                    Ok(request)
+                })
+            }
+            
+            fn name(&self) -> &'static str {
+                "OldTestMiddleware"
+            }
+        }
+        
+        // Wrap old middleware with adapter
+        let adapter = MiddlewareAdapter::new(OldTestMiddleware);
+        
+        // Create test request
+        let request = ElifRequest::new(
+            Method::GET,
+            "/test".parse().unwrap(),
+            HeaderMap::new(),
+        );
+        
+        // Create next handler
+        let next = Next::new(|req| {
+            Box::pin(async move {
+                // Verify old middleware was applied
+                assert!(req.headers.contains_key("x-old-middleware"));
+                ElifResponse::ok().text("Success")
+            })
+        });
+        
+        // Execute adapter
+        let response = adapter.handle(request, next).await;
+        assert_eq!(response.status_code(), axum::http::StatusCode::OK);
+        assert_eq!(adapter.name(), "OldTestMiddleware");
     }
 }

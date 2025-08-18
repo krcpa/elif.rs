@@ -253,6 +253,49 @@ impl ElifRequest {
     pub fn query_string(&self) -> Option<&str> {
         self.uri.query()
     }
+
+    /// Convert ElifRequest to Axum Request for backward compatibility
+    pub fn into_axum_request(self) -> axum::extract::Request {
+        use axum::body::Body;
+        
+        let body = match self.body_bytes {
+            Some(bytes) => Body::from(bytes),
+            None => Body::empty(),
+        };
+        
+        let mut builder = axum::extract::Request::builder()
+            .method(self.method)
+            .uri(self.uri);
+        
+        // Add headers one by one
+        for (key, value) in self.headers.iter() {
+            builder = builder.header(key, value);
+        }
+        
+        builder.body(body)
+            .expect("Failed to construct Axum request")
+    }
+
+    /// Convert Axum Request to ElifRequest for backward compatibility
+    pub async fn from_axum_request(request: axum::extract::Request) -> Self {
+        use axum::body::Body;
+        use axum::extract::Request;
+        
+        let (parts, body) = request.into_parts();
+        
+        // Extract body bytes
+        let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
+            Ok(bytes) => Some(bytes),
+            Err(_) => None,
+        };
+        
+        Self::extract_elif_request(
+            parts.method,
+            parts.uri,
+            parts.headers,
+            body_bytes,
+        )
+    }
 }
 
 #[cfg(test)]

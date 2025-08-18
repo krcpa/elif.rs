@@ -148,6 +148,56 @@ impl ElifResponse {
         response.body(body)
             .map_err(|e| HttpError::internal(format!("Failed to build response: {}", e)))
     }
+
+    /// Convert ElifResponse to Axum Response for backward compatibility
+    pub fn into_axum_response(self) -> Response<Body> {
+        IntoResponse::into_response(self)
+    }
+
+    /// Convert Axum Response to ElifResponse for backward compatibility
+    pub async fn from_axum_response(response: Response<Body>) -> Self {
+        let (parts, body) = response.into_parts();
+        
+        // Extract body bytes
+        let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
+            Ok(bytes) => bytes,
+            Err(_) => Bytes::new(),
+        };
+        
+        let mut elif_response = Self::with_status(parts.status);
+        let headers = parts.headers.clone();
+        elif_response.headers = parts.headers;
+        
+        // Try to determine body type based on content-type header
+        if let Some(content_type) = headers.get("content-type") {
+            if let Ok(content_type_str) = content_type.to_str() {
+                if content_type_str.contains("application/json") {
+                    // Try to parse as JSON
+                    if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                        elif_response.body = ResponseBody::Json(json_value);
+                    } else {
+                        elif_response.body = ResponseBody::Bytes(body_bytes);
+                    }
+                } else if content_type_str.starts_with("text/") {
+                    // Parse as text
+                    match String::from_utf8(body_bytes.to_vec()) {
+                        Ok(text) => elif_response.body = ResponseBody::Text(text),
+                        Err(_) => elif_response.body = ResponseBody::Bytes(body_bytes),
+                    }
+                } else {
+                    elif_response.body = ResponseBody::Bytes(body_bytes);
+                }
+            } else {
+                elif_response.body = ResponseBody::Bytes(body_bytes);
+            }
+        } else if body_bytes.is_empty() {
+            elif_response.body = ResponseBody::Empty;
+        } else {
+            elif_response.body = ResponseBody::Bytes(body_bytes);
+        }
+        
+        elif_response
+    }
 }
 
 impl Default for ElifResponse {
