@@ -316,8 +316,11 @@ mod tests {
             HeaderMap::new(),
         );
         
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async {
+        let response = pipeline.execute(request, |req| {
+            Box::pin(async move {
+                // Assert that both middleware have executed by checking for the headers they add.
+                assert!(req.headers.contains_key("x-middleware-first"), "First middleware did not run");
+                assert!(req.headers.contains_key("x-middleware-second"), "Second middleware did not run");
                 ElifResponse::ok().text("Hello World")
             })
         }).await;
