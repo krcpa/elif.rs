@@ -8,6 +8,8 @@ use serde_json::Value;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+pub mod mapping_tests;
+
 /// Test model for use in tests
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct TestUser {

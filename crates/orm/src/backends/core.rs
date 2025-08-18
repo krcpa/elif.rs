@@ -105,6 +105,52 @@ pub trait DatabaseRow: Send + Sync {
     fn to_map(&self) -> OrmResult<HashMap<String, DatabaseValue>>;
 }
 
+/// Extension trait for DatabaseRow to support typed column access for models
+pub trait DatabaseRowExt {
+    /// Get a typed value from a column (for model deserialization)
+    fn get<T>(&self, column: &str) -> Result<T, crate::error::ModelError>
+    where
+        T: for<'de> serde::Deserialize<'de>;
+    
+    /// Try to get an optional typed value from a column
+    fn try_get<T>(&self, column: &str) -> Result<Option<T>, crate::error::ModelError>
+    where
+        T: for<'de> serde::Deserialize<'de>;
+}
+
+impl<R: DatabaseRow + ?Sized> DatabaseRowExt for R {
+    fn get<T>(&self, column: &str) -> Result<T, crate::error::ModelError>
+    where
+        T: for<'de> serde::Deserialize<'de>,
+    {
+        let db_value = self.get_by_name(column)?;
+        
+        let json_value = db_value.to_json();
+        serde_json::from_value(json_value)
+            .map_err(|e| crate::error::ModelError::Serialization(format!("Failed to deserialize column '{}': {}", column, e)))
+    }
+    
+    fn try_get<T>(&self, column: &str) -> Result<Option<T>, crate::error::ModelError>
+    where
+        T: for<'de> serde::Deserialize<'de>,
+    {
+        match self.get_by_name(column) {
+            Ok(db_value) => {
+                if db_value.is_null() {
+                    Ok(None)
+                } else {
+                    let json_value = db_value.to_json();
+                    let parsed: T = serde_json::from_value(json_value)
+                        .map_err(|e| crate::error::ModelError::Serialization(format!("Failed to deserialize column '{}': {}", column, e)))?;
+                    Ok(Some(parsed))
+                }
+            },
+            Err(crate::error::ModelError::ColumnNotFound(_)) => Ok(None),
+            Err(e) => Err(e), // Preserve the original error type and information
+        }
+    }
+}
+
 /// Database value enumeration for type-safe parameter binding
 #[derive(Debug, Clone, PartialEq)]
 pub enum DatabaseValue {
@@ -153,6 +199,42 @@ impl DatabaseValue {
             DatabaseValue::Time(t) => JsonValue::String(t.to_string()),
             DatabaseValue::Json(j) => j.clone(),
             DatabaseValue::Array(arr) => JsonValue::Array(arr.iter().map(|v| v.to_json()).collect()),
+        }
+    }
+
+    /// Create DatabaseValue from JSON value
+    pub fn from_json(json: JsonValue) -> Self {
+        match json {
+            JsonValue::Null => DatabaseValue::Null,
+            JsonValue::Bool(b) => DatabaseValue::Bool(b),
+            JsonValue::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    if i >= i32::MIN as i64 && i <= i32::MAX as i64 {
+                        DatabaseValue::Int32(i as i32)
+                    } else {
+                        DatabaseValue::Int64(i)
+                    }
+                } else if let Some(f) = n.as_f64() {
+                    DatabaseValue::Float64(f)
+                } else {
+                    DatabaseValue::Null
+                }
+            },
+            JsonValue::String(s) => {
+                // Try to parse as UUID first
+                if let Ok(uuid) = uuid::Uuid::parse_str(&s) {
+                    DatabaseValue::Uuid(uuid)
+                } else if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
+                    DatabaseValue::DateTime(dt.with_timezone(&chrono::Utc))
+                } else {
+                    DatabaseValue::String(s)
+                }
+            },
+            JsonValue::Array(arr) => {
+                let db_values: Vec<DatabaseValue> = arr.into_iter().map(DatabaseValue::from_json).collect();
+                DatabaseValue::Array(db_values)
+            },
+            JsonValue::Object(_) => DatabaseValue::Json(json),
         }
     }
 }

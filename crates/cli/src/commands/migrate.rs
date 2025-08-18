@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 use chrono::Utc;
 use elif_core::ElifError;
-use elif_orm::{MigrationManager, MigrationRunner};
+use elif_orm::{MigrationManager, MigrationRunner, MigrationRollback};
 
 pub async fn create(name: &str) -> Result<(), ElifError> {
     let manager = MigrationManager::new();
@@ -62,11 +62,11 @@ pub async fn rollback() -> Result<(), ElifError> {
     
     match runner.rollback_last_batch().await {
         Ok(result) => {
-            if result.applied_count == 0 {
+            if result.rolled_back_count == 0 {
                 println!("✓ No migrations to rollback.");
             } else {
-                println!("✓ Rolled back {} migration(s) successfully:", result.applied_count);
-                for migration_id in &result.applied_migrations {
+                println!("✓ Rolled back {} migration(s) successfully:", result.rolled_back_count);
+                for migration_id in &result.rolled_back_migrations {
                     println!("  - {}", migration_id);
                 }
                 println!("  Execution time: {}ms", result.execution_time_ms);
