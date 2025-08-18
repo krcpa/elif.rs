@@ -82,14 +82,8 @@ impl WebSocketServer {
             })
         };
         
-        // Add the route using the router's internal mechanism
-        // This is a temporary solution for the foundation
-        let axum_router = router.into_axum_router();
-        let updated_router = axum_router.route(path, get(ws_handler));
-        
-        // Create a new ElifRouter from the updated axum router
-        // For now, we lose the route registry information
-        ElifRouter::new().merge_axum(updated_router)
+        // FIXED: Use the new add_axum_route method to preserve all router state
+        router.add_axum_route(path, get(ws_handler))
     }
 
     /// Add a simple WebSocket handler function (alias for add_websocket_route)
