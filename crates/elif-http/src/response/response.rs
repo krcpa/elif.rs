@@ -112,6 +112,11 @@ impl ElifResponse {
         Ok(())
     }
 
+    /// Remove header from response
+    pub fn remove_header<K: AsRef<str>>(&mut self, key: K) -> Option<ElifHeaderValue> {
+        self.headers.remove_header(key.as_ref())
+    }
+
     /// Set Content-Type header (consuming)
     pub fn content_type(self, content_type: &str) -> HttpResult<Self> {
         self.header("content-type", content_type)

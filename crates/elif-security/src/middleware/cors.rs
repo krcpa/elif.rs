@@ -159,7 +159,7 @@ impl CorsMiddleware {
         
         // Add method headers
         if !self.config.allowed_methods.is_empty() {
-            let methods = self.config.allowed_methods.join(", ");
+            let methods = self.config.allowed_methods.iter().cloned().collect::<Vec<_>>().join(", ");
             if let Err(_) = response.add_header("access-control-allow-methods", &methods) {
                 return Err(SecurityError::CorsViolation {
                     message: "Failed to add allowed methods header".to_string(),
@@ -169,7 +169,7 @@ impl CorsMiddleware {
         
         // Add headers header
         if !self.config.allowed_headers.is_empty() {
-            let headers = self.config.allowed_headers.join(", ");
+            let headers = self.config.allowed_headers.iter().cloned().collect::<Vec<_>>().join(", ");
             if let Err(_) = response.add_header("access-control-allow-headers", &headers) {
                 return Err(SecurityError::CorsViolation {
                     message: "Failed to add allowed headers header".to_string(),
@@ -218,7 +218,7 @@ impl CorsMiddleware {
         
         // Add Access-Control-Expose-Headers
         if !self.config.exposed_headers.is_empty() {
-            let exposed = self.config.exposed_headers.join(", ");
+            let exposed = self.config.exposed_headers.iter().cloned().collect::<Vec<_>>().join(", ");
             response.add_header("access-control-expose-headers", &exposed)
                 .map_err(|_| SecurityError::CorsViolation {
                     message: "Failed to add exposed headers".to_string(),

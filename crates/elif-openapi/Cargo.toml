@@ -1,6 +1,6 @@
 [package]
 name = "elif-openapi"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "OpenAPI 3.0 specification generation for elif.rs framework"
 license = "MIT"
@@ -10,9 +10,9 @@ categories = ["web-programming", "development-tools"]
 
 [dependencies]
 # Core elif dependencies
-elif-core = { version = "0.4.0", path = "../core" }
-elif-http = { version = "0.6.0", path = "../elif-http" }
-elif-orm = { version = "0.6.0", path = "../orm" }
+elif-core = { version = "0.5.0", path = "../core" }
+elif-http = { version = "0.7.0", path = "../elif-http" }
+elif-orm = { version = "0.7.0", path = "../orm" }
 
 # Serialization and JSON processing
 serde = { version = "1.0", features = ["derive"] }
@@ -29,7 +29,7 @@ tower-http = { version = "0.5", features = ["cors", "fs"] }
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
-elif-openapi-derive = "0.1.0"
+elif-openapi-derive = { version = "0.2.0", path = "../elif-openapi-derive" }
 
 # Type reflection and inspection
 inventory = "0.3"

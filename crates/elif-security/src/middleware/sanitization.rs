@@ -114,6 +114,7 @@ impl SanitizationMiddleware {
 
 impl Middleware for SanitizationMiddleware {
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        let config = self.config.clone();
         Box::pin(async move {
             // Check request size
             let content_length = request.headers
@@ -122,7 +123,7 @@ impl Middleware for SanitizationMiddleware {
                 .and_then(|s| s.parse::<usize>().ok())
                 .unwrap_or(0);
                 
-            if let Err(e) = self.config.check_request_size(content_length) {
+            if let Err(e) = config.check_request_size(content_length) {
                 return ElifResponse::with_status(ElifStatusCode::BAD_REQUEST)
                     .text(&format!("Request sanitization failed: {}", e));
             }

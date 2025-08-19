@@ -189,13 +189,16 @@ impl Middleware for CsrfMiddleware {
             }
             
             // CSRF validation failed - return 403 Forbidden
+            let error_data = serde_json::json!({
+                "error": {
+                    "code": "CSRF_VALIDATION_FAILED",
+                    "message": "CSRF token validation failed"
+                }
+            });
             ElifResponse::with_status(ElifStatusCode::FORBIDDEN)
-                .json(serde_json::json!({
-                    "error": {
-                        "code": "CSRF_VALIDATION_FAILED",
-                        "message": "CSRF token validation failed"
-                    }
-                }))
+                .json(&error_data)
+                .unwrap_or_else(|_| ElifResponse::with_status(ElifStatusCode::INTERNAL_SERVER_ERROR)
+                    .text("Internal server error"))
         })
     }
     
