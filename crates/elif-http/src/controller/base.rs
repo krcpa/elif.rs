@@ -4,10 +4,9 @@
 //! Controllers are thin HTTP handlers that delegate to injected services.
 
 use std::{sync::Arc, pin::Pin, future::Future};
-use axum::{
-    extract::{State, Path, Query},
-    response::{Json, Response, IntoResponse},
-    http::StatusCode,
+use crate::{
+    request::{ElifState, ElifPath, ElifQuery},
+    response::{ElifJson, ElifResponse, ElifStatusCode},
 };
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
@@ -65,29 +64,29 @@ impl BaseController {
     }
 
     /// Create standardized success response
-    pub fn success_response<T: Serialize>(&self, data: T) -> HttpResult<Response> {
+    pub fn success_response<T: Serialize>(&self, data: T) -> HttpResult<ElifResponse> {
         let api_response = ApiResponse::success(data);
-        Ok((StatusCode::OK, Json(api_response)).into_response())
+        Ok(ElifResponse::ok().json(&api_response)?)
     }
 
     /// Create standardized created response
-    pub fn created_response<T: Serialize>(&self, data: T) -> HttpResult<Response> {
+    pub fn created_response<T: Serialize>(&self, data: T) -> HttpResult<ElifResponse> {
         let api_response = ApiResponse::success(data);
-        Ok((StatusCode::CREATED, Json(api_response)).into_response())
+        Ok(ElifResponse::created().json(&api_response)?)
     }
 
     /// Create paginated response with metadata
-    pub fn paginated_response<T: Serialize>(&self, data: Vec<T>, meta: PaginationMeta) -> HttpResult<Response> {
+    pub fn paginated_response<T: Serialize>(&self, data: Vec<T>, meta: PaginationMeta) -> HttpResult<ElifResponse> {
         let response_data = serde_json::json!({
             "data": data,
             "meta": meta
         });
         let api_response = ApiResponse::success(response_data);
-        Ok((StatusCode::OK, Json(api_response)).into_response())
+        Ok(ElifResponse::ok().json(&api_response)?)
     }
 
     /// Create standardized delete response
-    pub fn deleted_response<T: Serialize>(&self, resource_name: &str, deleted_id: Option<T>) -> HttpResult<Response> {
+    pub fn deleted_response<T: Serialize>(&self, resource_name: &str, deleted_id: Option<T>) -> HttpResult<ElifResponse> {
         let mut response_data = serde_json::json!({
             "message": format!("{} deleted successfully", resource_name)
         });
@@ -97,7 +96,7 @@ impl BaseController {
         }
         
         let api_response = ApiResponse::success(response_data);
-        Ok((StatusCode::OK, Json(api_response)).into_response())
+        Ok(ElifResponse::ok().json(&api_response)?)
     }
 }
 
@@ -107,38 +106,38 @@ pub trait Controller: Send + Sync {
     /// List resources with pagination
     fn index(
         &self,
-        container: State<Arc<Container>>,
-        params: Query<QueryParams>,
-    ) -> Pin<Box<dyn Future<Output = HttpResult<Response>> + Send>>;
+        container: ElifState<Arc<Container>>,
+        params: ElifQuery<QueryParams>,
+    ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
 
     /// Get single resource by ID
     fn show(
         &self,
-        container: State<Arc<Container>>,
-        id: Path<String>,
-    ) -> Pin<Box<dyn Future<Output = HttpResult<Response>> + Send>>;
+        container: ElifState<Arc<Container>>,
+        id: ElifPath<String>,
+    ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
 
     /// Create new resource
     fn create(
         &self,
-        container: State<Arc<Container>>,
-        data: Json<Value>,
-    ) -> Pin<Box<dyn Future<Output = HttpResult<Response>> + Send>>;
+        container: ElifState<Arc<Container>>,
+        data: ElifJson<Value>,
+    ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
 
     /// Update existing resource
     fn update(
         &self,
-        container: State<Arc<Container>>,
-        id: Path<String>,
-        data: Json<Value>,
-    ) -> Pin<Box<dyn Future<Output = HttpResult<Response>> + Send>>;
+        container: ElifState<Arc<Container>>,
+        id: ElifPath<String>,
+        data: ElifJson<Value>,
+    ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
 
     /// Delete resource
     fn destroy(
         &self,
-        container: State<Arc<Container>>,
-        id: Path<String>,
-    ) -> Pin<Box<dyn Future<Output = HttpResult<Response>> + Send>>;
+        container: ElifState<Arc<Container>>,
+        id: ElifPath<String>,
+    ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
 }
 
 #[cfg(test)]

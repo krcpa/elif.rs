@@ -7,7 +7,7 @@ use crate::{
     config::HttpConfig, 
     errors::{HttpError, HttpResult},
     routing::ElifRouter, 
-    middleware::{MiddlewarePipeline, Middleware},
+    middleware::v2::{MiddlewarePipelineV2, Middleware},
 };
 use super::lifecycle::{build_internal_router, start_server};
 use elif_core::Container;
@@ -36,7 +36,7 @@ pub struct Server {
     container: Arc<Container>,
     config: HttpConfig,
     router: Option<ElifRouter>,
-    middleware: MiddlewarePipeline,
+    middleware: MiddlewarePipelineV2,
 }
 
 impl Server {
@@ -46,7 +46,7 @@ impl Server {
             container: Arc::new(container),
             config,
             router: None,
-            middleware: MiddlewarePipeline::new(),
+            middleware: MiddlewarePipelineV2::new(),
         })
     }
 
@@ -56,7 +56,7 @@ impl Server {
             container,
             config,
             router: None,
-            middleware: MiddlewarePipeline::new(),
+            middleware: MiddlewarePipelineV2::new(),
         })
     }
 
@@ -115,7 +115,7 @@ impl Server {
     where 
         M: Middleware + 'static,
     {
-        self.middleware = std::mem::take(&mut self.middleware).add(middleware);
+        self.middleware.add_mut(middleware);
         self
     }
 
@@ -150,7 +150,7 @@ impl Server {
         info!("📋 Health check endpoint: {}", self.config.health_check_path);
         
         // Build the internal router
-        let axum_router = build_internal_router(self.container.clone(), self.config.clone(), self.router).await?;
+        let axum_router = build_internal_router(self.container.clone(), self.config.clone(), self.router, self.middleware).await?;
         
         // Start the server
         start_server(addr, axum_router).await?;
@@ -172,7 +172,7 @@ impl Server {
         self.router.as_ref()
     }
 
-    pub fn middleware(&self) -> &MiddlewarePipeline {
+    pub fn middleware(&self) -> &MiddlewarePipelineV2 {
         &self.middleware
     }
 }

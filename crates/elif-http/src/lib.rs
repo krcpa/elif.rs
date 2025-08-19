@@ -48,27 +48,28 @@ pub use routing::{
 };
 
 // Re-export request/response types  
-pub use request::{ElifRequest, ElifQuery, ElifPath, ElifState};
-pub use response::{ElifResponse, ResponseBody, ElifStatusCode, ElifHeaderMap};
+pub use request::{ElifRequest, ElifQuery, ElifPath, ElifState, ElifMethod};
+pub use response::{ElifResponse, ResponseBody, ElifStatusCode, ElifHeaderMap, ElifHeaderName, ElifHeaderValue};
 
 // Re-export JSON handling
 pub use response::{ElifJson, JsonError, JsonResponse, ValidationErrors, ApiResponse};
 
-// Re-export middleware types
+// Re-export middleware types - V2 system is now the default
 pub use middleware::{
-    Middleware, MiddlewarePipeline, ErrorHandlingMiddleware, BoxFuture as MiddlewareBoxFuture,
-    // V2 Middleware System
+    // V2 Middleware System (default)
     v2::{
-        Middleware as MiddlewareV2, MiddlewarePipelineV2, Next, 
-        LoggingMiddleware as LoggingMiddlewareV2, SimpleAuthMiddleware, MiddlewareAdapter
+        Middleware, MiddlewarePipelineV2 as MiddlewarePipeline, Next, 
+        LoggingMiddleware, SimpleAuthMiddleware, MiddlewareAdapter
     },
+    // Legacy V1 system
+    Middleware as LegacyMiddleware, MiddlewarePipeline as LegacyMiddlewarePipeline, ErrorHandlingMiddleware, BoxFuture as MiddlewareBoxFuture,
     // Core middleware
     error_handler::{
         ErrorHandlerMiddleware, ErrorHandlerConfig, ErrorHandlerLayer,
         error_handler_middleware, error_handler_with_config, 
         error_handler_layer, error_handler_layer_with_config
     },
-    logging::LoggingMiddleware,
+    logging::LoggingMiddleware as LegacyLoggingMiddleware,
     enhanced_logging::{EnhancedLoggingMiddleware, LoggingConfig as MiddlewareLoggingConfig, RequestContext},
     timing::{TimingMiddleware, RequestStartTime, format_duration},
     tracing::{TracingMiddleware, TracingConfig, RequestMetadata},
