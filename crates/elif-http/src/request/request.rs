@@ -4,19 +4,21 @@
 
 use std::collections::HashMap;
 use axum::{
-    http::{HeaderMap, HeaderValue, Method, Uri},
+    http::{HeaderValue, Uri},
     body::Bytes,
 };
 use serde::de::DeserializeOwned;
 use crate::errors::{HttpError, HttpResult};
+use super::ElifMethod;
+use crate::response::ElifHeaderMap;
 
 /// Request abstraction that wraps Axum's request types
 /// with additional parsing and extraction capabilities
 #[derive(Debug)]
 pub struct ElifRequest {
-    pub method: Method,
+    pub method: ElifMethod,
     pub uri: Uri,
-    pub headers: HeaderMap,
+    pub headers: ElifHeaderMap,
     pub path_params: HashMap<String, String>,
     pub query_params: HashMap<String, String>,
     body_bytes: Option<Bytes>,
@@ -25,9 +27,9 @@ pub struct ElifRequest {
 impl ElifRequest {
     /// Create new ElifRequest from Axum components
     pub fn new(
-        method: Method,
+        method: ElifMethod,
         uri: Uri,
-        headers: HeaderMap,
+        headers: ElifHeaderMap,
     ) -> Self {
         Self {
             method,
@@ -41,9 +43,9 @@ impl ElifRequest {
 
     /// Extract ElifRequest from request components
     pub fn extract_elif_request(
-        method: Method,
+        method: ElifMethod,
         uri: Uri,
-        headers: HeaderMap,
+        headers: ElifHeaderMap,
         body: Option<Bytes>,
     ) -> ElifRequest {
         let mut request = ElifRequest::new(method, uri, headers);
@@ -295,7 +297,7 @@ impl ElifRequest {
     }
 
     /// Convert ElifRequest to Axum Request for backward compatibility
-    pub fn into_axum_request(self) -> axum::extract::Request {
+    pub(crate) fn into_axum_request(self) -> axum::extract::Request {
         use axum::body::Body;
         
         let body = match self.body_bytes {
@@ -304,12 +306,12 @@ impl ElifRequest {
         };
         
         let mut builder = axum::extract::Request::builder()
-            .method(self.method)
+            .method(self.method.to_axum())
             .uri(self.uri);
         
         // Add headers one by one
         for (key, value) in self.headers.iter() {
-            builder = builder.header(key, value);
+            builder = builder.header(key.to_axum(), value.to_axum());
         }
         
         builder.body(body)
@@ -317,7 +319,7 @@ impl ElifRequest {
     }
 
     /// Convert Axum Request to ElifRequest for backward compatibility
-    pub async fn from_axum_request(request: axum::extract::Request) -> Self {
+    pub(crate) async fn from_axum_request(request: axum::extract::Request) -> Self {
         use axum::body::Body;
         use axum::extract::Request;
         
@@ -330,9 +332,9 @@ impl ElifRequest {
         };
         
         Self::extract_elif_request(
-            parts.method,
+            ElifMethod::from_axum(parts.method),
             parts.uri,
-            parts.headers,
+            ElifHeaderMap::from_axum(parts.headers),
             body_bytes,
         )
     }

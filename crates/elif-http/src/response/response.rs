@@ -3,24 +3,18 @@
 //! Provides fluent response building with status codes, headers, and JSON serialization.
 
 use axum::{
-    http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::{Response, IntoResponse},
     body::{Body, Bytes},
 };
 use serde::Serialize;
 use crate::errors::{HttpError, HttpResult};
-
-/// Framework-native status codes - use instead of axum::http::StatusCode
-pub use axum::http::StatusCode as ElifStatusCode;
-
-/// Framework-native header map - use instead of axum::http::HeaderMap  
-pub use axum::http::HeaderMap as ElifHeaderMap;
+use super::{ElifStatusCode, ElifHeaderMap, ElifHeaderName, ElifHeaderValue};
 
 /// Response builder for creating HTTP responses with fluent API
 #[derive(Debug)]
 pub struct ElifResponse {
-    status: StatusCode,
-    headers: HeaderMap,
+    status: ElifStatusCode,
+    headers: ElifHeaderMap,
     body: ResponseBody,
 }
 
@@ -37,48 +31,46 @@ impl ElifResponse {
     /// Create new response with OK status
     pub fn new() -> Self {
         Self {
-            status: StatusCode::OK,
-            headers: HeaderMap::new(),
+            status: ElifStatusCode::OK,
+            headers: ElifHeaderMap::new(),
             body: ResponseBody::Empty,
         }
     }
 
     /// Create response with specific status code
-    pub fn with_status(status: StatusCode) -> Self {
+    pub fn with_status(status: ElifStatusCode) -> Self {
         Self {
             status,
-            headers: HeaderMap::new(),
+            headers: ElifHeaderMap::new(),
             body: ResponseBody::Empty,
         }
     }
 
     /// Set response status code (consuming)
-    pub fn status(mut self, status: StatusCode) -> Self {
+    pub fn status(mut self, status: ElifStatusCode) -> Self {
         self.status = status;
         self
     }
 
     /// Set response status code (borrowing - for middleware use)
-    pub fn set_status(&mut self, status: StatusCode) {
+    pub fn set_status(&mut self, status: ElifStatusCode) {
         self.status = status;
     }
 
     /// Get response status code
-    pub fn status_code(&self) -> StatusCode {
+    pub fn status_code(&self) -> ElifStatusCode {
         self.status
     }
 
     /// Add header to response (consuming)
     pub fn header<K, V>(mut self, key: K, value: V) -> HttpResult<Self>
     where
-        K: TryInto<HeaderName>,
-        K::Error: std::fmt::Display,
-        V: TryInto<HeaderValue>,
-        V::Error: std::fmt::Display,
+        K: AsRef<str>,
+        V: AsRef<str>,
     {
-        let header_name = key.try_into()
+        let header_name = ElifHeaderName::from_str(key.as_ref())
             .map_err(|e| HttpError::internal(format!("Invalid header name: {}", e)))?;
-        let header_value = value.try_into()
+        let header_value = ElifHeaderValue::from_str(value.as_ref())
             .map_err(|e| HttpError::internal(format!("Invalid header value: {}", e)))?;
         
         self.headers.insert(header_name, header_value);
@@ -88,14 +80,12 @@ impl ElifResponse {
     /// Add header to response (borrowing - for middleware use)
     pub fn add_header<K, V>(&mut self, key: K, value: V) -> HttpResult<()>
     where
-        K: TryInto<HeaderName>,
-        K::Error: std::fmt::Display,
-        V: TryInto<HeaderValue>,
-        V::Error: std::fmt::Display,
+        K: AsRef<str>,
+        V: AsRef<str>,
     {
-        let header_name = key.try_into()
+        let header_name = ElifHeaderName::from_str(key.as_ref())
             .map_err(|e| HttpError::internal(format!("Invalid header name: {}", e)))?;
-        let header_value = value.try_into()
+        let header_value = ElifHeaderValue::from_str(value.as_ref())
             .map_err(|e| HttpError::internal(format!("Invalid header value: {}", e)))?;
         
         self.headers.insert(header_name, header_value);
@@ -164,7 +154,7 @@ impl ElifResponse {
     /// Build the response
     pub fn build(mut self) -> HttpResult<Response<Body>> {
         // Set default content type based on body type
-        if !self.headers.contains_key("content-type") {
+        if !self.headers.contains_key_str("content-type") {
             match &self.body {
                 ResponseBody::Json(_) => {
                     self = self.content_type("application/json")?;
@@ -188,11 +178,11 @@ impl ElifResponse {
         };
 
         let mut response = Response::builder()
-            .status(self.status);
+            .status(self.status.to_axum());
         
         // Add headers
         for (key, value) in self.headers.iter() {
-            response = response.header(key, value);
+            response = response.header(key.to_axum(), value.to_axum());
         }
 
         response.body(body)
@@ -200,12 +190,12 @@ impl ElifResponse {
     }
 
     /// Convert ElifResponse to Axum Response for backward compatibility
-    pub fn into_axum_response(self) -> Response<Body> {
+    pub(crate) fn into_axum_response(self) -> Response<Body> {
         IntoResponse::into_response(self)
     }
 
     /// Convert Axum Response to ElifResponse for backward compatibility
-    pub async fn from_axum_response(response: Response<Body>) -> Self {
+    pub(crate) async fn from_axum_response(response: Response<Body>) -> Self {
         let (parts, body) = response.into_parts();
         
         // Extract body bytes
@@ -214,9 +204,9 @@ impl ElifResponse {
             Err(_) => Bytes::new(),
         };
         
-        let mut elif_response = Self::with_status(parts.status);
+        let mut elif_response = Self::with_status(ElifStatusCode::from_axum(parts.status));
         let headers = parts.headers.clone();
-        elif_response.headers = parts.headers;
+        elif_response.headers = ElifHeaderMap::from_axum(parts.headers);
         
         // Try to determine body type based on content-type header
         if let Some(content_type) = headers.get("content-type") {
@@ -374,7 +364,7 @@ impl IntoResponse for ElifResponse {
             Ok(response) => response,
             Err(e) => {
                 // Fallback error response
-                (StatusCode::INTERNAL_SERVER_ERROR, format!("Response build failed: {}", e)).into_response()
+                (ElifStatusCode::INTERNAL_SERVER_ERROR.to_axum(), format!("Response build failed: {}", e)).into_response()
             }
         }
     }
@@ -384,19 +374,19 @@ impl IntoResponse for ElifResponse {
 impl ElifResponse {
     /// Create 301 Moved Permanently redirect
     pub fn redirect_permanent(location: &str) -> HttpResult<Self> {
-        Ok(Self::with_status(StatusCode::MOVED_PERMANENTLY)
+        Ok(Self::with_status(ElifStatusCode::MOVED_PERMANENTLY)
             .header("location", location)?)
     }
 
     /// Create 302 Found (temporary) redirect
     pub fn redirect_temporary(location: &str) -> HttpResult<Self> {
-        Ok(Self::with_status(StatusCode::FOUND)
+        Ok(Self::with_status(ElifStatusCode::FOUND)
             .header("location", location)?)
     }
 
     /// Create 303 See Other redirect
     pub fn redirect_see_other(location: &str) -> HttpResult<Self> {
-        Ok(Self::with_status(StatusCode::SEE_OTHER)
+        Ok(Self::with_status(ElifStatusCode::SEE_OTHER)
             .header("location", location)?)
     }
 }

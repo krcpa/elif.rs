@@ -2,14 +2,12 @@
 //!
 //! Provides secure cross-origin request handling with configurable policies.
 
-use axum::{
-    extract::Request,
-    http::{HeaderMap, HeaderValue, Method, StatusCode},
-    response::Response,
-    body::Body,
-};
 use std::collections::HashSet;
-use elif_http::middleware::{Middleware, BoxFuture};
+use elif_http::{
+    middleware::v2::{Middleware, Next, NextFuture},
+    request::{ElifRequest, ElifMethod},
+    response::{ElifResponse, ElifStatusCode},
+};
 use crate::{SecurityError, SecurityResult};
 
 pub use crate::config::CorsConfig;
@@ -62,7 +60,7 @@ impl CorsMiddleware {
     }
     
     /// Builder method to set allowed methods
-    pub fn allow_methods(mut self, methods: Vec<Method>) -> Self {
+    pub fn allow_methods(mut self, methods: Vec<ElifMethod>) -> Self {
         self.config.allowed_methods = methods
             .into_iter()
             .map(|m| m.to_string())
@@ -114,8 +112,8 @@ impl CorsMiddleware {
     }
     
     /// Check if the request headers are allowed
-    fn are_headers_allowed(&self, headers: &HeaderMap) -> bool {
-        if let Some(requested_headers) = headers.get("access-control-request-headers") {
+    fn are_headers_allowed(&self, headers: &elif_http::response::ElifHeaderMap) -> bool {
+        if let Some(requested_headers) = headers.get_str("access-control-request-headers") {
             if let Ok(requested_headers_str) = requested_headers.to_str() {
                 for header in requested_headers_str.split(',') {
                     let header = header.trim().to_lowercase();
@@ -277,14 +275,11 @@ impl CorsMiddleware {
 struct CorsOrigin(Option<String>);
 
 impl Middleware for CorsMiddleware {
-    fn process_request<'a>(
-        &'a self, 
-        mut request: Request
-    ) -> BoxFuture<'a, Result<Request, Response>> {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
         Box::pin(async move {
-            // Extract and store origin for later use in response processing
-            let origin = request.headers().get("origin")
-                .and_then(|v| v.to_str().ok())
+            // Extract origin header
+            let origin = request.headers.get_str("origin")
+                .and_then(|h| h.to_str().ok())
                 .map(|s| s.to_string());
             
             // Store origin in request extensions
