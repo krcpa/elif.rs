@@ -250,47 +250,47 @@ impl Default for ElifResponse {
 impl ElifResponse {
     /// Create 200 OK response
     pub fn ok() -> Self {
-        Self::with_status(StatusCode::OK)
+        Self::with_status(ElifStatusCode::OK)
     }
 
     /// Create 201 Created response
     pub fn created() -> Self {
-        Self::with_status(StatusCode::CREATED)
+        Self::with_status(ElifStatusCode::CREATED)
     }
 
     /// Create 204 No Content response
     pub fn no_content() -> Self {
-        Self::with_status(StatusCode::NO_CONTENT)
+        Self::with_status(ElifStatusCode::NO_CONTENT)
     }
 
     /// Create 400 Bad Request response
     pub fn bad_request() -> Self {
-        Self::with_status(StatusCode::BAD_REQUEST)
+        Self::with_status(ElifStatusCode::BAD_REQUEST)
     }
 
     /// Create 401 Unauthorized response
     pub fn unauthorized() -> Self {
-        Self::with_status(StatusCode::UNAUTHORIZED)
+        Self::with_status(ElifStatusCode::UNAUTHORIZED)
     }
 
     /// Create 403 Forbidden response
     pub fn forbidden() -> Self {
-        Self::with_status(StatusCode::FORBIDDEN)
+        Self::with_status(ElifStatusCode::FORBIDDEN)
     }
 
     /// Create 404 Not Found response
     pub fn not_found() -> Self {
-        Self::with_status(StatusCode::NOT_FOUND)
+        Self::with_status(ElifStatusCode::NOT_FOUND)
     }
 
     /// Create 422 Unprocessable Entity response
     pub fn unprocessable_entity() -> Self {
-        Self::with_status(StatusCode::UNPROCESSABLE_ENTITY)
+        Self::with_status(ElifStatusCode::UNPROCESSABLE_ENTITY)
     }
 
     /// Create 500 Internal Server Error response
     pub fn internal_server_error() -> Self {
-        Self::with_status(StatusCode::INTERNAL_SERVER_ERROR)
+        Self::with_status(ElifStatusCode::INTERNAL_SERVER_ERROR)
     }
 
     /// Create JSON response with data
@@ -299,7 +299,7 @@ impl ElifResponse {
     }
 
     /// Create JSON error response
-    pub fn json_error(status: StatusCode, message: &str) -> HttpResult<Response<Body>> {
+    pub fn json_error(status: ElifStatusCode, message: &str) -> HttpResult<Response<Body>> {
         let error_data = serde_json::json!({
             "error": {
                 "code": status.as_u16(),
@@ -345,7 +345,7 @@ impl IntoElifResponse for &str {
     }
 }
 
-impl IntoElifResponse for StatusCode {
+impl IntoElifResponse for ElifStatusCode {
     fn into_response(self) -> ElifResponse {
         ElifResponse::with_status(self)
     }
@@ -424,7 +424,7 @@ mod tests {
         let response = ElifResponse::ok()
             .text("Hello, World!");
 
-        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(response.status, ElifStatusCode::OK);
         match response.body {
             ResponseBody::Text(text) => assert_eq!(text, "Hello, World!"),
             _ => panic!("Expected text body"),
@@ -449,9 +449,9 @@ mod tests {
 
     #[test]
     fn test_status_codes() {
-        assert_eq!(ElifResponse::created().status, StatusCode::CREATED);
-        assert_eq!(ElifResponse::not_found().status, StatusCode::NOT_FOUND);
-        assert_eq!(ElifResponse::internal_server_error().status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(ElifResponse::created().status, ElifStatusCode::CREATED);
+        assert_eq!(ElifResponse::not_found().status, ElifStatusCode::NOT_FOUND);
+        assert_eq!(ElifResponse::internal_server_error().status, ElifStatusCode::INTERNAL_SERVER_ERROR);
     }
 
     #[test]
@@ -470,14 +470,14 @@ mod tests {
     #[test]
     fn test_redirect_responses() {
         let redirect = ElifResponse::redirect_permanent("/new-location").unwrap();
-        assert_eq!(redirect.status, StatusCode::MOVED_PERMANENTLY);
+        assert_eq!(redirect.status, ElifStatusCode::MOVED_PERMANENTLY);
         assert!(redirect.headers.contains_key("location"));
     }
 
     #[test]
     fn test_status_code_getter() {
         let response = ElifResponse::created();
-        assert_eq!(response.status_code(), StatusCode::CREATED);
+        assert_eq!(response.status_code(), ElifStatusCode::CREATED);
     }
 
     #[test]
@@ -502,7 +502,7 @@ mod tests {
         
         // Test borrowing text body method
         response.set_text("Hello World");
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
         match &response.body {
             ResponseBody::Text(text) => assert_eq!(text, "Hello World"),
             _ => panic!("Expected text body after calling set_text"),
@@ -532,14 +532,14 @@ mod tests {
         let mut response = ElifResponse::ok();
         
         // Test borrowing status method
-        response.set_status(StatusCode::CREATED);
-        assert_eq!(response.status_code(), StatusCode::CREATED);
+        response.set_status(ElifStatusCode::CREATED);
+        assert_eq!(response.status_code(), ElifStatusCode::CREATED);
         
         // Test multiple modifications
-        response.set_status(StatusCode::ACCEPTED);
+        response.set_status(ElifStatusCode::ACCEPTED);
         response.set_text("Updated");
         
-        assert_eq!(response.status_code(), StatusCode::ACCEPTED);
+        assert_eq!(response.status_code(), ElifStatusCode::ACCEPTED);
     }
 
     #[test] 

@@ -88,9 +88,9 @@ where
             };
             
             let elif_request = ElifRequest::extract_elif_request(
-                parts.method,
+                crate::request::ElifMethod::from_axum(parts.method),
                 parts.uri,
-                parts.headers,
+                crate::response::ElifHeaderMap::from_axum(parts.headers),
                 body_bytes,
             ).with_query_params(query_params);
             
