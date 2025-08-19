@@ -354,9 +354,9 @@ mod tests {
         params.insert("slug".to_string(), "test-post".to_string());
 
         let request = ElifRequest::new(
-            ElifElifMethod::GET,
+            ElifMethod::GET,
             "/users/123/posts/test-post".parse().unwrap(),
-            ElifElifHeaderMap::new(),
+            ElifHeaderMap::new(),
         ).with_path_params(params);
 
         assert_eq!(request.path_param("id"), Some(&"123".to_string()));
@@ -376,9 +376,9 @@ mod tests {
         query_params.insert("search".to_string(), "rust".to_string());
 
         let request = ElifRequest::new(
-            ElifElifMethod::GET,
+            ElifMethod::GET,
             "/posts?page=2&per_page=25&search=rust".parse().unwrap(),
-            ElifElifHeaderMap::new(),
+            ElifHeaderMap::new(),
         ).with_query_params(query_params);
 
         assert_eq!(request.query_param("page"), Some(&"2".to_string()));
@@ -393,13 +393,13 @@ mod tests {
 
     #[test]
     fn test_json_detection() {
-        let mut headers = ElifElifHeaderMap::new();
+        let mut headers = ElifHeaderMap::new();
         let header_name = crate::response::ElifHeaderName::from_str("content-type").unwrap();
         let header_value = crate::response::ElifHeaderValue::from_str("application/json").unwrap();
         headers.insert(header_name, header_value);
 
         let request = ElifRequest::new(
-            ElifElifMethod::POST,
+            ElifMethod::POST,
             "/api/users".parse().unwrap(),
             headers,
         );
@@ -409,13 +409,13 @@ mod tests {
 
     #[test]
     fn test_bearer_token_extraction() {
-        let mut headers = ElifElifHeaderMap::new();
+        let mut headers = ElifHeaderMap::new();
         let header_name = crate::response::ElifHeaderName::from_str("authorization").unwrap();
         let header_value = crate::response::ElifHeaderValue::from_str("Bearer abc123xyz").unwrap();
         headers.insert(header_name, header_value);
 
         let request = ElifRequest::new(
-            ElifElifMethod::GET,
+            ElifMethod::GET,
             "/api/protected".parse().unwrap(),
             headers,
         );
@@ -426,9 +426,9 @@ mod tests {
 
     #[test]
     fn test_extract_elif_request() {
-        let method = ElifElifMethod::POST;
+        let method = ElifMethod::POST;
         let uri: Uri = "/test".parse().unwrap();
-        let headers = ElifElifHeaderMap::new();
+        let headers = ElifHeaderMap::new();
         let body = Some(Bytes::from("test body"));
 
         let request = ElifRequest::extract_elif_request(method.clone(), uri.clone(), headers.clone(), body.clone());
