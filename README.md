@@ -194,6 +194,16 @@ impl Middleware for AuthMiddleware {
 - 🚀 **Deployment Tools**: Docker, cloud deployment
 - 📱 **Client SDKs**: JavaScript/TypeScript clients
 
+## 🤖 **AI Development**
+
+elif.rs is heavily developed and tested with AI assistants:
+
+- **Claude**: Primary development partner - understands the codebase deeply
+- **GPT-4**: Excellent for generating boilerplate and tests
+- **Gemini**: Great for code reviews and optimization suggestions
+
+The framework's clean architecture and intuitive patterns make it ideal for AI-assisted development. Many features were implemented through AI collaboration, ensuring the APIs are AI-friendly by design.
+
 ## 🤝 **Contributing**
 
 We welcome contributions! Check out our [open issues](https://github.com/krcpa/elif.rs/issues) or:
