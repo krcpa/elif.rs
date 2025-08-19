@@ -98,30 +98,54 @@ impl MaintenanceResponse {
 }
 
 /// Path matching strategy
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub enum PathMatch {
     /// Exact path match
     Exact(String),
     /// Path prefix match
     Prefix(String),
-    /// Regex pattern match
-    Regex(String),
+    /// Regex pattern match (stores compiled regex for performance)
+    Regex(regex::Regex),
     /// Custom matcher function
     Custom(fn(&str) -> bool),
 }
 
 impl PathMatch {
+    /// Create a new regex path matcher (compiles the regex once)
+    pub fn regex(pattern: &str) -> Result<Self, regex::Error> {
+        Ok(Self::Regex(regex::Regex::new(pattern)?))
+    }
+
     /// Check if this matcher matches the given path
     pub fn matches(&self, path: &str) -> bool {
         match self {
             Self::Exact(exact_path) => path == exact_path,
             Self::Prefix(prefix) => path.starts_with(prefix),
-            Self::Regex(pattern) => {
-                regex::Regex::new(pattern)
-                    .map(|re| re.is_match(path))
-                    .unwrap_or(false)
-            }
+            Self::Regex(compiled_regex) => compiled_regex.is_match(path),
             Self::Custom(matcher) => matcher(path),
+        }
+    }
+}
+
+impl Clone for PathMatch {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Exact(s) => Self::Exact(s.clone()),
+            Self::Prefix(s) => Self::Prefix(s.clone()),
+            Self::Regex(regex) => Self::Regex(regex.clone()),
+            Self::Custom(f) => Self::Custom(*f),
+        }
+    }
+}
+
+impl PartialEq for PathMatch {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Exact(a), Self::Exact(b)) => a == b,
+            (Self::Prefix(a), Self::Prefix(b)) => a == b,
+            (Self::Regex(a), Self::Regex(b)) => a.as_str() == b.as_str(),
+            (Self::Custom(a), Self::Custom(b)) => std::ptr::eq(a as *const _, b as *const _),
+            _ => false,
         }
     }
 }
@@ -225,9 +249,9 @@ impl MaintenanceModeMiddleware {
     }
     
     /// Add allowed path regex pattern
-    pub fn allow_regex(mut self, pattern: impl Into<String>) -> Self {
-        self.config.allowed_paths.push(PathMatch::Regex(pattern.into()));
-        self
+    pub fn allow_regex(mut self, pattern: &str) -> Result<Self, regex::Error> {
+        self.config.allowed_paths.push(PathMatch::regex(pattern)?);
+        Ok(self)
     }
     
     /// Add custom path matcher
@@ -440,7 +464,7 @@ mod tests {
         assert!(prefix.matches("/api/"));
         assert!(!prefix.matches("/v1/api/users"));
         
-        let regex = PathMatch::Regex(r"^/api/v\d+/.*".to_string());
+        let regex = PathMatch::regex(r"^/api/v\d+/.*").unwrap();
         assert!(regex.matches("/api/v1/users"));
         assert!(regex.matches("/api/v2/posts"));
         assert!(!regex.matches("/api/users"));
@@ -674,5 +698,46 @@ mod tests {
         assert!(middleware.config.allowed_ips.contains("127.0.0.1"));
         assert_eq!(middleware.config.bypass_header, Some(("x-bypass".to_string(), "secret".to_string())));
         assert_eq!(middleware.config.add_retry_after, Some(7200));
+    }
+
+    #[test]
+    fn test_regex_performance_improvement() {
+        // Test that regex is compiled once, not on every match
+        let regex_matcher = PathMatch::regex(r"^/api/v\d+/.*").unwrap();
+        
+        // These multiple matches should use the same compiled regex
+        // (This is a behavioral test - the main benefit is performance under load)
+        assert!(regex_matcher.matches("/api/v1/users"));
+        assert!(regex_matcher.matches("/api/v2/posts"));
+        assert!(regex_matcher.matches("/api/v3/comments"));
+        assert!(!regex_matcher.matches("/api/users"));
+        assert!(!regex_matcher.matches("/v1/api/users"));
+        
+        // Verify error handling for invalid regex
+        let invalid_regex = PathMatch::regex(r"[invalid");
+        assert!(invalid_regex.is_err());
+    }
+
+    #[test] 
+    fn test_path_match_clone_and_equality() {
+        let exact1 = PathMatch::Exact("/test".to_string());
+        let exact2 = PathMatch::Exact("/test".to_string());
+        let exact3 = PathMatch::Exact("/other".to_string());
+        
+        assert_eq!(exact1, exact2);
+        assert_ne!(exact1, exact3);
+        
+        let cloned = exact1.clone();
+        assert_eq!(exact1, cloned);
+        
+        let regex1 = PathMatch::regex(r"^/api/.*").unwrap();
+        let regex2 = PathMatch::regex(r"^/api/.*").unwrap(); 
+        let regex3 = PathMatch::regex(r"^/other/.*").unwrap();
+        
+        assert_eq!(regex1, regex2); // Same pattern
+        assert_ne!(regex1, regex3); // Different pattern
+        
+        let cloned_regex = regex1.clone();
+        assert_eq!(regex1, cloned_regex);
     }
 }

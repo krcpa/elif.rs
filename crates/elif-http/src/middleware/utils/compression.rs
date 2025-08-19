@@ -7,8 +7,8 @@ use crate::middleware::v2::{Middleware, Next, NextFuture};
 use crate::request::ElifRequest;
 use crate::response::ElifResponse;
 use tower_http::compression::{CompressionLayer, CompressionLevel};
-use tower::{Service, ServiceExt};
-use std::sync::Arc;
+use tower::{Service, Layer};
+use http_body_util::BodyExt;
 
 /// Configuration for compression middleware
 #[derive(Debug, Clone)]
@@ -141,17 +141,107 @@ impl Clone for CompressionMiddleware {
 
 impl Middleware for CompressionMiddleware {
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
-        // For now, just pass through without compression to avoid the tower integration complexity.
-        // This can be revisited later with a proper tower service integration.
+        let layer = self.layer.clone();
         
         Box::pin(async move {
+            // Check if the client accepts compression from the original request
+            let accept_encoding = request.header("accept-encoding")
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.to_owned())
+                .unwrap_or_default();
+            
+            let wants_compression = accept_encoding.contains("gzip") || 
+                                   accept_encoding.contains("br") || 
+                                   accept_encoding.contains("deflate");
+            
+            // First get the response from the next handler
             let response = next.run(request).await;
             
-            // TODO: Integrate tower-http compression properly
-            // For now, we return the uncompressed response
-            // This maintains API compatibility while avoiding the complex tower service integration
+            if !wants_compression {
+                // Client doesn't want compression, return as-is
+                return response;
+            }
             
-            response
+            let axum_response = response.into_axum_response();
+            let (parts, body) = axum_response.into_parts();
+            
+            // Read the response body to compress it
+            let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    // Can't read body, return as-is
+                    let response = axum::response::Response::from_parts(parts, axum::body::Body::empty());
+                    return ElifResponse::from_axum_response(response).await;
+                }
+            };
+            
+            // Store copies for fallback use
+            let parts_clone = parts.clone();
+            let body_bytes_clone = body_bytes.clone();
+            
+            // Create a mock request for the compression service
+            let mock_request = axum::extract::Request::builder()
+                .uri("/")
+                .header("accept-encoding", &accept_encoding)
+                .body(axum::body::Body::empty())
+                .unwrap();
+            
+            // Create a service that returns our response body
+            let service = tower::service_fn(move |_req: axum::extract::Request| {
+                let response_parts = parts.clone();
+                let response_body = body_bytes.clone();
+                async move {
+                    let response = axum::response::Response::from_parts(
+                        response_parts,
+                        axum::body::Body::from(response_body)
+                    );
+                    Ok::<axum::response::Response, std::convert::Infallible>(response)
+                }
+            });
+            
+            // Apply compression layer
+            let mut compression_service = layer.layer(service);
+            
+            // Call the compression service
+            match compression_service.call(mock_request).await {
+                Ok(compressed_response) => {
+                    // Extract the compressed response
+                    let (compressed_parts, compressed_body) = compressed_response.into_parts();
+                    
+                    // Convert CompressionBody to bytes
+                    match compressed_body.collect().await {
+                        Ok(collected) => {
+                            // Get the compressed bytes
+                            let compressed_bytes = collected.to_bytes();
+                            
+                            // Create final response with compressed body
+                            let final_response = axum::response::Response::from_parts(
+                                compressed_parts,
+                                axum::body::Body::from(compressed_bytes)
+                            );
+                            
+                            // Convert back to ElifResponse
+                            ElifResponse::from_axum_response(final_response).await
+                        }
+                        Err(_) => {
+                            // Fallback: return original response if compression fails
+                            let original_response = axum::response::Response::from_parts(
+                                parts_clone, 
+                                axum::body::Body::from(body_bytes_clone)
+                            );
+                            ElifResponse::from_axum_response(original_response).await
+                        }
+                    }
+                }
+                Err(_) => {
+                    // Fallback: return original response if compression service fails
+                    let original_response = axum::response::Response::from_parts(
+                        parts_clone, 
+                        axum::body::Body::from(body_bytes_clone)
+                    );
+                    ElifResponse::from_axum_response(original_response).await
+                }
+            }
         })
     }
     

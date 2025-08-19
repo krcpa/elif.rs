@@ -1512,6 +1512,7 @@ dependencies = [
  "elif-core",
  "futures-util",
  "html-escape",
+ "http-body-util",
  "hyper 1.6.0",
  "log",
  "once_cell",
