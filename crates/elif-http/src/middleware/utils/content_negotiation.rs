@@ -249,7 +249,11 @@ impl ContentNegotiationMiddleware {
     where 
         F: Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync + 'static
     {
-        self.config.converters.insert(content_type, std::sync::Arc::new(converter));
+        self.config.converters.insert(content_type.clone(), std::sync::Arc::new(converter));
+        // Automatically add the content type to supported types if not already present
+        if !self.config.supported_types.contains(&content_type) {
+            self.config.supported_types.push(content_type);
+        }
         self
     }
     
@@ -681,9 +685,6 @@ mod tests {
         assert!(html_content.contains("test"));
     }
     
-    // TODO: Fix content negotiation custom converter preservation issue
-    // See GitHub issue: https://github.com/krcpa/elif.rs/issues/208
-    #[ignore]
     #[tokio::test]
     async fn test_custom_converter_preservation_after_clone() {
         // Test that custom converters are preserved after config clone

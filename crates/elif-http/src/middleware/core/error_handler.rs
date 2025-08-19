@@ -129,7 +129,7 @@ mod tests {
     use crate::{
         middleware::v2::MiddlewarePipelineV2,
         request::ElifMethod,
-        response::headers::ElifHeaderMap,
+        response::{ElifResponse, headers::ElifHeaderMap},
     };
 
     #[tokio::test]

@@ -202,9 +202,9 @@ async fn test_request_response_cycle() {
     let (parts, body) = request.into_parts();
     let body_bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap_or_default();
     let elif_request = ElifRequest::extract_elif_request(
-        parts.method,
+        parts.method.into(),
         parts.uri,
-        parts.headers,
+        parts.headers.into(),
         if body_bytes.is_empty() { None } else { Some(body_bytes) }
     );
     
@@ -259,9 +259,9 @@ async fn test_json_request_parsing() {
     let (parts, body) = request.into_parts();
     let body_bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap_or_default();
     let elif_request = ElifRequest::extract_elif_request(
-        parts.method,
+        parts.method.into(),
         parts.uri,
-        parts.headers,
+        parts.headers.into(),
         if body_bytes.is_empty() { None } else { Some(body_bytes) }
     );
     
@@ -298,34 +298,32 @@ async fn test_error_response_formatting() {
 
 #[tokio::test]
 async fn test_middleware_integration_timing() {
-    use crate::middleware::{Middleware, timing::TimingMiddleware};
-    use axum::extract::Request;
-    use axum::body::Body;
-    use axum::http::Method;
+    use crate::middleware::v2::{Middleware, Next};
+    use crate::middleware::core::timing::TimingMiddleware;
+    use crate::request::{ElifRequest, ElifMethod};
+    use crate::response::ElifResponse;
+    use crate::response::headers::ElifHeaderMap;
     
     let middleware = TimingMiddleware::new();
     
-    let request = Request::builder()
-        .method(Method::GET)
-        .uri("/test")
-        .body(Body::empty())
-        .unwrap();
+    let request = ElifRequest::new(
+        ElifMethod::GET,
+        "/test".parse().unwrap(),
+        ElifHeaderMap::new(),
+    );
     
-    let result = middleware.process_request(request).await;
-    assert!(result.is_ok());
+    let next = Next::new(|_req| {
+        Box::pin(async move {
+            ElifResponse::ok().text("test response")
+        })
+    });
     
-    let processed_request = result.unwrap();
-    
-    // Timing middleware should add request start time
-    assert!(processed_request.extensions().get::<crate::middleware::timing::RequestStartTime>().is_some());
-    
-    // Test response processing
-    use axum::response::Response;
-    let response = Response::new(Body::from("test response"));
-    let processed_response = middleware.process_response(response).await;
+    let result = middleware.handle(request, next).await;
     
     // Should add timing header
-    assert!(processed_response.headers().get("x-response-time").is_some());
+    let axum_response = result.into_axum_response();
+    let (parts, _) = axum_response.into_parts();
+    assert!(parts.headers.get("x-response-time").is_some());
 }
 
 #[tokio::test]
@@ -393,9 +391,9 @@ async fn test_route_parameter_extraction() {
     let (parts, body) = request.into_parts();
     let body_bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap_or_default();
     let elif_request = ElifRequest::extract_elif_request(
-        parts.method,
+        parts.method.into(),
         parts.uri,
-        parts.headers,
+        parts.headers.into(),
         if body_bytes.is_empty() { None } else { Some(body_bytes) }
     );
     

@@ -98,12 +98,17 @@ impl CorsMiddleware {
         self
     }
     
-    /// Check if the request origin is allowed
-    fn is_origin_allowed(&self, origin: &str) -> bool {
-        match &self.config.allowed_origins {
+    /// Check if the request origin is allowed (static version)
+    fn is_origin_allowed_static(origin: &str, config: &CorsConfig) -> bool {
+        match &config.allowed_origins {
             None => true, // Allow all origins
             Some(origins) => origins.contains(origin) || origins.contains("*"),
         }
+    }
+
+    /// Check if the request origin is allowed
+    fn is_origin_allowed(&self, origin: &str) -> bool {
+        Self::is_origin_allowed_static(origin, &self.config)
     }
     
     /// Check if the request method is allowed
@@ -189,13 +194,25 @@ impl CorsMiddleware {
         Ok(response)
     }
     
+    /// Add CORS headers to response (static version for async contexts)
+    fn add_cors_headers_to_response(response: &mut ElifResponse, origin: Option<&str>, config: &CorsConfig) {
+        if let Err(_) = Self::add_cors_headers_impl(response, origin, config) {
+            log::warn!("Failed to add CORS headers to response");
+        }
+    }
+
     /// Add CORS headers to response
     fn add_cors_headers(&self, response: &mut ElifResponse, origin: Option<&str>) -> SecurityResult<()> {
+        Self::add_cors_headers_impl(response, origin, &self.config)
+    }
+
+    /// Internal implementation for adding CORS headers
+    fn add_cors_headers_impl(response: &mut ElifResponse, origin: Option<&str>, config: &CorsConfig) -> SecurityResult<()> {
         // Add Access-Control-Allow-Origin
         if let Some(origin_str) = origin {
-            if self.is_origin_allowed(origin_str) {
-                let origin_header = if self.config.allowed_origins.is_none() || 
-                   self.config.allowed_origins.as_ref().unwrap().contains("*") {
+            if Self::is_origin_allowed_static(origin_str, config) {
+                let origin_header = if config.allowed_origins.is_none() || 
+                   config.allowed_origins.as_ref().unwrap().contains("*") {
                     "*"
                 } else {
                     origin_str
@@ -209,7 +226,7 @@ impl CorsMiddleware {
         }
         
         // Add Access-Control-Allow-Credentials
-        if self.config.allow_credentials {
+        if config.allow_credentials {
             response.add_header("access-control-allow-credentials", "true")
                 .map_err(|_| SecurityError::CorsViolation {
                     message: "Failed to add credentials header".to_string(),
@@ -217,8 +234,8 @@ impl CorsMiddleware {
         }
         
         // Add Access-Control-Expose-Headers
-        if !self.config.exposed_headers.is_empty() {
-            let exposed = self.config.exposed_headers.iter().cloned().collect::<Vec<_>>().join(", ");
+        if !config.exposed_headers.is_empty() {
+            let exposed = config.exposed_headers.iter().cloned().collect::<Vec<_>>().join(", ");
             response.add_header("access-control-expose-headers", &exposed)
                 .map_err(|_| SecurityError::CorsViolation {
                     message: "Failed to add exposed headers".to_string(),
@@ -235,40 +252,41 @@ struct CorsOrigin(Option<String>);
 
 impl Middleware for CorsMiddleware {
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
-        Box::pin(async move {
-            // Extract origin header
-            let origin = request.headers.get_str("origin")
-                .and_then(|h| h.to_str().ok())
-                .map(|s| s.to_string());
-            
-            // Handle preflight OPTIONS request
-            if request.method == ElifMethod::OPTIONS {
-                return match self.handle_preflight(&request) {
+        let config = self.config.clone();
+        
+        // Extract origin header before async move
+        let origin = request.headers.get_str("origin")
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string());
+        
+        // Handle preflight OPTIONS request before async move
+        if request.method == ElifMethod::OPTIONS {
+            let preflight_result = self.handle_preflight(&request);
+            return Box::pin(async move {
+                match preflight_result {
                     Ok(response) => response,
                     Err(_) => ElifResponse::with_status(ElifStatusCode::FORBIDDEN)
                         .text("CORS policy violation"),
-                };
-            }
-            
-            // Check origin for non-preflight requests
-            if let Some(ref origin_str) = origin {
-                if !self.is_origin_allowed(origin_str) {
-                    return ElifResponse::with_status(ElifStatusCode::FORBIDDEN)
-                        .text("CORS policy violation: origin not allowed");
                 }
+            });
+        }
+        
+        // Check origin for non-preflight requests before async move
+        if let Some(ref origin_str) = origin {
+            if !self.is_origin_allowed(origin_str) {
+                return Box::pin(async move {
+                    ElifResponse::with_status(ElifStatusCode::FORBIDDEN)
+                        .text("CORS policy violation: origin not allowed")
+                });
             }
-            
+        }
+        
+        Box::pin(async move {
             // Request is valid, proceed to next middleware/handler
             let mut response = next.run(request).await;
             
-            // Add CORS headers to response
-            if let Some(ref origin_str) = origin {
-                if let Err(_) = self.add_cors_headers(&mut response, Some(origin_str)) {
-                    tracing::warn!("Failed to add CORS headers to response");
-                }
-            } else if let Err(_) = self.add_cors_headers(&mut response, None) {
-                tracing::warn!("Failed to add CORS headers to response");
-            }
+            // Add CORS headers to response (inline the logic)
+            CorsMiddleware::add_cors_headers_to_response(&mut response, origin.as_deref(), &config);
             
             response
         })

@@ -204,17 +204,17 @@ impl RateLimitMiddleware {
         
         // Add rate limit headers
         if let Err(e) = response.add_header("X-RateLimit-Limit", &info.limit.to_string()) {
-            tracing::warn!("Failed to add X-RateLimit-Limit header: {}", e);
+            log::warn!("Failed to add X-RateLimit-Limit header: {}", e);
         }
         if let Err(e) = response.add_header("X-RateLimit-Remaining", 
             &info.limit.saturating_sub(info.current).to_string()) {
-            tracing::warn!("Failed to add X-RateLimit-Remaining header: {}", e);
+            log::warn!("Failed to add X-RateLimit-Remaining header: {}", e);
         }
         if let Err(e) = response.add_header("X-RateLimit-Reset", &info.reset_time.to_string()) {
-            tracing::warn!("Failed to add X-RateLimit-Reset header: {}", e);
+            log::warn!("Failed to add X-RateLimit-Reset header: {}", e);
         }
         if let Err(e) = response.add_header("Retry-After", &info.reset_time.to_string()) {
-            tracing::warn!("Failed to add Retry-After header: {}", e);
+            log::warn!("Failed to add Retry-After header: {}", e);
         }
         
         response
@@ -235,7 +235,7 @@ impl Middleware for RateLimitMiddleware {
                 Some(id) => id,
                 None => {
                     // If we can't identify the request, allow it but log warning
-                    tracing::warn!("Rate limiting: Could not extract identifier from request");
+                    log::warn!("Rate limiting: Could not extract identifier from request");
                     return next.run(request).await;
                 }
             };
@@ -249,27 +249,27 @@ impl Middleware for RateLimitMiddleware {
                         
                         // Add rate limit headers to successful responses
                         if let Err(e) = response.add_header("X-RateLimit-Limit", &info.limit.to_string()) {
-                            tracing::warn!("Failed to add X-RateLimit-Limit header: {}", e);
+                            log::warn!("Failed to add X-RateLimit-Limit header: {}", e);
                         }
                         if let Err(e) = response.add_header("X-RateLimit-Remaining", 
                             &info.limit.saturating_sub(info.current).to_string()) {
-                            tracing::warn!("Failed to add X-RateLimit-Remaining header: {}", e);
+                            log::warn!("Failed to add X-RateLimit-Remaining header: {}", e);
                         }
                         if let Err(e) = response.add_header("X-RateLimit-Reset", &info.reset_time.to_string()) {
-                            tracing::warn!("Failed to add X-RateLimit-Reset header: {}", e);
+                            log::warn!("Failed to add X-RateLimit-Reset header: {}", e);
                         }
                         
                         response
                     } else {
                         // Rate limit exceeded
-                        tracing::warn!("Rate limit exceeded for identifier: {}, current: {}, limit: {}", 
+                        log::warn!("Rate limit exceeded for identifier: {}, current: {}, limit: {}", 
                             identifier, info.current, info.limit);
                         rate_limiter.rate_limit_response(&info)
                     }
                 }
                 Err(err) => {
                     // Log error and allow the request
-                    tracing::error!("Rate limiting check failed: {}", err);
+                    log::error!("Rate limiting check failed: {}", err);
                     next.run(request).await
                 }
             }

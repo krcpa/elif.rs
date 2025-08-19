@@ -165,6 +165,12 @@ impl CsrfMiddleware {
 /// Implementation of our Middleware trait for CSRF protection
 impl Middleware for CsrfMiddleware {
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        // Check if exempt before async block
+        let is_exempt = self.is_exempt_path(request.uri.path());
+        let token = self.extract_token(&request.headers);
+        let config = self.config.clone();
+        let store = self.token_store.clone();
+        
         Box::pin(async move {
             // Skip CSRF protection for safe methods (GET, HEAD, OPTIONS)
             if matches!(request.method, ElifMethod::GET | ElifMethod::HEAD | ElifMethod::OPTIONS) {
@@ -172,7 +178,7 @@ impl Middleware for CsrfMiddleware {
             }
             
             // Skip exempt paths
-            if self.is_exempt_path(request.uri.path()) {
+            if is_exempt {
                 return next.run(request).await;
             }
             
@@ -180,8 +186,35 @@ impl Middleware for CsrfMiddleware {
             let user_agent = request.headers.get_str("user-agent")
                 .and_then(|h| h.to_str().ok());
                 
-            if let Some(token) = self.extract_token(&request.headers) {
-                if self.validate_token(&token, user_agent).await {
+            if let Some(token) = token {
+                // Validate token manually in async block
+                let is_valid = {
+                    let store = store.read().await;
+                    if let Some(token_data) = store.get(&token) {
+                        // Check expiration
+                        if time::OffsetDateTime::now_utc() <= token_data.expires_at {
+                            // Check user agent if configured
+                            if let Some(stored_hash) = &token_data.user_agent_hash {
+                                if let Some(ua) = user_agent {
+                                    let mut hasher = Sha256::new();
+                                    hasher.update(ua.as_bytes());
+                                    let ua_hash = format!("{:x}", hasher.finalize());
+                                    stored_hash == &ua_hash
+                                } else {
+                                    false
+                                }
+                            } else {
+                                true
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                };
+                
+                if is_valid {
                     // Consume token for single-use (optional - can be configured)
                     // self.consume_token(&token).await;
                     return next.run(request).await;
