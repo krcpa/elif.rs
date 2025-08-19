@@ -5,15 +5,12 @@
 
 use std::time::Duration;
 use tokio::time::timeout;
-use axum::{
-    extract::Request,
-    response::{Response, IntoResponse},
-    http::StatusCode,
-};
 use tracing::{warn, error};
-
+use serde_json;
 use crate::{
-    middleware::{Middleware, BoxFuture},
+    middleware::v2::{Middleware, Next, NextFuture},
+    request::ElifRequest,
+    response::{ElifResponse, ElifStatusCode},
     HttpError,
 };
 
@@ -115,9 +112,15 @@ impl TimeoutMiddleware {
     }
 
     /// Create timeout error response
-    fn timeout_response(&self) -> Response {
-        let error = HttpError::timeout();
-        error.into_response()
+    fn timeout_response(&self) -> ElifResponse {
+        ElifResponse::with_status(ElifStatusCode::REQUEST_TIMEOUT)
+            .json(serde_json::json!({
+                "error": {
+                    "code": "REQUEST_TIMEOUT",
+                    "message": self.config.timeout_message,
+                    "timeout_duration_secs": self.config.timeout.as_secs()
+                }
+            }))
     }
 }
 
@@ -128,36 +131,37 @@ impl Default for TimeoutMiddleware {
 }
 
 impl Middleware for TimeoutMiddleware {
-    fn process_request<'a>(
-        &'a self,
-        request: Request
-    ) -> BoxFuture<'a, Result<Request, Response>> {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        let timeout_duration = self.config.timeout;
+        let log_timeouts = self.config.log_timeouts;
+        let timeout_message = self.config.timeout_message.clone();
+        
         Box::pin(async move {
-            // Store timeout duration in request extensions for downstream middleware
-            // This allows handlers to know the timeout that's been applied
-            let mut request = request;
-            request.extensions_mut().insert(TimeoutInfo {
-                duration: self.config.timeout,
-                message: self.config.timeout_message.clone(),
-            });
-
-            Ok(request)
-        })
-    }
-
-    fn process_response<'a>(
-        &'a self,
-        response: Response
-    ) -> BoxFuture<'a, Response> {
-        Box::pin(async move {
-            // For timeout middleware, response processing is mainly for logging
-            // The actual timeout handling happens at the handler level or higher
-            
-            if response.status() == StatusCode::REQUEST_TIMEOUT && self.config.log_timeouts {
-                warn!("Request timed out after {:?}", self.config.timeout);
+            // Apply timeout to the entire middleware chain
+            match timeout(timeout_duration, next.run(request)).await {
+                Ok(response) => {
+                    // Check if response indicates timeout and log if enabled
+                    if response.status_code() == ElifStatusCode::REQUEST_TIMEOUT && log_timeouts {
+                        warn!("Request timed out after {:?}", timeout_duration);
+                    }
+                    response
+                }
+                Err(_) => {
+                    // Timeout occurred
+                    if log_timeouts {
+                        error!("Request timed out after {:?}: {}", timeout_duration, timeout_message);
+                    }
+                    
+                    ElifResponse::with_status(ElifStatusCode::REQUEST_TIMEOUT)
+                        .json(serde_json::json!({
+                            "error": {
+                                "code": "REQUEST_TIMEOUT",
+                                "message": timeout_message,
+                                "timeout_duration_secs": timeout_duration.as_secs()
+                            }
+                        }))
+                }
             }
-
-            response
         })
     }
 

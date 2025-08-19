@@ -2,13 +2,11 @@
 //!
 //! Provides XSS prevention and input sanitization for incoming requests.
 
-use axum::{
-    extract::Request,
-    http::StatusCode,
-    response::Response,
-    body::Body,
+use elif_http::{
+    middleware::v2::{Middleware, Next, NextFuture},
+    request::ElifRequest,
+    response::{ElifResponse, ElifStatusCode},
 };
-use elif_http::middleware::{Middleware, BoxFuture};
 use crate::{SecurityError, SecurityResult};
 
 pub use crate::config::SanitizationConfig;
@@ -115,28 +113,22 @@ impl SanitizationMiddleware {
 }
 
 impl Middleware for SanitizationMiddleware {
-    fn process_request<'a>(
-        &'a self, 
-        request: Request
-    ) -> BoxFuture<'a, Result<Request, Response>> {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
         Box::pin(async move {
             // Check request size
-            let content_length = request
-                .headers()
-                .get(axum::http::header::CONTENT_LENGTH)
+            let content_length = request.headers
+                .get_str("content-length")
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.parse::<usize>().ok())
                 .unwrap_or(0);
                 
             if let Err(e) = self.config.check_request_size(content_length) {
-                return Err(Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(Body::from(format!("Request sanitization failed: {}", e)))
-                    .unwrap_or_else(|_| Response::new(Body::empty())));
+                return ElifResponse::with_status(ElifStatusCode::BAD_REQUEST)
+                    .text(&format!("Request sanitization failed: {}", e));
             }
             
             // Check User-Agent for suspicious patterns
-            if let Some(user_agent) = request.headers().get(axum::http::header::USER_AGENT) {
+            if let Some(user_agent) = request.headers.get_str("user-agent") {
                 if let Ok(ua_str) = user_agent.to_str() {
                     // Block known malicious user agents
                     let malicious_patterns = [
@@ -146,10 +138,8 @@ impl Middleware for SanitizationMiddleware {
                     
                     for pattern in &malicious_patterns {
                         if ua_str.to_lowercase().contains(pattern) {
-                            return Err(Response::builder()
-                                .status(StatusCode::FORBIDDEN)
-                                .body(Body::from(format!("Suspicious User-Agent detected: {}", pattern)))
-                                .unwrap_or_else(|_| Response::new(Body::empty())));
+                            return ElifResponse::with_status(ElifStatusCode::FORBIDDEN)
+                                .text(&format!("Suspicious User-Agent detected: {}", pattern));
                         }
                     }
                 }
@@ -161,7 +151,7 @@ impl Middleware for SanitizationMiddleware {
             // 2. Extract and sanitize request body (JSON/form data)
             // 3. Reconstruct the request with sanitized data
             
-            Ok(request)
+            next.run(request).await
         })
     }
     
