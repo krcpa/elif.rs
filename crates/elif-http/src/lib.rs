@@ -57,6 +57,11 @@ pub use response::{ElifJson, JsonError, JsonResponse, ValidationErrors, ApiRespo
 // Re-export middleware types
 pub use middleware::{
     Middleware, MiddlewarePipeline, ErrorHandlingMiddleware, BoxFuture as MiddlewareBoxFuture,
+    // V2 Middleware System
+    v2::{
+        Middleware as MiddlewareV2, MiddlewarePipelineV2, Next, 
+        LoggingMiddleware as LoggingMiddlewareV2, SimpleAuthMiddleware, MiddlewareAdapter
+    },
     // Core middleware
     error_handler::{
         ErrorHandlerMiddleware, ErrorHandlerConfig, ErrorHandlerLayer,
