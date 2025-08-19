@@ -87,7 +87,9 @@ impl Middleware for TimingMiddleware {
             
             // Add timing header if enabled
             if add_header {
-                let _ = response.add_header("X-Response-Time", &duration_ms.to_string());
+                if let Err(e) = response.add_header("X-Response-Time", &duration_ms.to_string()) {
+                    warn!("Failed to add X-Response-Time header: {}", e);
+                }
             }
             
             // Check for slow requests and log warning
@@ -157,15 +159,30 @@ mod tests {
             })
         }).await;
         
-        // Should complete successfully
+        // Should complete successfully and have the timing header
         assert_eq!(response.status_code(), ElifStatusCode::OK);
-        // In a real implementation, we'd check for X-Response-Time header
+        assert!(response.has_header("x-response-time"));
     }
     
     #[tokio::test]
     async fn test_timing_middleware_without_header() {
         let middleware = TimingMiddleware::new().without_header();
-        assert!(!middleware.add_header);
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
+        
+        let request = ElifRequest::new(
+            ElifMethod::GET,
+            "/api/test".parse().unwrap(),
+            ElifHeaderMap::new(),
+        );
+        
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move {
+                ElifResponse::ok().text("Success")
+            })
+        }).await;
+        
+        // Should NOT have timing header
+        assert!(!response.has_header("x-response-time"));
     }
     
     #[test]

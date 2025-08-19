@@ -203,11 +203,19 @@ impl RateLimitMiddleware {
             .json_value(json_body);
         
         // Add rate limit headers
-        let _ = response.add_header("X-RateLimit-Limit", &info.limit.to_string());
-        let _ = response.add_header("X-RateLimit-Remaining", 
-            &info.limit.saturating_sub(info.current).to_string());
-        let _ = response.add_header("X-RateLimit-Reset", &info.reset_time.to_string());
-        let _ = response.add_header("Retry-After", &info.reset_time.to_string());
+        if let Err(e) = response.add_header("X-RateLimit-Limit", &info.limit.to_string()) {
+            tracing::warn!("Failed to add X-RateLimit-Limit header: {}", e);
+        }
+        if let Err(e) = response.add_header("X-RateLimit-Remaining", 
+            &info.limit.saturating_sub(info.current).to_string()) {
+            tracing::warn!("Failed to add X-RateLimit-Remaining header: {}", e);
+        }
+        if let Err(e) = response.add_header("X-RateLimit-Reset", &info.reset_time.to_string()) {
+            tracing::warn!("Failed to add X-RateLimit-Reset header: {}", e);
+        }
+        if let Err(e) = response.add_header("Retry-After", &info.reset_time.to_string()) {
+            tracing::warn!("Failed to add Retry-After header: {}", e);
+        }
         
         response
     }
@@ -240,10 +248,16 @@ impl Middleware for RateLimitMiddleware {
                         let mut response = next.run(request).await;
                         
                         // Add rate limit headers to successful responses
-                        let _ = response.add_header("X-RateLimit-Limit", &info.limit.to_string());
-                        let _ = response.add_header("X-RateLimit-Remaining", 
-                            &info.limit.saturating_sub(info.current).to_string());
-                        let _ = response.add_header("X-RateLimit-Reset", &info.reset_time.to_string());
+                        if let Err(e) = response.add_header("X-RateLimit-Limit", &info.limit.to_string()) {
+                            tracing::warn!("Failed to add X-RateLimit-Limit header: {}", e);
+                        }
+                        if let Err(e) = response.add_header("X-RateLimit-Remaining", 
+                            &info.limit.saturating_sub(info.current).to_string()) {
+                            tracing::warn!("Failed to add X-RateLimit-Remaining header: {}", e);
+                        }
+                        if let Err(e) = response.add_header("X-RateLimit-Reset", &info.reset_time.to_string()) {
+                            tracing::warn!("Failed to add X-RateLimit-Reset header: {}", e);
+                        }
                         
                         response
                     } else {

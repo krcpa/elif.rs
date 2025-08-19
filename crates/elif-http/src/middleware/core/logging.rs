@@ -94,8 +94,11 @@ impl Middleware for LoggingMiddleware {
             // Log response headers if enabled
             if log_response_headers {
                 debug!("Response headers:");
-                // In a real implementation, we'd iterate over response headers
-                // but ElifResponse might not expose them in the same way
+                for (name, value) in response.headers().iter() {
+                    if let Ok(value_str) = value.to_str() {
+                        debug!("  {}: {}", name, value_str);
+                    }
+                }
             }
             
             response
