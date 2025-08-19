@@ -289,7 +289,8 @@ impl ETagMiddleware {
         &self, 
         response: ElifResponse,
         if_none_match: Option<HeaderValue>,
-        if_match: Option<HeaderValue>
+        if_match: Option<HeaderValue>,
+        request_method: axum::http::Method
     ) -> ElifResponse {
         let axum_response = response.into_axum_response();
         let (parts, body) = axum_response.into_parts();
@@ -328,25 +329,64 @@ impl ETagMiddleware {
                 let request_etags = self.parse_if_none_match(if_none_match_str);
                 
                 // Special case: "*" matches any ETag
+                // RFC 7232: For GET/HEAD, return 304. For others, return 412 if resource exists.
                 if if_none_match_str.trim() == "*" {
-                    return ElifResponse::from_axum_response(
-                        axum::response::Response::builder()
-                            .status(StatusCode::NOT_MODIFIED)
-                            .header("etag", etag.to_header_value())
-                            .body(axum::body::Body::empty())
-                            .unwrap()
-                    ).await;
+                    return if request_method == axum::http::Method::GET || request_method == axum::http::Method::HEAD {
+                        // Return 304 Not Modified for GET/HEAD
+                        ElifResponse::from_axum_response(
+                            axum::response::Response::builder()
+                                .status(StatusCode::NOT_MODIFIED)
+                                .header("etag", etag.to_header_value())
+                                .body(axum::body::Body::empty())
+                                .unwrap()
+                        ).await
+                    } else {
+                        // Return 412 Precondition Failed for state-changing methods
+                        ElifResponse::from_axum_response(
+                            axum::response::Response::builder()
+                                .status(StatusCode::PRECONDITION_FAILED)
+                                .header("etag", etag.to_header_value())
+                                .body(axum::body::Body::from(
+                                    serde_json::to_vec(&serde_json::json!({
+                                        "error": {
+                                            "code": "precondition_failed",
+                                            "message": "If-None-Match: * failed - resource exists"
+                                        }
+                                    })).unwrap_or_default()
+                                ))
+                                .unwrap()
+                        ).await
+                    };
                 }
                 
                 if !self.check_if_none_match(&request_etags, &etag) {
-                    // ETag matches, return 304 Not Modified
-                    return ElifResponse::from_axum_response(
-                        axum::response::Response::builder()
-                            .status(StatusCode::NOT_MODIFIED)
-                            .header("etag", etag.to_header_value())
-                            .body(axum::body::Body::empty())
-                            .unwrap()
-                    ).await;
+                    // ETag matches - behavior depends on request method
+                    return if request_method == axum::http::Method::GET || request_method == axum::http::Method::HEAD {
+                        // Return 304 Not Modified for GET/HEAD
+                        ElifResponse::from_axum_response(
+                            axum::response::Response::builder()
+                                .status(StatusCode::NOT_MODIFIED)
+                                .header("etag", etag.to_header_value())
+                                .body(axum::body::Body::empty())
+                                .unwrap()
+                        ).await
+                    } else {
+                        // Return 412 Precondition Failed for state-changing methods
+                        ElifResponse::from_axum_response(
+                            axum::response::Response::builder()
+                                .status(StatusCode::PRECONDITION_FAILED)
+                                .header("etag", etag.to_header_value())
+                                .body(axum::body::Body::from(
+                                    serde_json::to_vec(&serde_json::json!({
+                                        "error": {
+                                            "code": "precondition_failed",
+                                            "message": "If-None-Match precondition failed - resource unchanged"
+                                        }
+                                    })).unwrap_or_default()
+                                ))
+                                .unwrap()
+                        ).await
+                    };
                 }
             }
         }
@@ -414,15 +454,16 @@ impl Middleware for ETagMiddleware {
         let config = self.config.clone();
         
         Box::pin(async move {
-            // Extract needed headers before moving request
+            // Extract needed headers and method before moving request
             let if_none_match = request.header("if-none-match").cloned();
             let if_match = request.header("if-match").cloned();
+            let method = request.method.clone();
             
             let response = next.run(request).await;
             
             // Process response to add ETag and handle conditional requests
             let middleware = ETagMiddleware { config };
-            middleware.process_response_with_headers(response, if_none_match, if_match).await
+            middleware.process_response_with_headers(response, if_none_match, if_match, method).await
         })
     }
     
@@ -596,6 +637,104 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
+        assert_eq!(response.status_code(), StatusCode::PRECONDITION_FAILED);
+    }
+    
+    #[tokio::test]
+    async fn test_if_none_match_star_put_request() {
+        let middleware = ETagMiddleware::new();
+        
+        let mut headers = HeaderMap::new();
+        headers.insert("if-none-match", "*".parse().unwrap());
+        let request = ElifRequest::new(
+            Method::PUT,  // State-changing method
+            "/api/data".parse().unwrap(),
+            headers,
+        );
+        
+        let next = Next::new(|_req| {
+            Box::pin(async move {
+                ElifResponse::ok().json_value(serde_json::json!({
+                    "message": "Created!"
+                }))
+            })
+        });
+        
+        let response = middleware.handle(request, next).await;
+        // Should return 412 for PUT with If-None-Match: * when resource exists
+        assert_eq!(response.status_code(), StatusCode::PRECONDITION_FAILED);
+    }
+    
+    #[tokio::test]
+    async fn test_if_none_match_star_get_request() {
+        let middleware = ETagMiddleware::new();
+        
+        let mut headers = HeaderMap::new();
+        headers.insert("if-none-match", "*".parse().unwrap());
+        let request = ElifRequest::new(
+            Method::GET,  // Safe method
+            "/api/data".parse().unwrap(),
+            headers,
+        );
+        
+        let next = Next::new(|_req| {
+            Box::pin(async move {
+                ElifResponse::ok().json_value(serde_json::json!({
+                    "message": "Data"
+                }))
+            })
+        });
+        
+        let response = middleware.handle(request, next).await;
+        // Should return 304 for GET with If-None-Match: *
+        assert_eq!(response.status_code(), StatusCode::NOT_MODIFIED);
+    }
+    
+    #[tokio::test] 
+    async fn test_if_none_match_etag_put_request() {
+        let middleware = ETagMiddleware::new();
+        
+        // First request to get ETag
+        let request = ElifRequest::new(
+            Method::GET,
+            "/api/data".parse().unwrap(),
+            HeaderMap::new(),
+        );
+        
+        let next = Next::new(|_req| {
+            Box::pin(async move {
+                ElifResponse::ok().json_value(serde_json::json!({
+                    "message": "Data"
+                }))
+            })
+        });
+        
+        let response = middleware.handle(request, next).await;
+        let axum_response = response.into_axum_response();
+        let (parts, _) = axum_response.into_parts();
+        
+        let etag_header = parts.headers.get("etag").unwrap();
+        let etag_value = etag_header.to_str().unwrap();
+        
+        // Second request - PUT with matching ETag
+        let mut headers = HeaderMap::new();
+        headers.insert("if-none-match", etag_value.parse().unwrap());
+        let request = ElifRequest::new(
+            Method::PUT,
+            "/api/data".parse().unwrap(),
+            headers,
+        );
+        
+        let next = Next::new(|_req| {
+            Box::pin(async move {
+                ElifResponse::ok().json_value(serde_json::json!({
+                    "message": "Data"
+                }))
+            })
+        });
+        
+        let response = middleware.handle(request, next).await;
+        // Should return 412 for PUT when ETag matches
         assert_eq!(response.status_code(), StatusCode::PRECONDITION_FAILED);
     }
     

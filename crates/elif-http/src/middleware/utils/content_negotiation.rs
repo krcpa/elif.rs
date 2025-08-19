@@ -118,15 +118,15 @@ pub struct ContentNegotiationConfig {
     /// Whether to add Vary header
     pub add_vary_header: bool,
     /// Custom converters for content types
-    pub converters: HashMap<ContentType, Box<dyn Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync>>,
+    pub converters: HashMap<ContentType, std::sync::Arc<dyn Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync>>,
 }
 
 impl Default for ContentNegotiationConfig {
     fn default() -> Self {
         let mut converters = HashMap::new();
-        converters.insert(ContentType::Json, Box::new(Self::convert_to_json) as Box<dyn Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync>);
-        converters.insert(ContentType::PlainText, Box::new(Self::convert_to_text) as Box<dyn Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync>);
-        converters.insert(ContentType::Html, Box::new(Self::convert_to_html) as Box<dyn Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync>);
+        converters.insert(ContentType::Json, std::sync::Arc::new(Self::convert_to_json) as std::sync::Arc<dyn Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync>);
+        converters.insert(ContentType::PlainText, std::sync::Arc::new(Self::convert_to_text) as std::sync::Arc<dyn Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync>);
+        converters.insert(ContentType::Html, std::sync::Arc::new(Self::convert_to_html) as std::sync::Arc<dyn Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync>);
         
         Self {
             default_content_type: ContentType::Json,
@@ -203,17 +203,11 @@ impl std::fmt::Debug for ContentNegotiationConfig {
 
 impl Clone for ContentNegotiationConfig {
     fn clone(&self) -> Self {
-        // Recreate the default converters since we can't clone trait objects
-        let mut converters = HashMap::new();
-        converters.insert(ContentType::Json, Box::new(Self::convert_to_json) as Box<dyn Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync>);
-        converters.insert(ContentType::PlainText, Box::new(Self::convert_to_text) as Box<dyn Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync>);
-        converters.insert(ContentType::Html, Box::new(Self::convert_to_html) as Box<dyn Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync>);
-        
         Self {
             default_content_type: self.default_content_type.clone(),
             supported_types: self.supported_types.clone(),
             add_vary_header: self.add_vary_header,
-            converters,
+            converters: self.converters.clone(), // Arc is Clone, so this works correctly
         }
     }
 }
@@ -254,7 +248,7 @@ impl ContentNegotiationMiddleware {
     where 
         F: Fn(&serde_json::Value) -> Result<Vec<u8>, String> + Send + Sync + 'static
     {
-        self.config.converters.insert(content_type, Box::new(converter));
+        self.config.converters.insert(content_type, std::sync::Arc::new(converter));
         self
     }
     
@@ -678,5 +672,43 @@ mod tests {
         let html_content = String::from_utf8(html_result).unwrap();
         assert!(html_content.contains("<!DOCTYPE html>"));
         assert!(html_content.contains("test"));
+    }
+    
+    #[tokio::test]
+    async fn test_custom_converter_preservation_after_clone() {
+        // Test that custom converters are preserved after config clone
+        let middleware = ContentNegotiationMiddleware::new()
+            .converter(ContentType::Csv, |json_value| {
+                // Custom CSV converter
+                Ok(b"custom,csv,data".to_vec())
+            });
+        
+        let mut headers = HeaderMap::new();
+        headers.insert("accept", "text/csv".parse().unwrap());
+        let request = ElifRequest::new(
+            Method::GET,
+            "/api/data".parse().unwrap(),
+            headers,
+        );
+        
+        let next = Next::new(|_req| {
+            Box::pin(async move {
+                ElifResponse::ok().json_value(serde_json::json!({
+                    "test": "data"
+                }))
+            })
+        });
+        
+        // This should work because the custom converter is preserved through clone
+        let response = middleware.handle(request, next).await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+        
+        // Check that it was converted to CSV format
+        let axum_response = response.into_axum_response();
+        let (parts, _) = axum_response.into_parts();
+        assert_eq!(
+            parts.headers.get("content-type").unwrap(),
+            "text/csv"
+        );
     }
 }

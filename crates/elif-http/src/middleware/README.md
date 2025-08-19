@@ -8,15 +8,16 @@ The elif.rs framework provides a comprehensive middleware system supporting both
 
 ### CompressionMiddleware
 
-Provides response compression using gzip and brotli algorithms.
+Provides response compression using tower-http's battle-tested CompressionLayer.
 
 ```rust
 use elif_http::middleware::CompressionMiddleware;
+use tower_http::compression::CompressionLevel;
 
 let middleware = CompressionMiddleware::new()
-    .min_size(1024)         // Only compress responses >= 1KB
-    .level(6)               // Compression level (1-11)
-    .content_type("application/xml"); // Add supported content type
+    .best()                 // Maximum compression level
+    .gzip_only()           // Only use gzip (disable brotli)
+    .level(CompressionLevel::Precise(6)); // Custom compression level
 
 // Usage in pipeline
 let pipeline = MiddlewarePipelineV2::new()
@@ -25,10 +26,11 @@ let pipeline = MiddlewarePipelineV2::new()
 ```
 
 Features:
-- Gzip and Brotli compression
-- Configurable compression levels
-- Size and content-type filtering
+- Uses tower-http's proven compression implementation
+- Gzip, Brotli, and Deflate support
+- Configurable compression levels (fast/best/precise)
 - Automatic Accept-Encoding negotiation
+- Built-in content-type and size filtering
 
 ### ETagMiddleware
 
@@ -50,7 +52,8 @@ let pipeline = MiddlewarePipelineV2::new()
 
 Features:
 - Strong and weak ETag generation
-- Conditional request handling (304 Not Modified, 412 Precondition Failed)
+- RFC 7232 compliant conditional request handling
+- 304 Not Modified for GET/HEAD, 412 Precondition Failed for state-changing methods
 - Configurable generation strategies
 - Content-type filtering
 
