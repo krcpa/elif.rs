@@ -74,6 +74,7 @@ impl ProviderRegistry {
     }
     
     /// Visit provider for dependency resolution
+    #[allow(clippy::only_used_in_recursion)]
     fn visit_provider(
         &self,
         index: usize,

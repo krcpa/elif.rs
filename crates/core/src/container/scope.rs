@@ -1,7 +1,8 @@
 /// Service scope enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ServiceScope {
     /// Single instance shared across the application
+    #[default]
     Singleton,
     /// New instance created for each request
     Transient,
@@ -35,11 +36,6 @@ impl ServiceScope {
     }
 }
 
-impl Default for ServiceScope {
-    fn default() -> Self {
-        ServiceScope::Singleton
-    }
-}
 
 impl std::fmt::Display for ServiceScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

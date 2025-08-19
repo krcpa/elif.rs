@@ -1,5 +1,4 @@
-use crate::errors::CoreError;
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 use std::fmt;
 
 /// Core trait for framework components that can be registered and managed

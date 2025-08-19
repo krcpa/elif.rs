@@ -48,9 +48,7 @@ impl ValidationRule for RequiredValidator {
     async fn validate(&self, value: &Value, field: &str) -> ValidationResult<()> {
         if self.is_empty(value) {
             let message = self
-                .message
-                .as_ref()
-                .map(|m| m.clone())
+                .message.clone()
                 .unwrap_or_else(|| format!("{} is required", field));
 
             Err(ValidationError::with_code(field, message, "required").into())

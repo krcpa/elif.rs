@@ -89,7 +89,7 @@ impl ValidationErrors {
     pub fn add(&mut self, error: ValidationError) {
         self.errors
             .entry(error.field.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(error);
     }
 
@@ -98,7 +98,7 @@ impl ValidationErrors {
         let field = field.into();
         self.errors
             .entry(field)
-            .or_insert_with(Vec::new)
+            .or_default()
             .extend(errors);
     }
 
@@ -138,7 +138,7 @@ impl ValidationErrors {
         for (field, errors) in other.errors {
             self.errors
                 .entry(field)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .extend(errors);
         }
     }

@@ -340,7 +340,6 @@ mod base64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Attachment;
 
     #[test]
     fn test_sendgrid_provider_creation() {

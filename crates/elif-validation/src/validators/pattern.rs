@@ -73,7 +73,7 @@ impl PatternValidator {
     /// Validate the string against the pattern
     fn validate_pattern(&self, text: &str) -> bool {
         if self.full_match {
-            self.pattern.is_match(text) && self.pattern.find(text).map_or(false, |m| m.as_str() == text)
+            self.pattern.is_match(text) && self.pattern.find(text).is_some_and(|m| m.as_str() == text)
         } else {
             self.pattern.is_match(text)
         }
@@ -101,9 +101,7 @@ impl ValidationRule for PatternValidator {
 
         if !self.validate_pattern(text) {
             let message = self
-                .message
-                .as_ref()
-                .map(|m| m.clone())
+                .message.clone()
                 .unwrap_or_else(|| format!("{} does not match the required pattern", field));
 
             return Err(ValidationError::with_code(field, message, "pattern_mismatch").into());

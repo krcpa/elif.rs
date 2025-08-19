@@ -245,7 +245,6 @@ mod base64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Attachment;
 
     #[test]
     fn test_mailgun_provider_creation() {

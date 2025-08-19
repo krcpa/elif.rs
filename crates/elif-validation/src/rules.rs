@@ -45,7 +45,7 @@ impl Rules {
         let field = field.into();
         self.field_rules
             .entry(field)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(Arc::new(rule));
         self
     }
@@ -63,7 +63,7 @@ impl Rules {
         
         self.field_rules
             .entry(field)
-            .or_insert_with(Vec::new)
+            .or_default()
             .extend(rule_arcs);
         self
     }
@@ -206,7 +206,7 @@ impl RulesBuilderConfigBuilder {
         let mut field_rules = self.field_rules.unwrap_or_default();
         field_rules
             .entry(field)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(Arc::new(rule));
         RulesBuilderConfigBuilder {
             field_rules: Some(field_rules),
@@ -228,7 +228,7 @@ impl RulesBuilderConfigBuilder {
         let mut field_rules = self.field_rules.unwrap_or_default();
         field_rules
             .entry(field)
-            .or_insert_with(Vec::new)
+            .or_default()
             .extend(rule_arcs);
         RulesBuilderConfigBuilder {
             field_rules: Some(field_rules),

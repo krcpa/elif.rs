@@ -1,4 +1,4 @@
-use crate::foundation::traits::{Service, FrameworkComponent};
+use crate::foundation::traits::Service;
 use crate::container::registry::ServiceRegistry;
 use crate::container::scope::ServiceScope;
 use crate::errors::CoreError;

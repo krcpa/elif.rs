@@ -199,17 +199,17 @@ impl OperationSpec {
     
     /// Check if operation supports filtering
     pub fn supports_filtering(&self) -> bool {
-        self.filter.as_ref().map_or(false, |f| !f.is_empty())
+        self.filter.as_ref().is_some_and(|f| !f.is_empty())
     }
     
     /// Check if operation supports searching
     pub fn supports_searching(&self) -> bool {
-        self.search_by.as_ref().map_or(false, |s| !s.is_empty())
+        self.search_by.as_ref().is_some_and(|s| !s.is_empty())
     }
     
     /// Check if operation supports ordering
     pub fn supports_ordering(&self) -> bool {
-        self.order_by.as_ref().map_or(false, |o| !o.is_empty())
+        self.order_by.as_ref().is_some_and(|o| !o.is_empty())
     }
 }
 

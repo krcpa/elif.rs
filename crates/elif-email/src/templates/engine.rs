@@ -145,7 +145,7 @@ impl TemplateEngine {
 
     /// List available templates
     pub fn list_templates(&self) -> Result<Vec<String>, EmailError> {
-        let mut tera = self.tera.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
+        let tera = self.tera.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
         Ok(tera.get_template_names().map(|s| s.to_string()).collect())
     }
 }
