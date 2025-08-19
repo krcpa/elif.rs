@@ -5,6 +5,7 @@ use std::fmt;
 use std::str::FromStr;
 
 /// Framework-native header name wrapper that hides Axum internals
+#[repr(transparent)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ElifHeaderName(axum::http::HeaderName);
 
