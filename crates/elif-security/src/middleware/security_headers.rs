@@ -119,7 +119,7 @@ impl SecurityHeadersMiddleware {
     }
 
     /// Apply security headers to response
-    fn apply_headers(&self, response: &mut ElifResponse) -> SecurityResult<()> {
+    pub fn apply_headers(&self, response: &mut ElifResponse) -> SecurityResult<()> {
         Self::apply_headers_impl(response, &self.config)
     }
 
@@ -249,39 +249,38 @@ impl Middleware for SecurityHeadersMiddleware {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use elif_http::response::ElifHeaderName;
 
     #[test]
     fn test_strict_headers() {
         let middleware = SecurityHeadersMiddleware::strict();
-        let response = Response::new(Body::empty());
+        let mut response = ElifResponse::ok();
         
-        let result = middleware.apply_headers(response);
+        let result = middleware.apply_headers(&mut response);
         assert!(result.is_ok());
         
-        let response = result.unwrap();
-        let headers = response.headers();
+        let headers = response.headers().clone();
         
         // Check essential headers are present
-        assert!(headers.contains_key("content-security-policy"));
-        assert!(headers.contains_key("strict-transport-security"));
-        assert!(headers.contains_key("x-frame-options"));
-        assert!(headers.contains_key("x-content-type-options"));
-        assert!(headers.contains_key("x-xss-protection"));
+        assert!(headers.contains_key(&ElifHeaderName::from_str("content-security-policy").unwrap()));
+        assert!(headers.contains_key(&ElifHeaderName::from_str("strict-transport-security").unwrap()));
+        assert!(headers.contains_key(&ElifHeaderName::from_str("x-frame-options").unwrap()));
+        assert!(headers.contains_key(&ElifHeaderName::from_str("x-content-type-options").unwrap()));
+        assert!(headers.contains_key(&ElifHeaderName::from_str("x-xss-protection").unwrap()));
     }
     
     #[test]
     fn test_development_headers() {
         let middleware = SecurityHeadersMiddleware::development();
-        let response = Response::new(Body::empty());
+        let mut response = ElifResponse::ok();
         
-        let result = middleware.apply_headers(response);
+        let result = middleware.apply_headers(&mut response);
         assert!(result.is_ok());
         
-        let response = result.unwrap();
-        let headers = response.headers();
+        let headers = response.headers().clone();
         
         // Should have less restrictive CSP
-        let csp = headers.get("content-security-policy").unwrap().to_str().unwrap();
+        let csp = headers.get(&ElifHeaderName::from_str("content-security-policy").unwrap()).unwrap().to_str().unwrap();
         assert!(csp.contains("unsafe-inline"));
         assert!(csp.contains("unsafe-eval"));
     }
@@ -289,20 +288,19 @@ mod tests {
     #[test]
     fn test_api_focused_headers() {
         let middleware = SecurityHeadersMiddleware::api_focused();
-        let response = Response::new(Body::empty());
+        let mut response = ElifResponse::ok();
         
-        let result = middleware.apply_headers(response);
+        let result = middleware.apply_headers(&mut response);
         assert!(result.is_ok());
         
-        let response = result.unwrap();
-        let headers = response.headers();
+        let headers = response.headers().clone();
         
-        // Should have strict CSP for APIs
-        let csp = headers.get("content-security-policy").unwrap().to_str().unwrap();
+        // Should have strict CSP for APIs 
+        let csp = headers.get(&ElifHeaderName::from_str("content-security-policy").unwrap()).unwrap().to_str().unwrap();
         assert_eq!(csp, "default-src 'none'; frame-ancestors 'none'");
         
         // Should deny framing
-        let xfo = headers.get("x-frame-options").unwrap().to_str().unwrap();
+        let xfo = headers.get(&ElifHeaderName::from_str("x-frame-options").unwrap()).unwrap().to_str().unwrap();
         assert_eq!(xfo, "DENY");
     }
     
@@ -323,50 +321,7 @@ mod tests {
         assert!(result.is_ok());
         
         // Custom headers should be applied (implementation specific check)
-    }
-    
-    #[cfg(feature = "legacy-tests")]
-#[tokio::test]
-    async fn test_header_removal() {
-        let config = SecurityHeadersConfig {
-            remove_server_header: true,
-            remove_x_powered_by: true,
-            ..SecurityHeadersConfig::default()
-        };
-        
-        let middleware = SecurityHeadersMiddleware::new(config);
-        
-        let mut response = ElifResponse::ok();
-        let _ = response.add_header("server", "nginx/1.20");
-        let _ = response.add_header("x-powered-by", "PHP/8.0");
-        
-        let result = middleware.apply_headers(&mut response);
-        assert!(result.is_ok());
-        
-        // Headers should be removed (implementation specific check)
-    }
-    
-    #[cfg(feature = "legacy-tests")]
-#[tokio::test]
-    async fn test_middleware_v2() {
-        let middleware = SecurityHeadersMiddleware::strict();
-        let pipeline = MiddlewarePipelineV2::new().add(middleware);
-        
-        let headers = ElifHeaderMap::new();
-        let request = ElifRequest::new(
-            ElifMethod::GET,
-            "/".parse().unwrap(),
-            headers,
-        );
-        
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("Hello World")
-            })
-        }).await;
-        
-        // Response should have security headers applied
-        assert_eq!(response.status_code(), ElifStatusCode::OK);
-        // In a real implementation, we'd check that security headers are present
+        let custom_header = response.headers().get(&ElifHeaderName::from_str("X-Custom-Header").unwrap()).unwrap().to_str().unwrap();
+        assert_eq!(custom_header, "custom-value");
     }
 }

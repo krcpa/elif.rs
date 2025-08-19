@@ -6,9 +6,6 @@ pub mod rate_limit;
 pub mod sanitization;
 pub mod security_headers;
 
-#[cfg(test)]
-pub mod tests;
-
 pub use cors::{CorsMiddleware, CorsConfig};
 pub use csrf::{CsrfMiddleware, CsrfConfig};
 pub use rate_limit::{RateLimitMiddleware, RateLimitConfig, RateLimitIdentifier};

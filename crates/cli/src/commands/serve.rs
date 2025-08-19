@@ -2,8 +2,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 use clap::Args;
 use elif_core::ElifError;
-use crate::command_system::{CommandHandler, CommandError, CommandDefinition, impl_command};
-use async_trait::async_trait;
 
 /// Serve command arguments
 #[derive(Args, Debug, Clone)]
@@ -33,30 +31,18 @@ pub struct ServeArgs {
     pub env: String,
 }
 
-impl_command!(
-    ServeArgs, 
-    "serve", 
-    "Start the development server with optional hot reload",
-    "Starts a development server for your elif application.\n\n\
-     Features:\n\
-     - Configurable host and port\n\
-     - Hot reload support for development\n\
-     - File watching with custom patterns\n\
-     - Environment configuration\n\n\
-     Examples:\n\
-       elifrs serve --port 8080 --hot-reload\n\
-       elifrs serve --host 0.0.0.0 --env production\n\
-       elifrs serve --watch src --watch templates --exclude '*.tmp'"
-);
 
-/// Serve command handler
-pub struct ServeCommand {
-    pub args: ServeArgs,
+/// Internal implementation for serve functionality
+struct ServeCommand {
+    args: ServeArgs,
 }
 
-#[async_trait]
-impl CommandHandler for ServeCommand {
-    async fn handle(&self) -> Result<(), CommandError> {
+impl ServeCommand {
+    fn new(args: ServeArgs) -> Self {
+        Self { args }
+    }
+    
+    async fn handle(&self) -> Result<(), ElifError> {
         println!("🚀 Starting elif development server...");
         println!("📡 Host: {}", self.args.host);
         println!("🔌 Port: {}", self.args.port);
@@ -71,30 +57,10 @@ impl CommandHandler for ServeCommand {
         }
     }
     
-    fn name(&self) -> &'static str {
-        ServeArgs::NAME
-    }
-    
-    fn description(&self) -> &'static str {
-        ServeArgs::DESCRIPTION
-    }
-    
-    fn help(&self) -> Option<&'static str> {
-        ServeArgs::HELP
-    }
-}
-
-impl ServeCommand {
-    pub fn new(args: ServeArgs) -> Self {
-        Self { args }
-    }
-    
-    async fn start_server(&self) -> Result<(), CommandError> {
+    async fn start_server(&self) -> Result<(), ElifError> {
         // Check if Cargo.toml exists
         if !std::path::Path::new("Cargo.toml").exists() {
-            return Err(CommandError::ExecutionError(
-                "No Cargo.toml found. Make sure you're in an elif project directory.".to_string()
-            ));
+            return Err(ElifError::Codegen { message: "No Cargo.toml found. Make sure you're in an elif project directory.".to_string() });
         }
         
         println!("📦 Building project...");
@@ -107,9 +73,7 @@ impl ServeCommand {
             
         if !build_output.status.success() {
             let stderr = String::from_utf8_lossy(&build_output.stderr);
-            return Err(CommandError::ExecutionError(
-                format!("Build failed:\n{}", stderr)
-            ));
+            return Err(ElifError::Codegen { message: format!("Build failed:\n{}", stderr) });
         }
         
         println!("✅ Build completed successfully");
@@ -138,9 +102,7 @@ impl ServeCommand {
                         }
                     }
                     Err(e) => {
-                        return Err(CommandError::ExecutionError(
-                            format!("Failed to wait for server: {}", e)
-                        ));
+                        return Err(ElifError::Codegen { message: format!("Failed to wait for server: {}", e) });
                     }
                 }
             }
@@ -154,7 +116,7 @@ impl ServeCommand {
         Ok(())
     }
     
-    async fn start_hot_reload_server(&self) -> Result<(), CommandError> {
+    async fn start_hot_reload_server(&self) -> Result<(), ElifError> {
         println!("🔍 Setting up file watchers...");
         
         // Default watch directories
@@ -244,7 +206,7 @@ impl ServeCommand {
         &self,
         watch_dirs: &[PathBuf],
         last_check: std::time::SystemTime,
-    ) -> Result<bool, CommandError> {
+    ) -> Result<bool, ElifError> {
         for dir in watch_dirs {
             if self.dir_modified_since(dir, last_check).await? {
                 return Ok(true);
@@ -257,7 +219,7 @@ impl ServeCommand {
         &self,
         dir: &PathBuf,
         since: std::time::SystemTime,
-    ) -> Result<bool, CommandError> {
+    ) -> Result<bool, ElifError> {
         if !dir.exists() {
             return Ok(false);
         }
@@ -299,7 +261,5 @@ impl ServeCommand {
 /// Create and run a serve command
 pub async fn run(args: ServeArgs) -> Result<(), ElifError> {
     let command = ServeCommand::new(args);
-    command.handle().await.map_err(|e| {
-        ElifError::Codegen { message: format!("Serve command failed: {}", e) }
-    })
+    command.handle().await
 }

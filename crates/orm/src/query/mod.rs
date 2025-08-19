@@ -14,8 +14,8 @@ pub mod performance;
 pub mod performance_optimized;
 pub mod with;
 
-// Re-export main types and builder
-pub use types::*;
+// Re-export main types and builder (minimal exports to avoid conflicts)
+pub use types::{OrderDirection, QueryOperator};
 pub use builder::QueryBuilder;
 pub use upsert::UpsertBuilder;
 pub use with::{QueryBuilderWithMethods, QueryBuilderWithEagerLoading};

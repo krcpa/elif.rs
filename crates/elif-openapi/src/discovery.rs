@@ -581,6 +581,7 @@ impl ProjectDiscovery {
 
     /// Bridge function for old line-based documentation extraction (used by model parsing)
     /// TODO: Replace with AST-based model parsing
+    #[allow(dead_code)]
     fn extract_documentation_from_lines(&self, lines: &[&str], route_index: usize) -> Option<String> {
         let mut doc_lines = Vec::new();
 

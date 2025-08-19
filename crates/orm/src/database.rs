@@ -195,7 +195,7 @@ impl ManagedPool {
     /// Check pool health and log detailed statistics
     pub async fn detailed_health_check(&self) -> Result<PoolHealthReport, PoolError> {
         let start = Instant::now();
-        let initial_stats = self.extended_stats();
+        let _initial_stats = self.extended_stats();
         
         // Perform the actual health check
         let check_duration = self.health_check().await?;

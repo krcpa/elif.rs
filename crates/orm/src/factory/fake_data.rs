@@ -6,7 +6,6 @@ use rand::seq::SliceRandom;
 use chrono::{DateTime, Utc, Duration};
 use serde_json::{json, Value};
 
-/// Thread-local random number generator
 thread_local! {
     static RNG: std::cell::RefCell<StdRng> = std::cell::RefCell::new(StdRng::from_entropy());
 }

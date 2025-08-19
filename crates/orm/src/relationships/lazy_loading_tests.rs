@@ -49,6 +49,7 @@ pub mod tests {
             }
         }
 
+        #[allow(dead_code)]
         async fn get_call_count(&self) -> usize {
             *self.call_count.read().await
         }

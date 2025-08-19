@@ -11,6 +11,7 @@ use chrono::{DateTime, Utc, Duration};
 use crate::{TestError, TestResult, factories::{User, UserFactory, Factory}};
 
 /// Test authentication provider for generating test tokens and sessions
+#[allow(dead_code)]
 pub struct TestAuthProvider {
     jwt_secret: String,
     session_store: HashMap<String, TestSession>,
@@ -23,6 +24,10 @@ impl TestAuthProvider {
             jwt_secret: "test_jwt_secret_key_for_testing_only".to_string(),
             session_store: HashMap::new(),
         }
+    }
+
+    pub fn jwt_secret(&self) -> &str {
+        &self.jwt_secret
     }
     
     /// Create with custom JWT secret

@@ -414,7 +414,7 @@ mod tests {
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
         // Create GET request
-        let mut headers = ElifHeaderMap::new();
+        let headers = ElifHeaderMap::new();
         let request = ElifRequest::new(
             ElifMethod::GET,
             "/test".parse().unwrap(),
@@ -437,7 +437,7 @@ mod tests {
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
         // Create POST request without CSRF token
-        let mut headers = ElifHeaderMap::new();
+        let headers = ElifHeaderMap::new();
         let request = ElifRequest::new(
             ElifMethod::POST,
             "/test".parse().unwrap(),
@@ -488,7 +488,7 @@ mod tests {
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
         // Test exempt exact path
-        let mut headers1 = ElifHeaderMap::new();
+        let headers1 = ElifHeaderMap::new();
         let request1 = ElifRequest::new(
             ElifMethod::POST,
             "/api/webhook".parse().unwrap(),
@@ -504,7 +504,7 @@ mod tests {
         assert_eq!(response1.status_code(), ElifStatusCode::OK);
         
         // Test exempt glob path
-        let mut headers2 = ElifHeaderMap::new();
+        let headers2 = ElifHeaderMap::new();
         let request2 = ElifRequest::new(
             ElifMethod::POST,
             "/public/upload".parse().unwrap(),

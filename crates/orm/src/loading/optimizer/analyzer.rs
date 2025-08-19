@@ -51,8 +51,6 @@ pub struct QueryOptimizer {
     max_complexity: f64,
     /// Target execution time threshold (ms)
     target_execution_time: u64,
-    /// Enable detailed analysis
-    detailed_analysis: bool,
 }
 
 impl QueryOptimizer {
@@ -61,7 +59,6 @@ impl QueryOptimizer {
         Self {
             max_complexity: 100.0,
             target_execution_time: 5000, // 5 seconds
-            detailed_analysis: true,
         }
     }
 
@@ -69,12 +66,10 @@ impl QueryOptimizer {
     pub fn with_settings(
         max_complexity: f64,
         target_execution_time: u64,
-        detailed_analysis: bool,
     ) -> Self {
         Self {
             max_complexity,
             target_execution_time,
-            detailed_analysis,
         }
     }
 
@@ -147,7 +142,6 @@ impl QueryOptimizer {
 
     /// Estimate execution time for a plan (in milliseconds)
     fn estimate_execution_time(&self, plan: &QueryPlan) -> u64 {
-        let mut total_time = 0u64;
         
         // Base time per node (database connection overhead)
         let base_time_per_node = 10; // 10ms per node
@@ -167,7 +161,7 @@ impl QueryOptimizer {
             }
         }).sum();
         
-        total_time = base_time_per_node * plan.nodes.len() as u64
+        let total_time = base_time_per_node * plan.nodes.len() as u64
             + row_processing_time
             + depth_penalty
             + phase_time;

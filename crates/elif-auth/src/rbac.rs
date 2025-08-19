@@ -7,7 +7,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
-use crate::{AuthError, AuthResult, AuthorizationProvider, Authenticatable};
+use crate::{AuthError, AuthResult};
+use crate::traits::{AuthorizationProvider, Authenticatable};
 
 /// Represents a role in the RBAC system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]

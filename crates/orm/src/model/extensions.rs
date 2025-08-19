@@ -11,6 +11,7 @@ use crate::model::crud_operations::CrudOperations;
 
 // <<<ELIF:BEGIN agent-editable:model_extensions>>>
 /// Extension trait for models with additional utility methods
+#[allow(async_fn_in_trait)]
 pub trait ModelExtensions: Model + CrudOperations {
     /// Refresh this model instance from the database
     async fn refresh(&mut self, pool: &Pool<sqlx::Postgres>) -> ModelResult<()>

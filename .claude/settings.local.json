@@ -51,7 +51,9 @@
       "Bash(gh pr close:*)",
       "Bash(cp:*)",
       "Bash(diff:*)",
-      "Bash(timeout 60 cargo test --package elif-http --lib)"
+      "Bash(timeout 60 cargo test --package elif-http --lib)",
+      "Bash(RUSTFLAGS=\"-A warnings\" cargo build -p elifrs)",
+      "Bash(RUSTFLAGS=\"-A warnings\" cargo check -p elifrs)"
     ],
     "deny": []
   }

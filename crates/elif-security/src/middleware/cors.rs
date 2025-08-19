@@ -246,10 +246,6 @@ impl CorsMiddleware {
     }
 }
 
-/// Extension type to store CORS origin in request
-#[derive(Debug, Clone)]
-struct CorsOrigin(Option<String>);
-
 impl Middleware for CorsMiddleware {
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
         let config = self.config.clone();

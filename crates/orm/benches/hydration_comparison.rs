@@ -4,8 +4,7 @@
 //! the performance difference for model deserialization
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use elif_orm::tests::mapping_tests::{MockDatabaseRow, TestUser};
-use elif_orm::{Model, ModelResult};
+use elif_orm::models::mapping_tests::{MockDatabaseRow, TestUser};
 use serde_json::{json, Value};
 use uuid::Uuid;
 use chrono::Utc;

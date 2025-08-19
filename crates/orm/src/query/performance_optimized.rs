@@ -9,6 +9,7 @@ use once_cell::sync::Lazy;
 use super::builder::QueryBuilder;
 
 /// Cache for common SQL patterns to reduce string allocations
+#[allow(dead_code)]
 static QUERY_TEMPLATE_CACHE: Lazy<RwLock<HashMap<String, String>>> = Lazy::new(|| {
     RwLock::new(HashMap::new())
 });

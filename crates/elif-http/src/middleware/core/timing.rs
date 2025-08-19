@@ -191,7 +191,7 @@ mod tests {
         let start = RequestStartTime::new();
         
         // Add a tiny delay to ensure some time passes
-        std::thread::sleep(std::time::Duration::from_nanos(1));
+        std::thread::sleep(std::time::Duration::from_millis(1000));
         
         // Should have elapsed time
         assert!(start.elapsed().as_nanos() > 0);

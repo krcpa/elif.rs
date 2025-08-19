@@ -1,6 +1,7 @@
 //! Password hashing and cryptographic utilities
 
-use crate::{AuthError, AuthResult, PasswordHasher};
+use crate::{AuthError, AuthResult};
+use crate::traits::PasswordHasher;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::collections::HashMap;
 

@@ -2,10 +2,10 @@
 //!
 //! This example demonstrates complex database queries using the elif-orm
 //! QueryBuilder with joins, subqueries, aggregations, and more.
-
-use elif_orm::{QueryBuilder, Model, ModelError, ModelResult};
+#[allow(unused_imports)]
+use elif_orm::{QueryBuilder, Model, ModelResult};
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Postgres, Row};
+use sqlx::{Row};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;

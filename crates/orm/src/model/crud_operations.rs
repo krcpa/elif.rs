@@ -11,6 +11,7 @@ use crate::error::{ModelError, ModelResult};
 use crate::model::core_trait::Model;
 
 /// Trait providing CRUD operations for models
+#[allow(async_fn_in_trait)]
 pub trait CrudOperations: Model {
     // <<<ELIF:BEGIN agent-editable:model_crud_operations>>>
     /// Find a model by its primary key

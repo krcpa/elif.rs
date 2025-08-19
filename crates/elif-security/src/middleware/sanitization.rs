@@ -65,7 +65,7 @@ impl SanitizationMiddleware {
     }
     
     /// Sanitize a string value according to configuration
-    fn sanitize_value(&self, value: &str) -> SecurityResult<String> {
+    pub fn sanitize_value(&self, value: &str) -> SecurityResult<String> {
         let mut sanitized = value.to_string();
         
         // Check blocked patterns
@@ -100,7 +100,7 @@ impl SanitizationMiddleware {
     }
     
     /// Check if request size is within limits
-    fn check_request_size(&self, body_size: usize) -> SecurityResult<()> {
+    pub fn check_request_size(&self, body_size: usize) -> SecurityResult<()> {
         if let Some(max_size) = self.config.max_request_size {
             if body_size > max_size {
                 return Err(SecurityError::PolicyViolation {

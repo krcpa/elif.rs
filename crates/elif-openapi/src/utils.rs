@@ -583,7 +583,7 @@ impl ValidationWarning {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::specification::{ApiInfo, Schema};
+    use crate::specification::Schema;
     use std::collections::HashMap;
 
     #[test]

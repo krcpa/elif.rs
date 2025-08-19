@@ -8,6 +8,7 @@ pub mod test_utils {
     use std::collections::HashMap;
 
     /// Create a test OpenAPI specification
+    #[allow(dead_code)]
     pub fn create_test_spec() -> OpenApiSpec {
         let mut spec = OpenApiSpec::new("Test API", "1.0.0");
         
@@ -31,6 +32,7 @@ pub mod test_utils {
     }
 
     /// Create test route metadata
+    #[allow(dead_code)]
     pub fn create_test_route() -> RouteMetadata {
         RouteMetadata {
             method: "GET".to_string(),
@@ -62,6 +64,7 @@ pub mod test_utils {
     }
 
     /// Create test controller info
+    #[allow(dead_code)]
     pub fn create_test_controller() -> ControllerInfo {
         let endpoint = EndpointMetadata::new("show", "GET", "/users/{id}")
             .with_return_type("User")
@@ -73,6 +76,7 @@ pub mod test_utils {
     }
 
     /// Create test schema
+    #[allow(dead_code)]
     pub fn create_test_schema() -> Schema {
         let mut properties = HashMap::new();
         
@@ -115,6 +119,7 @@ pub mod test_utils {
     }
 
     /// Create test operation
+    #[allow(dead_code)]
     pub fn create_test_operation() -> Operation {
         let mut responses = HashMap::new();
         
@@ -181,6 +186,7 @@ pub mod test_utils {
     }
 
     /// Create test components
+    #[allow(dead_code)]
     pub fn create_test_components() -> Components {
         let mut schemas = HashMap::new();
         schemas.insert("User".to_string(), create_test_schema());
@@ -204,6 +210,7 @@ pub mod test_utils {
     }
 
     /// Assert that an OpenAPI spec is valid
+    #[allow(dead_code)]
     pub fn assert_valid_spec(spec: &OpenApiSpec) {
         assert!(!spec.info.title.is_empty());
         assert!(!spec.info.version.is_empty());
@@ -211,6 +218,7 @@ pub mod test_utils {
     }
 
     /// Assert that a route metadata is valid
+    #[allow(dead_code)]
     pub fn assert_valid_route(route: &RouteMetadata) {
         assert!(!route.method.is_empty());
         assert!(!route.path.is_empty());

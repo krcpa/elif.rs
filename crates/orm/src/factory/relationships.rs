@@ -58,6 +58,10 @@ impl<Parent, Related> HasManyFactory<Parent, Related> {
             _phantom: std::marker::PhantomData,
         }
     }
+
+    pub fn count(&self) -> usize {
+        self.count
+    }
 }
 
 #[async_trait::async_trait]

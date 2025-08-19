@@ -10,6 +10,7 @@ use super::definitions::{Migration, MigrationRecord, RollbackResult};
 use super::runner::MigrationRunner;
 
 /// Extension trait for MigrationRunner to add rollback functionality
+#[allow(async_fn_in_trait)]
 pub trait MigrationRollback {
     /// Rollback the last batch of migrations
     async fn rollback_last_batch(&self) -> OrmResult<RollbackResult>;
@@ -120,7 +121,7 @@ impl MigrationRollback for MigrationRunner {
     async fn rollback_migration(&self, migration_id: &str) -> OrmResult<()> {
         // Check if migration is applied
         let applied_migrations = self.get_applied_migrations_ordered().await?;
-        let migration_record = applied_migrations.iter()
+        let _migration_record = applied_migrations.iter()
             .find(|m| m.id == migration_id)
             .ok_or_else(|| OrmError::Migration(format!("Migration {} is not applied", migration_id)))?;
         

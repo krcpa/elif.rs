@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use serde_json::{json, Value};
 
+#[allow(dead_code)]
 pub struct AuthGenerator {
     template_engine: TemplateEngine,
     project_root: PathBuf,

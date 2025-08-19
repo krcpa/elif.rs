@@ -1,6 +1,5 @@
 mod commands;
 mod generators;
-mod command_system;
 mod interactive;
 
 use clap::{Parser, Subcommand};

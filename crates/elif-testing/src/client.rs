@@ -4,7 +4,7 @@
 //! comprehensive assertions for validating responses.
 
 use std::collections::HashMap;
-use serde_json::{Value as JsonValue, json};
+use serde_json::{Value as JsonValue};
 use crate::{TestError, TestResult};
 
 /// HTTP test client for making requests in tests

@@ -27,6 +27,7 @@ impl Prompt {
     }
     
     /// Ask for a string input with optional default value
+    #[allow(dead_code)]
     pub fn input(message: &str, default: Option<&str>) -> io::Result<String> {
         if let Some(def) = default {
             print!("{} [{}]: ", message, def);
@@ -91,6 +92,7 @@ impl Prompt {
     }
     
     /// Select from a list of options
+    #[allow(dead_code)]
     pub fn select<T>(message: &str, options: &[(T, &str)]) -> io::Result<T>
     where
         T: Clone,
@@ -121,6 +123,7 @@ impl Prompt {
     }
     
     /// Multi-select from a list of options
+    #[allow(dead_code)]
     pub fn multi_select<T>(message: &str, options: &[(T, &str)]) -> io::Result<Vec<T>>
     where
         T: Clone,
@@ -168,6 +171,7 @@ impl Prompt {
     }
     
     /// Ask for a password (hidden input)
+    #[allow(dead_code)]
     pub fn password(message: &str) -> io::Result<String> {
         print!("{}: ", message);
         io::stdout().flush()?;
@@ -183,6 +187,7 @@ impl Prompt {
     }
     
     /// Display a progress spinner while executing a task
+    #[allow(dead_code)]
     pub fn with_spinner<F, T>(message: &str, task: F) -> io::Result<T>
     where
         F: FnOnce() -> T,
@@ -191,8 +196,8 @@ impl Prompt {
         io::stdout().flush()?;
         
         // Simple spinner animation
-        let chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-        let spinner_idx = 0;
+        let _chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+        let _spinner_idx = 0;
         
         // In a real implementation, you'd run this in a separate thread
         // For now, just show the message
@@ -207,6 +212,7 @@ impl Prompt {
 }
 
 /// Progress bar for showing task completion
+#[allow(dead_code)]
 pub struct ProgressBar {
     message: String,
     total: usize,
@@ -215,6 +221,7 @@ pub struct ProgressBar {
 }
 
 impl ProgressBar {
+    #[allow(dead_code)]
     pub fn new(message: &str, total: usize) -> Self {
         Self {
             message: message.to_string(),
@@ -224,16 +231,19 @@ impl ProgressBar {
         }
     }
     
+    #[allow(dead_code)]
     pub fn update(&mut self, current: usize) -> io::Result<()> {
         self.current = current;
         self.draw()
     }
     
+    #[allow(dead_code)]
     pub fn increment(&mut self) -> io::Result<()> {
         self.current += 1;
         self.draw()
     }
     
+    #[allow(dead_code)]
     pub fn finish(&mut self) -> io::Result<()> {
         self.current = self.total;
         self.draw()?;
@@ -241,6 +251,7 @@ impl ProgressBar {
         Ok(())
     }
     
+    #[allow(dead_code)]
     pub fn finish_with_message(&mut self, message: &str) -> io::Result<()> {
         self.current = self.total;
         self.draw()?;
@@ -248,6 +259,7 @@ impl ProgressBar {
         Ok(())
     }
     
+    #[allow(dead_code)]
     fn draw(&self) -> io::Result<()> {
         let percentage = if self.total > 0 {
             (self.current * 100) / self.total
@@ -270,42 +282,50 @@ impl ProgressBar {
 }
 
 /// Output formatting utilities
+#[allow(dead_code)]
 pub struct Format;
 
 impl Format {
     /// Print a success message
+    #[allow(dead_code)]
     pub fn success(message: &str) {
         println!("✅ {}", message);
     }
     
     /// Print an error message
+    #[allow(dead_code)]
     pub fn error(message: &str) {
         println!("❌ {}", message);
     }
     
     /// Print a warning message
+    #[allow(dead_code)]
     pub fn warning(message: &str) {
         println!("⚠️  {}", message);
     }
     
     /// Print an info message
+    #[allow(dead_code)]
     pub fn info(message: &str) {
         println!("ℹ️  {}", message);
     }
     
     /// Print a section header
+    #[allow(dead_code)]
     pub fn header(title: &str) {
         println!("\n{}", title);
         println!("{}", "=".repeat(title.len()));
     }
     
     /// Print a subsection header
+    #[allow(dead_code)]
     pub fn subheader(title: &str) {
         println!("\n{}", title);
         println!("{}", "-".repeat(title.len()));
     }
     
     /// Print a table with headers and rows
+    #[allow(dead_code)]
     pub fn table(headers: &[&str], rows: &[Vec<String>]) {
         if headers.is_empty() || rows.is_empty() {
             return;
@@ -373,6 +393,7 @@ impl Format {
     }
     
     /// Print a list with bullets
+    #[allow(dead_code)]
     pub fn list(items: &[&str]) {
         for item in items {
             println!("• {}", item);
@@ -380,6 +401,7 @@ impl Format {
     }
     
     /// Print numbered list
+    #[allow(dead_code)]
     pub fn numbered_list(items: &[&str]) {
         for (i, item) in items.iter().enumerate() {
             println!("{}. {}", i + 1, item);

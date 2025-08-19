@@ -118,7 +118,8 @@ impl TracingMiddleware {
 
     #[cfg(test)]
     pub fn is_sensitive_header(&self, header: &str) -> bool {
-        self.config.sensitive_headers.iter().any(|h| h == header)
+        let header_lower = header.to_lowercase();
+        self.config.sensitive_headers.iter().any(|h| h == &header_lower)
     }
 
 }

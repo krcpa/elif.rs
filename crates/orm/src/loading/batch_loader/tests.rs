@@ -28,31 +28,6 @@ fn test_batch_loader_creation() {
     assert!(!custom_loader.config.deduplicate_queries);
 }
 
-// Mock PostgreSQL row for testing
-struct MockPgRow {
-    columns: Vec<MockColumn>,
-    values: HashMap<String, serde_json::Value>,
-}
-
-struct MockColumn {
-    name: String,
-}
-
-impl MockPgRow {
-    fn new() -> Self {
-        Self {
-            columns: Vec::new(),
-            values: HashMap::new(),
-        }
-    }
-
-    fn add_column(&mut self, name: &str, value: serde_json::Value) {
-        self.columns.push(MockColumn {
-            name: name.to_string(),
-        });
-        self.values.insert(name.to_string(), value);
-    }
-}
 
 #[test]
 fn test_row_to_json_conversion_logic() {

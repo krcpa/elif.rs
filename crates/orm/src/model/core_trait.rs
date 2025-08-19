@@ -77,7 +77,7 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
 
     /// Create a model instance from a database row (abstracted version)
     /// This will replace from_row in the future
-    fn from_database_row(row: &dyn DatabaseRow) -> ModelResult<Self>
+    fn from_database_row(_row: &dyn DatabaseRow) -> ModelResult<Self>
     where
         Self: Sized,
     {

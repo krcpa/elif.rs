@@ -1,5 +1,5 @@
 use super::{TemplateEngine, pluralize_word, to_snake_case, to_pascal_case};
-use elif_core::{ElifError, FieldSpec};
+use elif_core::{ElifError, specs::FieldSpec};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use serde_json::{json, Value};
@@ -203,7 +203,7 @@ impl ResourceGenerator {
 
     fn generate_request_classes(&self, context: &HashMap<String, Value>) -> Result<Vec<GeneratedFile>, ElifError> {
         let mut files = Vec::new();
-        let name = context.get("pascal_case_name").unwrap().as_str().unwrap();
+        let _name = context.get("pascal_case_name").unwrap().as_str().unwrap();
         let snake_name = context.get("snake_case_name").unwrap().as_str().unwrap();
 
         // Create request template
@@ -237,7 +237,7 @@ impl ResourceGenerator {
 
     fn generate_resource_classes(&self, context: &HashMap<String, Value>) -> Result<Vec<GeneratedFile>, ElifError> {
         let mut files = Vec::new();
-        let name = context.get("pascal_case_name").unwrap().as_str().unwrap();
+        let _name = context.get("pascal_case_name").unwrap().as_str().unwrap();
         let snake_name = context.get("snake_case_name").unwrap().as_str().unwrap();
 
         // Resource template
@@ -342,7 +342,7 @@ impl ResourceGenerator {
     fn generate_collection_content(&self, context: &HashMap<String, Value>) -> Result<String, ElifError> {
         let name = context.get("pascal_case_name").unwrap().as_str().unwrap();
         let snake_name = context.get("snake_case_name").unwrap().as_str().unwrap();
-        let plural_name = pluralize_word(name);
+        let _plural_name = pluralize_word(name);
 
         let content = format!(
             "use serde::{{Serialize, Deserialize}};\nuse crate::models::{}::{};\nuse crate::resources::{}_resource::{}Resource;\n\n#[derive(Debug, Serialize, Deserialize)]\npub struct {}Collection {{\n    pub data: Vec<{}Resource>,\n    pub meta: CollectionMeta,\n}}\n\nimpl {}Collection {{\n    pub fn new({}: Vec<{}>) -> Self {{\n        let data = {}.into_iter()\n            .map({}Resource::new)\n            .collect();\n\n        Self {{\n            data,\n            meta: CollectionMeta {{\n                total: data.len(),\n            }},\n        }}\n    }}\n}}\n\n#[derive(Debug, Serialize, Deserialize)]\npub struct CollectionMeta {{\n    pub total: usize,\n}}\n",
@@ -424,6 +424,7 @@ impl Default for GenerationOptions {
 pub struct GeneratedFile {
     pub path: PathBuf,
     pub content: String,
+    #[allow(dead_code)]
     pub file_type: GeneratedFileType,
 }
 

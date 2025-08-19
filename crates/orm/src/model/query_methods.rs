@@ -10,6 +10,7 @@ use crate::model::core_trait::Model;
 use crate::query::QueryBuilder;
 
 /// Trait providing query operations for model collections
+#[allow(async_fn_in_trait)]
 pub trait QueryMethods: Model {
     // <<<ELIF:BEGIN agent-editable:model_query_methods>>>
     /// Get a query builder for this model

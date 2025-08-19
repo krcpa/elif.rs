@@ -377,7 +377,7 @@ impl MfaProvider {
     }
 
     #[cfg(feature = "mfa")]
-    fn verify_backup_code(&mut self, secret: &mut MfaSecret, code: &str) -> AuthResult<bool> {
+    pub fn verify_backup_code(&mut self, secret: &mut MfaSecret, code: &str) -> AuthResult<bool> {
         let code_hash = self.hash_backup_code(code)?;
         
         // Check if this backup code exists and hasn't been used
@@ -390,7 +390,7 @@ impl MfaProvider {
     }
 
     #[cfg(feature = "mfa")]
-    fn hash_backup_code(&self, code: &str) -> AuthResult<String> {
+    pub fn hash_backup_code(&self, code: &str) -> AuthResult<String> {
         // Simple hash for backup codes - in production, use proper hashing
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};

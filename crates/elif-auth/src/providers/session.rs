@@ -268,6 +268,10 @@ where
             _phantom: std::marker::PhantomData,
         }
     }
+
+    pub fn cleanup_interval(&self) -> Duration {
+        self.cleanup_interval.clone()
+    }
     
     /// Create session provider with default settings
     pub fn with_default_config(storage: S) -> Self {

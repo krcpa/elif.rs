@@ -165,7 +165,7 @@ impl RateLimitMiddleware {
             (1u32, current_time, current_time + window_size)
         } else {
             // Same window - increment counter
-            let remaining_window = window_size - time_since_window_start;
+            let _remaining_window = window_size - time_since_window_start;
             (count + 1, window_start, window_start + window_size)
         };
         

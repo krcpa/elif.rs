@@ -16,11 +16,9 @@ pub mod states;
 pub mod relationships;
 pub mod seeder;
 
-pub use traits::*;
-pub use fake_data::*;
-pub use states::*;
-pub use relationships::*;
-pub use seeder::*;
+// Minimal exports to avoid conflicts  
+pub use traits::{FactoryState, RelationshipFactory};
+pub use seeder::Seeder;
 
 /// Core factory trait that all model factories must implement
 #[async_trait::async_trait]
@@ -158,9 +156,9 @@ impl FactoryRegistry {
             .get(T::table_name())
             .and_then(|f| f.downcast_ref::<F>())
     }
-    
+
     /// Create a model using the registered factory
-    pub async fn create<T: Model>(&self, pool: &sqlx::Pool<sqlx::Postgres>) -> OrmResult<T> 
+    pub async fn create<T: Model>(&self, _pool: &sqlx::Pool<sqlx::Postgres>) -> OrmResult<T> 
     where
         T: 'static,
     {
@@ -196,7 +194,6 @@ pub fn factory_registry_mut() -> std::sync::RwLockWriteGuard<'static, FactoryReg
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     
     // TODO: Add comprehensive tests once the core implementation is complete
     

@@ -2,7 +2,9 @@
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
     use crate::security::{escape_identifier, validate_identifier, validate_parameter};
+    use crate::query::QueryBuilder;
 
     #[test]
     fn test_identifier_escaping_basic() {
@@ -27,9 +29,6 @@ mod tests {
 
     #[test]
     fn test_sql_generation_escapes_identifiers() {
-        use crate::query::QueryBuilder;
-        use serde_json::json;
-        
         let (sql, _params) = QueryBuilder::<()>::new()
             .select("*")
             .from("users")
@@ -42,9 +41,6 @@ mod tests {
 
     #[test] 
     fn test_sql_generation_prevents_basic_injection() {
-        use crate::query::QueryBuilder;
-        use serde_json::json;
-        
         let (sql, params) = QueryBuilder::<()>::new()
             .select("*")
             .from("users")

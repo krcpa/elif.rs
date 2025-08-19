@@ -4,15 +4,13 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use elif_orm::{
-    Model, PrimaryKey, PrimaryKeyType,
+    Model, PrimaryKey,
     query::QueryBuilder,
     error::ModelResult,
-    model::{ModelCrud, ModelQuery},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use tokio::runtime::Runtime;
 use uuid::Uuid;
 
 // Test model for benchmarks

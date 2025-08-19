@@ -78,12 +78,12 @@ where
     }
 
     /// Iterate over related models
-    pub fn iter(&self) -> std::slice::Iter<Related> {
+    pub fn iter(&self) -> std::slice::Iter<'_, Related> {
         self.related.iter()
     }
-
+    
     /// Iterate mutably over related models
-    pub fn iter_mut(&mut self) -> std::slice::IterMut<Related> {
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Related> {
         self.related.iter_mut()
     }
 }
