@@ -63,9 +63,8 @@ pub use middleware::{
     },
     // Core middleware
     error_handler::{
-        ErrorHandlerMiddleware, ErrorHandlerConfig, ErrorHandlerLayer,
-        error_handler_middleware, error_handler_with_config, 
-        error_handler_layer, error_handler_layer_with_config
+        ErrorHandlerMiddleware, ErrorHandlerConfig,
+        error_handler, error_handler_with_config
     },
     logging::LoggingMiddleware as LegacyLoggingMiddleware,
     enhanced_logging::{EnhancedLoggingMiddleware, LoggingConfig as MiddlewareLoggingConfig, RequestContext},
