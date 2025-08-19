@@ -5,7 +5,7 @@ use crate::handlers::elif_handler;
 use crate::request::ElifRequest;
 use crate::response::IntoElifResponse;
 use crate::errors::HttpResult;
-use crate::middleware::v2::{Middleware, MiddlewarePipelineV2, LoggingMiddleware};
+use crate::middleware::v2::{Middleware, MiddlewarePipelineV2};
 use service_builder::builder;
 use axum::{
     Router as AxumRouter,
@@ -99,12 +99,7 @@ where
 
     /// Create a middleware group
     pub fn middleware_group(mut self, name: &str, middleware: Vec<Arc<dyn Middleware>>) -> Self {
-        let mut pipeline = MiddlewarePipelineV2::new();
-        for _m in middleware {
-            // TODO: Need to improve the pipeline API to accept Arc<dyn Middleware>
-            // For now, just create an empty pipeline as placeholder
-            pipeline = pipeline.add(LoggingMiddleware); // Placeholder - will fix this
-        }
+        let pipeline = MiddlewarePipelineV2::from(middleware);
         self.middleware_groups.insert(name.to_string(), pipeline);
         self
     }
@@ -496,18 +491,20 @@ mod tests {
         // Verify middleware group was created
         assert!(router.middleware_groups().contains_key("api"));
         
-        // Note: Currently middleware groups use placeholder implementation
-        // This will be improved in the future to properly add the middleware
+        // Verify the middleware group contains the actual middleware
+        let api_group = router.middleware_groups().get("api").unwrap();
+        assert_eq!(api_group.len(), 1);
+        assert_eq!(api_group.names(), vec!["LoggingMiddleware"]);
     }
 
     #[test]
     fn test_router_merge_with_middleware() {
-        use crate::middleware::v2::LoggingMiddleware;
+        use crate::middleware::v2::{LoggingMiddleware, SimpleAuthMiddleware};
         use std::sync::Arc;
         
         let router1 = Router::<()>::new()
             .use_middleware(LoggingMiddleware)
-            .middleware_group("auth", vec![Arc::new(LoggingMiddleware)]);
+            .middleware_group("auth", vec![Arc::new(SimpleAuthMiddleware::new("secret".to_string()))]);
         
         let router2 = Router::<()>::new()
             .middleware_group("api", vec![Arc::new(LoggingMiddleware)]);
@@ -518,7 +515,34 @@ mod tests {
         assert!(merged.middleware_groups().contains_key("auth"));
         assert!(merged.middleware_groups().contains_key("api"));
         
+        // Verify middleware groups contain the correct middleware
+        let auth_group = merged.middleware_groups().get("auth").unwrap();
+        assert_eq!(auth_group.len(), 1);
+        assert_eq!(auth_group.names(), vec!["SimpleAuthMiddleware"]);
+        
+        let api_group = merged.middleware_groups().get("api").unwrap();
+        assert_eq!(api_group.len(), 1);
+        assert_eq!(api_group.names(), vec!["LoggingMiddleware"]);
+        
         // Verify global middleware is preserved
         assert_eq!(merged.middleware_pipeline().len(), 1);
+    }
+
+    #[test]
+    fn test_middleware_group_with_multiple_middleware() {
+        use crate::middleware::v2::{LoggingMiddleware, SimpleAuthMiddleware};
+        use std::sync::Arc;
+        
+        let router = Router::<()>::new()
+            .middleware_group("api", vec![
+                Arc::new(LoggingMiddleware),
+                Arc::new(SimpleAuthMiddleware::new("secret".to_string()))
+            ])
+            .get("/", elif_handler);
+        
+        // Verify middleware group contains both middleware
+        let api_group = router.middleware_groups().get("api").unwrap();
+        assert_eq!(api_group.len(), 2);
+        assert_eq!(api_group.names(), vec!["LoggingMiddleware", "SimpleAuthMiddleware"]);
     }
 }

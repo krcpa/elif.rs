@@ -73,6 +73,17 @@ impl MiddlewarePipelineV2 {
         self.middleware.push(Arc::new(middleware));
         self
     }
+
+    /// Create a pipeline from a vector of Arc<dyn Middleware>
+    pub fn from_middleware_vec(middleware: Vec<Arc<dyn Middleware>>) -> Self {
+        Self { middleware }
+    }
+
+    /// Add an already-boxed middleware to the pipeline
+    pub fn add_boxed(mut self, middleware: Arc<dyn Middleware>) -> Self {
+        self.middleware.push(middleware);
+        self
+    }
     
     /// Execute the middleware pipeline with a handler
     pub async fn execute<F, Fut>(&self, request: ElifRequest, handler: F) -> ElifResponse
@@ -117,6 +128,12 @@ impl Clone for MiddlewarePipelineV2 {
         Self {
             middleware: self.middleware.clone(),
         }
+    }
+}
+
+impl From<Vec<Arc<dyn Middleware>>> for MiddlewarePipelineV2 {
+    fn from(middleware: Vec<Arc<dyn Middleware>>) -> Self {
+        Self { middleware }
     }
 }
 
