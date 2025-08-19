@@ -149,56 +149,7 @@ impl From<Vec<Arc<dyn Middleware>>> for MiddlewarePipelineV2 {
     }
 }
 
-/// Backward compatibility adapter to wrap old middleware in the new trait
-#[derive(Debug)]
-pub struct MiddlewareAdapter<T> {
-    inner: Arc<T>,
-}
-
-impl<T> MiddlewareAdapter<T> {
-    pub fn new(middleware: T) -> Self {
-        Self { inner: Arc::new(middleware) }
-    }
-}
-
-impl<T> Middleware for MiddlewareAdapter<T> 
-where 
-    T: super::Middleware + Send + Sync + 'static + std::fmt::Debug,
-{
-    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
-        let inner = self.inner.clone();
-        Box::pin(async move {
-            // Convert ElifRequest to axum Request for old middleware
-            let axum_request = request.into_axum_request();
-            
-            // Process request through old middleware
-            let processed_request = match inner.process_request(axum_request).await {
-                Ok(req) => req,
-                Err(response) => {
-                    // Old middleware returned early response, convert and return
-                    return ElifResponse::from_axum_response(response).await;
-                }
-            };
-            
-            // Convert back to ElifRequest and continue chain
-            let elif_request = ElifRequest::from_axum_request(processed_request).await;
-            let response = next.run(elif_request).await;
-            
-            // Convert response to axum Response for old middleware
-            let axum_response = response.into_axum_response();
-            
-            // Process response through old middleware
-            let processed_response = inner.process_response(axum_response).await;
-            
-            // Convert back to ElifResponse
-            ElifResponse::from_axum_response(processed_response).await
-        })
-    }
-    
-    fn name(&self) -> &'static str {
-        self.inner.name()
-    }
-}
+// Legacy middleware adapter removed - all middleware should use V2 system directly
 
 /// Example logging middleware using the new pattern
 #[derive(Debug)]
@@ -497,56 +448,5 @@ mod tests {
         assert!(empty_pipeline.is_empty());
     }
     
-    #[tokio::test]
-    async fn test_backward_compatibility_adapter() {
-        use super::super::{Middleware as OldMiddleware, BoxFuture};
-        use axum::extract::Request;
-        use axum::response::Response;
-        use axum::body::Body;
-        
-        // Create a simple old-style middleware
-        #[derive(Debug)]
-        struct OldTestMiddleware;
-        
-        impl OldMiddleware for OldTestMiddleware {
-            fn process_request<'a>(
-                &'a self, 
-                mut request: Request
-            ) -> BoxFuture<'a, Result<Request, Response>> {
-                Box::pin(async move {
-                    // Add a test header
-                    request.headers_mut().insert("x-old-middleware", "processed".parse().unwrap());
-                    Ok(request)
-                })
-            }
-            
-            fn name(&self) -> &'static str {
-                "OldTestMiddleware"
-            }
-        }
-        
-        // Wrap old middleware with adapter
-        let adapter = MiddlewareAdapter::new(OldTestMiddleware);
-        
-        // Create test request
-        let request = ElifRequest::new(
-            Method::GET,
-            "/test".parse().unwrap(),
-            HeaderMap::new(),
-        );
-        
-        // Create next handler
-        let next = Next::new(|req| {
-            Box::pin(async move {
-                // Verify old middleware was applied
-                assert!(req.headers.contains_key("x-old-middleware"));
-                ElifResponse::ok().text("Success")
-            })
-        });
-        
-        // Execute adapter
-        let response = adapter.handle(request, next).await;
-        assert_eq!(response.status_code(), axum::http::StatusCode::OK);
-        assert_eq!(adapter.name(), "OldTestMiddleware");
-    }
+    // Legacy compatibility test removed - all middleware use V2 system directly
 }

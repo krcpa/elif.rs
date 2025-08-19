@@ -2,16 +2,14 @@
 //!
 //! Provides configurable rate limiting to prevent abuse and ensure fair usage.
 
-use axum::{
-    extract::Request,
-    http::{StatusCode, HeaderValue},
-    response::Response,
-    body::Body,
-};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-use elif_http::middleware::{Middleware, BoxFuture};
+use elif_http::{
+    middleware::v2::{Middleware, Next, NextFuture},
+    request::ElifRequest,
+    response::{ElifResponse, ElifStatusCode},
+};
 use crate::SecurityError;
 
 pub use crate::config::{RateLimitConfig, RateLimitIdentifier};
@@ -89,16 +87,16 @@ impl RateLimitMiddleware {
     }
     
     /// Extract identifier from request based on configuration
-    fn extract_identifier(&self, request: &Request) -> Option<String> {
+    fn extract_identifier(&self, request: &ElifRequest) -> Option<String> {
         match &self.config.identifier {
             RateLimitIdentifier::IpAddress => {
                 // Try to get real IP from forwarded headers first
-                if let Some(forwarded_for) = request.headers().get("x-forwarded-for") {
+                if let Some(forwarded_for) = request.headers.get_str("x-forwarded-for") {
                     if let Ok(forwarded_str) = forwarded_for.to_str() {
                         return forwarded_str.split(',').next().map(|ip| ip.trim().to_string());
                     }
                 }
-                if let Some(real_ip) = request.headers().get("x-real-ip") {
+                if let Some(real_ip) = request.headers.get_str("x-real-ip") {
                     if let Ok(real_ip_str) = real_ip.to_str() {
                         return Some(real_ip_str.to_string());
                     }
@@ -108,18 +106,18 @@ impl RateLimitMiddleware {
             }
             RateLimitIdentifier::UserId => {
                 // Extract from Authorization header or custom user header
-                request.headers().get("x-user-id")
+                request.headers.get_str("x-user-id")
                     .and_then(|h| h.to_str().ok())
                     .map(|s| s.to_string())
             }
             RateLimitIdentifier::ApiKey => {
                 // Extract from Authorization header or API key header
-                request.headers().get("x-api-key")
+                request.headers.get_str("x-api-key")
                     .and_then(|h| h.to_str().ok())
                     .map(|s| s.to_string())
             }
             RateLimitIdentifier::CustomHeader(header_name) => {
-                request.headers().get(header_name)
+                request.headers.get_str(header_name)
                     .and_then(|h| h.to_str().ok())
                     .map(|s| s.to_string())
             }
@@ -190,94 +188,82 @@ impl RateLimitMiddleware {
     }
     
     /// Create rate limit exceeded response
-    fn rate_limit_response(&self, info: &RateLimitInfo) -> Response {
-        let mut response = Response::builder()
-            .status(StatusCode::TOO_MANY_REQUESTS)
-            .body(Body::from(format!(
-                r#"{{"error":{{"code":"RATE_LIMIT_EXCEEDED","message":"Rate limit exceeded. Try again in {} seconds.","limit":{},"current":{},"reset_time":{}}}}}"#,
-                info.reset_time, info.limit, info.current, info.reset_time
-            )))
-            .unwrap();
+    fn rate_limit_response(&self, info: &RateLimitInfo) -> ElifResponse {
+        let json_body = serde_json::json!({
+            "error": {
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": format!("Rate limit exceeded. Try again in {} seconds.", info.reset_time),
+                "limit": info.limit,
+                "current": info.current,
+                "reset_time": info.reset_time
+            }
+        });
+        
+        let mut response = ElifResponse::with_status(ElifStatusCode::TOO_MANY_REQUESTS)
+            .json_value(json_body);
         
         // Add rate limit headers
-        let headers = response.headers_mut();
-        headers.insert("X-RateLimit-Limit", HeaderValue::from(info.limit));
-        headers.insert("X-RateLimit-Remaining", 
-            HeaderValue::from(info.limit.saturating_sub(info.current)));
-        headers.insert("X-RateLimit-Reset", HeaderValue::from(info.reset_time));
-        headers.insert("Retry-After", HeaderValue::from(info.reset_time));
-        headers.insert("Content-Type", HeaderValue::from_static("application/json"));
+        let _ = response.add_header("X-RateLimit-Limit", &info.limit.to_string());
+        let _ = response.add_header("X-RateLimit-Remaining", 
+            &info.limit.saturating_sub(info.current).to_string());
+        let _ = response.add_header("X-RateLimit-Reset", &info.reset_time.to_string());
+        let _ = response.add_header("Retry-After", &info.reset_time.to_string());
         
         response
     }
 }
 
 impl Middleware for RateLimitMiddleware {
-    fn process_request<'a>(
-        &'a self,
-        request: Request,
-    ) -> BoxFuture<'a, Result<Request, Response>> {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        let rate_limiter = self.clone();
         Box::pin(async move {
             // Check if path is exempt
-            if self.is_exempt_path(request.uri().path()) {
-                return Ok(request);
+            if rate_limiter.is_exempt_path(request.path()) {
+                return next.run(request).await;
             }
             
             // Extract identifier
-            let identifier = match self.extract_identifier(&request) {
+            let identifier = match rate_limiter.extract_identifier(&request) {
                 Some(id) => id,
                 None => {
                     // If we can't identify the request, allow it but log warning
-                    // Log warning using print for now - can be upgraded to proper logging later
-                    eprintln!("Rate limiting: Could not extract identifier from request");
-                    return Ok(request);
+                    tracing::warn!("Rate limiting: Could not extract identifier from request");
+                    return next.run(request).await;
                 }
             };
             
             // Check rate limit
-            match self.check_rate_limit(&identifier) {
+            match rate_limiter.check_rate_limit(&identifier) {
                 Ok(info) => {
                     if info.allowed {
-                        // Add rate limit headers to successful requests
-                        let mut request = request;
-                        if let Ok(remaining) = HeaderValue::try_from(info.limit.saturating_sub(info.current)) {
-                            request.headers_mut().insert("X-RateLimit-Remaining", remaining);
-                        }
-                        Ok(request)
+                        // Continue to next middleware/handler
+                        let mut response = next.run(request).await;
+                        
+                        // Add rate limit headers to successful responses
+                        let _ = response.add_header("X-RateLimit-Limit", &info.limit.to_string());
+                        let _ = response.add_header("X-RateLimit-Remaining", 
+                            &info.limit.saturating_sub(info.current).to_string());
+                        let _ = response.add_header("X-RateLimit-Reset", &info.reset_time.to_string());
+                        
+                        response
                     } else {
                         // Rate limit exceeded
-                        // Log warning using print for now - can be upgraded to proper logging later
-                        eprintln!("Rate limit exceeded for identifier: {}, current: {}, limit: {}", 
+                        tracing::warn!("Rate limit exceeded for identifier: {}, current: {}, limit: {}", 
                             identifier, info.current, info.limit);
-                        Err(self.rate_limit_response(&info))
+                        rate_limiter.rate_limit_response(&info)
                     }
                 }
                 Err(err) => {
-                    // Log error using print for now - can be upgraded to proper logging later
-                    eprintln!("Rate limiting check failed: {}", err);
-                    // On error, allow the request but log the error
-                    Ok(request)
+                    // Log error and allow the request
+                    tracing::error!("Rate limiting check failed: {}", err);
+                    next.run(request).await
                 }
             }
         })
     }
-    
-    fn process_response<'a>(
-        &'a self,
-        mut response: Response,
-    ) -> BoxFuture<'a, Response> {
-        Box::pin(async move {
-            // Add rate limit headers to response if not already present
-            let headers = response.headers_mut();
-            if !headers.contains_key("X-RateLimit-Limit") {
-                headers.insert("X-RateLimit-Limit", HeaderValue::from(self.config.max_requests));
-            }
-            response
-        })
-    }
-    
+
     fn name(&self) -> &'static str {
-        "RateLimit"
+        "RateLimitMiddleware"
     }
 }
 
