@@ -3,7 +3,7 @@
 //! HTTP request/response logging middleware for observability.
 
 use std::time::Instant;
-use log::{info, debug, error};
+use log::{info, debug, warn, error};
 use crate::{
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
@@ -79,10 +79,16 @@ impl Middleware for LoggingMiddleware {
             
             // Log response info
             let status = response.status_code();
-            if matches!(status, ElifStatusCode::OK | ElifStatusCode::CREATED | ElifStatusCode::ACCEPTED) {
+            if status.is_success() {
                 info!("← {:?} {}ms", status, duration_ms);
+            } else if status.is_redirection() {
+                info!("← {:?} {}ms (Redirect)", status, duration_ms);
+            } else if status.is_client_error() {
+                warn!("← {:?} {}ms (Client Error)", status, duration_ms);
+            } else if status.is_server_error() {
+                error!("← {:?} {}ms (Server Error)", status, duration_ms);
             } else {
-                error!("← {:?} {}ms", status, duration_ms);
+                info!("← {:?} {}ms (Informational)", status, duration_ms);
             }
             
             // Log response headers if enabled
@@ -167,5 +173,41 @@ mod tests {
         
         assert!(middleware.log_body);
         assert!(middleware.log_response_headers);
+    }
+    
+    #[tokio::test]
+    async fn test_logging_different_status_codes() {
+        let middleware = LoggingMiddleware::new();
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
+        
+        let headers = ElifHeaderMap::new();
+        
+        // Test success status (2xx)
+        let request = ElifRequest::new(ElifMethod::GET, "/success".parse().unwrap(), headers.clone());
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Success") })
+        }).await;
+        assert!(response.status_code().is_success());
+        
+        // Test redirect status (3xx)
+        let request = ElifRequest::new(ElifMethod::GET, "/redirect".parse().unwrap(), headers.clone());
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move { ElifResponse::with_status(ElifStatusCode::FOUND).text("Redirect") })
+        }).await;
+        assert!(response.status_code().is_redirection());
+        
+        // Test client error (4xx)
+        let request = ElifRequest::new(ElifMethod::GET, "/client-error".parse().unwrap(), headers.clone());
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move { ElifResponse::with_status(ElifStatusCode::NOT_FOUND).text("Not Found") })
+        }).await;
+        assert!(response.status_code().is_client_error());
+        
+        // Test server error (5xx)
+        let request = ElifRequest::new(ElifMethod::GET, "/server-error".parse().unwrap(), headers);
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move { ElifResponse::with_status(ElifStatusCode::INTERNAL_SERVER_ERROR).text("Error") })
+        }).await;
+        assert!(response.status_code().is_server_error());
     }
 }
