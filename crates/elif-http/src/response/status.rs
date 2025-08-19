@@ -10,17 +10,23 @@ impl ElifStatusCode {
     // Common status codes as constants
     pub const OK: Self = Self(axum::http::StatusCode::OK);
     pub const CREATED: Self = Self(axum::http::StatusCode::CREATED);
+    pub const ACCEPTED: Self = Self(axum::http::StatusCode::ACCEPTED);
     pub const NO_CONTENT: Self = Self(axum::http::StatusCode::NO_CONTENT);
     pub const MOVED_PERMANENTLY: Self = Self(axum::http::StatusCode::MOVED_PERMANENTLY);
     pub const FOUND: Self = Self(axum::http::StatusCode::FOUND);
+    pub const SEE_OTHER: Self = Self(axum::http::StatusCode::SEE_OTHER);
     pub const NOT_MODIFIED: Self = Self(axum::http::StatusCode::NOT_MODIFIED);
     pub const BAD_REQUEST: Self = Self(axum::http::StatusCode::BAD_REQUEST);
     pub const UNAUTHORIZED: Self = Self(axum::http::StatusCode::UNAUTHORIZED);
     pub const FORBIDDEN: Self = Self(axum::http::StatusCode::FORBIDDEN);
     pub const NOT_FOUND: Self = Self(axum::http::StatusCode::NOT_FOUND);
     pub const METHOD_NOT_ALLOWED: Self = Self(axum::http::StatusCode::METHOD_NOT_ALLOWED);
+    pub const PRECONDITION_FAILED: Self = Self(axum::http::StatusCode::PRECONDITION_FAILED);
     pub const CONFLICT: Self = Self(axum::http::StatusCode::CONFLICT);
+    pub const LOCKED: Self = Self(axum::http::StatusCode::LOCKED);
     pub const UNPROCESSABLE_ENTITY: Self = Self(axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    pub const REQUEST_TIMEOUT: Self = Self(axum::http::StatusCode::REQUEST_TIMEOUT);
+    pub const PAYLOAD_TOO_LARGE: Self = Self(axum::http::StatusCode::PAYLOAD_TOO_LARGE);
     pub const TOO_MANY_REQUESTS: Self = Self(axum::http::StatusCode::TOO_MANY_REQUESTS);
     pub const INTERNAL_SERVER_ERROR: Self = Self(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
     pub const NOT_IMPLEMENTED: Self = Self(axum::http::StatusCode::NOT_IMPLEMENTED);

@@ -290,7 +290,8 @@ pub mod limits {
 mod tests {
     use super::*;
     use crate::middleware::v2::MiddlewarePipelineV2;
-    use crate::request::{ElifRequest, ElifMethod, ElifHeaderMap};
+    use crate::request::{ElifRequest, ElifMethod};
+    use crate::response::headers::ElifHeaderMap;
 
     #[tokio::test]
     async fn test_body_limit_middleware_v2() {

@@ -94,9 +94,9 @@ mod tests {
 
         let (parts, _body) = request.into_parts();
         ElifRequest::extract_elif_request(
-            parts.method,
+            crate::request::ElifMethod::from_axum(parts.method),
             parts.uri, 
-            parts.headers,
+            crate::response::headers::ElifHeaderMap::from_axum(parts.headers),
             None
         )
     }

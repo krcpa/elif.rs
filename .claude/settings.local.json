@@ -50,7 +50,8 @@
       "WebFetch(domain:github.com)",
       "Bash(gh pr close:*)",
       "Bash(cp:*)",
-      "Bash(diff:*)"
+      "Bash(diff:*)",
+      "Bash(timeout 60 cargo test --package elif-http --lib)"
     ],
     "deny": []
   }

@@ -270,10 +270,12 @@ mod tests {
         let middleware = CompressionMiddleware::new();
         
         // Create request with accept-encoding
-        let mut headers = HeaderMap::new();
-        headers.insert("accept-encoding", "gzip, br".parse().unwrap());
+        let mut headers = crate::response::headers::ElifHeaderMap::new();
+        let encoding_header = crate::response::headers::ElifHeaderName::from_str("accept-encoding").unwrap();
+        let encoding_value = crate::response::headers::ElifHeaderValue::from_str("gzip, br").unwrap();
+        headers.insert(encoding_header, encoding_value);
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/data".parse().unwrap(),
             headers,
         );
@@ -293,7 +295,7 @@ mod tests {
         let response = middleware.handle(request, next).await;
         
         // Response should be successful
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
     }
     
     #[tokio::test]

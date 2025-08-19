@@ -61,6 +61,11 @@ impl ElifHeaderValue {
         axum::http::HeaderValue::from_bytes(bytes).map(Self)
     }
 
+    /// Create a new header value from a static string
+    pub fn from_static(value: &'static str) -> Self {
+        Self(axum::http::HeaderValue::from_static(value))
+    }
+
     /// Get header value as string
     pub fn to_str(&self) -> Result<&str, axum::http::header::ToStrError> {
         self.0.to_str()
@@ -171,6 +176,36 @@ impl ElifHeaderMap {
                 (std::mem::transmute(k), std::mem::transmute(v))
             }
         })
+    }
+
+    /// Iterate over all header keys
+    pub fn keys(&self) -> impl Iterator<Item = &ElifHeaderName> {
+        self.0.keys().map(|k| {
+            // SAFETY: This is safe because our wrapper type is transparent
+            unsafe { std::mem::transmute(k) }
+        })
+    }
+
+    /// Iterate over all header values
+    pub fn values(&self) -> impl Iterator<Item = &ElifHeaderValue> {
+        self.0.values().map(|v| {
+            // SAFETY: This is safe because our wrapper type is transparent
+            unsafe { std::mem::transmute(v) }
+        })
+    }
+
+    /// Add a header to the map (used by middleware for response headers)
+    pub fn add_header(&mut self, name: &str, value: &str) -> Result<(), String> {
+        if let Ok(header_name) = ElifHeaderName::from_str(name) {
+            if let Ok(header_value) = ElifHeaderValue::from_str(value) {
+                self.insert(header_name, header_value);
+                Ok(())
+            } else {
+                Err("Invalid header value".to_string())
+            }
+        } else {
+            Err("Invalid header name".to_string())
+        }
     }
 
     /// Convert to a HashMap for easier manipulation

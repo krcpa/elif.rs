@@ -1,7 +1,7 @@
 use crate::{
     errors::{HttpError, HttpResult},
     request::ElifRequest,
-    response::{ElifResponse, ElifHeaderMap, ElifStatusCode},
+    response::ElifResponse,
     middleware::v2::{Middleware, Next, NextFuture},
 };
 use serde::{Deserialize, Serialize};
@@ -154,6 +154,7 @@ pub struct VersionInfo {
 }
 
 /// API versioning middleware
+#[derive(Debug)]
 pub struct VersioningMiddleware {
     config: VersioningConfig,
 }
@@ -258,68 +259,139 @@ impl VersioningMiddleware {
     }
 }
 
-impl Middleware for VersioningMiddleware {
-    fn process_request<'a>(
-        &'a self,
-        mut request: axum::extract::Request,
-    ) -> BoxFuture<'a, Result<axum::extract::Request, axum::response::Response>> {
-        Box::pin(async move {
-            // Extract version from request
-            match self.extract_version_from_axum(&request) {
-                Ok(extracted_version) => {
-                    match self.resolve_version(extracted_version) {
-                        Ok(version_info) => {
-                            // Store version info in request extensions
-                            request.extensions_mut().insert(version_info);
-                            Ok(request)
-                        }
-                        Err(err) => {
-                            let response = axum::response::Response::builder()
-                                .status(err.status_code())
-                                .body(axum::body::Body::from(err.to_string()))
-                                .unwrap();
-                            Err(response)
+/// Extract version from ElifRequest based on strategy
+fn extract_version_from_request(request: &ElifRequest, strategy: &VersionStrategy) -> Result<Option<String>, HttpError> {
+    match strategy {
+        VersionStrategy::UrlPath => {
+            let path = request.path();
+            if let Some(captures) = URL_PATH_VERSION_REGEX.captures(path) {
+                Ok(Some(captures[1].to_string()))
+            } else {
+                Ok(None)
+            }
+        }
+        VersionStrategy::Header(header_name) => {
+            if let Some(header_value) = request.header(header_name) {
+                if let Ok(version_str) = header_value.to_str() {
+                    Ok(Some(version_str.to_string()))
+                } else {
+                    Err(HttpError::bad_request("Invalid version header"))
+                }
+            } else {
+                Ok(None)
+            }
+        }
+        VersionStrategy::QueryParam(param_name) => {
+            if let Some(query) = request.uri.query() {
+                for pair in query.split('&') {
+                    let mut parts = pair.split('=');
+                    if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+                        if key == param_name {
+                            return Ok(Some(value.to_string()));
                         }
                     }
                 }
-                Err(err) => {
-                    let response = axum::response::Response::builder()
-                        .status(err.status_code())
-                        .body(axum::body::Body::from(err.to_string()))
-                        .unwrap();
-                    Err(response)
+            }
+            Ok(None)
+        }
+        VersionStrategy::AcceptHeader => {
+            if let Some(accept_header) = request.header("Accept") {
+                if let Ok(accept_str) = accept_header.to_str() {
+                    if let Some(captures) = ACCEPT_HEADER_VERSION_REGEX.captures(accept_str) {
+                        return Ok(Some(captures[1].to_string()));
+                    }
                 }
             }
-        })
+            Ok(None)
+        }
     }
+}
 
-    fn process_response<'a>(
-        &'a self,
-        mut response: axum::response::Response,
-    ) -> BoxFuture<'a, axum::response::Response> {
+/// Resolve version info from extracted version and config
+fn resolve_version(config: &VersioningConfig, extracted_version: Option<String>) -> Result<VersionInfo, HttpError> {
+    let version_key = match extracted_version {
+        Some(v) => v,
+        None => {
+            if let Some(default) = &config.default_version {
+                default.clone()
+            } else if config.strict_validation {
+                return Err(HttpError::bad_request("Version is required"));
+            } else {
+                // Pick first available version if not strict (sorted for deterministic behavior)
+                let mut sorted_keys: Vec<_> = config.versions.keys().cloned().collect();
+                sorted_keys.sort();
+                if let Some(first_version) = sorted_keys.first() {
+                    first_version.clone()
+                } else {
+                    return Err(HttpError::bad_request("No versions configured"));
+                }
+            }
+        }
+    };
+
+    if let Some(api_version) = config.versions.get(&version_key) {
+        Ok(VersionInfo {
+            version: version_key,
+            api_version: api_version.clone(),
+            is_deprecated: api_version.deprecated,
+        })
+    } else {
+        Err(HttpError::bad_request(&format!("Unsupported version: {}", version_key)))
+    }
+}
+
+impl Middleware for VersioningMiddleware {
+    fn handle(&self, mut request: ElifRequest, next: Next) -> NextFuture<'static> {
         let config = self.config.clone();
         
         Box::pin(async move {
-            // For now, we can't easily access the version info from request in response processing
-            // In a production implementation, you'd want to store this in response extensions
-            // or use a more sophisticated middleware pattern
-            
-            // Add general API versioning headers
-            let headers = response.headers_mut();
-            
-            // Add API version support information
-            if let Some(default_version) = &config.default_version {
-                if let Ok(value) = default_version.parse() {
-                    headers.insert("X-Api-Default-Version", value);
+            // Extract version from request
+            let extracted_version = match extract_version_from_request(&request, &config.strategy) {
+                Ok(version) => version,
+                Err(err) => {
+                    return ElifResponse::bad_request()
+                        .json_value(serde_json::json!({
+                            "error": {
+                                "code": "VERSION_EXTRACTION_FAILED",
+                                "message": err.to_string()
+                            }
+                        }));
                 }
-            }
+            };
             
-            // Add supported versions list
-            let supported_versions: Vec<String> = config.versions.keys().cloned().collect();
-            if !supported_versions.is_empty() {
-                let versions_str = supported_versions.join(",");
-                if let Ok(value) = versions_str.parse() {
-                    headers.insert("X-Api-Supported-Versions", value);
+            // Resolve version using the extracted version
+            let version_info = match resolve_version(&config, extracted_version) {
+                Ok(info) => info,
+                Err(err) => {
+                    return ElifResponse::bad_request()
+                        .json_value(serde_json::json!({
+                            "error": {
+                                "code": "VERSION_RESOLUTION_FAILED", 
+                                "message": err.to_string()
+                            }
+                        }));
+                }
+            };
+            
+            // Store version info in request extensions for handlers to use
+            request.insert_extension(version_info.clone());
+            
+            // Call next middleware/handler
+            let mut response = next.run(request).await;
+            
+            // Add deprecation headers if needed
+            if config.include_deprecation_headers && version_info.api_version.deprecated {
+                // Add Deprecation header
+                let _ = response.add_header("Deprecation", "true");
+                
+                // Add Warning header if deprecation message exists
+                if let Some(message) = &version_info.api_version.deprecation_message {
+                    let _ = response.add_header("Warning", &format!("299 - \"{}\"", message));
+                }
+                
+                // Add Sunset header if sunset date exists
+                if let Some(sunset) = &version_info.api_version.sunset_date {
+                    let _ = response.add_header("Sunset", sunset);
                 }
             }
             

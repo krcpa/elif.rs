@@ -269,8 +269,8 @@ mod tests {
             let name = self.name;
             Box::pin(async move {
                 // Add a custom header to track middleware execution
-                let header_name: axum::http::HeaderName = format!("x-middleware-{}", name.to_lowercase()).parse().unwrap();
-                let header_value: axum::http::HeaderValue = "executed".parse().unwrap();
+                let header_name = crate::response::headers::ElifHeaderName::from_str(&format!("x-middleware-{}", name.to_lowercase())).unwrap();
+                let header_value = crate::response::headers::ElifHeaderValue::from_str("executed").unwrap();
                 request.headers.insert(header_name, header_value);
                 
                 let response = next.run(request).await;
@@ -292,24 +292,24 @@ mod tests {
             .add(TestMiddleware::new("Second"));
         
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/test".parse().unwrap(),
-            HeaderMap::new(),
+            crate::response::headers::ElifHeaderMap::new(),
         );
         
         let response = pipeline.execute(request, |req| {
             Box::pin(async move {
                 // Verify both middleware executed by checking headers they added
-                assert!(req.headers.contains_key("x-middleware-first"), 
+                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-first").unwrap()), 
                     "First middleware should have added header");
-                assert!(req.headers.contains_key("x-middleware-second"), 
+                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-second").unwrap()), 
                     "Second middleware should have added header");
                 
                 ElifResponse::ok().text("Hello World")
             })
         }).await;
         
-        assert_eq!(response.status_code(), axum::http::StatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
     }
     
     #[tokio::test]
@@ -331,11 +331,10 @@ mod tests {
                 let name = self.name;
                 Box::pin(async move {
                     // Add execution order to request headers (before handler)
-                    let header_name = format!("x-before-{}", name.to_lowercase());
-                    request.headers.insert(
-                        header_name.parse::<axum::http::HeaderName>().unwrap(), 
-                        "executed".parse::<axum::http::HeaderValue>().unwrap()
-                    );
+                    let header_name_str = format!("x-before-{}", name.to_lowercase());
+                    let header_name = crate::response::headers::ElifHeaderName::from_str(&header_name_str).unwrap();
+                    let header_value = crate::response::headers::ElifHeaderValue::from_str("executed").unwrap();
+                    request.headers.insert(header_name, header_value);
                     
                     // Call next middleware/handler
                     let response = next.run(request).await;
@@ -361,24 +360,24 @@ mod tests {
             .add(OrderTestMiddleware::new("Third"));
         
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/test".parse().unwrap(),
-            HeaderMap::new(),
+            crate::response::headers::ElifHeaderMap::new(),
         );
         
         let response = pipeline.execute(request, |req| {
             Box::pin(async move {
                 // Verify all middleware ran before the handler
-                assert!(req.headers.contains_key("x-before-first"));
-                assert!(req.headers.contains_key("x-before-second"));
-                assert!(req.headers.contains_key("x-before-third"));
+                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-before-first").unwrap()));
+                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-before-second").unwrap()));
+                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-before-third").unwrap()));
                 
                 ElifResponse::ok().text("Handler executed")
             })
         }).await;
         
         // Verify response and that all middleware ran after the handler
-        assert_eq!(response.status_code(), axum::http::StatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
         
         // Convert to axum response to check headers
         let axum_response = response.into_axum_response();
@@ -397,10 +396,10 @@ mod tests {
         let auth_middleware = SimpleAuthMiddleware::new("secret123".to_string());
         
         // Test with valid token
-        let mut headers = HeaderMap::new();
-        headers.insert("authorization", "Bearer secret123".parse().unwrap());
+        let mut headers = crate::response::headers::ElifHeaderMap::new();
+        headers.insert(crate::response::headers::ElifHeaderName::from_str("authorization").unwrap(), "Bearer secret123".parse().unwrap());
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/protected".parse().unwrap(),
             headers,
         );
@@ -412,13 +411,13 @@ mod tests {
         });
         
         let response = auth_middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), axum::http::StatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
         
         // Test with invalid token
-        let mut headers = HeaderMap::new();
-        headers.insert("authorization", "Bearer invalid".parse().unwrap());
+        let mut headers = crate::response::headers::ElifHeaderMap::new();
+        headers.insert(crate::response::headers::ElifHeaderName::from_str("authorization").unwrap(), "Bearer invalid".parse().unwrap());
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/protected".parse().unwrap(),
             headers,
         );
@@ -430,7 +429,7 @@ mod tests {
         });
         
         let response = auth_middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), axum::http::StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::UNAUTHORIZED);
     }
     
     #[tokio::test]

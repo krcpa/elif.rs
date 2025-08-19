@@ -4,8 +4,8 @@
 //! Supports both strong and weak ETags for caching optimization.
 
 use crate::middleware::v2::{Middleware, Next, NextFuture};
-use crate::request::ElifRequest;
-use crate::response::ElifResponse;
+use crate::request::{ElifRequest, ElifMethod};
+use crate::response::{ElifResponse, ElifHeaderValue};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -288,10 +288,15 @@ impl ETagMiddleware {
     async fn process_response_with_headers(
         &self, 
         response: ElifResponse,
-        if_none_match: Option<HeaderValue>,
-        if_match: Option<HeaderValue>,
-        request_method: axum::http::Method
+        if_none_match: Option<ElifHeaderValue>,
+        if_match: Option<ElifHeaderValue>,
+        request_method: ElifMethod
     ) -> ElifResponse {
+        // Convert elif types to axum types for internal processing
+        let axum_if_none_match = if_none_match.as_ref().map(|v| v.to_axum());
+        let axum_if_match = if_match.as_ref().map(|v| v.to_axum());
+        let axum_method = request_method.to_axum();
+        
         let axum_response = response.into_axum_response();
         let (parts, body) = axum_response.into_parts();
         
@@ -324,18 +329,18 @@ impl ETagMiddleware {
         // Check conditional request headers
         
         // Handle If-None-Match (typically used with GET/HEAD for caching)
-        if let Some(if_none_match) = if_none_match {
+        if let Some(if_none_match) = axum_if_none_match {
             if let Ok(if_none_match_str) = if_none_match.to_str() {
                 let request_etags = self.parse_if_none_match(if_none_match_str);
                 
                 // Special case: "*" matches any ETag
                 // RFC 7232: For GET/HEAD, return 304. For others, return 412 if resource exists.
                 if if_none_match_str.trim() == "*" {
-                    return if request_method == axum::http::Method::GET || request_method == axum::http::Method::HEAD {
+                    return if axum_method == &axum::http::Method::GET || axum_method == &axum::http::Method::HEAD {
                         // Return 304 Not Modified for GET/HEAD
                         ElifResponse::from_axum_response(
                             axum::response::Response::builder()
-                                .status(StatusCode::NOT_MODIFIED)
+                                .status(axum::http::StatusCode::NOT_MODIFIED)
                                 .header("etag", etag.to_header_value())
                                 .body(axum::body::Body::empty())
                                 .unwrap()
@@ -344,7 +349,7 @@ impl ETagMiddleware {
                         // Return 412 Precondition Failed for state-changing methods
                         ElifResponse::from_axum_response(
                             axum::response::Response::builder()
-                                .status(StatusCode::PRECONDITION_FAILED)
+                                .status(axum::http::StatusCode::PRECONDITION_FAILED)
                                 .header("etag", etag.to_header_value())
                                 .body(axum::body::Body::from(
                                     serde_json::to_vec(&serde_json::json!({
@@ -361,11 +366,11 @@ impl ETagMiddleware {
                 
                 if !self.check_if_none_match(&request_etags, &etag) {
                     // ETag matches - behavior depends on request method
-                    return if request_method == axum::http::Method::GET || request_method == axum::http::Method::HEAD {
+                    return if axum_method == &axum::http::Method::GET || axum_method == &axum::http::Method::HEAD {
                         // Return 304 Not Modified for GET/HEAD
                         ElifResponse::from_axum_response(
                             axum::response::Response::builder()
-                                .status(StatusCode::NOT_MODIFIED)
+                                .status(axum::http::StatusCode::NOT_MODIFIED)
                                 .header("etag", etag.to_header_value())
                                 .body(axum::body::Body::empty())
                                 .unwrap()
@@ -374,7 +379,7 @@ impl ETagMiddleware {
                         // Return 412 Precondition Failed for state-changing methods
                         ElifResponse::from_axum_response(
                             axum::response::Response::builder()
-                                .status(StatusCode::PRECONDITION_FAILED)
+                                .status(axum::http::StatusCode::PRECONDITION_FAILED)
                                 .header("etag", etag.to_header_value())
                                 .body(axum::body::Body::from(
                                     serde_json::to_vec(&serde_json::json!({
@@ -392,7 +397,7 @@ impl ETagMiddleware {
         }
         
         // Handle If-Match (typically used with PUT/POST for conflict detection)
-        if let Some(if_match) = if_match {
+        if let Some(if_match) = axum_if_match {
             if let Ok(if_match_str) = if_match.to_str() {
                 let request_etags = self.parse_if_match(if_match_str);
                 
@@ -403,7 +408,7 @@ impl ETagMiddleware {
                     // No ETag matches with strong comparison, return 412 Precondition Failed
                     return ElifResponse::from_axum_response(
                         axum::response::Response::builder()
-                            .status(StatusCode::PRECONDITION_FAILED)
+                            .status(axum::http::StatusCode::PRECONDITION_FAILED)
                             .header("etag", etag.to_header_value())
                             .body(axum::body::Body::from(
                                 serde_json::to_vec(&serde_json::json!({
@@ -546,9 +551,9 @@ mod tests {
         let middleware = ETagMiddleware::new();
         
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/data".parse().unwrap(),
-            HeaderMap::new(),
+            crate::response::headers::ElifHeaderMap::new(),
         );
         
         let next = Next::new(|_req| {
@@ -561,7 +566,7 @@ mod tests {
         
         let response = middleware.handle(request, next).await;
         
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
         
         // Convert to check headers
         let axum_response = response.into_axum_response();
@@ -575,9 +580,9 @@ mod tests {
         
         // First request to get ETag
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/data".parse().unwrap(),
-            HeaderMap::new(),
+            crate::response::headers::ElifHeaderMap::new(),
         );
         
         let next = Next::new(|_req| {
@@ -596,10 +601,12 @@ mod tests {
         let etag_value = etag_header.to_str().unwrap();
         
         // Second request with If-None-Match
-        let mut headers = HeaderMap::new();
-        headers.insert("if-none-match", etag_value.parse().unwrap());
+        let mut headers = crate::response::headers::ElifHeaderMap::new();
+        let header_name = crate::response::headers::ElifHeaderName::from_str("if-none-match").unwrap();
+        let header_value = crate::response::headers::ElifHeaderValue::from_str(etag_value).unwrap();
+        headers.insert(header_name, header_value);
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/data".parse().unwrap(),
             headers,
         );
@@ -613,17 +620,19 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::NOT_MODIFIED);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::NOT_MODIFIED);
     }
     
     #[tokio::test]
     async fn test_if_match_412() {
         let middleware = ETagMiddleware::new();
         
-        let mut headers = HeaderMap::new();
-        headers.insert("if-match", "\"non-matching-etag\"".parse().unwrap());
+        let mut headers = crate::response::headers::ElifHeaderMap::new();
+        let header_name = crate::response::headers::ElifHeaderName::from_str("if-match").unwrap();
+        let header_value = crate::response::headers::ElifHeaderValue::from_str("\"non-matching-etag\"").unwrap();
+        headers.insert(header_name, header_value);
         let request = ElifRequest::new(
-            Method::PUT,
+            crate::request::ElifMethod::PUT,
             "/api/data".parse().unwrap(),
             headers,
         );
@@ -637,17 +646,19 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::PRECONDITION_FAILED);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::PRECONDITION_FAILED);
     }
     
     #[tokio::test]
     async fn test_if_none_match_star_put_request() {
         let middleware = ETagMiddleware::new();
         
-        let mut headers = HeaderMap::new();
-        headers.insert("if-none-match", "*".parse().unwrap());
+        let mut headers = crate::response::headers::ElifHeaderMap::new();
+        let header_name = crate::response::headers::ElifHeaderName::from_str("if-none-match").unwrap();
+        let header_value = crate::response::headers::ElifHeaderValue::from_str("*").unwrap();
+        headers.insert(header_name, header_value);
         let request = ElifRequest::new(
-            Method::PUT,  // State-changing method
+            crate::request::ElifMethod::PUT,  // State-changing method
             "/api/data".parse().unwrap(),
             headers,
         );
@@ -662,17 +673,19 @@ mod tests {
         
         let response = middleware.handle(request, next).await;
         // Should return 412 for PUT with If-None-Match: * when resource exists
-        assert_eq!(response.status_code(), StatusCode::PRECONDITION_FAILED);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::PRECONDITION_FAILED);
     }
     
     #[tokio::test]
     async fn test_if_none_match_star_get_request() {
         let middleware = ETagMiddleware::new();
         
-        let mut headers = HeaderMap::new();
-        headers.insert("if-none-match", "*".parse().unwrap());
+        let mut headers = crate::response::headers::ElifHeaderMap::new();
+        let header_name = crate::response::headers::ElifHeaderName::from_str("if-none-match").unwrap();
+        let header_value = crate::response::headers::ElifHeaderValue::from_str("*").unwrap();
+        headers.insert(header_name, header_value);
         let request = ElifRequest::new(
-            Method::GET,  // Safe method
+            crate::request::ElifMethod::GET,  // Safe method
             "/api/data".parse().unwrap(),
             headers,
         );
@@ -687,7 +700,7 @@ mod tests {
         
         let response = middleware.handle(request, next).await;
         // Should return 304 for GET with If-None-Match: *
-        assert_eq!(response.status_code(), StatusCode::NOT_MODIFIED);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::NOT_MODIFIED);
     }
     
     #[tokio::test] 
@@ -696,9 +709,9 @@ mod tests {
         
         // First request to get ETag
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/data".parse().unwrap(),
-            HeaderMap::new(),
+            crate::response::headers::ElifHeaderMap::new(),
         );
         
         let next = Next::new(|_req| {
@@ -717,10 +730,12 @@ mod tests {
         let etag_value = etag_header.to_str().unwrap();
         
         // Second request - PUT with matching ETag
-        let mut headers = HeaderMap::new();
-        headers.insert("if-none-match", etag_value.parse().unwrap());
+        let mut headers = crate::response::headers::ElifHeaderMap::new();
+        let header_name = crate::response::headers::ElifHeaderName::from_str("if-none-match").unwrap();
+        let header_value = crate::response::headers::ElifHeaderValue::from_str(etag_value).unwrap();
+        headers.insert(header_name, header_value);
         let request = ElifRequest::new(
-            Method::PUT,
+            crate::request::ElifMethod::PUT,
             "/api/data".parse().unwrap(),
             headers,
         );
@@ -735,7 +750,7 @@ mod tests {
         
         let response = middleware.handle(request, next).await;
         // Should return 412 for PUT when ETag matches
-        assert_eq!(response.status_code(), StatusCode::PRECONDITION_FAILED);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::PRECONDITION_FAILED);
     }
     
     #[tokio::test]
@@ -743,9 +758,9 @@ mod tests {
         let middleware = ETagMiddleware::new().weak();
         
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/data".parse().unwrap(),
-            HeaderMap::new(),
+            crate::response::headers::ElifHeaderMap::new(),
         );
         
         let next = Next::new(|_req| {

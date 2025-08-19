@@ -6,7 +6,8 @@
 use crate::middleware::v2::{Middleware, Next, NextFuture};
 use crate::request::ElifRequest;
 use crate::response::ElifResponse;
-use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use crate::response::status::ElifStatusCode;
+use crate::response::headers::{ElifHeaderMap, ElifHeaderName, ElifHeaderValue};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -275,7 +276,7 @@ impl ContentNegotiationMiddleware {
     }
     
     /// Choose best content type based on Accept header and supported types
-    fn negotiate_content_type(&self, accept_header: Option<&HeaderValue>) -> ContentType {
+    fn negotiate_content_type(&self, accept_header: Option<&ElifHeaderValue>) -> ContentType {
         let accept_str = match accept_header.and_then(|h| h.to_str().ok()) {
             Some(s) => s,
             None => return self.config.default_content_type.clone(),
@@ -359,7 +360,7 @@ impl ContentNegotiationMiddleware {
                     // Conversion failed, return 406 Not Acceptable
                     return ElifResponse::from_axum_response(
                         axum::response::Response::builder()
-                            .status(StatusCode::NOT_ACCEPTABLE)
+                            .status(axum::http::StatusCode::NOT_ACCEPTABLE)
                             .header("content-type", "application/json")
                             .body(axum::body::Body::from(
                                 serde_json::to_vec(&serde_json::json!({
@@ -378,7 +379,7 @@ impl ContentNegotiationMiddleware {
                 // No converter available
                 return ElifResponse::from_axum_response(
                     axum::response::Response::builder()
-                        .status(StatusCode::NOT_ACCEPTABLE)
+                        .status(axum::http::StatusCode::NOT_ACCEPTABLE)
                         .header("content-type", "application/json")
                         .body(axum::body::Body::from(
                             serde_json::to_vec(&serde_json::json!({
@@ -397,19 +398,19 @@ impl ContentNegotiationMiddleware {
         // Build response with new content type
         let mut new_parts = parts;
         new_parts.headers.insert(
-            HeaderName::from_static("content-type"),
-            HeaderValue::from_static(target_type.to_mime_type()),
+            axum::http::HeaderName::from_static("content-type"),
+            axum::http::HeaderValue::from_static(target_type.to_mime_type()),
         );
         
         new_parts.headers.insert(
-            HeaderName::from_static("content-length"),
-            HeaderValue::try_from(converted_body.len().to_string()).unwrap(),
+            axum::http::HeaderName::from_static("content-length"),
+            axum::http::HeaderValue::try_from(converted_body.len().to_string()).unwrap(),
         );
         
         if self.config.add_vary_header {
             new_parts.headers.insert(
-                HeaderName::from_static("vary"),
-                HeaderValue::from_static("Accept"),
+                axum::http::HeaderName::from_static("vary"),
+                axum::http::HeaderValue::from_static("Accept"),
             );
         }
         
@@ -507,28 +508,28 @@ mod tests {
         let middleware = ContentNegotiationMiddleware::new();
         
         // Test JSON preference
-        let header = HeaderValue::from_static("application/json");
+        let header = ElifHeaderValue::from_static("application/json");
         assert_eq!(
             middleware.negotiate_content_type(Some(&header)),
             ContentType::Json
         );
         
         // Test HTML preference with quality
-        let header = HeaderValue::from_static("text/html,application/json;q=0.9");
+        let header = ElifHeaderValue::from_static("text/html,application/json;q=0.9");
         assert_eq!(
             middleware.negotiate_content_type(Some(&header)),
             ContentType::Html
         );
         
         // Test unsupported type fallback
-        let header = HeaderValue::from_static("application/pdf");
+        let header = ElifHeaderValue::from_static("application/pdf");
         assert_eq!(
             middleware.negotiate_content_type(Some(&header)),
             ContentType::Json // default
         );
         
         // Test wildcard
-        let header = HeaderValue::from_static("*/*");
+        let header = ElifHeaderValue::from_static("*/*");
         assert_eq!(
             middleware.negotiate_content_type(Some(&header)),
             ContentType::Json // default
@@ -539,10 +540,12 @@ mod tests {
     async fn test_json_to_text_conversion() {
         let middleware = ContentNegotiationMiddleware::new();
         
-        let mut headers = HeaderMap::new();
-        headers.insert("accept", "text/plain".parse().unwrap());
+        let mut headers = ElifHeaderMap::new();
+        let accept_header = ElifHeaderName::from_str("accept").unwrap();
+        let plain_value = ElifHeaderValue::from_str("text/plain").unwrap();
+        headers.insert(accept_header, plain_value);
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/data".parse().unwrap(),
             headers,
         );
@@ -557,7 +560,7 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
         
         // Check content type was converted
         let axum_response = response.into_axum_response();
@@ -572,10 +575,12 @@ mod tests {
     async fn test_json_to_html_conversion() {
         let middleware = ContentNegotiationMiddleware::new();
         
-        let mut headers = HeaderMap::new();
-        headers.insert("accept", "text/html".parse().unwrap());
+        let mut headers = ElifHeaderMap::new();
+        let accept_header = ElifHeaderName::from_str("accept").unwrap();
+        let html_value = ElifHeaderValue::from_str("text/html").unwrap();
+        headers.insert(accept_header, html_value);
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/data".parse().unwrap(),
             headers,
         );
@@ -589,7 +594,7 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
         
         let axum_response = response.into_axum_response();
         let (parts, body) = axum_response.into_parts();
@@ -609,10 +614,12 @@ mod tests {
     async fn test_unsupported_format_406() {
         let middleware = ContentNegotiationMiddleware::new();
         
-        let mut headers = HeaderMap::new();
-        headers.insert("accept", "application/pdf".parse().unwrap());
+        let mut headers = ElifHeaderMap::new();
+        let accept_header = ElifHeaderName::from_str("accept").unwrap();
+        let pdf_value = ElifHeaderValue::from_str("application/pdf").unwrap();
+        headers.insert(accept_header, pdf_value);
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/data".parse().unwrap(),
             headers,
         );
@@ -627,7 +634,7 @@ mod tests {
         
         let response = middleware.handle(request, next).await;
         // Should still return JSON as default since PDF is not supported but has a converter
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
     }
     
     #[tokio::test]
@@ -686,10 +693,12 @@ mod tests {
                 Ok(b"custom,csv,data".to_vec())
             });
         
-        let mut headers = HeaderMap::new();
-        headers.insert("accept", "text/csv".parse().unwrap());
+        let mut headers = ElifHeaderMap::new();
+        let accept_header = ElifHeaderName::from_str("accept").unwrap();
+        let csv_value = ElifHeaderValue::from_str("text/csv").unwrap();
+        headers.insert(accept_header, csv_value);
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/data".parse().unwrap(),
             headers,
         );
@@ -704,7 +713,7 @@ mod tests {
         
         // This should work because the custom converter is preserved through clone
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
         
         // Check that it was converted to CSV format
         let axum_response = response.into_axum_response();

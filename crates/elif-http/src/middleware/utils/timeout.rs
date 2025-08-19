@@ -11,7 +11,7 @@ use crate::{
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
     response::{ElifResponse, ElifStatusCode},
-    HttpError,
+    errors::HttpError,
 };
 
 /// Configuration for timeout middleware
@@ -64,6 +64,7 @@ impl TimeoutConfig {
 }
 
 /// Framework timeout middleware for HTTP requests
+#[derive(Debug)]
 pub struct TimeoutMiddleware {
     config: TimeoutConfig,
 }
@@ -114,10 +115,10 @@ impl TimeoutMiddleware {
     /// Create timeout error response
     fn timeout_response(&self) -> ElifResponse {
         ElifResponse::with_status(ElifStatusCode::REQUEST_TIMEOUT)
-            .json(serde_json::json!({
+            .json_value(serde_json::json!({
                 "error": {
                     "code": "REQUEST_TIMEOUT",
-                    "message": self.config.timeout_message,
+                    "message": &self.config.timeout_message,
                     "timeout_duration_secs": self.config.timeout.as_secs()
                 }
             }))
@@ -153,10 +154,10 @@ impl Middleware for TimeoutMiddleware {
                     }
                     
                     ElifResponse::with_status(ElifStatusCode::REQUEST_TIMEOUT)
-                        .json(serde_json::json!({
+                        .json_value(serde_json::json!({
                             "error": {
                                 "code": "REQUEST_TIMEOUT",
-                                "message": timeout_message,
+                                "message": &timeout_message,
                                 "timeout_duration_secs": timeout_duration.as_secs()
                             }
                         }))
@@ -182,7 +183,7 @@ pub async fn apply_timeout<F, T>(
     future: F,
     duration: Duration,
     timeout_message: &str,
-) -> Result<T, Response>
+) -> Result<T, ElifResponse>
 where
     F: std::future::Future<Output = T>,
 {
@@ -190,107 +191,68 @@ where
         Ok(result) => Ok(result),
         Err(_) => {
             error!("Request timed out after {:?}: {}", duration, timeout_message);
-            let error = HttpError::timeout();
-            Err(error.into_response())
+            Err(ElifResponse::with_status(ElifStatusCode::REQUEST_TIMEOUT)
+                .json_value(serde_json::json!({
+                    "error": {
+                        "code": "REQUEST_TIMEOUT",
+                        "message": timeout_message,
+                        "timeout_duration_secs": duration.as_secs()
+                    }
+                })))
         }
     }
 }
 
-/// Timeout middleware wrapper that can be applied to handlers
-pub struct TimeoutHandler<F> {
-    handler: F,
-    duration: Duration,
-    message: String,
-}
-
-impl<F> TimeoutHandler<F> {
-    pub fn new(handler: F, duration: Duration) -> Self {
-        Self {
-            handler,
-            duration,
-            message: "Request timed out".to_string(),
-        }
-    }
-
-    pub fn with_message<S: Into<String>>(mut self, message: S) -> Self {
-        self.message = message.into();
-        self
-    }
-}
-
-impl<F, Fut, T> tower::Service<Request> for TimeoutHandler<F>
-where
-    F: tower::Service<Request, Response = T, Future = Fut> + Clone + Send + 'static,
-    Fut: std::future::Future<Output = Result<T, F::Error>> + Send + 'static,
-    T: axum::response::IntoResponse,
-{
-    type Response = Response;
-    type Error = Response;
-    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
-        match self.handler.poll_ready(cx) {
-            std::task::Poll::Ready(Ok(())) => std::task::Poll::Ready(Ok(())),
-            std::task::Poll::Ready(Err(_)) => {
-                let error = HttpError::internal("Handler not ready");
-                std::task::Poll::Ready(Err(error.into_response()))
-            },
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
-    }
-
-    fn call(&mut self, request: Request) -> Self::Future {
-        let handler = self.handler.clone();
-        let mut handler = handler;
-        let duration = self.duration;
-        let message = self.message.clone();
-
-        Box::pin(async move {
-            match timeout(duration, handler.call(request)).await {
-                Ok(Ok(response)) => Ok(response.into_response()),
-                Ok(Err(_)) => {
-                    let error = HttpError::internal("Handler error");
-                    Err(error.into_response())
-                },
-                Err(_) => {
-                    error!("Request timed out after {:?}: {}", duration, message);
-                    let error = HttpError::timeout();
-                    Err(error.into_response())
-                }
-            }
-        })
-    }
-}
+// TimeoutHandler removed - use TimeoutMiddleware with V2 system instead
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{Method, StatusCode};
+    use crate::{middleware::v2::Next, request::ElifRequest};
+    use axum::http::{HeaderMap, Method};
     use tokio::time::{sleep, Duration as TokioDuration};
     use std::time::Duration;
 
     #[tokio::test]
-    async fn test_timeout_middleware_basic() {
-        let middleware = TimeoutMiddleware::new();
+    async fn test_timeout_middleware_fast_response() {
+        let middleware = TimeoutMiddleware::with_duration(Duration::from_secs(1));
         
-        let request = Request::builder()
-            .method(Method::GET)
-            .uri("/test")
-            .body(axum::body::Body::empty())
-            .unwrap();
+        let request = ElifRequest::new(
+            crate::request::ElifMethod::GET,
+            "/test".parse().unwrap(),
+            crate::response::headers::ElifHeaderMap::new(),
+        );
 
-        let result = middleware.process_request(request).await;
-        assert!(result.is_ok());
+        let next = Next::new(|_req| {
+            Box::pin(async {
+                ElifResponse::ok().text("Fast response")
+            })
+        });
 
-        let processed_request = result.unwrap();
+        let response = middleware.handle(request, next).await;
+        assert_eq!(response.status_code(), crate::response::ElifStatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_timeout_middleware_slow_response() {
+        let middleware = TimeoutMiddleware::with_duration(Duration::from_millis(100));
         
-        // Check that timeout info was added to extensions
-        let timeout_info = processed_request.extensions().get::<TimeoutInfo>();
-        assert!(timeout_info.is_some());
-        
-        let timeout_info = timeout_info.unwrap();
-        assert_eq!(timeout_info.duration, Duration::from_secs(30));
-        assert_eq!(timeout_info.message, "Request timed out");
+        let request = ElifRequest::new(
+            crate::request::ElifMethod::GET,
+            "/test".parse().unwrap(),
+            crate::response::headers::ElifHeaderMap::new(),
+        );
+
+        let next = Next::new(|_req| {
+            Box::pin(async {
+                // Slow response that will timeout
+                sleep(TokioDuration::from_millis(200)).await;
+                ElifResponse::ok().text("Should not reach here")
+            })
+        });
+
+        let response = middleware.handle(request, next).await;
+        assert_eq!(response.status_code(), crate::response::ElifStatusCode::REQUEST_TIMEOUT);
     }
 
     #[tokio::test]
@@ -316,19 +278,6 @@ mod tests {
         assert_eq!(middleware.duration(), Duration::from_secs(45));
         assert!(middleware.config.log_timeouts);
         assert_eq!(middleware.config.timeout_message, "Builder timeout");
-    }
-
-    #[tokio::test]
-    async fn test_timeout_middleware_response() {
-        let middleware = TimeoutMiddleware::new();
-        
-        let response = Response::builder()
-            .status(StatusCode::OK)
-            .body(axum::body::Body::empty())
-            .unwrap();
-
-        let processed_response = middleware.process_response(response).await;
-        assert_eq!(processed_response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -358,7 +307,7 @@ mod tests {
         
         // Verify it's a timeout response
         let response = result.unwrap_err();
-        assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+        assert_eq!(response.status_code(), crate::response::ElifStatusCode::REQUEST_TIMEOUT);
     }
 
     #[tokio::test]
@@ -368,23 +317,5 @@ mod tests {
         assert_eq!(config.timeout, Duration::from_secs(30));
         assert!(config.log_timeouts);
         assert_eq!(config.timeout_message, "Request timed out");
-    }
-
-    #[tokio::test]
-    async fn test_timeout_info_extension() {
-        let middleware = TimeoutMiddleware::with_duration(Duration::from_secs(15));
-        
-        let request = Request::builder()
-            .method(Method::POST)
-            .uri("/api/test")
-            .body(axum::body::Body::empty())
-            .unwrap();
-
-        let result = middleware.process_request(request).await;
-        let processed_request = result.unwrap();
-        
-        let timeout_info = processed_request.extensions().get::<TimeoutInfo>().unwrap();
-        assert_eq!(timeout_info.duration, Duration::from_secs(15));
-        assert_eq!(timeout_info.message, "Request timed out");
     }
 }

@@ -5,8 +5,8 @@
 
 use crate::middleware::v2::{Middleware, Next, NextFuture};
 use crate::request::ElifRequest;
-use crate::response::ElifResponse;
-use axum::http::{HeaderMap, HeaderName, HeaderValue};
+use crate::response::{ElifResponse, ElifHeaderName, ElifHeaderValue};
+use crate::response::headers::{ElifHeaderMap, ElifHeaderName as HeaderName, ElifHeaderValue as HeaderValue};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -210,12 +210,12 @@ impl RequestIdMiddleware {
     
     /// Add request ID to request headers
     fn add_request_id_to_request(&self, mut request: ElifRequest, request_id: &str) -> ElifRequest {
-        let header_name = match HeaderName::from_bytes(self.config.header_name.as_bytes()) {
+        let header_name = match ElifHeaderName::from_str(&self.config.header_name) {
             Ok(name) => name,
             Err(_) => return request, // Invalid header name, skip
         };
         
-        let header_value = match HeaderValue::from_str(request_id) {
+        let header_value = match ElifHeaderValue::from_str(request_id) {
             Ok(value) => value,
             Err(_) => return request, // Invalid header value, skip
         };
@@ -275,7 +275,7 @@ impl Middleware for RequestIdMiddleware {
         let path = request.path().to_string();
         
         // Log request ID
-        self.log_request_id(&request_id, &method, &path);
+        self.log_request_id(&request_id, method.to_axum(), &path);
         
         // Add request ID to request headers
         let updated_request = self.add_request_id_to_request(request, &request_id);
@@ -388,9 +388,9 @@ mod tests {
         let middleware = RequestIdMiddleware::new();
         
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         let next = Next::new(|req| {
@@ -402,7 +402,7 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
         
         // Check response has request ID header
         let axum_response = response.into_axum_response();
@@ -414,10 +414,10 @@ mod tests {
     async fn test_request_id_middleware_existing_id() {
         let middleware = RequestIdMiddleware::new();
         
-        let mut headers = HeaderMap::new();
-        headers.insert("x-request-id", "existing-123".parse().unwrap());
+        let mut headers = ElifHeaderMap::new();
+        headers.insert(crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap(), "existing-123".parse().unwrap());
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
             headers,
         );
@@ -445,10 +445,10 @@ mod tests {
     async fn test_request_id_middleware_override() {
         let middleware = RequestIdMiddleware::new().override_existing();
         
-        let mut headers = HeaderMap::new();
-        headers.insert("x-request-id", "existing-123".parse().unwrap());
+        let mut headers = ElifHeaderMap::new();
+        headers.insert(crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap(), "existing-123".parse().unwrap());
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
             headers,
         );
@@ -476,9 +476,9 @@ mod tests {
         let middleware = RequestIdMiddleware::new().header_name("x-trace-id");
         
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         let next = Next::new(|req| {
@@ -501,9 +501,9 @@ mod tests {
         let middleware = RequestIdMiddleware::new().prefixed("api");
         
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         let next = Next::new(|req| {
@@ -527,9 +527,9 @@ mod tests {
         let middleware = RequestIdMiddleware::new().counter();
         
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         let next = Next::new(|req| {
@@ -541,7 +541,7 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
     }
     
     #[tokio::test]
@@ -549,9 +549,9 @@ mod tests {
         let middleware = RequestIdMiddleware::new().no_response_header();
         
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         let next = Next::new(|_req| {
@@ -569,10 +569,10 @@ mod tests {
     
     #[test]
     fn test_request_id_extension_trait() {
-        let mut headers = HeaderMap::new();
-        headers.insert("x-request-id", "test-123".parse().unwrap());
+        let mut headers = ElifHeaderMap::new();
+        headers.insert(crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap(), "test-123".parse().unwrap());
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/test".parse().unwrap(),
             headers,
         );
@@ -580,10 +580,10 @@ mod tests {
         assert_eq!(request.request_id(), Some("test-123".to_string()));
         
         // Test with fallbacks
-        let mut headers = HeaderMap::new();
-        headers.insert("x-trace-id", "trace-456".parse().unwrap());
+        let mut headers = ElifHeaderMap::new();
+        headers.insert(crate::response::headers::ElifHeaderName::from_str("x-trace-id").unwrap(), "trace-456".parse().unwrap());
         let request = ElifRequest::new(
-            Method::GET,
+            crate::request::ElifMethod::GET,
             "/test".parse().unwrap(),
             headers,
         );

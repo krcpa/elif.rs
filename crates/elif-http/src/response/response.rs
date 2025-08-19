@@ -480,10 +480,11 @@ mod tests {
             .header("x-custom-header", "test-value")
             .unwrap();
 
-        assert!(response.headers.contains_key("x-custom-header"));
+        let custom_header = crate::response::headers::ElifHeaderName::from_str("x-custom-header").unwrap();
+        assert!(response.headers.contains_key(&custom_header));
         assert_eq!(
-            response.headers.get("x-custom-header").unwrap(),
-            &HeaderValue::from_static("test-value")
+            response.headers.get(&custom_header).unwrap(),
+            &crate::response::headers::ElifHeaderValue::from_static("test-value")
         );
     }
 
@@ -491,7 +492,7 @@ mod tests {
     fn test_redirect_responses() {
         let redirect = ElifResponse::redirect_permanent("/new-location").unwrap();
         assert_eq!(redirect.status, ElifStatusCode::MOVED_PERMANENTLY);
-        assert!(redirect.headers.contains_key("location"));
+        assert!(redirect.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("location").unwrap()));
     }
 
     #[test]
