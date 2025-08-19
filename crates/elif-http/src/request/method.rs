@@ -57,7 +57,7 @@ impl FromStr for ElifMethod {
     type Err = axum::http::method::InvalidMethod;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_str(s)
+        axum::http::Method::from_str(s).map(Self)
     }
 }
 
