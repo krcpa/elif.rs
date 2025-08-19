@@ -123,23 +123,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-elif-core = "0.4.0"         # Architecture foundation
-elif-orm = "0.6.0"          # Multi-database ORM
-elif-http = "0.6.0"         # HTTP server with WebSocket support
-elif-security = "0.2.3"     # Security middleware stack
-elif-validation = "0.1.0"   # Input validation
-elif-auth = "0.3.1"         # Authentication with JWT, sessions, RBAC, MFA
-elif-cache = "0.2.0"        # Multi-backend caching system
-elif-queue = "0.2.0"        # Job queue system
-elif-testing = "0.2.0"      # Testing framework
-elif-openapi = "0.1.0"      # OpenAPI documentation generation
-elif-codegen = "0.3.1"      # Code generation and templates
-elif-introspect = "0.2.1"   # Project introspection
+elif-core = "0.5.0"         # Architecture foundation
+elif-orm = "0.7.0"          # Multi-database ORM
+elif-http = "0.7.0"         # HTTP server with WebSocket support
+elif-security = "0.3.0"     # Security middleware stack
+elif-validation = "0.2.0"   # Input validation
+elif-auth = "0.4.0"         # Authentication with JWT, sessions, RBAC, MFA
+elif-cache = "0.3.0"        # Multi-backend caching system
+elif-queue = "0.3.0"        # Job queue system
+elif-testing = "0.3.0"      # Testing framework
+elif-openapi = "0.2.0"      # OpenAPI documentation generation
+elif-codegen = "0.4.0"      # Code generation and templates
+elif-introspect = "0.3.0"   # Project introspection
 ```
 
 CLI tool:
 ```bash
-cargo install elifrs  # v0.8.0 - CLI with project scaffolding and management
+cargo install elifrs  # v0.9.0 - CLI with project scaffolding and management
 ```
 
 ## 🏗️ **Architecture Overview**

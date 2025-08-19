@@ -1384,7 +1384,7 @@ dependencies = [
 
 [[package]]
 name = "elif-auth"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "argon2",
@@ -1411,7 +1411,7 @@ dependencies = [
 
 [[package]]
 name = "elif-cache"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1440,7 +1440,7 @@ dependencies = [
 
 [[package]]
 name = "elif-codegen"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "elif-core",
@@ -1453,7 +1453,7 @@ dependencies = [
 
 [[package]]
 name = "elif-core"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1471,7 +1471,7 @@ dependencies = [
 
 [[package]]
 name = "elif-email"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1502,7 +1502,7 @@ dependencies = [
 
 [[package]]
 name = "elif-http"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "argon2",
  "axum",
@@ -1537,7 +1537,7 @@ dependencies = [
 
 [[package]]
 name = "elif-introspect"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "elif-core",
@@ -1547,14 +1547,14 @@ dependencies = [
 
 [[package]]
 name = "elif-openapi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "axum",
  "chrono",
  "elif-core",
  "elif-http",
- "elif-openapi-derive 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "elif-openapi-derive",
  "elif-orm",
  "inventory",
  "proc-macro2",
@@ -1577,19 +1577,7 @@ dependencies = [
 
 [[package]]
 name = "elif-openapi-derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "serde_json",
- "syn 2.0.106",
-]
-
-[[package]]
-name = "elif-openapi-derive"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac46a50714282dd3a8e2e49b2ddeb32689038ba27232f2fff8681d0bdf17024c"
+version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1599,7 +1587,7 @@ dependencies = [
 
 [[package]]
 name = "elif-orm"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1624,7 +1612,7 @@ dependencies = [
 
 [[package]]
 name = "elif-queue"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1650,7 +1638,7 @@ dependencies = [
 
 [[package]]
 name = "elif-security"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1676,7 +1664,7 @@ dependencies = [
 
 [[package]]
 name = "elif-storage"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -1705,7 +1693,7 @@ dependencies = [
 
 [[package]]
 name = "elif-testing"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1731,7 +1719,7 @@ dependencies = [
 
 [[package]]
 name = "elif-validation"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1747,7 +1735,7 @@ dependencies = [
 
 [[package]]
 name = "elifrs"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",

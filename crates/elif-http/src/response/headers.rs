@@ -208,6 +208,15 @@ impl ElifHeaderMap {
         }
     }
 
+    /// Remove a header from the map
+    pub fn remove_header(&mut self, name: &str) -> Option<ElifHeaderValue> {
+        if let Ok(header_name) = ElifHeaderName::from_str(name) {
+            self.remove(&header_name)
+        } else {
+            None
+        }
+    }
+
     /// Convert to a HashMap for easier manipulation
     pub fn to_hash_map(&self) -> HashMap<String, String> {
         self.0
