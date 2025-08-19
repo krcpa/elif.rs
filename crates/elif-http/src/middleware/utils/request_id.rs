@@ -38,11 +38,8 @@ impl Clone for RequestIdStrategy {
             Self::UuidV1 => Self::UuidV1,
             Self::Counter(counter) => {
                 // Create new counter starting from current value
-                Self::Counter(AtomicU64::new(counter.load(Ordering::SeqCst)))
+                Self::Counter(Arc::clone(counter))
             }
-            Self::PrefixedUuid(prefix) => Self::PrefixedUuid(prefix.clone()),
-            Self::Custom(func) => Self::Custom(*func),
-        }
     }
 }
 
