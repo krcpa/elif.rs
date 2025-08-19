@@ -31,22 +31,17 @@ pub mod type_safe_tests;
 #[cfg(test)]
 pub mod lazy_loading_tests;
 
-// Re-export main types
-pub use traits::*;
-pub use has_one::*;
-pub use has_many::*;
-pub use belongs_to::*;
-pub use eager_loading::*;
-pub use loader::*;
-pub use cache::*;
+// Re-export main types (minimal exports to avoid conflicts)
+pub use traits as relationship_traits;
+pub use eager_loading::EagerLoader;
+pub use loader::{RelationshipLoader, RelationshipCache};
 
 // Re-export metadata system types
-pub use metadata::*;
-pub use types::*;
-pub use registry::*;
+pub use metadata::{RelationshipMetadata, RelationshipType, RelationshipConstraint};
+pub use registry::RelationshipRegistry;
 
 // Re-export constraint system types
-pub use constraints::*;
+pub use constraints::{RelationshipConstraintBuilder, ConstraintType};
 
 // Re-export type-safe relationship types
 // Use the new modular containers

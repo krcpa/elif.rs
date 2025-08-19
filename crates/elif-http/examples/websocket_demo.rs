@@ -4,7 +4,7 @@
 //! This is a simplified version showing the structure and API design.
 
 use elif_http::{
-    websocket::{WebSocketServer, server::WebSocketServerBuilder},
+    websocket::{server::WebSocketServerBuilder},
     ElifRouter, ConnectionId, WebSocketConnection,
 };
 use std::sync::Arc;
@@ -28,7 +28,7 @@ async fn main() {
     let router = ElifRouter::new();
     
     // Add WebSocket route - simplified for foundation
-    let router = ws_server.add_websocket_route(
+    let _router = ws_server.add_websocket_route(
         router,
         "/ws",
         |_connection_id: ConnectionId, _connection: Arc<WebSocketConnection>| async {

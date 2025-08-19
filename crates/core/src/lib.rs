@@ -6,24 +6,18 @@ pub mod config;
 pub mod providers;
 pub mod specs;
 
-// Re-export key types for convenience
-pub use foundation::*;
-pub use errors::*;
-pub use container::*;
-pub use modules::*;
-pub use config::*;
-pub use providers::*;
-pub use specs::*;
-
-// Specific re-exports to maintain compatibility
+// Re-export key types for convenience (specific exports to avoid ambiguity)
+pub use foundation::{FrameworkComponent, Initializable, Finalizable, LifecycleManager, LifecycleState};
+pub use errors::{CoreError, ErrorDefinition, ApiError, ApiErrorResponse};
+pub use container::{Container, ContainerBuilder, ServiceRegistry, ServiceScope};
+pub use modules::{Module, ModuleRegistry, ModuleLoader, BaseModule, ModuleError};
+pub use config::{AppConfigTrait, Environment, AppConfig, ConfigSource};
 pub use config::validation::ConfigError;
-pub use config::sources::ConfigSource;
-pub use config::app_config::{AppConfig, AppConfigTrait, Environment};
+pub use providers::{ServiceProvider, ProviderRegistry, ProviderLifecycleManager};
+pub use specs::{ResourceSpec, ApiSpec, OperationSpec, StorageSpec};
 
 // Legacy re-exports for backward compatibility
 pub use errors::CoreError as ElifError;
-pub use container::Container;
-pub use modules::{Module, ModuleRegistry, ModuleLoader};
 
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

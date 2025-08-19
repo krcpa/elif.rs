@@ -1,7 +1,6 @@
 //! Query Builder - Core builder implementation
 
 use std::marker::PhantomData;
-use serde_json::Value;
 
 use super::types::*;
 

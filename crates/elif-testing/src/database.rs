@@ -15,6 +15,7 @@ use crate::{TestError, TestResult};
 #[derive(Clone)]
 pub struct TestDatabase {
     pool: PgPool,
+    #[allow(dead_code)]
     transaction: Option<Arc<std::sync::Mutex<Transaction<'static, Postgres>>>>,
 }
 

@@ -212,7 +212,7 @@ impl BatchLoader {
     /// Load nested relationships with deep optimization
     pub async fn load_nested_relationships(
         &self,
-        root_table: &str,
+        _root_table: &str,
         root_ids: Vec<Value>,
         relationship_path: &str,
         connection: &sqlx::PgPool,

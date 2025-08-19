@@ -1,6 +1,6 @@
 use crate::{
     errors::{HttpError, HttpResult},
-    response::{ElifResponse, ElifJson, ElifStatusCode},
+    response::{ElifResponse, ElifStatusCode},
     middleware::versioning::VersionInfo,
 };
 use serde::{Serialize, Deserialize};

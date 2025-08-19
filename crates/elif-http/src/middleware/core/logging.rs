@@ -7,7 +7,6 @@ use log::{info, debug, warn, error};
 use crate::{
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
-    response::{ElifResponse, ElifStatusCode},
 };
 
 /// HTTP request logging middleware that logs request details and response status
@@ -133,7 +132,8 @@ mod tests {
     use super::*;
     use crate::middleware::v2::MiddlewarePipelineV2;
     use crate::request::{ElifRequest, ElifMethod};
-    use crate::response::ElifHeaderMap;
+    use crate::response::headers::ElifHeaderMap;
+    use crate::response::{ElifResponse, ElifStatusCode};
     
     #[test]
     fn test_sensitive_header_detection() {
@@ -161,12 +161,14 @@ mod tests {
         
         let response = pipeline.execute(request, |_req| {
             Box::pin(async move {
-                ElifResponse::ok().text("Success")
+                ElifResponse::ok().json_value(serde_json::json!({
+                    "message": "Success"
+                }))
             })
         }).await;
         
         // Should complete successfully
-        assert_eq!(response.status_code(), ElifStatusCode::OK);
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
     }
     
     #[test]

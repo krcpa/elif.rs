@@ -17,24 +17,6 @@ async fn bench_pool_acquisition(pool: &DatabasePool, operations: usize) {
     }
 }
 
-async fn bench_concurrent_acquisition(pool: &DatabasePool, concurrent_tasks: usize, ops_per_task: usize) {
-    let handles: Vec<_> = (0..concurrent_tasks).map(|_| {
-        let pool = pool.clone();
-        tokio::spawn(async move {
-            for _ in 0..ops_per_task {
-                if let Ok(conn) = pool.acquire().await {
-                    let _ = black_box(conn);
-                }
-                // Small delay to simulate real work
-                tokio::time::sleep(Duration::from_micros(10)).await;
-            }
-        })
-    }).collect();
-    
-    for handle in handles {
-        handle.await.unwrap();
-    }
-}
 
 fn bench_pool_creation(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();

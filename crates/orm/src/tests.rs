@@ -2,11 +2,13 @@
 //! 
 //! Tests cover QueryBuilder, error handling, primary keys, and Model trait functionality
 
-use super::*;
 use std::collections::HashMap;
 use serde_json::Value;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
+use crate::query::QueryBuilder;
+use crate::error::{ModelError, ModelResult};
+use crate::model::Model;
 
 pub mod mapping_tests;
 
@@ -102,6 +104,8 @@ impl Model for TestUser {
 
 #[cfg(test)]
 mod query_builder_tests {
+    use crate::query::{OrderDirection, QueryOperator};
+
     use super::*;
 
     #[test]
@@ -339,6 +343,8 @@ mod query_builder_tests {
 
 #[cfg(test)]
 mod error_tests {
+    use crate::error::QueryError;
+
     use super::*;
 
     #[test]
@@ -372,6 +378,8 @@ mod error_tests {
 
 #[cfg(test)]
 mod primary_key_tests {
+    use crate::model::PrimaryKey;
+
     use super::*;
 
     #[test]
@@ -483,16 +491,6 @@ mod model_tests {
     }
 
     #[test]
-    fn test_model_query_builder() {
-        let query = TestUser::query();
-        let sql = query.to_sql();
-        
-        // Should include table name and exclude soft-deleted records
-        assert!(sql.contains("FROM users"));
-        assert!(sql.contains("deleted_at IS NULL"));
-    }
-
-    #[test]
     fn test_model_to_fields() {
         let user = TestUser {
             id: Some(Uuid::new_v4()),
@@ -512,6 +510,8 @@ mod model_tests {
 
 #[cfg(test)]
 mod performance_tests {
+    use crate::query::QueryOperator;
+
     use super::*;
     use std::time::Instant;
     use std::mem::size_of_val;

@@ -81,7 +81,7 @@ where
     Related: Model + DeserializeOwned + Send + Sync,
 {
     /// The relationship metadata
-    metadata: RelationshipMetadata,
+    _metadata: RelationshipMetadata,
     
     /// Parent model hydrator
     parent_hydrator: ModelHydrator<Parent>,
@@ -100,7 +100,7 @@ where
 {
     pub fn new(metadata: RelationshipMetadata) -> Self {
         Self {
-            metadata,
+            _metadata: metadata,
             parent_hydrator: ModelHydrator::new(),
             related_hydrator: ModelHydrator::new(),
             related_prefix: None,
@@ -241,7 +241,7 @@ pub mod specialized_hydrators {
         Parent: Model + DeserializeOwned + Send + Sync + Clone,
         Related: Model + DeserializeOwned + Send + Sync + Clone,
     {
-        loader: TypeSafeRelationshipLoader<Parent, Related>,
+        _loader: TypeSafeRelationshipLoader<Parent, Related>,
     }
     
     impl<Parent, Related> HasOneHydrator<Parent, Related>
@@ -251,7 +251,7 @@ pub mod specialized_hydrators {
     {
         pub fn new(metadata: RelationshipMetadata) -> Self {
             Self {
-                loader: TypeSafeRelationshipLoader::new(metadata),
+                _loader: TypeSafeRelationshipLoader::new(metadata),
             }
         }
         
@@ -300,7 +300,7 @@ pub mod specialized_hydrators {
         Parent: Model + DeserializeOwned + Send + Sync + Clone,
         Related: Model + DeserializeOwned + Send + Sync + Clone,
     {
-        loader: TypeSafeRelationshipLoader<Parent, Related>,
+        _loader: TypeSafeRelationshipLoader<Parent, Related>,
     }
     
     impl<Parent, Related> HasManyHydrator<Parent, Related>
@@ -310,7 +310,7 @@ pub mod specialized_hydrators {
     {
         pub fn new(metadata: RelationshipMetadata) -> Self {
             Self {
-                loader: TypeSafeRelationshipLoader::new(metadata),
+                _loader: TypeSafeRelationshipLoader::new(metadata),
             }
         }
         
@@ -359,7 +359,7 @@ pub mod specialized_hydrators {
         Child: Model + DeserializeOwned + Send + Sync + Clone,
         Parent: Model + DeserializeOwned + Send + Sync + Clone,
     {
-        loader: TypeSafeRelationshipLoader<Child, Parent>,
+        _loader: TypeSafeRelationshipLoader<Child, Parent>,
     }
     
     impl<Child, Parent> BelongsToHydrator<Child, Parent>
@@ -369,7 +369,7 @@ pub mod specialized_hydrators {
     {
         pub fn new(metadata: RelationshipMetadata) -> Self {
             Self {
-                loader: TypeSafeRelationshipLoader::new(metadata),
+                _loader: TypeSafeRelationshipLoader::new(metadata),
             }
         }
         

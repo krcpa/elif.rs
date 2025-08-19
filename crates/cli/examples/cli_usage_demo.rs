@@ -3,7 +3,6 @@
 //! This example shows all the CLI commands and workflows for the elif.rs
 //! framework, including project scaffolding, code generation, and database operations.
 
-use std::process::Command;
 use std::path::Path;
 use std::fs;
 use tempfile::TempDir;

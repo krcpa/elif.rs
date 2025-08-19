@@ -183,7 +183,8 @@ impl<B: QueueBackend + 'static> Worker<B> {
         info!("Starting worker with graceful shutdown support");
         
         let mut poll_interval = interval(*self.config.get_poll_interval());
-        let mut shutting_down = false;
+        
+        let shutting_down = false;
         
         loop {
             tokio::select! {
@@ -257,7 +258,6 @@ impl<B: QueueBackend + 'static> Worker<B> {
                 
                 _ = shutdown.recv() => {
                     info!("Shutdown signal received, stopping new job processing");
-                    shutting_down = true;
                     
                     // Wait for active jobs to complete
                     let active_jobs = *self.config.get_max_workers() - self.concurrency_limiter.available_permits();

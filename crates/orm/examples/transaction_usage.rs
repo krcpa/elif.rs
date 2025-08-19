@@ -24,7 +24,7 @@ async fn transaction_examples() -> Result<(), ModelError> {
     // Example 1: Basic transaction with manual commit/rollback
     let pool = create_mock_pool().await?;
     
-    let mut tx = Transaction::begin_default(&pool).await?;
+    let tx = Transaction::begin_default(&pool).await?;
     
     // Perform database operations here
     // If everything succeeds:
@@ -38,14 +38,14 @@ async fn transaction_examples() -> Result<(), ModelError> {
         ..Default::default()
     };
     
-    let mut tx = Transaction::begin(&pool, config).await?;
+    let tx = Transaction::begin(&pool, config).await?;
     
     // Perform operations that need serializable isolation
     // The transaction will auto-retry on serialization failures
     tx.commit().await?;
     
     // Example 3: Read-only transaction
-    let mut tx = Transaction::begin_read_only(&pool).await?;
+    let tx = Transaction::begin_read_only(&pool).await?;
     
     // Perform read-only operations
     tx.commit().await?;

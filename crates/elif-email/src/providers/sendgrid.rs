@@ -57,14 +57,19 @@ struct SendGridAttachment {
 
 #[derive(Debug, Deserialize)]
 struct SendGridResponse {
+    #[allow(dead_code)]
     message_id: Option<String>,
+    #[allow(dead_code)]
     errors: Option<Vec<SendGridError>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct SendGridError {
+    #[allow(dead_code)]
     message: String,
+    #[allow(dead_code)]
     field: Option<String>,
+    #[allow(dead_code)]
     help: Option<String>,
 }
 

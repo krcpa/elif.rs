@@ -7,7 +7,6 @@ use log::{debug, warn};
 use crate::{
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
-    response::{ElifResponse, ElifStatusCode},
 };
 
 /// Request timing middleware that tracks request duration and adds timing headers
@@ -130,7 +129,8 @@ mod tests {
     use super::*;
     use crate::middleware::v2::MiddlewarePipelineV2;
     use crate::request::{ElifRequest, ElifMethod};
-    use crate::response::ElifHeaderMap;
+    use crate::response::headers::ElifHeaderMap;
+    use crate::response::{ElifResponse, ElifStatusCode};
     use tokio::time::Duration;
     
     #[test]
@@ -191,11 +191,11 @@ mod tests {
         let start = RequestStartTime::new();
         
         // Add a tiny delay to ensure some time passes
-        std::thread::sleep(std::time::Duration::from_nanos(1));
+        std::thread::sleep(std::time::Duration::from_millis(1000));
         
         // Should have elapsed time
-        assert!(start.elapsed().as_nanos() >= 0);
-        assert!(start.elapsed_ms() >= 0);
+        assert!(start.elapsed().as_nanos() > 0);
+        assert!(start.elapsed_ms() > 0);
     }
     
     #[test]

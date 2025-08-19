@@ -268,12 +268,6 @@ where
         self
     }
 
-    /// Internal method to nest with Axum router (for framework internals only)
-    pub(crate) fn nest_axum(mut self, path: &str, router: AxumRouter<S>) -> Self {
-        self.axum_router = self.axum_router.nest(path, router);
-        self
-    }
-
     /// Get the underlying Axum router
     pub fn into_axum_router(self) -> AxumRouter<S> {
         self.axum_router
@@ -771,9 +765,6 @@ mod integration_tests {
             }
         }
 
-        fn execution_count(&self) -> usize {
-            *self.counter.lock().unwrap()
-        }
     }
 
     impl Middleware for HeaderTestMiddleware {

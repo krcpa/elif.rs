@@ -7,9 +7,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicU64, Ordering};
 use elif_core::{ServiceProvider, Container, ContainerBuilder};
+use elif_core::providers::ProviderError;
 use crate::error::ModelError;
 use crate::backends::{
-    DatabasePool as DatabasePoolTrait, DatabaseBackend, DatabaseBackendRegistry,
+    DatabasePool as DatabasePoolTrait, DatabaseBackendRegistry,
     DatabasePoolConfig, DatabasePoolStats, DatabaseBackendType
 };
 
@@ -194,7 +195,7 @@ impl ManagedPool {
     /// Check pool health and log detailed statistics
     pub async fn detailed_health_check(&self) -> Result<PoolHealthReport, PoolError> {
         let start = Instant::now();
-        let initial_stats = self.extended_stats();
+        let _initial_stats = self.extended_stats();
         
         // Perform the actual health check
         let check_duration = self.health_check().await?;
@@ -337,7 +338,7 @@ impl ServiceProvider for DatabaseServiceProvider {
         "DatabaseServiceProvider"
     }
     
-    fn register(&self, builder: ContainerBuilder) -> Result<ContainerBuilder, elif_core::ProviderError> {
+    fn register(&self, builder: ContainerBuilder) -> Result<ContainerBuilder, ProviderError> {
         // Store database configuration for later pool creation
         // The actual pool will be created during boot phase
         tracing::debug!("Registering database service with URL: {}", 
@@ -345,7 +346,7 @@ impl ServiceProvider for DatabaseServiceProvider {
         Ok(builder)
     }
     
-    fn boot(&self, _container: &Container) -> Result<(), elif_core::ProviderError> {
+    fn boot(&self, _container: &Container) -> Result<(), ProviderError> {
         tracing::info!("✅ Database service provider booted successfully");
         tracing::debug!("Database pool configuration: max_connections={}, min_connections={}, acquire_timeout={}s, idle_timeout={:?}s, max_lifetime={:?}s, test_before_acquire={}", 
             self.config.max_connections, self.config.min_connections, self.config.acquire_timeout_seconds,

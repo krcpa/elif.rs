@@ -6,7 +6,7 @@
 use std::{sync::Arc, pin::Pin, future::Future};
 use crate::{
     request::{ElifState, ElifPath, ElifQuery},
-    response::{ElifJson, ElifResponse, ElifStatusCode},
+    response::{ElifJson, ElifResponse},
 };
 use serde::{Serialize, Deserialize};
 use serde_json::Value;

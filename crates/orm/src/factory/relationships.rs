@@ -1,7 +1,5 @@
 //! Relationship factory support for creating related models
 
-use std::collections::HashMap;
-use serde_json::Value;
 use crate::error::OrmResult;
 use crate::model::Model;
 use super::traits::{RelationshipFactory, RelationshipType};
@@ -59,6 +57,10 @@ impl<Parent, Related> HasManyFactory<Parent, Related> {
             count,
             _phantom: std::marker::PhantomData,
         }
+    }
+
+    pub fn count(&self) -> usize {
+        self.count
     }
 }
 

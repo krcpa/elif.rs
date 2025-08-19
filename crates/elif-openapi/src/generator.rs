@@ -4,7 +4,6 @@ use crate::{
     schema::{SchemaConfig, SchemaGenerator},
     specification::*,
 };
-use elif_http::routing::{ElifRouter, RouteInfo};
 use std::collections::HashMap;
 
 /// Main OpenAPI specification generator

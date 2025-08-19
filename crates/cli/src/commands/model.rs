@@ -26,9 +26,11 @@ pub async fn add_model(name: &str, fields_str: &str) -> Result<(), ElifError> {
 #[derive(Debug)]
 struct Field {
     name: String,
+    #[allow(dead_code)]
     field_type: String,
     rust_type: String,
     sql_type: String,
+    #[allow(dead_code)]
     required: bool,
 }
 

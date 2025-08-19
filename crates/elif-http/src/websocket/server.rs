@@ -17,7 +17,7 @@ pub struct WebSocketServer {
     /// Connection registry
     registry: Arc<ConnectionRegistry>,
     /// WebSocket configuration
-    config: WebSocketConfig,
+    _config: WebSocketConfig,
     /// Cleanup task handle
     cleanup_handle: Option<tokio::task::JoinHandle<()>>,
 }
@@ -27,7 +27,7 @@ impl WebSocketServer {
     pub fn new() -> Self {
         Self {
             registry: Arc::new(ConnectionRegistry::new()),
-            config: WebSocketConfig::default(),
+            _config: WebSocketConfig::default(),
             cleanup_handle: None,
         }
     }
@@ -36,7 +36,7 @@ impl WebSocketServer {
     pub fn with_config(config: WebSocketConfig) -> Self {
         Self {
             registry: Arc::new(ConnectionRegistry::new()),
-            config,
+            _config: config,
             cleanup_handle: None,
         }
     }
@@ -210,7 +210,7 @@ impl Drop for WebSocketServer {
 /// Builder for WebSocket server configuration
 #[derive(Debug)]
 pub struct WebSocketServerBuilder {
-    config: WebSocketConfig,
+    _config: WebSocketConfig,
     cleanup_interval: Option<u64>,
 }
 
@@ -218,38 +218,38 @@ impl WebSocketServerBuilder {
     /// Create a new builder
     pub fn new() -> Self {
         Self {
-            config: WebSocketConfig::default(),
+            _config: WebSocketConfig::default(),
             cleanup_interval: Some(300), // 5 minutes default
         }
     }
 
     /// Set maximum message size
     pub fn max_message_size(mut self, size: usize) -> Self {
-        self.config.max_message_size = Some(size);
+        self._config.max_message_size = Some(size);
         self
     }
 
     /// Set maximum frame size
     pub fn max_frame_size(mut self, size: usize) -> Self {
-        self.config.max_frame_size = Some(size);
+        self._config.max_frame_size = Some(size);
         self
     }
 
     /// Enable/disable automatic pong responses
     pub fn auto_pong(mut self, enabled: bool) -> Self {
-        self.config.auto_pong = enabled;
+        self._config.auto_pong = enabled;
         self
     }
 
     /// Set ping interval in seconds
     pub fn ping_interval(mut self, seconds: u64) -> Self {
-        self.config.ping_interval = Some(seconds);
+        self._config.ping_interval = Some(seconds);
         self
     }
 
     /// Set connection timeout in seconds
     pub fn connect_timeout(mut self, seconds: u64) -> Self {
-        self.config.connect_timeout = Some(seconds);
+        self._config.connect_timeout = Some(seconds);
         self
     }
 
@@ -267,7 +267,7 @@ impl WebSocketServerBuilder {
 
     /// Build the WebSocket server
     pub fn build(self) -> WebSocketServer {
-        let mut server = WebSocketServer::with_config(self.config);
+        let mut server = WebSocketServer::with_config(self._config);
         
         if let Some(interval) = self.cleanup_interval {
             server.start_cleanup_task(interval);

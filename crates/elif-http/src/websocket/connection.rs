@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 use tokio::time;
 use tokio_tungstenite::{accept_async, tungstenite, WebSocketStream};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 /// WebSocket connection wrapper - clean API over tokio-tungstenite
 #[derive(Clone)]
@@ -24,7 +24,7 @@ pub struct WebSocketConnection {
     /// Message sender channel
     sender: mpsc::UnboundedSender<WebSocketMessage>,
     /// Configuration
-    config: WebSocketConfig,
+    _config: WebSocketConfig,
 }
 
 /// Connection metadata for tracking and debugging
@@ -85,7 +85,7 @@ impl WebSocketConnection {
             state: state.clone(),
             metadata: metadata.clone(),
             sender,
-            config: config.clone(),
+            _config: config.clone(),
         };
 
         // Spawn the connection handler

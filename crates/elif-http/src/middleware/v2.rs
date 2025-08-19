@@ -250,7 +250,6 @@ mod tests {
     use super::*;
     use crate::request::ElifRequest;
     use crate::response::ElifResponse;
-    use axum::http::{HeaderMap, Method};
     
     /// Test middleware that adds a header to requests
     #[derive(Debug)]

@@ -17,7 +17,6 @@ use service_builder::builder;
 use serde_json;
 
 pub use crate::config::CsrfConfig;
-use crate::SecurityError;
 
 /// CSRF token store - in production this would be backed by Redis/database
 type TokenStore = Arc<tokio::sync::RwLock<HashMap<String, CsrfTokenData>>>;
@@ -82,32 +81,7 @@ impl CsrfMiddleware {
     
     /// Validate a CSRF token
     pub async fn validate_token(&self, token: &str, user_agent: Option<&str>) -> bool {
-        let store = self.token_store.read().await;
-        
-        if let Some(token_data) = store.get(token) {
-            // Check expiration
-            if time::OffsetDateTime::now_utc() > token_data.expires_at {
-                return false;
-            }
-            
-            // Check user agent if configured
-            if let Some(stored_hash) = &token_data.user_agent_hash {
-                if let Some(ua) = user_agent {
-                    let mut hasher = Sha256::new();
-                    hasher.update(ua.as_bytes());
-                    let ua_hash = format!("{:x}", hasher.finalize());
-                    if stored_hash != &ua_hash {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-            
-            true
-        } else {
-            false
-        }
+        Self::validate_token_internal(&self.token_store, token, user_agent).await
     }
     
     /// Remove a token after successful validation (single-use)
@@ -120,6 +94,36 @@ impl CsrfMiddleware {
     async fn cleanup_expired_tokens(&self, store: &mut HashMap<String, CsrfTokenData>) {
         let now = time::OffsetDateTime::now_utc();
         store.retain(|_, data| data.expires_at > now);
+    }
+    
+    /// Internal token validation logic
+    async fn validate_token_internal(
+        store: &TokenStore,
+        token: &str,
+        user_agent: Option<&str>,
+    ) -> bool {
+        let store_guard = store.read().await;
+        let Some(token_data) = store_guard.get(token) else {
+            return false;
+        };
+
+        if time::OffsetDateTime::now_utc() > token_data.expires_at {
+            return false;
+        }
+
+        if let Some(stored_hash) = &token_data.user_agent_hash {
+            let Some(ua) = user_agent else {
+                return false;
+            };
+            let mut hasher = sha2::Sha256::new();
+            hasher.update(ua.as_bytes());
+            let ua_hash = format!("{:x}", hasher.finalize());
+            if stored_hash != &ua_hash {
+                return false;
+            }
+        }
+
+        true
     }
     
     /// Check if path is exempt from CSRF protection
@@ -165,6 +169,11 @@ impl CsrfMiddleware {
 /// Implementation of our Middleware trait for CSRF protection
 impl Middleware for CsrfMiddleware {
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        // Check if exempt before async block
+        let is_exempt = self.is_exempt_path(request.uri.path());
+        let token = self.extract_token(&request.headers);
+        let store = self.token_store.clone();
+        
         Box::pin(async move {
             // Skip CSRF protection for safe methods (GET, HEAD, OPTIONS)
             if matches!(request.method, ElifMethod::GET | ElifMethod::HEAD | ElifMethod::OPTIONS) {
@@ -172,7 +181,7 @@ impl Middleware for CsrfMiddleware {
             }
             
             // Skip exempt paths
-            if self.is_exempt_path(request.uri.path()) {
+            if is_exempt {
                 return next.run(request).await;
             }
             
@@ -180,8 +189,10 @@ impl Middleware for CsrfMiddleware {
             let user_agent = request.headers.get_str("user-agent")
                 .and_then(|h| h.to_str().ok());
                 
-            if let Some(token) = self.extract_token(&request.headers) {
-                if self.validate_token(&token, user_agent).await {
+            if let Some(token) = token {
+                let is_valid = Self::validate_token_internal(&store, &token, user_agent).await;
+                
+                if is_valid {
                     // Consume token for single-use (optional - can be configured)
                     // self.consume_token(&token).await;
                     return next.run(request).await;
@@ -403,7 +414,7 @@ mod tests {
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
         // Create GET request
-        let mut headers = ElifHeaderMap::new();
+        let headers = ElifHeaderMap::new();
         let request = ElifRequest::new(
             ElifMethod::GET,
             "/test".parse().unwrap(),
@@ -426,7 +437,7 @@ mod tests {
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
         // Create POST request without CSRF token
-        let mut headers = ElifHeaderMap::new();
+        let headers = ElifHeaderMap::new();
         let request = ElifRequest::new(
             ElifMethod::POST,
             "/test".parse().unwrap(),
@@ -477,7 +488,7 @@ mod tests {
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
         // Test exempt exact path
-        let mut headers1 = ElifHeaderMap::new();
+        let headers1 = ElifHeaderMap::new();
         let request1 = ElifRequest::new(
             ElifMethod::POST,
             "/api/webhook".parse().unwrap(),
@@ -493,7 +504,7 @@ mod tests {
         assert_eq!(response1.status_code(), ElifStatusCode::OK);
         
         // Test exempt glob path
-        let mut headers2 = ElifHeaderMap::new();
+        let headers2 = ElifHeaderMap::new();
         let request2 = ElifRequest::new(
             ElifMethod::POST,
             "/public/upload".parse().unwrap(),

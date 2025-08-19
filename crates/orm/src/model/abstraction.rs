@@ -12,6 +12,7 @@ use crate::backends::{DatabasePool, DatabaseValue};
 /// Trait for database-abstracted model operations
 /// This trait provides methods that use the database abstraction layer
 /// instead of hardcoded PostgreSQL types
+#[allow(async_fn_in_trait)]
 pub trait ModelAbstracted: Model {
     /// Find a model by its primary key using database abstraction
     async fn find_abstracted(pool: &Arc<dyn DatabasePool>, id: Self::PrimaryKey) -> ModelResult<Option<Self>>

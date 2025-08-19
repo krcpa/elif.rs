@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 // Test providers for internal testing
 #[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct MockEmailProvider {
     name: String,
@@ -48,6 +49,7 @@ impl EmailProvider for MockEmailProvider {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct PanickingEmailProvider {
     name: String,

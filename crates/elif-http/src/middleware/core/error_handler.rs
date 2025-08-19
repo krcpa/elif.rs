@@ -129,7 +129,7 @@ mod tests {
     use crate::{
         middleware::v2::MiddlewarePipelineV2,
         request::ElifMethod,
-        response::headers::ElifHeaderMap,
+        response::{ElifResponse, headers::ElifHeaderMap},
     };
 
     #[tokio::test]
@@ -187,7 +187,9 @@ mod tests {
         
         let response = pipeline.execute(request, |_req| {
             Box::pin(async {
-                ElifResponse::ok().text("Success")
+                ElifResponse::ok().json_value(serde_json::json!({
+                    "message": "Success"
+                }))
             })
         }).await;
         

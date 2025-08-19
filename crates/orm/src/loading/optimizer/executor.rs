@@ -74,7 +74,7 @@ impl Default for ExecutionStats {
 /// Executes optimized query plans with parallel processing
 pub struct PlanExecutor {
     /// Batch loader for executing queries
-    batch_loader: BatchLoader,
+    _batch_loader: BatchLoader,
     /// Maximum number of parallel tasks
     max_parallel_tasks: usize,
     /// Timeout for individual queries
@@ -85,7 +85,7 @@ impl PlanExecutor {
     /// Create a new plan executor
     pub fn new(batch_loader: BatchLoader) -> Self {
         Self {
-            batch_loader,
+            _batch_loader: batch_loader,
             max_parallel_tasks: 10, // Reasonable default
             query_timeout: Duration::from_secs(30),
         }
@@ -98,7 +98,7 @@ impl PlanExecutor {
         query_timeout: Duration,
     ) -> Self {
         Self {
-            batch_loader,
+            _batch_loader: batch_loader,
             max_parallel_tasks,
             query_timeout,
         }
@@ -116,7 +116,7 @@ impl PlanExecutor {
         let mut errors = Vec::new();
 
         // Execute each phase
-        for (phase_index, phase) in plan.execution_phases.iter().enumerate() {
+        for (_, phase) in plan.execution_phases.iter().enumerate() {
             let phase_start = Instant::now();
             
             if phase.len() == 1 {
@@ -170,7 +170,7 @@ impl PlanExecutor {
         plan: &QueryPlan,
         connection: &sqlx::PgPool,
     ) -> HashMap<String, OrmResult<Vec<JsonValue>>> {
-        let mut handles: Vec<JoinHandle<(String, OrmResult<Vec<JsonValue>>)>> = Vec::new();
+        let _handles: Vec<JoinHandle<(String, OrmResult<Vec<JsonValue>>)>> = Vec::new();
         let mut results = HashMap::new();
 
         // Limit parallel tasks to avoid overwhelming the database
@@ -287,7 +287,7 @@ impl PlanExecutor {
     /// Execute query for child node (with parent relationship)  
     async fn execute_relationship_query(
         &self,
-        node: &QueryNode,
+        _node: &QueryNode,
         _connection: &sqlx::PgPool,
     ) -> OrmResult<Vec<JsonValue>> {
         // For relationship queries, we need parent IDs to load the related records
@@ -353,7 +353,7 @@ impl PlanExecutor {
 
     /// Static version of relationship query execution
     async fn execute_relationship_query_static(
-        node: &QueryNode,
+        _node: &QueryNode,
         _connection: &sqlx::PgPool,
     ) -> OrmResult<Vec<JsonValue>> {
         // For relationship queries, we need parent IDs to load the related records

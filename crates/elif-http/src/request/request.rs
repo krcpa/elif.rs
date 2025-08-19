@@ -207,6 +207,11 @@ impl ElifRequest {
         serde_json::from_slice(bytes)
             .map_err(|e| HttpError::bad_request(format!("Invalid JSON body: {}", e)))
     }
+    
+    /// Parse JSON body to specified type (async version for consistency)
+    pub async fn json_async<T: DeserializeOwned>(&self) -> HttpResult<T> {
+        self.json()
+    }
 
     /// Parse form data body to specified type
     pub fn form<T: DeserializeOwned>(&self) -> HttpResult<T> {
@@ -235,46 +240,62 @@ impl ElifRequest {
         serde_json::from_value::<T>(json_value)
             .map_err(|e| HttpError::bad_request(format!("Invalid path parameters: {}", e)))
     }
+    
+    /// Get a query parameter as a specific type
+    pub fn query_param_as<T>(&self, name: &str) -> HttpResult<Option<T>>
+    where 
+        T: std::str::FromStr,
+        T::Err: std::fmt::Display,
+    {
+        match self.query_param(name) {
+            Some(param) => {
+                let parsed = param.parse::<T>()
+                    .map_err(|e| HttpError::bad_request(format!("Invalid {} query parameter '{}': {}", name, param, e)))?;
+                Ok(Some(parsed))
+            }
+            None => Ok(None)
+        }
+    }
 
     /// Get User-Agent header
-    pub fn user_agent(&self) -> HttpResult<Option<String>> {
-        self.header_string("user-agent")
+    pub fn user_agent(&self) -> Option<String> {
+        self.header_string("user-agent").unwrap_or(None)
     }
 
     /// Get Authorization header
-    pub fn authorization(&self) -> HttpResult<Option<String>> {
-        self.header_string("authorization")
+    pub fn authorization(&self) -> Option<String> {
+        self.header_string("authorization").unwrap_or(None)
     }
 
     /// Extract Bearer token from Authorization header
-    pub fn bearer_token(&self) -> HttpResult<Option<String>> {
-        if let Some(auth) = self.authorization()? {
+    pub fn bearer_token(&self) -> Option<String> {
+        if let Some(auth) = self.authorization() {
             if auth.starts_with("Bearer ") {
-                Ok(Some(auth[7..].to_string()))
+                Some(auth[7..].to_string())
             } else {
-                Ok(None)
+                None
             }
         } else {
-            Ok(None)
+            None
         }
     }
 
     /// Get request IP address from headers or connection
-    pub fn client_ip(&self) -> HttpResult<Option<String>> {
+    pub fn client_ip(&self) -> Option<String> {
         // Try common forwarded headers first
-        if let Some(forwarded) = self.header_string("x-forwarded-for")? {
+        if let Ok(Some(forwarded)) = self.header_string("x-forwarded-for") {
             // Take first IP if multiple
             if let Some(ip) = forwarded.split(',').next() {
-                return Ok(Some(ip.trim().to_string()));
+                return Some(ip.trim().to_string());
             }
         }
         
-        if let Some(real_ip) = self.header_string("x-real-ip")? {
-            return Ok(Some(real_ip));
+        if let Ok(Some(real_ip)) = self.header_string("x-real-ip") {
+            return Some(real_ip);
         }
         
         // Could extend with connection info if available
-        Ok(None)
+        None
     }
 
     /// Check if request is HTTPS
@@ -323,8 +344,8 @@ impl ElifRequest {
 
     /// Convert Axum Request to ElifRequest for backward compatibility
     pub(crate) async fn from_axum_request(request: axum::extract::Request) -> Self {
-        use axum::body::Body;
-        use axum::extract::Request;
+        
+        
         
         let (parts, body) = request.into_parts();
         
@@ -373,24 +394,79 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
-    fn test_path_param_extraction() {
+    fn test_new_path_param_methods() {
         let mut params = HashMap::new();
         params.insert("id".to_string(), "123".to_string());
         params.insert("slug".to_string(), "test-post".to_string());
 
-        let request = ElifRequest::new(
+        let mut request = ElifRequest::new(
             ElifMethod::GET,
             "/users/123/posts/test-post".parse().unwrap(),
             ElifHeaderMap::new(),
-        ).with_path_params(params);
+        );
+        request.path_params = params;
 
+        // Test existing convenient methods
         assert_eq!(request.path_param("id"), Some(&"123".to_string()));
         assert_eq!(request.path_param("slug"), Some(&"test-post".to_string()));
         assert_eq!(request.path_param("nonexistent"), None);
 
-        // Test parsed path param
+        // Test typed path params (existing method)
         let id: u32 = request.path_param_parsed("id").unwrap();
         assert_eq!(id, 123);
+        
+        let slug: String = request.path_param_parsed("slug").unwrap();
+        assert_eq!(slug, "test-post");
+        
+        // Test error on invalid type conversion
+        assert!(request.path_param_parsed::<u32>("slug").is_err());
+    }
+    
+    #[test]
+    fn test_query_param_methods() {
+        let mut query_params = HashMap::new();
+        query_params.insert("page".to_string(), "2".to_string());
+        query_params.insert("search".to_string(), "hello world".to_string());
+
+        let mut request = ElifRequest::new(
+            ElifMethod::GET,
+            "/search?page=2&search=hello%20world".parse().unwrap(),
+            ElifHeaderMap::new(),
+        );
+        request.query_params = query_params;
+
+        // Test query param access
+        assert_eq!(request.query_param("page"), Some(&"2".to_string()));
+        assert_eq!(request.query_param("search"), Some(&"hello world".to_string()));
+        assert_eq!(request.query_param("nonexistent"), None);
+
+        // Test typed query params
+        let page: Option<u32> = request.query_param_as("page").unwrap();
+        assert_eq!(page, Some(2));
+        
+        let nonexistent: Option<u32> = request.query_param_as("nonexistent").unwrap();
+        assert_eq!(nonexistent, None);
+        
+        // Test error on invalid type conversion
+        assert!(request.query_param_as::<u32>("search").is_err());
+    }
+    
+    #[test]
+    fn test_header_method() {
+        let mut headers = ElifHeaderMap::new();
+        headers.insert("Content-Type".parse().unwrap(), "application/json".parse().unwrap());
+        headers.insert("User-Agent".parse().unwrap(), "test-client/1.0".parse().unwrap());
+
+        let request = ElifRequest::new(
+            ElifMethod::POST,
+            "/api/test".parse().unwrap(),
+            headers,
+        );
+
+        // Test header access
+        assert_eq!(request.header_string("content-type").unwrap(), Some("application/json".to_string()));
+        assert_eq!(request.header_string("user-agent").unwrap(), Some("test-client/1.0".to_string()));
+        assert_eq!(request.header_string("nonexistent").unwrap(), None);
     }
 
     #[test]
@@ -445,7 +521,7 @@ mod tests {
             headers,
         );
 
-        let token = request.bearer_token().unwrap().unwrap();
+        let token = request.bearer_token().unwrap();
         assert_eq!(token, "abc123xyz");
     }
 

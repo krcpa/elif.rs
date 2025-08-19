@@ -1,10 +1,9 @@
-use elif_core::{ElifError, FieldSpec};
+use elif_core::{ElifError, specs::FieldSpec};
 use crate::generators::{
     resource_generator::{ResourceGenerator, ResourceRelationship, GenerationOptions, GeneratedFile},
     auth_generator::{AuthGenerator, AuthOptions},
     api_generator::{ApiGenerator, ApiOptions, ApiResource},
 };
-use std::path::PathBuf;
 
 pub async fn resource(
     name: &str,

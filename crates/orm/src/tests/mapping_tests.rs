@@ -3,7 +3,7 @@
 //! Tests model mapping from database rows without requiring a real database connection.
 //! Uses mock database rows to test the hydration and serialization functionality.
 
-use crate::{Model, ModelResult, ModelError, PrimaryKey, OrmResult};
+use crate::{Model, ModelError, ModelResult, OrmResult};
 use crate::backends::{DatabaseRow, DatabaseValue, DatabaseRowExt};
 use serde_json::Value as JsonValue;
 use serde::{Deserialize, Serialize};

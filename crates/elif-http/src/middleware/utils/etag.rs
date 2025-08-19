@@ -6,7 +6,7 @@
 use crate::middleware::v2::{Middleware, Next, NextFuture};
 use crate::request::{ElifRequest, ElifMethod};
 use crate::response::{ElifResponse, ElifHeaderValue};
-use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -481,7 +481,6 @@ impl Middleware for ETagMiddleware {
 mod tests {
     use super::*;
     use crate::response::ElifResponse;
-    use axum::http::{HeaderMap, Method, StatusCode};
     use crate::request::ElifRequest;
     
     #[test]

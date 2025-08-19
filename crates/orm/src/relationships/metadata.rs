@@ -1,6 +1,5 @@
 //! Relationship Metadata System - Core metadata definitions for relationships
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use crate::error::{ModelError, ModelResult};
 

@@ -1,4 +1,4 @@
-use elif_core::{ElifError, ResourceSpec, StorageSpec, FieldSpec, ApiSpec, OperationSpec};
+use elif_core::{ElifError, ResourceSpec, StorageSpec, specs::FieldSpec, ApiSpec, OperationSpec};
 use std::path::PathBuf;
 
 pub fn new_resource(name: &str, route: &str, fields_str: &str) -> Result<(), ElifError> {

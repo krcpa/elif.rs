@@ -10,7 +10,6 @@ use uuid::Uuid;
 use crate::{
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
-    response::ElifResponse,
 };
 
 /// Configuration for tracing middleware
@@ -117,51 +116,12 @@ impl TracingMiddleware {
         self
     }
 
-    /// Check if header is sensitive
-    fn is_sensitive_header(&self, name: &str) -> bool {
-        if self.config.include_sensitive_headers {
-            return false;
-        }
-        
-        let name_lower = name.to_lowercase();
-        self.config.sensitive_headers.iter().any(|h| h == &name_lower)
+    #[cfg(test)]
+    pub fn is_sensitive_header(&self, header: &str) -> bool {
+        let header_lower = header.to_lowercase();
+        self.config.sensitive_headers.iter().any(|h| h == &header_lower)
     }
 
-    /// Format headers for tracing
-    fn format_headers(&self, headers: &crate::response::ElifHeaderMap) -> String {
-        let mut header_strings = Vec::new();
-        
-        for name in headers.keys() {
-            let name_str = name.as_str();
-            if let Some(value) = headers.get_str(name_str) {
-                let value_str = if self.is_sensitive_header(name_str) {
-                    "[REDACTED]"
-                } else {
-                    value.to_str().unwrap_or("[INVALID_UTF8]")
-                };
-                header_strings.push(format!("{}={}", name_str, value_str));
-            }
-        }
-        
-        header_strings.join(", ")
-    }
-
-    /// Format response headers for tracing
-    fn format_response_headers(&self, headers: &crate::response::ElifHeaderMap) -> String {
-        let mut header_strings = Vec::new();
-        
-        for (name, value) in headers.iter() {
-            let name_str = name.as_str();
-            let value_str = if self.is_sensitive_header(name_str) {
-                "[REDACTED]"
-            } else {
-                value.to_str().unwrap_or("[INVALID_UTF8]")
-            };
-            header_strings.push(format!("{}={}", name_str, value_str));
-        }
-        
-        header_strings.join(", ")
-    }
 }
 
 impl Default for TracingMiddleware {

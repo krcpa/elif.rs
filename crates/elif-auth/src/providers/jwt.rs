@@ -364,7 +364,7 @@ where
     
     async fn authenticate(
         &self,
-        credentials: &Self::Credentials,
+        _credentials: &Self::Credentials,
     ) -> AuthResult<AuthenticationResult<User, Self::Token>> {
         // Note: In a real implementation, you would:
         // 1. Look up the user by credentials

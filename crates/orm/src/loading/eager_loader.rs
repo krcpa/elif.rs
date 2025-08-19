@@ -1,5 +1,5 @@
 use crate::{
-    error::{OrmError, OrmResult},
+    error::OrmResult,
     loading::{
         batch_loader::BatchLoader,
         optimizer::{QueryOptimizer, QueryPlan, QueryNode, PlanExecutor, OptimizationStrategy},
@@ -80,7 +80,7 @@ pub struct OptimizedEagerLoader {
     batch_loader: BatchLoader,
     query_optimizer: QueryOptimizer,
     plan_executor: PlanExecutor,
-    query_deduplicator: QueryDeduplicator,
+    _query_deduplicator: QueryDeduplicator,
     config: EagerLoadConfig,
 }
 
@@ -106,7 +106,7 @@ impl OptimizedEagerLoader {
             batch_loader,
             query_optimizer,
             plan_executor,
-            query_deduplicator,
+            _query_deduplicator: query_deduplicator,
             config,
         }
     }
@@ -340,7 +340,7 @@ impl OptimizedEagerLoader {
         
         // For now, create a simplified mapping
         // In a real implementation, this would properly hydrate relationships
-        for (i, root_id) in root_ids.iter().enumerate() {
+        for (_, root_id) in root_ids.iter().enumerate() {
             let mut entity_data = serde_json::json!({
                 "id": root_id,
                 "relationships": {}

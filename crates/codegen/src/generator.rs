@@ -1,4 +1,4 @@
-use elif_core::{ElifError, ResourceSpec, FieldSpec};
+use elif_core::{ElifError, ResourceSpec, specs::FieldSpec};
 use crate::templates::{render_template, MODEL_TEMPLATE, HANDLER_TEMPLATE, MIGRATION_TEMPLATE, TEST_TEMPLATE};
 use crate::writer::CodeWriter;
 use std::path::PathBuf;

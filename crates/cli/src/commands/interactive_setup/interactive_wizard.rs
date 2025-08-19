@@ -1,10 +1,9 @@
 use clap::Args;
-use crate::command_system::{CommandHandler, CommandError, CommandDefinition, impl_command};
-use crate::interactive::{Prompt, Format};
-use async_trait::async_trait;
-use super::interactive_config::{ProjectConfig, InteractiveConfigHandler};
+use elif_core::ElifError;
+use crate::interactive::Prompt;
+use super::interactive_config::{InteractiveConfig, ProjectSettings};
 
-/// Interactive setup command arguments
+/// Interactive setup wizard arguments
 #[derive(Args, Debug, Clone)]
 pub struct InteractiveSetupArgs {
     /// Skip interactive mode and use defaults
@@ -16,118 +15,84 @@ pub struct InteractiveSetupArgs {
     pub verbose: bool,
 }
 
-impl_command!(
-    InteractiveSetupArgs,
-    "interactive-setup",
-    "Interactive project setup and configuration wizard",
-    "Run an interactive setup wizard to configure your elif project.\n\n\
-     Features:\n\
-     - Database configuration\n\
-     - Authentication setup\n\
-     - Environment configuration\n\
-     - Development tools setup\n\n\
-     Examples:\n\
-       elifrs interactive-setup\n\
-       elifrs interactive-setup --verbose\n\
-       elifrs interactive-setup --non-interactive"
-);
-
-/// Interactive setup command handler
-pub struct InteractiveSetupCommand {
-    pub args: InteractiveSetupArgs,
-    config_handler: InteractiveConfigHandler,
+/// Run the interactive project setup wizard
+pub async fn run_wizard(args: InteractiveSetupArgs) -> Result<(), ElifError> {
+    if args.verbose {
+        println!("🔧 Interactive Setup Configuration:");
+        println!("  Non-interactive: {}", args.non_interactive);
+    }
+    
+    println!("🧙 Welcome to the elif.rs Interactive Setup Wizard!");
+    println!("====================================================");
+    
+    // Validate project structure
+    let is_valid_project = InteractiveConfig::validate_project()?;
+    
+    if !is_valid_project {
+        println!("⚠️  This doesn't appear to be an elif project directory.");
+        if !args.non_interactive {
+            let should_continue = Prompt::confirm("Continue anyway?", false)
+                .map_err(|e| ElifError::Codegen { message: format!("Input error: {}", e) })?;
+            
+            if !should_continue {
+                println!("👋 Setup cancelled. Run 'elifrs new <project_name>' to create a new project.");
+                return Ok(());
+            }
+        }
+    }
+    
+    let settings = if args.non_interactive {
+        println!("🤖 Using default settings (non-interactive mode)");
+        InteractiveConfig::get_recommended_settings()
+    } else {
+        gather_user_preferences()?
+    };
+    
+    apply_settings(settings, args.verbose).await?;
+    
+    println!("\n✅ Interactive setup completed!");
+    println!("🚀 Your elif project is ready to go!");
+    
+    Ok(())
 }
 
-#[async_trait]
-impl CommandHandler for InteractiveSetupCommand {
-    async fn handle(&self) -> Result<(), CommandError> {
-        if self.args.non_interactive {
-            self.non_interactive_setup().await
-        } else {
-            self.interactive_setup().await
-        }
-    }
+/// Gather user preferences through interactive prompts
+fn gather_user_preferences() -> Result<ProjectSettings, ElifError> {
+    println!("\n📋 Let's configure your project:");
     
-    fn name(&self) -> &'static str {
-        InteractiveSetupArgs::NAME
-    }
+    let use_hot_reload = Prompt::confirm("Enable hot reload for development?", true)
+        .map_err(|e| ElifError::Codegen { message: format!("Input error: {}", e) })?;
     
-    fn description(&self) -> &'static str {
-        InteractiveSetupArgs::DESCRIPTION
-    }
+    let default_port = Prompt::number("Default server port", Some(3000u16))
+        .map_err(|e| ElifError::Codegen { message: format!("Input error: {}", e) })?;
     
-    fn help(&self) -> Option<&'static str> {
-        InteractiveSetupArgs::HELP
-    }
+    let include_auth = Prompt::confirm("Include authentication scaffolding?", false)
+        .map_err(|e| ElifError::Codegen { message: format!("Input error: {}", e) })?;
+    
+    let include_database = Prompt::confirm("Include database configuration?", true)
+        .map_err(|e| ElifError::Codegen { message: format!("Input error: {}", e) })?;
+    
+    Ok(ProjectSettings {
+        use_hot_reload,
+        default_port,
+        include_auth,
+        include_database,
+    })
 }
 
-impl InteractiveSetupCommand {
-    pub fn new(args: InteractiveSetupArgs) -> Self {
-        Self { 
-            config_handler: InteractiveConfigHandler::new(args.verbose),
-            args,
-        }
+/// Apply the configured settings to the project
+async fn apply_settings(settings: ProjectSettings, verbose: bool) -> Result<(), ElifError> {
+    if verbose {
+        println!("\n📝 Applying settings:");
+        println!("  Hot reload: {}", settings.use_hot_reload);
+        println!("  Default port: {}", settings.default_port);
+        println!("  Include auth: {}", settings.include_auth);
+        println!("  Include database: {}", settings.include_database);
     }
     
-    async fn interactive_setup(&self) -> Result<(), CommandError> {
-        Format::header("🚀 elif.rs Interactive Setup");
-        
-        println!("Welcome to the elif.rs project setup wizard!");
-        println!("This will help you configure your project with the best settings.");
-        println!();
-        
-        if !Prompt::confirm("Would you like to continue with the setup?", true)
-            .map_err(|e| CommandError::Io(e))? 
-        {
-            Format::info("Setup cancelled by user");
-            return Ok(());
-        }
-        
-        let mut config = ProjectConfig::default();
-        
-        // Project configuration
-        self.config_handler.configure_project(&mut config).await?;
-        
-        // Database configuration
-        self.config_handler.configure_database(&mut config).await?;
-        
-        // Authentication configuration
-        self.config_handler.configure_auth(&mut config).await?;
-        
-        // Server configuration
-        self.config_handler.configure_server(&mut config).await?;
-        
-        // Logging configuration
-        self.config_handler.configure_logging(&mut config).await?;
-        
-        // Summary
-        self.config_handler.show_summary(&config).await?;
-        
-        // Apply configuration
-        if Prompt::confirm("Apply this configuration?", true)
-            .map_err(|e| CommandError::Io(e))? 
-        {
-            self.config_handler.apply_configuration(&config).await?;
-            Format::success("Setup completed successfully!");
-        } else {
-            Format::info("Setup cancelled - no changes were made");
-        }
-        
-        Ok(())
-    }
+    // Placeholder implementation
+    println!("\n⚠️  Setting application is not yet fully implemented");
+    println!("📋 TODO: Generate configuration files and project structure");
     
-    async fn non_interactive_setup(&self) -> Result<(), CommandError> {
-        Format::info("Running non-interactive setup with default values");
-        
-        let config = ProjectConfig::default();
-        
-        if self.args.verbose {
-            self.config_handler.show_summary(&config).await?;
-        }
-        
-        self.config_handler.apply_configuration(&config).await?;
-        Format::success("Non-interactive setup completed!");
-        
-        Ok(())
-    }
+    Ok(())
 }

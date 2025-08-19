@@ -11,14 +11,26 @@ pub mod middleware;
 pub mod utils;
 pub mod rbac;
 
-// Re-exports for convenient access
-pub use config::*;
-pub use error::*;
-pub use traits::*;
-pub use providers::*;
-pub use utils::*;
-pub use rbac::*;
+// Prelude-style re-exports for core functionality
+// Only export what actually exists to avoid conflicts
 
+// Error handling
+pub use error::AuthError;
+
+// Core authentication traits
+pub use traits::{Authenticatable, AuthProvider, UserContext};
+
+// Configuration (only existing types)
+pub use config::{AuthConfig, JwtConfig, SessionConfig, PasswordConfig, MfaConfig, AuthRateLimitConfig};
+
+// Providers (minimal specific exports)
+pub use providers::jwt::JwtProvider;
+pub use providers::session::SessionProvider;
+
+// RBAC system (only existing types)
+pub use rbac::{Role, Permission, UserRole};
+
+// Note: utils module contains implementation details, not exported
 /// Authentication result type alias
 pub type AuthResult<T> = Result<T, AuthError>;
 

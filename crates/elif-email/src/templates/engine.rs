@@ -9,7 +9,7 @@ use tera::{Tera, Context, Value, to_value, Result as TeraResult};
 /// Email template engine using Tera
 pub struct TemplateEngine {
     tera: RwLock<Tera>,
-    config: TemplateConfig,
+    _config: TemplateConfig,
     templates: RwLock<HashMap<String, EmailTemplate>>,
 }
 
@@ -26,7 +26,7 @@ impl TemplateEngine {
         
         Ok(Self { 
             tera: RwLock::new(tera), 
-            config,
+            _config: config,
             templates: RwLock::new(HashMap::new()),
         })
     }

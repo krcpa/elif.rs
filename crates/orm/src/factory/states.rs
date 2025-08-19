@@ -271,6 +271,10 @@ impl CustomState {
             name: name.into(),
         }
     }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
     
     pub fn with(mut self, key: impl Into<String>, value: Value) -> Self {
         self.modifications.insert(key.into(), value);

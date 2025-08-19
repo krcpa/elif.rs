@@ -1,8 +1,6 @@
 //! Query Builder SELECT operations
 
-use serde_json::Value;
 use super::builder::QueryBuilder;
-use super::types::*;
 
 impl<M> QueryBuilder<M> {
     /// Add SELECT fields to the query

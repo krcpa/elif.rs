@@ -7,8 +7,7 @@ use crate::{CacheBackend, CacheError, CacheResult, CacheTag, CacheKey};
 use async_trait::async_trait;
 use dashmap::DashMap;
 use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
+    collections::HashSet,
     time::Duration,
 };
 use serde::{Deserialize, Serialize};

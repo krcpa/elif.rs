@@ -6,7 +6,7 @@ formats including Postman collections and Insomnia workspaces.
 */
 
 use crate::{
-    error::{OpenApiError, OpenApiResult},
+    error::OpenApiResult,
     specification::OpenApiSpec,
 };
 use serde::{Deserialize, Serialize};
@@ -480,8 +480,7 @@ impl InsomniaRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::specification::{ApiInfo, OpenApiSpec, Operation};
-    use std::collections::HashMap;
+    use crate::specification::OpenApiSpec;
 
     #[test]
     fn test_postman_collection_creation() {

@@ -3,7 +3,7 @@ use crate::{
 };
 use serde_json::Value as JsonValue;
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;

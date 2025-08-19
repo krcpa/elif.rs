@@ -240,3 +240,425 @@ fn convert_discovered_routes_to_metadata(project_structure: &ProjectStructure) -
     
     Ok(routes)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::{tempdir, TempDir};
+    use std::fs;
+    use std::path::PathBuf;
+
+    /// Test utilities for OpenAPI functionality
+    pub struct OpenApiTestUtils;
+
+    impl OpenApiTestUtils {
+        /// Create a temporary test project structure
+        pub fn create_test_project() -> (TempDir, PathBuf) {
+            let temp_dir = tempdir().expect("Failed to create temp directory");
+            let project_root = temp_dir.path().to_path_buf();
+
+            // Create basic project structure
+            fs::create_dir_all(project_root.join("src/controllers")).unwrap();
+            fs::create_dir_all(project_root.join("src/models")).unwrap();
+            fs::create_dir_all(project_root.join("target")).unwrap();
+
+            // Create a mock Cargo.toml
+            fs::write(
+                project_root.join("Cargo.toml"),
+                r#"[package]
+name = "test-project"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+elif-core = "0.5.0""#
+            ).unwrap();
+
+            // Create a basic controller
+            fs::write(
+                project_root.join("src/controllers/user_controller.rs"),
+                r#"use elif_http::{Request, Response, Controller};
+
+pub struct UserController;
+
+impl Controller for UserController {
+    /// Get all users
+    pub async fn index(req: Request) -> Response {
+        todo!()
+    }
+    
+    /// Get user by ID
+    pub async fn show(req: Request) -> Response {
+        todo!()
+    }
+    
+    /// Create new user
+    pub async fn create(req: Request) -> Response {
+        todo!()
+    }
+    
+    /// Update existing user
+    pub async fn update(req: Request) -> Response {
+        todo!()
+    }
+    
+    /// Delete user
+    pub async fn destroy(req: Request) -> Response {
+        todo!()
+    }
+}"#
+            ).unwrap();
+
+            // Create a basic model
+            fs::write(
+                project_root.join("src/models/user.rs"),
+                r#"use elif_orm::Model;
+use serde::{Serialize, Deserialize};
+
+#[derive(Model, Serialize, Deserialize)]
+pub struct User {
+    pub id: i32,
+    pub name: String,
+    pub email: String,
+    pub created_at: String,
+    pub updated_at: String,
+}"#
+            ).unwrap();
+
+            (temp_dir, project_root)
+        }
+
+        /// Create a mock project structure for testing
+        pub fn create_mock_project_structure() -> ProjectStructure {
+            use elif_openapi::endpoints::{ControllerInfo, EndpointMetadata, EndpointParameter, ParameterSource};
+
+            ProjectStructure {
+                metadata: elif_openapi::discovery::ProjectMetadata {
+                    name: "test-api".to_string(),
+                    version: "1.0.0".to_string(),
+                    description: Some("Test API".to_string()),
+                    authors: vec!["Test Author".to_string()],
+                },
+                controllers: vec![
+                    ControllerInfo::new("UserController")
+                        .with_base_path("/api/users")
+                        .add_endpoint(
+                            EndpointMetadata::new("index", "GET", "/")
+                                .with_documentation("List all users")
+                        )
+                        .add_endpoint(
+                            EndpointMetadata::new("show", "GET", "/:id")
+                                .with_documentation("Get user by ID")
+                                .with_parameter(EndpointParameter {
+                                    name: "id".to_string(),
+                                    param_type: "i32".to_string(),
+                                    source: ParameterSource::Path,
+                                    optional: false,
+                                    documentation: Some("User ID".to_string()),
+                                })
+                        )
+                ],
+                models: vec![
+                    elif_openapi::discovery::ModelInfo {
+                        name: "User".to_string(),
+                        fields: vec![
+                            elif_openapi::discovery::ModelField {
+                                name: "id".to_string(),
+                                field_type: "i32".to_string(),
+                                optional: false,
+                                documentation: Some("Unique user identifier".to_string()),
+                            },
+                            elif_openapi::discovery::ModelField {
+                                name: "name".to_string(),
+                                field_type: "String".to_string(),
+                                optional: false,
+                                documentation: Some("User's full name".to_string()),
+                            },
+                            elif_openapi::discovery::ModelField {
+                                name: "email".to_string(),
+                                field_type: "String".to_string(),
+                                optional: false,
+                                documentation: Some("User's email address".to_string()),
+                            },
+                        ],
+                        documentation: Some("User model".to_string()),
+                        derives: vec!["Debug".to_string(), "Clone".to_string(), "Serialize".to_string()],
+                    }
+                ],
+            }
+        }
+
+        /// Validate that a generated OpenAPI spec contains expected routes
+        pub fn validate_openapi_spec(spec_path: &str, expected_paths: &[&str]) -> bool {
+            if !Path::new(spec_path).exists() {
+                return false;
+            }
+
+            let content = fs::read_to_string(spec_path).unwrap();
+            
+            // For JSON specs
+            if spec_path.ends_with(".json") {
+                let spec: serde_json::Value = serde_json::from_str(&content).unwrap();
+                if let Some(paths) = spec["paths"].as_object() {
+                    for expected_path in expected_paths {
+                        if !paths.contains_key(*expected_path) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+            }
+            
+            // For YAML specs, do simple string matching
+            if spec_path.ends_with(".yaml") || spec_path.ends_with(".yml") {
+                for expected_path in expected_paths {
+                    if !content.contains(expected_path) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            
+            false
+        }
+
+        /// Clean up test files
+        pub fn cleanup_test_files(files: &[&str]) {
+            for file in files {
+                let _ = fs::remove_file(file);
+            }
+            let _ = fs::remove_dir_all("target");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openapi_generation_with_default_settings() {
+        let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
+        
+        // Change to project directory for the test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&project_root).unwrap();
+
+        // Test generation with defaults (JSON format)
+        let result = generate(None, None).await;
+        
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+        
+        assert!(result.is_ok(), "OpenAPI generation should succeed: {:?}", result);
+        
+        let expected_file = project_root.join("target/_openapi.json");
+        assert!(expected_file.exists(), "Default JSON file should be created");
+        
+        // Validate the generated specification contains basic structure
+        let content = fs::read_to_string(&expected_file).unwrap();
+        assert!(content.contains("openapi"), "Should contain OpenAPI version");
+        assert!(content.contains("/health"), "Should contain health check endpoint");
+    }
+
+    #[tokio::test] 
+    async fn test_openapi_generation_yaml_format() {
+        let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
+        
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&project_root).unwrap();
+
+        let result = generate(None, Some("yaml".to_string())).await;
+        
+        std::env::set_current_dir(original_dir).unwrap();
+        
+        assert!(result.is_ok(), "YAML generation should succeed");
+        
+        let expected_file = project_root.join("target/_openapi.yaml");
+        assert!(expected_file.exists(), "YAML file should be created");
+        
+        let content = fs::read_to_string(&expected_file).unwrap();
+        assert!(content.contains("openapi:"), "Should contain YAML OpenAPI header");
+        assert!(content.contains("/health"), "Should contain health check endpoint");
+    }
+
+    #[tokio::test]
+    async fn test_openapi_generation_custom_output_path() {
+        let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
+        
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&project_root).unwrap();
+
+        let custom_path = "docs/api.json";
+        let result = generate(Some(custom_path.to_string()), Some("json".to_string())).await;
+        
+        std::env::set_current_dir(original_dir).unwrap();
+        
+        assert!(result.is_ok(), "Custom path generation should succeed");
+        
+        let expected_file = project_root.join(custom_path);
+        assert!(expected_file.exists(), "Custom path file should be created");
+    }
+
+    #[tokio::test]
+    async fn test_route_metadata_conversion() {
+        let project_structure = OpenApiTestUtils::create_mock_project_structure();
+        let routes = convert_discovered_routes_to_metadata(&project_structure).unwrap();
+        
+        // Should have health check route plus discovered routes
+        assert!(routes.len() >= 3, "Should have at least health + 2 user routes");
+        
+        // Find the health check route
+        let health_route = routes.iter().find(|r| r.path == "/health").unwrap();
+        assert_eq!(health_route.method, "GET");
+        assert_eq!(health_route.operation_id, Some("healthCheck".to_string()));
+        
+        // Find user routes
+        let user_index = routes.iter().find(|r| r.path == "/api/users/").unwrap();
+        assert_eq!(user_index.method, "GET");
+        assert!(user_index.tags.contains(&"UserController".to_string()));
+        
+        let user_show = routes.iter().find(|r| r.path == "/api/users/:id").unwrap();
+        assert_eq!(user_show.method, "GET");
+        assert!(!user_show.parameters.is_empty(), "Show route should have ID parameter");
+    }
+
+    #[tokio::test]
+    async fn test_export_postman_format() {
+        let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
+        
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&project_root).unwrap();
+
+        // Generate OpenAPI spec first
+        let _ = generate(None, None).await;
+        
+        // Test Postman export
+        let output_path = "test-collection.json";
+        let result = export("postman".to_string(), output_path.to_string()).await;
+        
+        std::env::set_current_dir(original_dir).unwrap();
+        
+        assert!(result.is_ok(), "Postman export should succeed");
+        
+        let exported_file = project_root.join(output_path);
+        assert!(exported_file.exists(), "Postman collection file should be created");
+        
+        // Validate it's valid JSON
+        let content = fs::read_to_string(&exported_file).unwrap();
+        let _: serde_json::Value = serde_json::from_str(&content).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_export_insomnia_format() {
+        let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
+        
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&project_root).unwrap();
+
+        // Generate OpenAPI spec first  
+        let _ = generate(None, None).await;
+        
+        // Test Insomnia export
+        let output_path = "test-workspace.json";
+        let result = export("insomnia".to_string(), output_path.to_string()).await;
+        
+        std::env::set_current_dir(original_dir).unwrap();
+        
+        assert!(result.is_ok(), "Insomnia export should succeed");
+        
+        let exported_file = project_root.join(output_path);
+        assert!(exported_file.exists(), "Insomnia workspace file should be created");
+        
+        // Validate it's valid JSON
+        let content = fs::read_to_string(&exported_file).unwrap();
+        let _: serde_json::Value = serde_json::from_str(&content).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_export_unsupported_format() {
+        let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
+        
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&project_root).unwrap();
+
+        // Generate OpenAPI spec first
+        let _ = generate(None, None).await;
+        
+        // Test unsupported format
+        let result = export("unsupported".to_string(), "output.json".to_string()).await;
+        
+        std::env::set_current_dir(original_dir).unwrap();
+        
+        assert!(result.is_err(), "Unsupported format should fail");
+        assert!(result.unwrap_err().to_string().contains("Unsupported export format"));
+    }
+
+    #[tokio::test]
+    async fn test_swagger_ui_generation() {
+        let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
+        
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&project_root).unwrap();
+
+        let result = serve(Some(8080)).await;
+        
+        std::env::set_current_dir(original_dir).unwrap();
+        
+        assert!(result.is_ok(), "Swagger UI generation should succeed");
+        
+        let swagger_file = project_root.join("target/_swagger.html");
+        assert!(swagger_file.exists(), "Swagger HTML file should be created");
+        
+        let content = fs::read_to_string(&swagger_file).unwrap();
+        assert!(content.contains("<html"), "Should be valid HTML");
+        assert!(content.contains("swagger"), "Should contain Swagger UI content");
+    }
+
+    #[tokio::test]
+    async fn test_auto_generation_on_export() {
+        let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
+        
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&project_root).unwrap();
+
+        // Export without generating first - should auto-generate
+        let result = export("postman".to_string(), "auto-gen.json".to_string()).await;
+        
+        std::env::set_current_dir(original_dir).unwrap();
+        
+        assert!(result.is_ok(), "Auto-generation during export should work");
+        
+        // Both OpenAPI spec and export should exist
+        let spec_file = project_root.join("target/_openapi.json");
+        let export_file = project_root.join("auto-gen.json");
+        assert!(spec_file.exists(), "OpenAPI spec should be auto-generated");
+        assert!(export_file.exists(), "Export file should be created");
+    }
+
+    #[test]
+    fn test_openapi_utils() {
+        // Test the utility functions
+        let test_paths = vec!["/health", "/users", "/users/:id"];
+        
+        // These would normally be tested with real files, but we'll test the logic
+        assert!(OpenApiTestUtils::validate_openapi_spec(
+            "nonexistent.json", 
+            &test_paths
+        ) == false, "Should return false for non-existent file");
+        
+        // Test cleanup utility
+        OpenApiTestUtils::cleanup_test_files(&["test1.json", "test2.yaml"]);
+        // No assertions needed - just ensuring it doesn't panic
+    }
+
+    #[test]
+    fn test_mock_project_structure() {
+        let project = OpenApiTestUtils::create_mock_project_structure();
+        
+        assert_eq!(project.metadata.name, "test-api");
+        assert_eq!(project.metadata.version, "1.0.0");
+        assert!(!project.controllers.is_empty());
+        assert!(!project.models.is_empty());
+        
+        let user_controller = &project.controllers[0];
+        assert_eq!(user_controller.name, "UserController");
+        assert!(user_controller.base_path.is_some());
+        assert!(!user_controller.endpoints.is_empty());
+    }
+}

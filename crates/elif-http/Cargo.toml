@@ -63,6 +63,7 @@ auth = ["elif-auth"]
 orm = []
 
 [dev-dependencies]
+elif-testing = "0.3.0"
 tokio-test = "0.4"
 tracing-test = "0.2"
 once_cell = "1.21"

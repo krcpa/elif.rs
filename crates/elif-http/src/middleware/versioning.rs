@@ -1,5 +1,5 @@
 use crate::{
-    errors::{HttpError, HttpResult},
+    errors::{HttpError},
     request::ElifRequest,
     response::ElifResponse,
     middleware::v2::{Middleware, Next, NextFuture},
@@ -163,99 +163,6 @@ impl VersioningMiddleware {
     /// Create new versioning middleware
     pub fn new(config: VersioningConfig) -> Self {
         Self { config }
-    }
-
-    /// Extract version from request based on strategy
-    fn extract_version_from_axum(&self, request: &axum::extract::Request) -> HttpResult<Option<String>> {
-        match &self.config.strategy {
-            VersionStrategy::UrlPath => {
-                // Extract version from URL path (e.g., /api/v1/users -> v1)
-                let path = request.uri().path();
-                if let Some(captures) = URL_PATH_VERSION_REGEX.captures(path) {
-                    if let Some(version) = captures.get(1) {
-                        return Ok(Some(format!("v{}", version.as_str())));
-                    }
-                }
-                Ok(None)
-            },
-            VersionStrategy::Header(header_name) => {
-                Ok(request.headers()
-                    .get(header_name)
-                    .and_then(|h| h.to_str().ok())
-                    .map(|s| s.to_string()))
-            },
-            VersionStrategy::QueryParam(param_name) => {
-                // Parse query parameters from URI
-                if let Some(query) = request.uri().query() {
-                    let params: HashMap<String, String> = serde_urlencoded::from_str(query)
-                        .map_err(|e| HttpError::bad_request(format!("Invalid query parameters: {}", e)))?;
-                    Ok(params.get(param_name).map(|s| s.to_string()))
-                } else {
-                    Ok(None)
-                }
-            },
-            VersionStrategy::AcceptHeader => {
-                if let Some(accept) = request.headers().get("accept") {
-                    if let Ok(accept_str) = accept.to_str() {
-                        // Parse Accept header for version (e.g., application/vnd.api+json;version=1)
-                        if let Some(captures) = ACCEPT_HEADER_VERSION_REGEX.captures(accept_str) {
-                            if let Some(version) = captures.get(1) {
-                                return Ok(Some(format!("v{}", version.as_str())));
-                            }
-                        }
-                    }
-                }
-                Ok(None)
-            }
-        }
-    }
-
-    /// Resolve version to API version configuration
-    fn resolve_version(&self, requested_version: Option<String>) -> HttpResult<VersionInfo> {
-        let version_key = if let Some(version) = requested_version {
-            if self.config.versions.contains_key(&version) {
-                version
-            } else if self.config.strict_validation {
-                return Err(HttpError::bad_request(format!("Unsupported API version: {}", version)));
-            } else if let Some(default) = &self.config.default_version {
-                default.clone()
-            } else {
-                return Err(HttpError::bad_request("No valid API version specified and no default available".to_string()));
-            }
-        } else if let Some(default) = &self.config.default_version {
-            default.clone()
-        } else {
-            return Err(HttpError::bad_request("API version is required".to_string()));
-        };
-
-        let api_version = self.config.versions.get(&version_key)
-            .ok_or_else(|| HttpError::internal(format!("Version configuration not found: {}", version_key)))?;
-
-        Ok(VersionInfo {
-            version: version_key,
-            is_deprecated: api_version.deprecated,
-            api_version: api_version.clone(),
-        })
-    }
-
-    /// Add deprecation headers to response
-    fn add_deprecation_headers(&self, mut response: ElifResponse, version_info: &VersionInfo) -> HttpResult<ElifResponse> {
-        if self.config.include_deprecation_headers && version_info.is_deprecated {
-            // Add deprecation header
-            response = response.header("Deprecation", "true")?;
-            
-            // Add warning message if available
-            if let Some(message) = &version_info.api_version.deprecation_message {
-                response = response.header("Warning", format!("299 - \"{}\"", message))?;
-            }
-            
-            // Add sunset date if available
-            if let Some(sunset) = &version_info.api_version.sunset_date {
-                response = response.header("Sunset", sunset)?;
-            }
-        }
-        
-        Ok(response)
     }
 }
 
@@ -728,7 +635,6 @@ impl RequestVersionExt for ElifRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{TestServerBuilder, HttpAssertions};
 
     #[test]
     fn test_version_config_builder() {

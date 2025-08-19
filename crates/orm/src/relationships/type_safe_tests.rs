@@ -3,10 +3,9 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
-use crate::error::{ModelError, ModelResult};
+use crate::error::ModelResult;
 use crate::model::Model;
 use super::containers::*;
-use super::hydration::*;
 use super::inference::*;
 use super::metadata::*;
 use super::type_safe_eager_loading::*;

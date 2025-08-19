@@ -1,4 +1,4 @@
-use super::{TemplateEngine, to_snake_case, to_pascal_case, pluralize_word};
+use super::{to_snake_case, to_pascal_case, pluralize_word};
 use super::resource_generator::{GeneratedFile, GeneratedFileType};
 use elif_core::ElifError;
 use std::collections::HashMap;
@@ -35,6 +35,7 @@ pub struct ApiResource {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ApiEndpoint {
     pub method: String,
     pub path: String,
@@ -45,6 +46,7 @@ pub struct ApiEndpoint {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ApiParameter {
     pub name: String,
     pub param_type: String, // "path", "query", "body"
@@ -54,6 +56,7 @@ pub struct ApiParameter {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ApiResponse {
     pub status_code: u16,
     pub description: String,

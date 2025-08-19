@@ -7,13 +7,12 @@ use std::time::{Instant, Duration};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use tracing::{info, warn, error, Span, span, Level};
+use tracing::{info, warn, error};
 use serde_json::{json, Value};
 
 use crate::{
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
-    response::ElifResponse,
 };
 
 /// Enhanced logging middleware with structured logging and request tracing
@@ -73,7 +72,6 @@ pub struct RequestContext {
     pub path: String,
     pub user_agent: Option<String>,
     pub remote_addr: Option<String>,
-    pub span: Option<Span>,
 }
 
 impl EnhancedLoggingMiddleware {
@@ -134,199 +132,6 @@ impl EnhancedLoggingMiddleware {
         self.config.custom_fields.insert(key.into(), value.into());
         self
     }
-    
-    /// Extract or generate correlation ID from request
-    fn get_or_create_correlation_id(&self, request: &ElifRequest) -> String {
-        if !self.config.correlation_ids {
-            return "disabled".to_string();
-        }
-        
-        // Try to get existing correlation ID from headers
-        if let Some(header_value) = request.headers.get_str(&self.config.correlation_header) {
-            if let Ok(correlation_id) = header_value.to_str() {
-                if !correlation_id.is_empty() && correlation_id.len() <= 64 {
-                    return correlation_id.to_string();
-                }
-            }
-        }
-        
-        // Generate new correlation ID
-        Uuid::new_v4().to_string()
-    }
-    
-    /// Create request context for tracking
-    fn create_request_context(&self, request: &ElifRequest) -> RequestContext {
-        let correlation_id = self.get_or_create_correlation_id(request);
-        let method = request.method.to_string();
-        let path = request.uri.path().to_string();
-        
-        let user_agent = request.headers
-            .get_str("user-agent")
-            .and_then(|h| h.to_str().ok())
-            .map(String::from);
-        
-        // Extract remote address from headers
-        let remote_addr = request.headers
-            .get_str("x-forwarded-for")
-            .or_else(|| request.headers.get_str("x-real-ip"))
-            .and_then(|h| h.to_str().ok())
-            .map(String::from);
-        
-        // Create tracing span if enabled
-        let span = if self.config.tracing_spans {
-            Some(span!(
-                Level::INFO,
-                "http_request",
-                correlation_id = %correlation_id,
-                method = %method,
-                path = %path,
-                user_agent = ?user_agent,
-                remote_addr = ?remote_addr
-            ))
-        } else {
-            None
-        };
-        
-        RequestContext {
-            correlation_id,
-            start_time: Instant::now(),
-            method,
-            path,
-            user_agent,
-            remote_addr,
-            span,
-        }
-    }
-    
-    /// Log request in structured or plain format
-    fn log_request(&self, request: &ElifRequest, context: &RequestContext) {
-        if self.config.structured {
-            let mut log_data = json!({
-                "event": "request_start",
-                "correlation_id": context.correlation_id,
-                "method": context.method,
-                "path": context.path,
-                "user_agent": context.user_agent,
-                "remote_addr": context.remote_addr,
-                "timestamp": chrono::Utc::now().to_rfc3339(),
-            });
-            
-            // Add custom fields
-            for (key, value) in &self.config.custom_fields {
-                log_data[key] = Value::String(value.clone());
-            }
-            
-            // Add headers if enabled
-            if self.config.log_request_headers {
-                let headers = self.extract_safe_headers(&request.headers);
-                log_data["headers"] = json!(headers);
-            }
-            
-            info!(target: "elif::http::request", "{}", log_data);
-        } else {
-            info!(
-                "→ {} {} [{}] from {}",
-                context.method,
-                context.path,
-                context.correlation_id,
-                context.remote_addr.as_deref().unwrap_or("unknown")
-            );
-        }
-    }
-    
-    /// Log response with timing information
-    fn log_response(&self, response: &ElifResponse, context: &RequestContext) {
-        let duration = context.start_time.elapsed();
-        let status = response.status_code();
-        let duration_ms = duration.as_millis();
-        
-        let is_slow = duration > self.config.slow_request_threshold;
-        let is_error = status.is_client_error() || status.is_server_error();
-        
-        if self.config.structured {
-            let mut log_data = json!({
-                "event": "request_complete",
-                "correlation_id": context.correlation_id,
-                "method": context.method,
-                "path": context.path,
-                "status_code": status.as_u16(),
-                "duration_ms": duration_ms,
-                "is_slow": is_slow,
-                "is_error": is_error,
-                "user_agent": context.user_agent,
-                "remote_addr": context.remote_addr,
-                "timestamp": chrono::Utc::now().to_rfc3339(),
-            });
-            
-            // Add custom fields
-            for (key, value) in &self.config.custom_fields {
-                log_data[key] = Value::String(value.clone());
-            }
-            
-            // Add response headers if enabled
-            if self.config.log_response_headers {
-                let headers = self.extract_response_headers(response.headers());
-                log_data["response_headers"] = json!(headers);
-            }
-            
-            // Log at appropriate level
-            if is_error {
-                error!(target: "elif::http::response", "{}", log_data);
-            } else if is_slow {
-                warn!(target: "elif::http::response", "Slow request: {}", log_data);
-            } else {
-                info!(target: "elif::http::response", "{}", log_data);
-            }
-        } else {
-            let log_msg = format!(
-                "← {:?} {} [{}] {}ms",
-                status,
-                context.path,
-                context.correlation_id,
-                duration_ms
-            );
-            
-            if is_error {
-                error!("{}", log_msg);
-            } else if is_slow {
-                warn!("SLOW: {}", log_msg);
-            } else {
-                info!("{}", log_msg);
-            }
-        }
-    }
-    
-    /// Extract safe headers for logging (filtering out sensitive ones)
-    fn extract_safe_headers(&self, headers: &crate::response::ElifHeaderMap) -> HashMap<String, String> {
-        let mut safe_headers = HashMap::new();
-        
-        for name in headers.keys() {
-            if let Some(value) = headers.get_str(name.as_str()) {
-                if let Ok(value_str) = value.to_str() {
-                    if !is_sensitive_header(name.as_str()) {
-                        safe_headers.insert(name.as_str().to_string(), value_str.to_string());
-                    } else {
-                        safe_headers.insert(name.as_str().to_string(), "[REDACTED]".to_string());
-                    }
-                }
-            }
-        }
-        
-        safe_headers
-    }
-    
-    /// Extract response headers for logging
-    fn extract_response_headers(&self, headers: &crate::response::ElifHeaderMap) -> HashMap<String, String> {
-        let mut response_headers = HashMap::new();
-        
-        for (name, value) in headers.iter() {
-            if let Ok(value_str) = value.to_str() {
-                response_headers.insert(name.as_str().to_string(), value_str.to_string());
-            }
-        }
-        
-        response_headers
-    }
 }
 
 impl Default for EnhancedLoggingMiddleware {
@@ -380,7 +185,6 @@ impl Middleware for EnhancedLoggingMiddleware {
                     path,
                     user_agent,
                     remote_addr,
-                    span: None,
                 }
             };
             

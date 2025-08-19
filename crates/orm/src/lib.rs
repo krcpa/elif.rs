@@ -61,18 +61,35 @@ mod security_tests_comprehensive;
 mod security_injection_tests;
 
 
-// Re-export core traits and types
-pub use model::*;
-pub use query::*;
-pub use error::*;
-pub use database::*;
-pub use transaction::*;
-pub use migration::*;
-pub use migration_runner::*;
-pub use relationships::*;
-pub use security::*;
-pub use backends::*;
-pub use factory::*;
+// Prelude-style re-exports for core functionality
+// Only export what actually exists in the modules
 
+// Error handling
+pub use error::{ModelError, ModelResult, OrmError, OrmResult};
+
+// Database core
+pub use database::{DatabaseServiceProvider, DatabasePool, PoolError, PoolHealthReport};
+
+// Model system  
+pub use model::{Model, PrimaryKey, CrudOperations};
+
+// Query system
+pub use query::{QueryBuilder};
+
+// Transaction management
+pub use transaction::{Transaction, IsolationLevel};
+
+// Migration system  
+pub use migration::{Migration, MigrationManager, MigrationRunResult as MigrationResult, MigrationStatus, RollbackResult};
+
+// Relationships (minimal exports to avoid conflicts)
+pub use relationships::{
+    relationship_traits::Relationship,
+    RelationshipMetadata, RelationshipType, RelationshipConstraint,
+    RelationshipCache, RelationshipRegistry,
+};
+
+// Database backends
+pub use backends::{DatabaseBackendType, DatabasePoolConfig, PostgresBackend, DatabaseBackendRegistry};
 // Derive macro re-exports (when implemented in future)
 // pub use elif_orm_derive::*;
