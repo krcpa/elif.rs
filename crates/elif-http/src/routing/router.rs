@@ -97,18 +97,17 @@ where
         self
     }
 
-    /// Create a middleware group
+    /// Create a named middleware group for future use with route-specific middleware
+    /// 
+    /// Currently, middleware groups are stored but not actively used for request processing.
+    /// This method prepares middleware groups for future route-specific middleware functionality.
+    /// For now, use `use_middleware()` to add global middleware that will be applied to all routes.
     pub fn middleware_group(mut self, name: &str, middleware: Vec<Arc<dyn Middleware>>) -> Self {
         let pipeline = MiddlewarePipelineV2::from(middleware);
         self.middleware_groups.insert(name.to_string(), pipeline);
         self
     }
 
-    /// Use a middleware group for routes (placeholder for future route-specific middleware)
-    pub fn use_group(&mut self, _group_name: &str) -> &mut Self {
-        // TODO: Implement route-specific middleware group usage
-        self
-    }
 
     /// Add a GET route with elif handler
     pub fn get<F, Fut, R>(mut self, path: &str, handler: F) -> Self

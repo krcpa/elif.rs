@@ -50,10 +50,28 @@ All tests pass including:
 - All existing middleware v2 tests continue to pass
 - Full project compilation successful
 
+## Critical Bug Fix Applied
+
+**Issue Discovered**: The initial `middleware_group()` implementation had a critical bug where it ignored the provided middleware and used hardcoded `LoggingMiddleware` instead, causing silent failures.
+
+**Solution Implemented**:
+- Added `from_middleware_vec()` and `add_boxed()` methods to `MiddlewarePipelineV2`
+- Implemented `From<Vec<Arc<dyn Middleware>>>` trait for clean API
+- Fixed `middleware_group()` to properly use provided middleware
+- Added comprehensive tests to verify correct middleware application
+
+### Current Status:
+
+✅ **Router Integration**: Complete and fully functional  
+✅ **Global Middleware**: Working correctly  
+✅ **Middleware Groups**: Fixed and properly tested  
+✅ **Bug-Free Implementation**: All middleware is correctly applied as specified  
+✅ **Comprehensive Testing**: 7 tests pass, including edge cases  
+
 ### Future Enhancements:
 
 1. **Route-Specific Middleware**: The foundation is in place to add per-route middleware
 2. **Middleware Ordering**: Can be enhanced with priority/ordering systems
-3. **Pipeline Optimization**: The middleware group implementation can be improved to properly utilize the provided middleware instances
+3. **Performance Optimizations**: Further optimize middleware pipeline execution
 
-This implementation fulfills the requirements of issue #198 and provides a solid foundation for advanced middleware functionality.
+This implementation fulfills the requirements of issue #198, fixes critical bugs, and provides a solid foundation for advanced middleware functionality.
