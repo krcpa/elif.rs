@@ -84,6 +84,13 @@ impl MiddlewarePipelineV2 {
         self.middleware.push(middleware);
         self
     }
+
+    /// Extend this pipeline with middleware from another pipeline
+    /// The middleware from this pipeline will execute before the middleware from the other pipeline
+    pub fn extend(mut self, other: Self) -> Self {
+        self.middleware.extend(other.middleware);
+        self
+    }
     
     /// Execute the middleware pipeline with a handler
     pub async fn execute<F, Fut>(&self, request: ElifRequest, handler: F) -> ElifResponse

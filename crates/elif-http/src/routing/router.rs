@@ -183,7 +183,8 @@ where
         // Merge middleware groups
         self.middleware_groups.extend(other.middleware_groups);
         
-        // Note: We don't merge the middleware_stack as global middleware should be separate per router
+        // Merge global middleware stacks. The middleware from `self` will run first.
+        self.middleware_stack = self.middleware_stack.extend(other.middleware_stack);
         
         // Merge the underlying Axum routers
         self.axum_router = self.axum_router.merge(other.axum_router);
@@ -506,6 +507,7 @@ mod tests {
             .middleware_group("auth", vec![Arc::new(SimpleAuthMiddleware::new("secret".to_string()))]);
         
         let router2 = Router::<()>::new()
+            .use_middleware(SimpleAuthMiddleware::new("token".to_string()))
             .middleware_group("api", vec![Arc::new(LoggingMiddleware)]);
         
         let merged = router1.merge(router2);
@@ -523,8 +525,9 @@ mod tests {
         assert_eq!(api_group.len(), 1);
         assert_eq!(api_group.names(), vec!["LoggingMiddleware"]);
         
-        // Verify global middleware is preserved
-        assert_eq!(merged.middleware_pipeline().len(), 1);
+        // Verify global middleware from both routers is preserved and merged
+        assert_eq!(merged.middleware_pipeline().len(), 2);
+        assert_eq!(merged.middleware_pipeline().names(), vec!["LoggingMiddleware", "SimpleAuthMiddleware"]);
     }
 
     #[test]
@@ -543,5 +546,30 @@ mod tests {
         let api_group = router.middleware_groups().get("api").unwrap();
         assert_eq!(api_group.len(), 2);
         assert_eq!(api_group.names(), vec!["LoggingMiddleware", "SimpleAuthMiddleware"]);
+    }
+
+    #[test]
+    fn test_middleware_merge_preserves_global_middleware() {
+        use crate::middleware::v2::{LoggingMiddleware, SimpleAuthMiddleware};
+        
+        // Test that global middleware from both routers is preserved during merge
+        let router1 = Router::<()>::new()
+            .use_middleware(LoggingMiddleware)
+            .use_middleware(SimpleAuthMiddleware::new("router1".to_string()));
+        
+        let router2 = Router::<()>::new()
+            .use_middleware(SimpleAuthMiddleware::new("router2".to_string()))
+            .use_middleware(LoggingMiddleware);
+        
+        let merged = router1.merge(router2);
+        
+        // Should have all 4 middleware instances: 2 from router1 + 2 from router2
+        assert_eq!(merged.middleware_pipeline().len(), 4);
+        
+        // Verify execution order: router1's middleware first, then router2's
+        assert_eq!(
+            merged.middleware_pipeline().names(), 
+            vec!["LoggingMiddleware", "SimpleAuthMiddleware", "SimpleAuthMiddleware", "LoggingMiddleware"]
+        );
     }
 }
