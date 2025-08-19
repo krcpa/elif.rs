@@ -2,14 +2,12 @@
 //!
 //! Provides secure cross-origin request handling with configurable policies.
 
-use axum::{
-    extract::Request,
-    http::{HeaderMap, HeaderValue, Method, StatusCode},
-    response::Response,
-    body::Body,
-};
 use std::collections::HashSet;
-use elif_http::middleware::{Middleware, BoxFuture};
+use elif_http::{
+    middleware::v2::{Middleware, Next, NextFuture},
+    request::{ElifRequest, ElifMethod},
+    response::{ElifResponse, ElifStatusCode},
+};
 use crate::{SecurityError, SecurityResult};
 
 pub use crate::config::CorsConfig;
@@ -62,7 +60,7 @@ impl CorsMiddleware {
     }
     
     /// Builder method to set allowed methods
-    pub fn allow_methods(mut self, methods: Vec<Method>) -> Self {
+    pub fn allow_methods(mut self, methods: Vec<ElifMethod>) -> Self {
         self.config.allowed_methods = methods
             .into_iter()
             .map(|m| m.to_string())
@@ -114,8 +112,8 @@ impl CorsMiddleware {
     }
     
     /// Check if the request headers are allowed
-    fn are_headers_allowed(&self, headers: &HeaderMap) -> bool {
-        if let Some(requested_headers) = headers.get("access-control-request-headers") {
+    fn are_headers_allowed(&self, headers: &elif_http::response::ElifHeaderMap) -> bool {
+        if let Some(requested_headers) = headers.get_str("access-control-request-headers") {
             if let Ok(requested_headers_str) = requested_headers.to_str() {
                 for header in requested_headers_str.split(',') {
                     let header = header.trim().to_lowercase();
@@ -270,6 +268,107 @@ impl CorsMiddleware {
         
         Ok(response)
     }
+    
+    /// Handle preflight OPTIONS request for V2 middleware system
+    fn handle_preflight_v2(&self, request: &ElifRequest) -> SecurityResult<ElifResponse> {
+        // Check if request method is allowed for preflight
+        if let Some(request_method) = request.headers.get_str("access-control-request-method") {
+            if let Ok(method_str) = request_method.to_str() {
+                if !self.is_method_allowed(method_str) {
+                    return Err(SecurityError::CorsViolation {
+                        message: format!("Method '{}' not allowed", method_str),
+                    });
+                }
+            }
+        }
+        
+        // Check if request headers are allowed
+        if !self.are_headers_allowed(&request.headers) {
+            return Err(SecurityError::CorsViolation {
+                message: "Headers not allowed".to_string(),
+            });
+        }
+        
+        // Create preflight response
+        let mut response = ElifResponse::with_status(ElifStatusCode::OK);
+        
+        // Add preflight headers
+        if let Err(e) = self.add_cors_headers_v2(&mut response, 
+            request.headers.get_str("origin")
+                .and_then(|h| h.to_str().ok())) {
+            return Err(e);
+        }
+        
+        // Add method headers
+        if !self.config.allowed_methods.is_empty() {
+            let methods = self.config.allowed_methods.join(", ");
+            if let Err(_) = response.add_header("access-control-allow-methods", &methods) {
+                return Err(SecurityError::CorsViolation {
+                    message: "Failed to add allowed methods header".to_string(),
+                });
+            }
+        }
+        
+        // Add headers header
+        if !self.config.allowed_headers.is_empty() {
+            let headers = self.config.allowed_headers.join(", ");
+            if let Err(_) = response.add_header("access-control-allow-headers", &headers) {
+                return Err(SecurityError::CorsViolation {
+                    message: "Failed to add allowed headers header".to_string(),
+                });
+            }
+        }
+        
+        // Add max age
+        if let Some(max_age) = self.config.max_age {
+            if let Err(_) = response.add_header("access-control-max-age", &max_age.to_string()) {
+                return Err(SecurityError::CorsViolation {
+                    message: "Failed to add max age header".to_string(),
+                });
+            }
+        }
+        
+        Ok(response)
+    }
+    
+    /// Add CORS headers to response for V2 middleware system
+    fn add_cors_headers_v2(&self, response: &mut ElifResponse, origin: Option<&str>) -> SecurityResult<()> {
+        // Add Access-Control-Allow-Origin
+        if let Some(origin_str) = origin {
+            if self.is_origin_allowed(origin_str) {
+                let origin_header = if self.config.allowed_origins.is_none() || 
+                   self.config.allowed_origins.as_ref().unwrap().contains("*") {
+                    "*"
+                } else {
+                    origin_str
+                };
+                
+                response.add_header("access-control-allow-origin", origin_header)
+                    .map_err(|_| SecurityError::CorsViolation {
+                        message: "Failed to add origin header".to_string(),
+                    })?;
+            }
+        }
+        
+        // Add Access-Control-Allow-Credentials
+        if self.config.allow_credentials {
+            response.add_header("access-control-allow-credentials", "true")
+                .map_err(|_| SecurityError::CorsViolation {
+                    message: "Failed to add credentials header".to_string(),
+                })?;
+        }
+        
+        // Add Access-Control-Expose-Headers
+        if !self.config.exposed_headers.is_empty() {
+            let exposed = self.config.exposed_headers.join(", ");
+            response.add_header("access-control-expose-headers", &exposed)
+                .map_err(|_| SecurityError::CorsViolation {
+                    message: "Failed to add exposed headers".to_string(),
+                })?;
+        }
+        
+        Ok(())
+    }
 }
 
 /// Extension type to store CORS origin in request
@@ -277,62 +376,40 @@ impl CorsMiddleware {
 struct CorsOrigin(Option<String>);
 
 impl Middleware for CorsMiddleware {
-    fn process_request<'a>(
-        &'a self, 
-        mut request: Request
-    ) -> BoxFuture<'a, Result<Request, Response>> {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
         Box::pin(async move {
-            // Extract and store origin for later use in response processing
-            let origin = request.headers().get("origin")
-                .and_then(|v| v.to_str().ok())
+            // Extract origin header
+            let origin = request.headers.get_str("origin")
+                .and_then(|h| h.to_str().ok())
                 .map(|s| s.to_string());
             
-            // Store origin in request extensions
-            request.extensions_mut().insert(CorsOrigin(origin.clone()));
-            
-            // Handle preflight OPTIONS request - return early response
-            if request.method() == Method::OPTIONS {
-                match self.handle_preflight(&request) {
-                    Ok(response) => return Err(response), // Return preflight response
-                    Err(_) => {
-                        // Return 403 Forbidden for CORS violations
-                        let response = Response::builder()
-                            .status(StatusCode::FORBIDDEN)
-                            .body(Body::from("CORS policy violation"))
-                            .unwrap();
-                        return Err(response);
-                    }
-                }
+            // Handle preflight OPTIONS request
+            if request.method == ElifMethod::OPTIONS {
+                return match self.handle_preflight_v2(&request) {
+                    Ok(response) => response,
+                    Err(_) => ElifResponse::with_status(ElifStatusCode::FORBIDDEN)
+                        .text("CORS policy violation"),
+                };
             }
             
             // Check origin for non-preflight requests
             if let Some(ref origin_str) = origin {
                 if !self.is_origin_allowed(origin_str) {
-                    let response = Response::builder()
-                        .status(StatusCode::FORBIDDEN)
-                        .body(Body::from("CORS policy violation: origin not allowed"))
-                        .unwrap();
-                    return Err(response);
+                    return ElifResponse::with_status(ElifStatusCode::FORBIDDEN)
+                        .text("CORS policy violation: origin not allowed");
                 }
             }
             
-            // Request is valid, allow it to continue
-            Ok(request)
-        })
-    }
-    
-    fn process_response<'a>(
-        &'a self, 
-        mut response: Response
-    ) -> BoxFuture<'a, Response> {
-        Box::pin(async move {
-            // Get origin from response extensions if the framework supports it
-            // For now, we'll use a simple approach and add permissive headers
+            // Request is valid, proceed to next middleware/handler
+            let mut response = next.run(request).await;
             
-            // Add basic CORS headers - in a full implementation, we'd have
-            // better context passing from process_request to process_response
-            if let Err(e) = self.add_cors_headers(&mut response, None) {
-                log::warn!("Failed to add CORS headers: {:?}", e);
+            // Add CORS headers to response
+            if let Some(ref origin_str) = origin {
+                if let Err(_) = self.add_cors_headers_v2(&mut response, Some(origin_str)) {
+                    tracing::warn!("Failed to add CORS headers to response");
+                }
+            } else if let Err(_) = self.add_cors_headers_v2(&mut response, None) {
+                tracing::warn!("Failed to add CORS headers to response");
             }
             
             response

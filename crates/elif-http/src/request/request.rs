@@ -4,19 +4,21 @@
 
 use std::collections::HashMap;
 use axum::{
-    http::{HeaderMap, HeaderValue, Method, Uri},
+    http::{HeaderValue, Uri},
     body::Bytes,
 };
 use serde::de::DeserializeOwned;
 use crate::errors::{HttpError, HttpResult};
+use super::ElifMethod;
+use crate::response::ElifHeaderMap;
 
 /// Request abstraction that wraps Axum's request types
 /// with additional parsing and extraction capabilities
 #[derive(Debug)]
 pub struct ElifRequest {
-    pub method: Method,
+    pub method: ElifMethod,
     pub uri: Uri,
-    pub headers: HeaderMap,
+    pub headers: ElifHeaderMap,
     pub path_params: HashMap<String, String>,
     pub query_params: HashMap<String, String>,
     body_bytes: Option<Bytes>,
@@ -25,9 +27,9 @@ pub struct ElifRequest {
 impl ElifRequest {
     /// Create new ElifRequest from Axum components
     pub fn new(
-        method: Method,
+        method: ElifMethod,
         uri: Uri,
-        headers: HeaderMap,
+        headers: ElifHeaderMap,
     ) -> Self {
         Self {
             method,
@@ -41,9 +43,9 @@ impl ElifRequest {
 
     /// Extract ElifRequest from request components
     pub fn extract_elif_request(
-        method: Method,
+        method: ElifMethod,
         uri: Uri,
-        headers: HeaderMap,
+        headers: ElifHeaderMap,
         body: Option<Bytes>,
     ) -> ElifRequest {
         let mut request = ElifRequest::new(method, uri, headers);
@@ -79,14 +81,14 @@ impl ElifRequest {
     /// Add header to request (for middleware use)
     pub fn add_header<K, V>(&mut self, key: K, value: V) -> HttpResult<()>
     where
-        K: TryInto<axum::http::HeaderName>,
-        K::Error: std::fmt::Display,
-        V: TryInto<axum::http::HeaderValue>, 
-        V::Error: std::fmt::Display,
+        K: AsRef<str>,
+        V: AsRef<str>,
     {
-        let header_name = key.try_into()
+        use crate::response::{ElifHeaderName, ElifHeaderValue};
+        
+        let header_name = ElifHeaderName::from_str(key.as_ref())
             .map_err(|e| HttpError::bad_request(format!("Invalid header name: {}", e)))?;
-        let header_value = value.try_into()
+        let header_value = ElifHeaderValue::from_str(value.as_ref())
             .map_err(|e| HttpError::bad_request(format!("Invalid header value: {}", e)))?;
         
         self.headers.insert(header_name, header_value);
@@ -160,8 +162,8 @@ impl ElifRequest {
     }
 
     /// Get header value by name
-    pub fn header(&self, name: &str) -> Option<&HeaderValue> {
-        self.headers.get(name)
+    pub fn header(&self, name: &str) -> Option<&crate::response::ElifHeaderValue> {
+        self.headers.get_str(name)
     }
 
     /// Get header value as string
@@ -295,7 +297,7 @@ impl ElifRequest {
     }
 
     /// Convert ElifRequest to Axum Request for backward compatibility
-    pub fn into_axum_request(self) -> axum::extract::Request {
+    pub(crate) fn into_axum_request(self) -> axum::extract::Request {
         use axum::body::Body;
         
         let body = match self.body_bytes {
@@ -304,12 +306,12 @@ impl ElifRequest {
         };
         
         let mut builder = axum::extract::Request::builder()
-            .method(self.method)
+            .method(self.method.to_axum())
             .uri(self.uri);
         
         // Add headers one by one
         for (key, value) in self.headers.iter() {
-            builder = builder.header(key, value);
+            builder = builder.header(key.to_axum(), value.to_axum());
         }
         
         builder.body(body)
@@ -317,7 +319,7 @@ impl ElifRequest {
     }
 
     /// Convert Axum Request to ElifRequest for backward compatibility
-    pub async fn from_axum_request(request: axum::extract::Request) -> Self {
+    pub(crate) async fn from_axum_request(request: axum::extract::Request) -> Self {
         use axum::body::Body;
         use axum::extract::Request;
         
@@ -330,9 +332,9 @@ impl ElifRequest {
         };
         
         Self::extract_elif_request(
-            parts.method,
+            ElifMethod::from_axum(parts.method),
             parts.uri,
-            parts.headers,
+            ElifHeaderMap::from_axum(parts.headers),
             body_bytes,
         )
     }
@@ -341,7 +343,8 @@ impl ElifRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{Method, Uri};
+    use axum::http::Uri;
+    use crate::response::ElifHeaderMap;
     use std::collections::HashMap;
 
     #[test]
@@ -351,9 +354,9 @@ mod tests {
         params.insert("slug".to_string(), "test-post".to_string());
 
         let request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/users/123/posts/test-post".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         ).with_path_params(params);
 
         assert_eq!(request.path_param("id"), Some(&"123".to_string()));
@@ -373,9 +376,9 @@ mod tests {
         query_params.insert("search".to_string(), "rust".to_string());
 
         let request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/posts?page=2&per_page=25&search=rust".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         ).with_query_params(query_params);
 
         assert_eq!(request.query_param("page"), Some(&"2".to_string()));
@@ -390,11 +393,13 @@ mod tests {
 
     #[test]
     fn test_json_detection() {
-        let mut headers = HeaderMap::new();
-        headers.insert("content-type", axum::http::HeaderValue::from_static("application/json"));
+        let mut headers = ElifHeaderMap::new();
+        let header_name = crate::response::ElifHeaderName::from_str("content-type").unwrap();
+        let header_value = crate::response::ElifHeaderValue::from_str("application/json").unwrap();
+        headers.insert(header_name, header_value);
 
         let request = ElifRequest::new(
-            Method::POST,
+            ElifMethod::POST,
             "/api/users".parse().unwrap(),
             headers,
         );
@@ -404,11 +409,13 @@ mod tests {
 
     #[test]
     fn test_bearer_token_extraction() {
-        let mut headers = HeaderMap::new();
-        headers.insert("authorization", axum::http::HeaderValue::from_static("Bearer abc123xyz"));
+        let mut headers = ElifHeaderMap::new();
+        let header_name = crate::response::ElifHeaderName::from_str("authorization").unwrap();
+        let header_value = crate::response::ElifHeaderValue::from_str("Bearer abc123xyz").unwrap();
+        headers.insert(header_name, header_value);
 
         let request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/api/protected".parse().unwrap(),
             headers,
         );
@@ -419,9 +426,9 @@ mod tests {
 
     #[test]
     fn test_extract_elif_request() {
-        let method = Method::POST;
+        let method = ElifMethod::POST;
         let uri: Uri = "/test".parse().unwrap();
-        let headers = HeaderMap::new();
+        let headers = ElifHeaderMap::new();
         let body = Some(Bytes::from("test body"));
 
         let request = ElifRequest::extract_elif_request(method.clone(), uri.clone(), headers.clone(), body.clone());
@@ -434,9 +441,9 @@ mod tests {
     #[test]
     fn test_borrowing_api_headers() {
         let mut request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/test".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         // Test adding headers with borrowing API
@@ -451,9 +458,9 @@ mod tests {
     #[test]
     fn test_borrowing_api_params() {
         let mut request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/users/123?page=2".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         // Test adding parameters with borrowing API
@@ -471,9 +478,9 @@ mod tests {
     #[test]
     fn test_borrowing_api_body() {
         let mut request = ElifRequest::new(
-            Method::POST,
+            ElifMethod::POST,
             "/test".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         let body_data = Bytes::from("test body content");
@@ -485,9 +492,9 @@ mod tests {
     #[test]
     fn test_borrowing_api_middleware_pattern() {
         let mut request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/api/users".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         // Simulate middleware adding context data

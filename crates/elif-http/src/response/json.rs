@@ -3,13 +3,12 @@
 use axum::{
     extract::{FromRequest, Request},
     response::{IntoResponse, Response},
-    http::StatusCode,
     Json,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::ops::{Deref, DerefMut};
 use crate::errors::HttpResult;
-use crate::response::{ElifResponse, IntoElifResponse};
+use crate::response::{ElifResponse, IntoElifResponse, ElifStatusCode};
 
 /// Enhanced JSON extractor with better error handling
 #[derive(Debug)]
@@ -95,7 +94,7 @@ where
             Err(err) => {
                 tracing::error!("JSON serialization failed: {}", err);
                 (
-                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ElifStatusCode::INTERNAL_SERVER_ERROR,
                     "Internal server error: JSON serialization failed"
                 ).into_response()
             }
@@ -106,14 +105,14 @@ where
 /// Enhanced JSON error handling
 #[derive(Debug)]
 pub struct JsonError {
-    pub status: StatusCode,
+    pub status: ElifStatusCode,
     pub message: String,
     pub details: Option<String>,
 }
 
 impl JsonError {
     /// Create new JSON error
-    pub fn new(status: StatusCode, message: String) -> Self {
+    pub fn new(status: ElifStatusCode, message: String) -> Self {
         Self {
             status,
             message,
@@ -122,7 +121,7 @@ impl JsonError {
     }
 
     /// Create JSON error with details
-    pub fn with_details(status: StatusCode, message: String, details: String) -> Self {
+    pub fn with_details(status: ElifStatusCode, message: String, details: String) -> Self {
         Self {
             status,
             message,
@@ -137,34 +136,34 @@ impl JsonError {
         match rejection {
             JsonDataError(err) => {
                 Self::with_details(
-                    StatusCode::BAD_REQUEST,
+                    ElifStatusCode::BAD_REQUEST,
                     "Invalid JSON data".to_string(),
                     err.to_string(),
                 )
             }
             JsonSyntaxError(err) => {
                 Self::with_details(
-                    StatusCode::BAD_REQUEST,
+                    ElifStatusCode::BAD_REQUEST,
                     "JSON syntax error".to_string(),
                     err.to_string(),
                 )
             }
             MissingJsonContentType(_) => {
                 Self::new(
-                    StatusCode::BAD_REQUEST,
+                    ElifStatusCode::BAD_REQUEST,
                     "Missing 'Content-Type: application/json' header".to_string(),
                 )
             }
             BytesRejection(err) => {
                 Self::with_details(
-                    StatusCode::BAD_REQUEST,
+                    ElifStatusCode::BAD_REQUEST,
                     "Failed to read request body".to_string(),
                     err.to_string(),
                 )
             }
             _ => {
                 Self::new(
-                    StatusCode::BAD_REQUEST,
+                    ElifStatusCode::BAD_REQUEST,
                     "Invalid JSON request".to_string(),
                 )
             }
@@ -214,7 +213,7 @@ impl JsonResponse {
     }
 
     /// Create JSON response with custom status
-    pub fn with_status<T: Serialize>(status: StatusCode, data: &T) -> HttpResult<Response> {
+    pub fn with_status<T: Serialize>(status: ElifStatusCode, data: &T) -> HttpResult<Response> {
         ElifResponse::with_status(status).json(data)?.build()
     }
 
@@ -243,7 +242,7 @@ impl JsonResponse {
     }
 
     /// Create error response with JSON body
-    pub fn error(status: StatusCode, message: &str) -> HttpResult<Response> {
+    pub fn error(status: ElifStatusCode, message: &str) -> HttpResult<Response> {
         ElifResponse::json_error(status, message)
     }
 
@@ -372,9 +371,9 @@ impl<T: Serialize> ApiResponse<T> {
     /// Convert to HTTP response
     pub fn to_response(self) -> HttpResult<Response> {
         let status = if self.success {
-            StatusCode::OK
+            ElifStatusCode::OK
         } else {
-            StatusCode::BAD_REQUEST
+            ElifStatusCode::BAD_REQUEST
         };
 
         ElifResponse::with_status(status).json(&self)?.build()
@@ -387,7 +386,7 @@ impl<T: Serialize> IntoResponse for ApiResponse<T> {
             Ok(response) => response,
             Err(e) => {
                 tracing::error!("Failed to create API response: {}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
+                (ElifStatusCode::INTERNAL_SERVER_ERROR.to_axum(), "Internal server error").into_response()
             }
         }
     }

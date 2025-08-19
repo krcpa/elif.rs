@@ -11,10 +11,10 @@ pub trait HttpAssertions {
 
 impl HttpAssertions for ElifResponse {
     fn assert_ok(&self) {
-        self.assert_status(StatusCode::OK);
+        self.assert_status(crate::response::ElifStatusCode::OK);
     }
 
-    fn assert_status(&self, expected: StatusCode) {
+    fn assert_status(&self, expected: crate::response::ElifStatusCode) {
         assert_eq!(self.status_code(), expected, "Response status mismatch");
     }
 
