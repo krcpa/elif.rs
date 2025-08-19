@@ -317,8 +317,10 @@ fn resolve_version(config: &VersioningConfig, extracted_version: Option<String>)
             } else if config.strict_validation {
                 return Err(HttpError::bad_request("Version is required"));
             } else {
-                // Pick first available version if not strict
-                if let Some(first_version) = config.versions.keys().next() {
+                // Pick first available version if not strict (sorted for deterministic behavior)
+                let mut sorted_keys: Vec<_> = config.versions.keys().cloned().collect();
+                sorted_keys.sort();
+                if let Some(first_version) = sorted_keys.first() {
                     first_version.clone()
                 } else {
                     return Err(HttpError::bad_request("No versions configured"));
