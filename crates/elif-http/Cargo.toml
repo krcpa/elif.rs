@@ -60,3 +60,4 @@ orm = []
 tokio-test = "0.4"
 tracing-test = "0.2"
 once_cell = "1.21"
+reqwest = { version = "0.11", features = ["json"] }

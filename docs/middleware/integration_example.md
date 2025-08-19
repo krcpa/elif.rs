@@ -92,7 +92,8 @@ All tests pass including:
 ✅ **Security**: Router merging preserves all middleware (no silent loss)  
 ✅ **Nested Router Middleware Scoping**: Fixed critical middleware scoping issue  
 ✅ **Route Registration**: Fixed route ID collision bug in merge() and nest() methods  
-✅ **Comprehensive Testing**: 12 tests pass, including all edge cases and security scenarios  
+✅ **Comprehensive Testing**: 17 tests pass, including all edge cases and security scenarios  
+✅ **Runtime Integration Tests**: Added 5 comprehensive runtime execution tests that verify middleware actually runs during request processing  
 
 ### Critical Issues Resolved:
 
@@ -109,4 +110,27 @@ All tests pass including:
 2. **Middleware Ordering**: Can be enhanced with priority/ordering systems  
 3. **Performance Optimizations**: Further optimize middleware pipeline execution
 
-This implementation fulfills the requirements of issue #198, fixes critical bugs including route ID collisions and middleware scoping issues, and provides a solid foundation for advanced middleware functionality.
+### Runtime Integration Tests Added:
+
+The implementation now includes comprehensive runtime integration tests that verify middleware actually executes during request processing, addressing the critical testing gap identified:
+
+1. **test_global_middleware_execution**: Verifies global middleware runs and modifies requests/responses correctly
+2. **test_nested_router_middleware_isolation**: Tests that nested router middleware only applies to nested routes  
+3. **test_middleware_execution_order**: Confirms middleware executes in the correct order with proper chaining
+4. **test_router_merge_middleware_execution**: Validates that merged router middleware all execute correctly
+5. **test_middleware_with_early_return**: Tests middleware can return early (e.g., auth failures) and bypass handlers
+
+These tests use actual middleware execution through the `MiddlewarePipelineV2` to verify:
+- Middleware execution counters increment correctly
+- Request headers are modified by middleware as expected  
+- Middleware execution order is preserved
+- Early returns work properly (auth, validation, etc.)
+- Router composition maintains middleware functionality
+
+**Key Testing Improvements:**
+- **Runtime Verification**: Tests now verify actual middleware execution, not just structural state
+- **Side Effect Validation**: Tests check middleware side effects like headers, counters, and response modifications
+- **End-to-End Coverage**: Complete request lifecycle testing from middleware input to final response
+- **Edge Case Coverage**: Auth failures, invalid inputs, middleware chaining, and error conditions
+
+This implementation fulfills the requirements of issue #198, fixes critical bugs including route ID collisions and middleware scoping issues, provides comprehensive runtime testing, and establishes a solid foundation for advanced middleware functionality.

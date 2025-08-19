@@ -229,7 +229,6 @@ where
         let nested_axum_router = if has_nested_middleware {
             use axum::middleware::from_fn;
             use axum::extract::Request;
-            use axum::response::Response;
             use axum::middleware::Next;
             
             // Create a layer from the nested router's middleware pipeline
@@ -623,7 +622,6 @@ mod tests {
     #[test]
     fn test_nested_router_middleware_scoping() {
         use crate::middleware::v2::{LoggingMiddleware, SimpleAuthMiddleware};
-        use std::sync::Arc;
         
         // Create parent router with its own middleware
         let parent_router = Router::<()>::new()
@@ -739,5 +737,414 @@ mod tests {
         // Verify that nesting merges route registries correctly
         // We expect the nested router's routes to be merged into the parent registry
         assert_eq!(route_count, 2, "Expected both parent and nested routes to be registered, got: {}", route_count);
+    }
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use crate::middleware::v2::{Middleware, Next, NextFuture};
+    use crate::response::ElifResponse;
+    use std::sync::{Arc, Mutex};
+    use std::collections::HashMap;
+    use serde_json::json;
+
+    /// Test middleware that adds headers to verify execution
+    #[derive(Debug, Clone)]
+    struct HeaderTestMiddleware {
+        name: String,
+        counter: Arc<Mutex<usize>>,
+    }
+
+    impl HeaderTestMiddleware {
+        fn new(name: &str) -> Self {
+            Self {
+                name: name.to_string(),
+                counter: Arc::new(Mutex::new(0)),
+            }
+        }
+
+        fn execution_count(&self) -> usize {
+            *self.counter.lock().unwrap()
+        }
+    }
+
+    impl Middleware for HeaderTestMiddleware {
+        fn handle(&self, mut request: ElifRequest, next: Next) -> NextFuture<'static> {
+            let name = self.name.clone();
+            let counter = self.counter.clone();
+            
+            Box::pin(async move {
+                // Increment counter to track execution
+                {
+                    let mut count = counter.lock().unwrap();
+                    *count += 1;
+                }
+
+                // Add request header to track middleware execution
+                let header_name: axum::http::HeaderName = format!("x-middleware-{}", name.to_lowercase()).parse().unwrap();
+                let header_value: axum::http::HeaderValue = "executed".parse().unwrap();
+                request.headers.insert(header_name, header_value);
+
+                // Call next in chain
+                let response = next.run(request).await;
+
+                // Add response header to verify middleware ran after handler  
+                let response_header = format!("x-response-{}", name.to_lowercase());
+                response.header(&response_header, "executed").unwrap_or_else(|_| {
+                    // Return original response if header addition fails
+                    ElifResponse::ok().text("Middleware executed")
+                })
+            })
+        }
+
+        fn name(&self) -> &'static str {
+            // Return static string for consistency in tests - we need to leak the string to make it 'static
+            match self.name.as_str() {
+                "Parent" => "Parent",
+                "Nested" => "Nested", 
+                "Global" => "Global",
+                "First" => "First",
+                "Second" => "Second",
+                "Third" => "Third",
+                "Router1" => "Router1",
+                "Router2" => "Router2",
+                _ => "TestMiddleware",
+            }
+        }
+    }
+
+    // Simple test handlers
+    async fn test_handler(request: ElifRequest) -> HttpResult<ElifResponse> {
+        // Return headers from request so we can verify middleware execution
+        let mut response_headers = HashMap::new();
+        
+        for (key, value) in request.headers.iter() {
+            let key_str = key.as_str().to_string();
+            if let Ok(value_str) = value.to_str() {
+                response_headers.insert(key_str, value_str.to_string());
+            }
+        }
+        
+        Ok(ElifResponse::ok().json(&json!({
+            "message": "Hello from handler",
+            "request_headers": response_headers,
+            "path": request.path()
+        }))?)
+    }
+
+    async fn nested_handler(request: ElifRequest) -> HttpResult<ElifResponse> {
+        Ok(ElifResponse::ok().json(&json!({
+            "message": "Hello from nested handler", 
+            "path": request.path()
+        }))?)
+    }
+
+
+    #[tokio::test]
+    async fn test_global_middleware_execution() {
+        // Create middleware that we can verify execution for
+        let test_middleware = HeaderTestMiddleware::new("Global");
+        let middleware_counter = test_middleware.counter.clone();
+        
+        // Create router with global middleware
+        let router = Router::<()>::new()
+            .use_middleware(test_middleware)
+            .get("/test", test_handler);
+        
+        // Verify middleware is in the pipeline
+        assert_eq!(router.middleware_pipeline().len(), 1);
+        assert_eq!(router.middleware_pipeline().names(), vec!["Global"]);
+        
+        // Verify counter starts at 0
+        assert_eq!(middleware_counter.lock().unwrap().clone(), 0);
+        
+        // Test middleware execution through pipeline (unit test style)
+        let request = ElifRequest::new(
+            axum::http::Method::GET,
+            "/test".parse().unwrap(),
+            axum::http::HeaderMap::new(),
+        );
+        
+        let response = router.middleware_pipeline().execute(request, |req| {
+            Box::pin(async move {
+                // Verify middleware added the header
+                assert!(req.headers.contains_key("x-middleware-global"));
+                ElifResponse::ok().text("Pipeline test response")
+            })
+        }).await;
+        
+        // Verify middleware was executed once
+        assert_eq!(middleware_counter.lock().unwrap().clone(), 1);
+        assert_eq!(response.status_code(), axum::http::StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_nested_router_middleware_isolation() {
+        // Create different middleware for parent and nested routers
+        let parent_middleware = HeaderTestMiddleware::new("Parent");
+        let nested_middleware = HeaderTestMiddleware::new("Nested");
+        
+        let parent_counter = parent_middleware.counter.clone();
+        let nested_counter = nested_middleware.counter.clone();
+        
+        // Create parent router with its middleware
+        let parent_router = Router::<()>::new()
+            .use_middleware(parent_middleware)
+            .get("/parent", test_handler);
+        
+        // Create nested router with different middleware  
+        let nested_router = Router::<()>::new()
+            .use_middleware(nested_middleware)
+            .get("/nested", nested_handler);
+        
+        // Compose the routers
+        let composed_router = parent_router.nest("/api", nested_router);
+        
+        // Verify structure
+        assert_eq!(composed_router.middleware_pipeline().len(), 1); // Only parent middleware in global
+        assert_eq!(composed_router.middleware_pipeline().names(), vec!["Parent"]);
+        
+        // Test that both middleware start with 0 executions
+        assert_eq!(parent_counter.lock().unwrap().clone(), 0);
+        assert_eq!(nested_counter.lock().unwrap().clone(), 0);
+        
+        // Test middleware isolation by manually executing pipelines
+        
+        // 1. Test parent route - should only execute parent middleware
+        let parent_request = ElifRequest::new(
+            axum::http::Method::GET,
+            "/parent".parse().unwrap(),
+            axum::http::HeaderMap::new(),
+        );
+        
+        let parent_response = composed_router.middleware_pipeline().execute(parent_request, |req| {
+            Box::pin(async move {
+                // Should have parent middleware header, not nested
+                assert!(req.headers.contains_key("x-middleware-parent"));
+                assert!(!req.headers.contains_key("x-middleware-nested"));
+                ElifResponse::ok().text("Parent response")
+            })
+        }).await;
+        
+        assert_eq!(parent_response.status_code(), axum::http::StatusCode::OK);
+        assert_eq!(parent_counter.lock().unwrap().clone(), 1);
+        assert_eq!(nested_counter.lock().unwrap().clone(), 0); // Nested middleware should not execute
+        
+        // Note: Testing nested route middleware execution would require integration with Axum
+        // The structural test above verifies that the middleware scoping is set up correctly
+        // Runtime testing would require a full HTTP server setup
+    }
+
+    #[tokio::test]
+    async fn test_middleware_execution_order() {
+        // Create middleware with execution tracking
+        let first_middleware = HeaderTestMiddleware::new("First");
+        let second_middleware = HeaderTestMiddleware::new("Second");
+        let third_middleware = HeaderTestMiddleware::new("Third");
+        
+        let first_counter = first_middleware.counter.clone();
+        let second_counter = second_middleware.counter.clone();
+        let third_counter = third_middleware.counter.clone();
+        
+        // Create router with multiple middleware
+        let router = Router::<()>::new()
+            .use_middleware(first_middleware)
+            .use_middleware(second_middleware)
+            .use_middleware(third_middleware)
+            .get("/test", test_handler);
+        
+        // Verify all middleware are in pipeline
+        assert_eq!(router.middleware_pipeline().len(), 3);
+        assert_eq!(router.middleware_pipeline().names(), vec!["First", "Second", "Third"]);
+        
+        // Execute through pipeline
+        let request = ElifRequest::new(
+            axum::http::Method::GET,
+            "/test".parse().unwrap(),
+            axum::http::HeaderMap::new(),
+        );
+        
+        let response = router.middleware_pipeline().execute(request, |req| {
+            Box::pin(async move {
+                // All middleware should have executed and added headers
+                assert!(req.headers.contains_key("x-middleware-first"));
+                assert!(req.headers.contains_key("x-middleware-second"));
+                assert!(req.headers.contains_key("x-middleware-third"));
+                
+                ElifResponse::ok().text("Handler executed after all middleware")
+            })
+        }).await;
+        
+        // Verify all middleware executed exactly once
+        assert_eq!(first_counter.lock().unwrap().clone(), 1);
+        assert_eq!(second_counter.lock().unwrap().clone(), 1);
+        assert_eq!(third_counter.lock().unwrap().clone(), 1);
+        assert_eq!(response.status_code(), axum::http::StatusCode::OK);
+    }
+
+    #[tokio::test] 
+    async fn test_router_merge_middleware_execution() {
+        // Create different middleware for each router
+        let router1_middleware = HeaderTestMiddleware::new("Router1");
+        let router2_middleware = HeaderTestMiddleware::new("Router2");
+        
+        let router1_counter = router1_middleware.counter.clone();
+        let router2_counter = router2_middleware.counter.clone();
+        
+        // Create two routers with different middleware
+        let router1 = Router::<()>::new()
+            .use_middleware(router1_middleware)
+            .get("/router1", test_handler);
+            
+        let router2 = Router::<()>::new()
+            .use_middleware(router2_middleware)
+            .get("/router2", test_handler);
+        
+        // Merge the routers
+        let merged_router = router1.merge(router2);
+        
+        // Verify merged middleware pipeline contains both middleware
+        assert_eq!(merged_router.middleware_pipeline().len(), 2);
+        assert_eq!(merged_router.middleware_pipeline().names(), vec!["Router1", "Router2"]);
+        
+        // Test execution through merged pipeline
+        let request = ElifRequest::new(
+            axum::http::Method::GET,
+            "/test".parse().unwrap(),
+            axum::http::HeaderMap::new(),
+        );
+        
+        let response = merged_router.middleware_pipeline().execute(request, |req| {
+            Box::pin(async move {
+                // Both router middleware should have executed
+                assert!(req.headers.contains_key("x-middleware-router1"));
+                assert!(req.headers.contains_key("x-middleware-router2"));
+                
+                ElifResponse::ok().text("Merged router response")
+            })
+        }).await;
+        
+        // Verify both middleware executed
+        assert_eq!(router1_counter.lock().unwrap().clone(), 1);
+        assert_eq!(router2_counter.lock().unwrap().clone(), 1);
+        assert_eq!(response.status_code(), axum::http::StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_middleware_with_early_return() {
+        /// Middleware that returns early based on a condition
+        #[derive(Debug)]
+        struct AuthMiddleware {
+            required_token: String,
+        }
+        
+        impl AuthMiddleware {
+            fn new(token: String) -> Self {
+                Self { required_token: token }
+            }
+        }
+        
+        impl Middleware for AuthMiddleware {
+            fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+                let required_token = self.required_token.clone();
+                Box::pin(async move {
+                    // Check authorization header
+                    let auth_header = request.header("authorization")
+                        .and_then(|h| h.to_str().ok());
+                    
+                    match auth_header {
+                        Some(header) if header.starts_with("Bearer ") => {
+                            let token = &header[7..];
+                            if token == required_token {
+                                // Token is valid, proceed
+                                next.run(request).await
+                            } else {
+                                // Invalid token, return early
+                                ElifResponse::unauthorized()
+                                    .json_value(json!({
+                                        "error": {
+                                            "code": "invalid_token",
+                                            "message": "Invalid authorization token"
+                                        }
+                                    }))
+                            }
+                        }
+                        _ => {
+                            // Missing or malformed auth header
+                            ElifResponse::unauthorized()
+                                .json_value(json!({
+                                    "error": {
+                                        "code": "missing_token",
+                                        "message": "Authorization header required"
+                                    }
+                                }))
+                        }
+                    }
+                })
+            }
+            
+            fn name(&self) -> &'static str {
+                "AuthMiddleware"
+            }
+        }
+        
+        // Create router with auth middleware
+        let router = Router::<()>::new()
+            .use_middleware(AuthMiddleware::new("secret123".to_string()))
+            .get("/protected", test_handler);
+        
+        // Test request without auth header (should return early)
+        let request_no_auth = ElifRequest::new(
+            axum::http::Method::GET,
+            "/protected".parse().unwrap(),
+            axum::http::HeaderMap::new(),
+        );
+        
+        let response_no_auth = router.middleware_pipeline().execute(request_no_auth, |_req| {
+            Box::pin(async move {
+                // This handler should NOT be called due to early return
+                panic!("Handler should not be called when auth fails");
+            })
+        }).await;
+        
+        assert_eq!(response_no_auth.status_code(), axum::http::StatusCode::UNAUTHORIZED);
+        
+        // Test request with valid auth header (should proceed to handler)
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("authorization", "Bearer secret123".parse().unwrap());
+        let request_valid_auth = ElifRequest::new(
+            axum::http::Method::GET,
+            "/protected".parse().unwrap(),
+            headers,
+        );
+        
+        let response_valid_auth = router.middleware_pipeline().execute(request_valid_auth, |req| {
+            Box::pin(async move {
+                // Handler should be called with valid auth
+                assert!(req.header("authorization").is_some());
+                ElifResponse::ok().text("Protected content accessed")
+            })
+        }).await;
+        
+        assert_eq!(response_valid_auth.status_code(), axum::http::StatusCode::OK);
+        
+        // Test request with invalid auth token (should return early) 
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("authorization", "Bearer invalid".parse().unwrap());
+        let request_invalid_auth = ElifRequest::new(
+            axum::http::Method::GET,
+            "/protected".parse().unwrap(),
+            headers,
+        );
+        
+        let response_invalid_auth = router.middleware_pipeline().execute(request_invalid_auth, |_req| {
+            Box::pin(async move {
+                // Handler should NOT be called with invalid token
+                panic!("Handler should not be called when auth token is invalid");
+            })
+        }).await;
+        
+        assert_eq!(response_invalid_auth.status_code(), axum::http::StatusCode::UNAUTHORIZED);
     }
 }

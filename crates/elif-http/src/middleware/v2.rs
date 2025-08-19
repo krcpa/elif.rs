@@ -12,7 +12,7 @@ use std::sync::Arc;
 // use super::Middleware as OldMiddleware; // Import the old middleware trait
 
 /// Type alias for boxed future in Next
-type NextFuture<'a> = Pin<Box<dyn Future<Output = ElifResponse> + Send + 'a>>;
+pub type NextFuture<'a> = Pin<Box<dyn Future<Output = ElifResponse> + Send + 'a>>;
 
 /// Next represents the rest of the middleware chain
 pub struct Next {
