@@ -40,6 +40,7 @@ impl Clone for RequestIdStrategy {
                 // Create new counter starting from current value
                 Self::Counter(Arc::clone(counter))
             }
+        }
     }
 }
 

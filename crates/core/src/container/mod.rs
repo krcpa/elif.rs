@@ -1,3 +1,4 @@
+#[allow(clippy::module_inception)]
 pub mod container;
 pub mod builder;
 pub mod registry;

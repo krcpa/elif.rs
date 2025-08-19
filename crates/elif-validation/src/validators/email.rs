@@ -71,14 +71,12 @@ impl EmailValidator {
                 // Unicode-aware without TLD requirement
                 r"^[^\s@.]+[^\s@]*@[^\s@.]+[^\s@]*$"
             }
+        } else if self.require_tld {
+            // ASCII-only with TLD requirement (no consecutive dots)
+            r"^[a-zA-Z0-9]([a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$"
         } else {
-            if self.require_tld {
-                // ASCII-only with TLD requirement (no consecutive dots)
-                r"^[a-zA-Z0-9]([a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$"
-            } else {
-                // ASCII-only without TLD requirement (no consecutive dots)
-                r"^[a-zA-Z0-9]([a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$"
-            }
+            // ASCII-only without TLD requirement (no consecutive dots)
+            r"^[a-zA-Z0-9]([a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$"
         };
 
         Regex::new(pattern)
@@ -161,9 +159,7 @@ impl ValidationRule for EmailValidator {
 
         if !self.validate_email_format(email) {
             let message = self
-                .message
-                .as_ref()
-                .map(|m| m.clone())
+                .message.clone()
                 .unwrap_or_else(|| format!("{} must be a valid email address", field));
 
             return Err(ValidationError::with_code(field, message, "invalid_email").into());

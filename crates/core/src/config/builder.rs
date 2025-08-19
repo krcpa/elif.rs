@@ -1,4 +1,4 @@
-use crate::config::{ConfigError, ConfigSource};
+use crate::config::ConfigError;
 use service_builder::builder;
 use std::collections::HashMap;
 
@@ -151,7 +151,7 @@ impl ConfigSchema {
                 return Err(ConfigError::invalid_value(
                     &field.name, 
                     value, 
-                    &format!("at least {} characters", min_len)
+                    format!("at least {} characters", min_len)
                 ));
             }
         } else if rule.starts_with("max_length:") {
@@ -161,7 +161,7 @@ impl ConfigSchema {
                 return Err(ConfigError::invalid_value(
                     &field.name, 
                     value, 
-                    &format!("at most {} characters", max_len)
+                    format!("at most {} characters", max_len)
                 ));
             }
         } else if rule.starts_with("pattern:") {
@@ -171,7 +171,7 @@ impl ConfigSchema {
                 return Err(ConfigError::invalid_value(
                     &field.name, 
                     value, 
-                    &format!("matching pattern: {}", pattern)
+                    format!("matching pattern: {}", pattern)
                 ));
             }
         }
