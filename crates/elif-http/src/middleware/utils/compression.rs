@@ -25,14 +25,15 @@ impl CompressionAlgorithm {
         let mut algorithms = Vec::new();
         
         // Parse Accept-Encoding header (e.g., "gzip, deflate, br")
-        for encoding in accept_encoding.split(',') {
-            let encoding = encoding.trim().to_lowercase();
+        for encoding_part in accept_encoding.split(',') {
+            let encoding = encoding_part.split(';').next().unwrap_or("").trim().to_lowercase();
             match encoding.as_str() {
                 "gzip" => algorithms.push(Self::Gzip),
                 "br" => algorithms.push(Self::Brotli),
                 "identity" => algorithms.push(Self::Identity),
                 _ => continue,
             }
+        }
         }
         
         // Default to identity if no supported encodings found
