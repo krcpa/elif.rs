@@ -154,7 +154,7 @@ where
     }
 
     /// Create a router builder for a specific version
-    pub fn version_builder(&mut self, version: &str) -> VersionedRouteBuilder<S> {
+    pub fn version_builder<'a>(&'a mut self, version: &str) -> VersionedRouteBuilder<'a, S> {
         VersionedRouteBuilder::new(version, self)
     }
 }

@@ -4,7 +4,6 @@
 //! MiddlewarePipeline, ensuring consistent usage and proper ordering.
 
 use elif_http::middleware::MiddlewarePipeline;
-use http::StatusCode;
 use service_builder::builder;
 use crate::{
     middleware::{

@@ -5,7 +5,7 @@
 use elif_http::{
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
-    response::{ElifResponse, ElifStatusCode},
+    response::ElifResponse,
 };
 use crate::{SecurityError, SecurityResult};
 

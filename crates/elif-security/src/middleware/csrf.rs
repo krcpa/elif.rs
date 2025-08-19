@@ -17,7 +17,6 @@ use service_builder::builder;
 use serde_json;
 
 pub use crate::config::CsrfConfig;
-use crate::SecurityError;
 
 /// CSRF token store - in production this would be backed by Redis/database
 type TokenStore = Arc<tokio::sync::RwLock<HashMap<String, CsrfTokenData>>>;
@@ -82,32 +81,7 @@ impl CsrfMiddleware {
     
     /// Validate a CSRF token
     pub async fn validate_token(&self, token: &str, user_agent: Option<&str>) -> bool {
-        let store = self.token_store.read().await;
-        
-        if let Some(token_data) = store.get(token) {
-            // Check expiration
-            if time::OffsetDateTime::now_utc() > token_data.expires_at {
-                return false;
-            }
-            
-            // Check user agent if configured
-            if let Some(stored_hash) = &token_data.user_agent_hash {
-                if let Some(ua) = user_agent {
-                    let mut hasher = Sha256::new();
-                    hasher.update(ua.as_bytes());
-                    let ua_hash = format!("{:x}", hasher.finalize());
-                    if stored_hash != &ua_hash {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-            
-            true
-        } else {
-            false
-        }
+        Self::validate_token_internal(&self.token_store, token, user_agent).await
     }
     
     /// Remove a token after successful validation (single-use)
@@ -120,6 +94,36 @@ impl CsrfMiddleware {
     async fn cleanup_expired_tokens(&self, store: &mut HashMap<String, CsrfTokenData>) {
         let now = time::OffsetDateTime::now_utc();
         store.retain(|_, data| data.expires_at > now);
+    }
+    
+    /// Internal token validation logic
+    async fn validate_token_internal(
+        store: &TokenStore,
+        token: &str,
+        user_agent: Option<&str>,
+    ) -> bool {
+        let store_guard = store.read().await;
+        let Some(token_data) = store_guard.get(token) else {
+            return false;
+        };
+
+        if time::OffsetDateTime::now_utc() > token_data.expires_at {
+            return false;
+        }
+
+        if let Some(stored_hash) = &token_data.user_agent_hash {
+            let Some(ua) = user_agent else {
+                return false;
+            };
+            let mut hasher = sha2::Sha256::new();
+            hasher.update(ua.as_bytes());
+            let ua_hash = format!("{:x}", hasher.finalize());
+            if stored_hash != &ua_hash {
+                return false;
+            }
+        }
+
+        true
     }
     
     /// Check if path is exempt from CSRF protection
@@ -168,7 +172,6 @@ impl Middleware for CsrfMiddleware {
         // Check if exempt before async block
         let is_exempt = self.is_exempt_path(request.uri.path());
         let token = self.extract_token(&request.headers);
-        let config = self.config.clone();
         let store = self.token_store.clone();
         
         Box::pin(async move {
@@ -187,32 +190,7 @@ impl Middleware for CsrfMiddleware {
                 .and_then(|h| h.to_str().ok());
                 
             if let Some(token) = token {
-                // Validate token manually in async block
-                let is_valid = {
-                    let store = store.read().await;
-                    if let Some(token_data) = store.get(&token) {
-                        // Check expiration
-                        if time::OffsetDateTime::now_utc() <= token_data.expires_at {
-                            // Check user agent if configured
-                            if let Some(stored_hash) = &token_data.user_agent_hash {
-                                if let Some(ua) = user_agent {
-                                    let mut hasher = Sha256::new();
-                                    hasher.update(ua.as_bytes());
-                                    let ua_hash = format!("{:x}", hasher.finalize());
-                                    stored_hash == &ua_hash
-                                } else {
-                                    false
-                                }
-                            } else {
-                                true
-                            }
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                };
+                let is_valid = Self::validate_token_internal(&store, &token, user_agent).await;
                 
                 if is_valid {
                     // Consume token for single-use (optional - can be configured)

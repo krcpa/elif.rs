@@ -254,7 +254,6 @@ impl Middleware for CompressionMiddleware {
 mod tests {
     use super::*;
     use crate::response::ElifResponse;
-    use axum::http::{HeaderMap, Method, StatusCode};
     use crate::request::ElifRequest;
     
     #[test]

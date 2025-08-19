@@ -1,0 +1,25 @@
+# Clippy configuration for elif.rs
+# Prevents use of internal implementation types in tests
+
+# Disallow Axum types in test files to maintain framework abstraction
+disallowed-types = [
+    # Axum types that should not appear in tests
+    "axum::extract::Request",
+    "axum::response::Response", 
+    "axum::body::Body",
+    "axum::http::Method",
+    "axum::http::StatusCode",
+    "axum::http::HeaderMap",
+    "axum::http::Uri",
+    
+    # Hyper types (internal implementation)
+    "hyper::Request",
+    "hyper::Response",
+    "hyper::Body",
+    "hyper::Method",
+    "hyper::StatusCode",
+    
+    # Tower types (internal middleware)
+    "tower::Service",
+    "tower_http::*",
+]

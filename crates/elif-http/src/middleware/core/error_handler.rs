@@ -187,7 +187,9 @@ mod tests {
         
         let response = pipeline.execute(request, |_req| {
             Box::pin(async {
-                ElifResponse::ok().text("Success")
+                ElifResponse::ok().json_value(serde_json::json!({
+                    "message": "Success"
+                }))
             })
         }).await;
         

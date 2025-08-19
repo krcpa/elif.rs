@@ -1,9 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::websocket::{WebSocketMessage, ConnectionId, ChannelId, ChannelType, 
                            ChannelPermissions, ChannelMetadata, ChannelMessage, 
-                           Channel, ChannelManager, ChannelStats};
+                           Channel, ChannelManager};
     use std::collections::HashSet;
     use std::time::SystemTime;
     use uuid::Uuid;

@@ -1,7 +1,7 @@
 use super::{TemplateEngine, pluralize_word, to_snake_case, to_pascal_case};
-use elif_core::{ElifError, ResourceSpec, FieldSpec};
+use elif_core::{ElifError, FieldSpec};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use serde_json::{json, Value};
 use chrono::Utc;
 

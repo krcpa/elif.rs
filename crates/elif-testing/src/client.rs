@@ -195,19 +195,50 @@ impl RequestBuilder {
             url.push_str(&format!("?{}", query_string));
         }
         
-        // In a real implementation, this would make an HTTP request
-        // For now, we'll create a mock response
-        let response = TestResponse {
-            status_code: 200,
-            headers: {
-                let mut headers = HashMap::new();
-                headers.insert("Content-Type".to_string(), "application/json".to_string());
-                headers
-            },
-            body: json!({"message": "Test response", "method": self.method, "path": self.path}).to_string(),
+        // Make actual HTTP request using reqwest (pure HTTP client, no axum)
+        let client = reqwest::Client::new();
+        let mut request_builder = match self.method.as_str() {
+            "GET" => client.get(&url),
+            "POST" => client.post(&url),
+            "PUT" => client.put(&url),
+            "PATCH" => client.patch(&url),
+            "DELETE" => client.delete(&url),
+            _ => return Err(TestError::Setup(format!("Unsupported HTTP method: {}", self.method))),
         };
         
-        Ok(response)
+        // Add headers from client and request
+        let mut all_headers = self.client.headers.clone();
+        all_headers.extend(self.headers);
+        
+        for (name, value) in all_headers {
+            request_builder = request_builder.header(&name, &value);
+        }
+        
+        // Add body if present
+        if let Some(body) = self.body {
+            request_builder = request_builder.body(body);
+        }
+        
+        // Execute request
+        let response = request_builder.send().await
+            .map_err(|e| TestError::Setup(format!("HTTP request failed: {}", e)))?;
+            
+        let status_code = response.status().as_u16();
+        let headers: HashMap<String, String> = response.headers()
+            .iter()
+            .map(|(name, value)| {
+                (name.to_string(), value.to_str().unwrap_or("").to_string())
+            })
+            .collect();
+            
+        let body = response.text().await
+            .map_err(|e| TestError::Setup(format!("Failed to read response body: {}", e)))?;
+        
+        Ok(TestResponse {
+            status_code,
+            headers,
+            body,
+        })
     }
 }
 

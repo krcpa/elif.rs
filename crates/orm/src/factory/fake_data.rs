@@ -1,6 +1,5 @@
 //! Realistic fake data generation for factories
 
-use std::sync::OnceLock;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;

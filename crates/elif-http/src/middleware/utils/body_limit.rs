@@ -9,7 +9,6 @@ use crate::{
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
     response::{ElifResponse, ElifStatusCode},
-    errors::HttpError,
 };
 
 /// Configuration for body limit middleware
@@ -118,52 +117,6 @@ impl BodyLimitMiddleware {
     pub fn limit(&self) -> usize {
         self.config.max_size
     }
-
-    /// Create body limit exceeded error response
-    fn create_error_response(&self, content_length: Option<usize>) -> ElifResponse {
-        let mut response = match content_length {
-            Some(size) => {
-                let error_msg = format!("Request body size {} bytes exceeds limit of {} bytes", 
-                                      size, self.config.max_size);
-                ElifResponse::with_status(ElifStatusCode::PAYLOAD_TOO_LARGE)
-                    .text(error_msg)
-            },
-            None => {
-                ElifResponse::with_status(ElifStatusCode::PAYLOAD_TOO_LARGE)
-                    .text(&self.config.error_message)
-            }
-        };
-        
-        if self.config.include_headers {
-            if let Err(e) = response.add_header("X-Max-Body-Size", &self.config.max_size.to_string()) {
-                warn!("Failed to add X-Max-Body-Size header: {}", e);
-            }
-        }
-
-        response
-    }
-
-    /// Check content-length header against limit
-    fn check_content_length(&self, request: &ElifRequest) -> Result<Option<usize>, ElifResponse> {
-        if let Some(content_length) = request.headers.get_str("content-length") {
-            if let Ok(content_length_str) = content_length.to_str() {
-                if let Ok(content_length) = content_length_str.parse::<usize>() {
-                    if content_length > self.config.max_size {
-                        if self.config.log_oversized {
-                            warn!(
-                                "Request body size {} bytes exceeds limit of {} bytes (Content-Length check)",
-                                content_length,
-                                self.config.max_size
-                            );
-                        }
-                        return Err(self.create_error_response(Some(content_length)));
-                    }
-                    return Ok(Some(content_length));
-                }
-            }
-        }
-        Ok(None)
-    }
 }
 
 impl Default for BodyLimitMiddleware {
@@ -177,7 +130,7 @@ impl Middleware for BodyLimitMiddleware {
         let config = self.config.clone();
         Box::pin(async move {
             // First, check Content-Length header if present
-            let content_length = {
+            let _content_length = {
                 if let Some(content_length) = request.headers.get_str("content-length") {
                     if let Ok(content_length_str) = content_length.to_str() {
                         if let Ok(content_length) = content_length_str.parse::<usize>() {
@@ -292,6 +245,7 @@ mod tests {
     use crate::middleware::v2::MiddlewarePipelineV2;
     use crate::request::{ElifRequest, ElifMethod};
     use crate::response::headers::ElifHeaderMap;
+    use crate::response::{ElifResponse, ElifStatusCode};
 
     #[tokio::test]
     async fn test_body_limit_middleware_v2() {

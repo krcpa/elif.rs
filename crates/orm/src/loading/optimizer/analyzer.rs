@@ -1,9 +1,6 @@
-use crate::{
-    error::{OrmError, OrmResult},
-    relationships::RelationshipType,
-};
-use super::plan::{QueryPlan, QueryNode, PlanStatistics};
-use std::collections::{HashMap, HashSet};
+use crate::error::OrmResult;
+use super::plan::{QueryPlan, PlanStatistics};
+use std::collections::HashSet;
 
 /// Analysis result for a query plan
 #[derive(Debug, Clone)]

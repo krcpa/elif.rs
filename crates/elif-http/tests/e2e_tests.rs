@@ -4,12 +4,11 @@
 //! to verify the complete functionality works in practice.
 
 use elif_http::*;
-use elif_core::{Container, app_config::AppConfigTrait};
+use elif_core::{Container};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time::timeout;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct User {
@@ -97,16 +96,16 @@ async fn get_users(_request: ElifRequest) -> HttpResult<ElifResponse> {
     Ok(ElifResponse::ok().json(&users)?)
 }
 
-async fn get_user_by_id(request: ElifRequest) -> HttpResult<ElifResponse> {
+async fn get_user_by_id(_request: ElifRequest) -> HttpResult<ElifResponse> {
     let user_id = 123u32; // Simplified for test
     
     match USER_STORE.get(user_id) {
         Some(user) => Ok(ElifResponse::ok().json(&user)?),
         None => Ok(ElifResponse::not_found().text("User not found")),
-    }
+    }   
 }
 
-async fn create_user(request: ElifRequest) -> HttpResult<ElifResponse> {
+async fn create_user(_request: ElifRequest) -> HttpResult<ElifResponse> {
     let create_req = CreateUserRequest {
         name: "Test User".to_string(),
         email: "test@example.com".to_string(),
@@ -128,7 +127,7 @@ async fn create_user(request: ElifRequest) -> HttpResult<ElifResponse> {
         .json(&user)?)
 }
 
-async fn update_user(request: ElifRequest) -> HttpResult<ElifResponse> {
+async fn update_user(_request: ElifRequest) -> HttpResult<ElifResponse> {
     let user_id = 123u32; // Simplified for test
     
     let update_req = CreateUserRequest {
@@ -142,7 +141,7 @@ async fn update_user(request: ElifRequest) -> HttpResult<ElifResponse> {
     }
 }
 
-async fn delete_user(request: ElifRequest) -> HttpResult<ElifResponse> {
+async fn delete_user(_request: ElifRequest) -> HttpResult<ElifResponse> {
     let user_id = 123u32; // Simplified for test
     
     if USER_STORE.delete(user_id) {
@@ -437,17 +436,16 @@ async fn test_framework_server_configuration() {
 #[tokio::test]
 async fn test_middleware_pipeline() {
     use crate::middleware::{
-        Middleware,
-        timing::TimingMiddleware,
         core::enhanced_logging::EnhancedLoggingMiddleware,
+        core::timing::TimingMiddleware,
         pipeline::MiddlewarePipeline,
     };
     
     // Test that middleware can be combined in a pipeline
-    let timing = TimingMiddleware::new();
-    let logging = EnhancedLoggingMiddleware::new();
+    let _timing = TimingMiddleware::new();
+    let _logging = EnhancedLoggingMiddleware::new();
     
-    let mut pipeline = MiddlewarePipeline::new();
+    let _pipeline = MiddlewarePipeline::new();
     // pipeline.add_middleware(timing); // Method doesn't exist yet
     // pipeline.add_middleware(logging); // Method doesn't exist yet
     

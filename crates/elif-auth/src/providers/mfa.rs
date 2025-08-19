@@ -4,7 +4,7 @@
 //! for enhanced security in the authentication flow.
 
 use crate::{AuthError, AuthResult};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

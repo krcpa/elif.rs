@@ -8,7 +8,7 @@ use futures::{Stream, StreamExt};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::fs;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -487,8 +487,8 @@ impl StorageBackend for LocalBackend {
     }
     
     async fn stats(&self) -> StorageResult<StorageStats> {
-        let mut total_files = 0u64;
-        let mut total_size = 0u64;
+        let total_files = 0u64;
+        let total_size = 0u64;
         
         fn collect_stats<'a>(dir: &'a Path, stats: &'a mut (u64, u64)) -> std::pin::Pin<Box<dyn std::future::Future<Output = StorageResult<()>> + Send + 'a>> {
             Box::pin(async move {

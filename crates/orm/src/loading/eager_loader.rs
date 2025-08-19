@@ -1,5 +1,5 @@
 use crate::{
-    error::{OrmError, OrmResult},
+    error::OrmResult,
     loading::{
         batch_loader::BatchLoader,
         optimizer::{QueryOptimizer, QueryPlan, QueryNode, PlanExecutor, OptimizationStrategy},

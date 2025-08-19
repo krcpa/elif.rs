@@ -232,7 +232,7 @@ impl std::fmt::Debug for ModuleRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modules::{BaseModule, Module};
+    use crate::modules::{BaseModule};
     
     #[tokio::test]
     async fn test_module_registry() -> Result<(), ModuleError> {

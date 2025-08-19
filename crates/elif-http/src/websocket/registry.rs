@@ -6,7 +6,7 @@ use super::channel::{ChannelManager, ChannelId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Events that can occur in the connection registry
 #[derive(Debug, Clone)]
@@ -301,7 +301,7 @@ impl ConnectionRegistry {
         // Batch removal: remove all inactive connections under a single write lock
         if !to_remove.is_empty() {
             let mut registry_connections = self.connections.write().await;
-            for (id, connection) in to_remove {
+            for (id, _connection) in to_remove {
                 if registry_connections.remove(&id).is_some() {
                     debug!("Cleaned up inactive connection: {}", id);
                     // Note: We can't emit Disconnected events here while holding the write lock

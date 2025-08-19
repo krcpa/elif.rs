@@ -41,6 +41,7 @@ regex = { workspace = true }
 
 # Development and testing
 tokio-test = "0.4"
+reqwest = { version = "0.11", features = ["json"] }
 
 [dev-dependencies]
 tokio-test = "0.4"

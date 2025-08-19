@@ -1,4 +1,4 @@
-use super::{TemplateEngine, to_snake_case, to_pascal_case, pluralize_word};
+use super::{to_snake_case, to_pascal_case, pluralize_word};
 use super::resource_generator::{GeneratedFile, GeneratedFileType};
 use elif_core::ElifError;
 use std::collections::HashMap;

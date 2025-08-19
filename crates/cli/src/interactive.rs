@@ -192,7 +192,7 @@ impl Prompt {
         
         // Simple spinner animation
         let chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-        let mut spinner_idx = 0;
+        let spinner_idx = 0;
         
         // In a real implementation, you'd run this in a separate thread
         // For now, just show the message

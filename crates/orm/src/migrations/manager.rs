@@ -4,7 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 

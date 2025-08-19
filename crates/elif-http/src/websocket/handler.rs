@@ -10,23 +10,26 @@ use std::sync::Arc;
 /// This is a simplified version for the foundation
 pub struct WebSocketUpgrade {
     /// WebSocket configuration
-    config: WebSocketConfig,
+    _config: WebSocketConfig,
     /// Connection registry
-    registry: Arc<ConnectionRegistry>,
+    _registry: Arc<ConnectionRegistry>,
 }
 
 impl WebSocketUpgrade {
     /// Create a new WebSocket upgrade handler
     pub fn new(registry: Arc<ConnectionRegistry>) -> Self {
         Self {
-            config: WebSocketConfig::default(),
-            registry,
+            _config: WebSocketConfig::default(),
+            _registry: registry,
         }
     }
 
     /// Create with custom configuration
     pub fn with_config(registry: Arc<ConnectionRegistry>, config: WebSocketConfig) -> Self {
-        Self { config, registry }
+        Self {
+            _config: config,
+            _registry: registry,
+        }
     }
 
     /// Upgrade an HTTP connection to WebSocket

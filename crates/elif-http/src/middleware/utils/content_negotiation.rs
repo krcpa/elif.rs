@@ -6,9 +6,7 @@
 use crate::middleware::v2::{Middleware, Next, NextFuture};
 use crate::request::ElifRequest;
 use crate::response::ElifResponse;
-use crate::response::status::ElifStatusCode;
-use crate::response::headers::{ElifHeaderMap, ElifHeaderName, ElifHeaderValue};
-use serde::{Deserialize, Serialize};
+use crate::response::headers::ElifHeaderValue;
 use std::collections::HashMap;
 
 /// Supported content types for negotiation
@@ -456,8 +454,9 @@ impl Middleware for ContentNegotiationMiddleware {
 mod tests {
     use super::*;
     use crate::response::ElifResponse;
-    use axum::http::{HeaderMap, Method, StatusCode};
     use crate::request::ElifRequest;
+    use crate::response::headers::ElifHeaderMap;
+    use crate::response::headers::ElifHeaderName;
     
     #[test]
     fn test_content_type_parsing() {

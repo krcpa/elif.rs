@@ -54,7 +54,7 @@ impl<T: Clone> ElifState<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::{Deserialize, Serialize};
+    use serde::{Deserialize};
     use crate::request::ElifRequest;
 
     #[derive(Debug, Deserialize, PartialEq)]

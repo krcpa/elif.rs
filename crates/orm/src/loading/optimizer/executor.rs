@@ -170,7 +170,7 @@ impl PlanExecutor {
         plan: &QueryPlan,
         connection: &sqlx::PgPool,
     ) -> HashMap<String, OrmResult<Vec<JsonValue>>> {
-        let mut handles: Vec<JoinHandle<(String, OrmResult<Vec<JsonValue>>)>> = Vec::new();
+        let handles: Vec<JoinHandle<(String, OrmResult<Vec<JsonValue>>)>> = Vec::new();
         let mut results = HashMap::new();
 
         // Limit parallel tasks to avoid overwhelming the database

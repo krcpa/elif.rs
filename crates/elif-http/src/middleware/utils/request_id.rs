@@ -6,9 +6,8 @@
 use crate::middleware::v2::{Middleware, Next, NextFuture};
 use crate::request::ElifRequest;
 use crate::response::{ElifResponse, ElifHeaderName, ElifHeaderValue};
-use crate::response::headers::{ElifHeaderMap, ElifHeaderName as HeaderName, ElifHeaderValue as HeaderValue};
+
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use uuid::Uuid;
 
 /// Request ID generation strategy
@@ -341,8 +340,7 @@ impl RequestIdExt for ElifRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::response::ElifResponse;
-    use axum::http::{HeaderMap, Method, StatusCode};
+    use crate::response::{ElifResponse, ElifHeaderMap};
     use crate::request::ElifRequest;
     
     #[test]
@@ -414,7 +412,7 @@ mod tests {
     async fn test_request_id_middleware_existing_id() {
         let middleware = RequestIdMiddleware::new();
         
-        let mut headers = ElifHeaderMap::new();
+        let mut headers = crate::response::headers::ElifHeaderMap::new();
         headers.insert(crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap(), "existing-123".parse().unwrap());
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,

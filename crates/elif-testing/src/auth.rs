@@ -5,7 +5,7 @@
 //! session management, and RBAC testing helpers.
 
 use std::collections::HashMap;
-use serde_json::{Value as JsonValue, json};
+use serde_json::Value as JsonValue;
 use uuid::Uuid;
 use chrono::{DateTime, Utc, Duration};
 use crate::{TestError, TestResult, factories::{User, UserFactory, Factory}};

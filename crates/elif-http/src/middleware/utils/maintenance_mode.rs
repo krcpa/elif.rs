@@ -209,14 +209,14 @@ impl MaintenanceModeMiddleware {
     }
     
     /// Enable maintenance mode
-    pub fn enable(&self) -> Result<(), std::sync::PoisonError<std::sync::RwLockWriteGuard<bool>>> {
+    pub fn enable(&self) -> Result<(), std::sync::PoisonError<std::sync::RwLockWriteGuard<'_, bool>>> {
         let mut enabled = self.config.enabled.write()?;
         *enabled = true;
         Ok(())
     }
     
     /// Disable maintenance mode
-    pub fn disable(&self) -> Result<(), std::sync::PoisonError<std::sync::RwLockWriteGuard<bool>>> {
+    pub fn disable(&self) -> Result<(), std::sync::PoisonError<std::sync::RwLockWriteGuard<'_, bool>>> {
         let mut enabled = self.config.enabled.write()?;
         *enabled = false;
         Ok(())

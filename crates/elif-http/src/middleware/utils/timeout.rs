@@ -11,7 +11,6 @@ use crate::{
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
     response::{ElifResponse, ElifStatusCode},
-    errors::HttpError,
 };
 
 /// Configuration for timeout middleware
@@ -111,18 +110,6 @@ impl TimeoutMiddleware {
     pub fn duration(&self) -> Duration {
         self.config.timeout
     }
-
-    /// Create timeout error response
-    fn timeout_response(&self) -> ElifResponse {
-        ElifResponse::with_status(ElifStatusCode::REQUEST_TIMEOUT)
-            .json_value(serde_json::json!({
-                "error": {
-                    "code": "REQUEST_TIMEOUT",
-                    "message": &self.config.timeout_message,
-                    "timeout_duration_secs": self.config.timeout.as_secs()
-                }
-            }))
-    }
 }
 
 impl Default for TimeoutMiddleware {
@@ -209,7 +196,6 @@ where
 mod tests {
     use super::*;
     use crate::{middleware::v2::Next, request::ElifRequest};
-    use axum::http::{HeaderMap, Method};
     use tokio::time::{sleep, Duration as TokioDuration};
     use std::time::Duration;
 

@@ -11,7 +11,6 @@ pub mod interactive_config;
 
 // Re-export main types and functions for external use
 pub use interactive_wizard::{InteractiveSetupArgs, InteractiveSetupCommand};
-pub use interactive_config::{ProjectConfig, InteractiveConfigHandler};
 
 use elif_core::ElifError;
 use crate::command_system::CommandHandler;

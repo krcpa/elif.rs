@@ -68,7 +68,6 @@ pub use error::*;
 pub use database::*;
 pub use transaction::*;
 pub use migration::*;
-pub use migration_runner::*;
 pub use relationships::*;
 pub use security::*;
 pub use backends::*;

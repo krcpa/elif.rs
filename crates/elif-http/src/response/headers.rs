@@ -25,10 +25,10 @@ impl ElifHeaderName {
         &self.0
     }
 
-    /// Internal method to create from axum HeaderName (for framework internals only)
-    pub(crate) fn from_axum(name: axum::http::HeaderName) -> Self {
-        Self(name)
-    }
+    // ///Internal method to create from axum HeaderName (for framework internals only)
+    // pub(crate) fn from_axum(name: axum::http::HeaderName) -> Self {
+    //     Self(name)
+    // }
 }
 
 impl FromStr for ElifHeaderName {
@@ -81,10 +81,10 @@ impl ElifHeaderValue {
         &self.0
     }
 
-    /// Internal method to create from axum HeaderValue (for framework internals only)
-    pub(crate) fn from_axum(value: axum::http::HeaderValue) -> Self {
-        Self(value)
-    }
+    // /// Internal method to create from axum HeaderValue (for framework internals only)
+    // pub(crate) fn from_axum(value: axum::http::HeaderValue) -> Self {
+    //     Self(value)
+    // }
 }
 
 impl FromStr for ElifHeaderValue {
@@ -227,10 +227,10 @@ impl ElifHeaderMap {
             .collect()
     }
 
-    /// Internal method to convert to axum HeaderMap (for framework internals only)
-    pub(crate) fn to_axum(&self) -> &axum::http::HeaderMap {
-        &self.0
-    }
+    // /// Internal method to convert to axum HeaderMap (for framework internals only)
+    // pub(crate) fn to_axum(&self) -> &axum::http::HeaderMap {
+    //     &self.0
+    // }
 
     /// Internal method to create from axum HeaderMap (for framework internals only)
     pub(crate) fn from_axum(headers: axum::http::HeaderMap) -> Self {

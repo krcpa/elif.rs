@@ -15,6 +15,7 @@ pub trait FrameworkComponent: Send + Sync + 'static {
 }
 
 /// Trait for components that require initialization
+#[allow(async_fn_in_trait)]
 pub trait Initializable {
     type Config;
     type Error: std::error::Error + Send + Sync + 'static;
@@ -27,6 +28,7 @@ pub trait Initializable {
 }
 
 /// Trait for components that need cleanup
+#[allow(async_fn_in_trait)]
 pub trait Finalizable {
     type Error: std::error::Error + Send + Sync + 'static;
     
@@ -56,6 +58,7 @@ pub trait Service: FrameworkComponent {
 }
 
 /// Factory trait for creating services
+#[allow(async_fn_in_trait)]
 pub trait ServiceFactory: Send + Sync + 'static {
     type Service: Service;
     type Config;

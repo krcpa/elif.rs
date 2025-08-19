@@ -4,7 +4,6 @@ use crate::generators::{
     auth_generator::{AuthGenerator, AuthOptions},
     api_generator::{ApiGenerator, ApiOptions, ApiResource},
 };
-use std::path::PathBuf;
 
 pub async fn resource(
     name: &str,

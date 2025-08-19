@@ -33,9 +33,6 @@ pub mod lazy_loading_tests;
 
 // Re-export main types
 pub use traits::*;
-pub use has_one::*;
-pub use has_many::*;
-pub use belongs_to::*;
 pub use eager_loading::*;
 pub use loader::*;
 pub use cache::*;

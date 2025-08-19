@@ -1,7 +1,6 @@
 //! Query Builder execution for Model types
 
 use sqlx::Row;
-use serde_json::Value;
 
 use crate::error::ModelResult;
 use crate::model::Model;
@@ -26,7 +25,7 @@ impl<M: Model> QueryBuilder<M> {
     
     /// Execute query with chunking for large datasets
     pub async fn chunk<F>(
-        mut self, 
+        self, 
         pool: &sqlx::Pool<sqlx::Postgres>, 
         chunk_size: i64,
         mut callback: F

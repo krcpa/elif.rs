@@ -19,6 +19,7 @@ where
     name: String,
     router: AxumRouter<S>,
     registry: Arc<Mutex<RouteRegistry>>,
+    #[allow(dead_code)]
     middleware: Vec<String>, // Placeholder for future middleware
 }
 
@@ -191,12 +192,13 @@ where
 #[derive(Debug, Clone)]
 #[builder]
 pub struct GroupBuilderConfig {
+    #[builder(getter)]
     pub name: String,
     
-    #[builder(default)]
+    #[builder(default, getter)]
     pub prefix: String,
     
-    #[builder(default)]
+    #[builder(default, getter)]
     pub middleware: Vec<String>,
 }
 

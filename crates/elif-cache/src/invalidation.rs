@@ -11,7 +11,7 @@ use wildmatch::WildMatch;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime},
 };
 use tokio::sync::RwLock;
 use tracing;

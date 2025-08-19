@@ -6,7 +6,7 @@ formats including Postman collections and Insomnia workspaces.
 */
 
 use crate::{
-    error::{OpenApiError, OpenApiResult},
+    error::OpenApiResult,
     specification::OpenApiSpec,
 };
 use serde::{Deserialize, Serialize};

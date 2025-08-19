@@ -3,7 +3,6 @@
 //! Implements the core database operations with proper parameter binding,
 //! timestamp management, soft delete support, and error handling.
 
-use std::collections::HashMap;
 use chrono::Utc;
 use sqlx::{Pool, Postgres};
 use serde_json::Value;
@@ -216,7 +215,7 @@ pub trait CrudOperations: Model {
     }
 
     /// Helper method to bind JSON values to SQL queries
-    fn bind_json_value<'a>(mut query: sqlx::query::Query<'a, Postgres, sqlx::postgres::PgArguments>, value: &Value) -> ModelResult<sqlx::query::Query<'a, Postgres, sqlx::postgres::PgArguments>> {
+    fn bind_json_value<'a>(query: sqlx::query::Query<'a, Postgres, sqlx::postgres::PgArguments>, value: &Value) -> ModelResult<sqlx::query::Query<'a, Postgres, sqlx::postgres::PgArguments>> {
         match value {
             Value::Null => Ok(query.bind(None::<String>)),
             Value::Bool(b) => Ok(query.bind(*b)),

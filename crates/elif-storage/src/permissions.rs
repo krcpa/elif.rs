@@ -1,7 +1,5 @@
 //! File access control and permissions
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 /// File permissions and access control
 #[cfg(feature = "access-control")]

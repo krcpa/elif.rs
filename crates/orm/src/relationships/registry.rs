@@ -1,11 +1,11 @@
 //! Relationship Registry - Runtime metadata storage and access system
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use dashmap::DashMap;
 
 use crate::error::{ModelError, ModelResult};
-use super::metadata::{RelationshipMetadata, RelationshipType, ForeignKeyConfig};
+use super::metadata::{RelationshipMetadata, RelationshipType};
 
 /// Thread-safe relationship registry for storing and accessing metadata at runtime
 #[derive(Debug, Clone)]

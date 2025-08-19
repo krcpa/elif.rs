@@ -1,7 +1,5 @@
 //! Database seeding system with environment controls
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use crate::error::{OrmError, OrmResult};
 use crate::model::Model;
 use super::Factory;

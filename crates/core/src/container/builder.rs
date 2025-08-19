@@ -126,6 +126,7 @@ mod tests {
     use crate::foundation::traits::{Service, FrameworkComponent};
     
     #[derive(Clone, Debug)]
+    #[allow(dead_code)]
     struct TestService {
         name: String,
     }
