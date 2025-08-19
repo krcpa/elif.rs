@@ -7,7 +7,7 @@ use crate::middleware::v2::{Middleware, Next, NextFuture};
 use crate::request::ElifRequest;
 use crate::response::ElifResponse;
 use tower_http::compression::{CompressionLayer, CompressionLevel};
-use tower::{Service, ServiceExt, Layer};
+use tower::{Service, ServiceExt};
 use std::sync::Arc;
 
 /// Configuration for compression middleware

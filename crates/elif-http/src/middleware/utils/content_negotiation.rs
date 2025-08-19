@@ -678,7 +678,7 @@ mod tests {
     async fn test_custom_converter_preservation_after_clone() {
         // Test that custom converters are preserved after config clone
         let middleware = ContentNegotiationMiddleware::new()
-            .converter(ContentType::Csv, |json_value| {
+            .converter(ContentType::Csv, |_json_value| {
                 // Custom CSV converter
                 Ok(b"custom,csv,data".to_vec())
             });

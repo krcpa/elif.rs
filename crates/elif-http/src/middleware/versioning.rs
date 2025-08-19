@@ -702,7 +702,7 @@ mod tests {
             .strategy(VersionStrategy::UrlPath)
             .build().unwrap();
             
-        let middleware = VersioningMiddleware::new(config);
+        let _middleware = VersioningMiddleware::new(config);
         
         // Test URL path extraction logic would go here
         // This is a simplified test structure

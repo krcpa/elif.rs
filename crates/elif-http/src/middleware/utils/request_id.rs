@@ -8,6 +8,7 @@ use crate::request::ElifRequest;
 use crate::response::ElifResponse;
 use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// Request ID generation strategy
@@ -38,8 +39,10 @@ impl Clone for RequestIdStrategy {
             Self::UuidV1 => Self::UuidV1,
             Self::Counter(counter) => {
                 // Create new counter starting from current value
-                Self::Counter(Arc::clone(counter))
+                Self::Counter(AtomicU64::new(counter.load(Ordering::Relaxed)))
             }
+            Self::PrefixedUuid(prefix) => Self::PrefixedUuid(prefix.clone()),
+            Self::Custom(func) => Self::Custom(*func),
         }
     }
 }

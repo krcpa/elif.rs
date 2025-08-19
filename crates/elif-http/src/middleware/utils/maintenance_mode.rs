@@ -279,12 +279,7 @@ impl MaintenanceModeMiddleware {
             return true;
         }
         
-        // Check allowed methods
-        if !self.config.allowed_methods.contains(&request.method) {
-            // Method not in allowed list, check other bypass conditions
-        } else {
-            return true; // Method is allowed
-        }
+        // Method check is removed - we check paths first, then other bypass conditions
         
         // Check allowed paths
         let path = request.path();
