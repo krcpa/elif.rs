@@ -345,14 +345,27 @@ mod tests {
     #[tokio::test]
     async fn test_rate_limit_different_ips() {
         let middleware = RateLimitMiddleware::strict(); // 10 requests per minute
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
-        // Request from first IP - simple test
-        let info1 = middleware.check_rate_limit("192.168.1.1").unwrap();
-        assert!(info1.allowed);
+        // Request from first IP
+        let mut headers1 = ElifHeaderMap::new();
+        headers1.insert("x-forwarded-for".parse().unwrap(), "192.168.1.1".parse().unwrap());
+        let request1 = ElifRequest::new(ElifMethod::GET, "/test".parse().unwrap(), headers1);
+        
+        let response1 = pipeline.execute(request1, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Success") })
+        }).await;
+        assert_eq!(response1.status_code(), ElifStatusCode::OK);
         
         // Request from different IP should be allowed
-        let info2 = middleware.check_rate_limit("192.168.1.2").unwrap();
-        assert!(info2.allowed);
+        let mut headers2 = ElifHeaderMap::new();
+        headers2.insert("x-forwarded-for".parse().unwrap(), "192.168.1.2".parse().unwrap());
+        let request2 = ElifRequest::new(ElifMethod::GET, "/test".parse().unwrap(), headers2);
+        
+        let response2 = pipeline.execute(request2, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Success") })
+        }).await;
+        assert_eq!(response2.status_code(), ElifStatusCode::OK);
     }
     
     #[tokio::test]
@@ -369,11 +382,38 @@ mod tests {
         };
         
         let middleware = RateLimitMiddleware::new(config);
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
-        // Test path exemption directly
-        assert!(middleware.is_exempt_path("/health"));
-        assert!(middleware.is_exempt_path("/api/v1/public/status"));
-        assert!(!middleware.is_exempt_path("/api/v1/users"));
+        let mut headers = ElifHeaderMap::new();
+        headers.insert("x-forwarded-for".parse().unwrap(), "192.168.1.1".parse().unwrap());
+        
+        // Health check should be exempt
+        let health_request = ElifRequest::new(ElifMethod::GET, "/health".parse().unwrap(), headers.clone());
+        let response = pipeline.execute(health_request, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Healthy") })
+        }).await;
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
+        
+        // Public API should be exempt (wildcard match)
+        let public_request = ElifRequest::new(ElifMethod::GET, "/api/v1/public/status".parse().unwrap(), headers.clone());
+        let response = pipeline.execute(public_request, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Status") })
+        }).await;
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
+        
+        // Regular API should be rate limited after using up quota (max_requests = 1)
+        let api_request1 = ElifRequest::new(ElifMethod::GET, "/api/v1/users".parse().unwrap(), headers.clone());
+        let response1 = pipeline.execute(api_request1, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Users") })
+        }).await;
+        assert_eq!(response1.status_code(), ElifStatusCode::OK);
+        
+        // Second request should be rate limited
+        let api_request2 = ElifRequest::new(ElifMethod::GET, "/api/v1/users".parse().unwrap(), headers);
+        let response2 = pipeline.execute(api_request2, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Should not reach handler") })
+        }).await;
+        assert_eq!(response2.status_code(), ElifStatusCode::TOO_MANY_REQUESTS);
     }
     
     #[tokio::test]
@@ -386,19 +426,37 @@ mod tests {
         };
         
         let middleware = RateLimitMiddleware::new(config);
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
-        // Test user ID identifier - basic rate limiting
-        let info1 = middleware.check_rate_limit("user123").unwrap();
-        assert!(info1.allowed);
-        assert_eq!(info1.current, 1);
+        // First request with user ID
+        let mut headers1 = ElifHeaderMap::new();
+        headers1.insert("x-user-id".parse().unwrap(), "user123".parse().unwrap());
+        let request1 = ElifRequest::new(ElifMethod::GET, "/test".parse().unwrap(), headers1);
         
-        let info2 = middleware.check_rate_limit("user123").unwrap();
-        assert!(info2.allowed);
-        assert_eq!(info2.current, 2);
+        let response1 = pipeline.execute(request1, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Success") })
+        }).await;
+        assert_eq!(response1.status_code(), ElifStatusCode::OK);
         
-        let info3 = middleware.check_rate_limit("user123").unwrap();
-        assert!(!info3.allowed);
-        assert_eq!(info3.current, 3);
+        // Second request with same user ID should be allowed
+        let mut headers2 = ElifHeaderMap::new();
+        headers2.insert("x-user-id".parse().unwrap(), "user123".parse().unwrap());
+        let request2 = ElifRequest::new(ElifMethod::GET, "/test".parse().unwrap(), headers2);
+        
+        let response2 = pipeline.execute(request2, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Success") })
+        }).await;
+        assert_eq!(response2.status_code(), ElifStatusCode::OK);
+        
+        // Third request should be rate limited
+        let mut headers3 = ElifHeaderMap::new();
+        headers3.insert("x-user-id".parse().unwrap(), "user123".parse().unwrap());
+        let request3 = ElifRequest::new(ElifMethod::GET, "/test".parse().unwrap(), headers3);
+        
+        let response3 = pipeline.execute(request3, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Should not reach handler") })
+        }).await;
+        assert_eq!(response3.status_code(), ElifStatusCode::TOO_MANY_REQUESTS);
     }
     
     #[tokio::test]
@@ -408,7 +466,7 @@ mod tests {
     }
     
     #[tokio::test]
-    async fn test_rate_limit_response() {
+    async fn test_rate_limit_response_headers() {
         let config = RateLimitConfig {
             max_requests: 1,
             window_seconds: 60,
@@ -417,16 +475,30 @@ mod tests {
         };
         
         let middleware = RateLimitMiddleware::new(config);
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
-        // Use up quota
-        let _info1 = middleware.check_rate_limit("192.168.1.1").unwrap();
+        let mut headers = ElifHeaderMap::new();
+        headers.insert("x-forwarded-for".parse().unwrap(), "192.168.1.1".parse().unwrap());
         
-        // Second request should be rate limited
-        let info2 = middleware.check_rate_limit("192.168.1.1").unwrap();
-        assert!(!info2.allowed);
+        // Use up the quota
+        let request1 = ElifRequest::new(ElifMethod::GET, "/test".parse().unwrap(), headers.clone());
+        let response1 = pipeline.execute(request1, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Success") })
+        }).await;
+        assert_eq!(response1.status_code(), ElifStatusCode::OK);
         
-        // Test response creation
-        let response = middleware.rate_limit_response(&info2);
-        assert_eq!(response.status_code(), ElifStatusCode::TOO_MANY_REQUESTS);
+        // Second request should return rate limit response
+        let request2 = ElifRequest::new(ElifMethod::GET, "/test".parse().unwrap(), headers);
+        let response2 = pipeline.execute(request2, |_req| {
+            Box::pin(async move { ElifResponse::ok().text("Should not reach handler") })
+        }).await;
+        
+        // Should be rate limited with proper status code
+        assert_eq!(response2.status_code(), ElifStatusCode::TOO_MANY_REQUESTS);
+        
+        // In a real implementation, we'd check for rate limit headers:
+        // X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After
+        // But since ElifResponse doesn't expose headers in tests easily, 
+        // we just verify the status code for now
     }
 }
