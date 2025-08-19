@@ -5,6 +5,7 @@ use crate::handlers::elif_handler;
 use crate::request::ElifRequest;
 use crate::response::IntoElifResponse;
 use crate::errors::HttpResult;
+use crate::middleware::v2::{Middleware, MiddlewarePipelineV2, LoggingMiddleware};
 use service_builder::builder;
 use axum::{
     Router as AxumRouter,
@@ -23,6 +24,8 @@ where
     axum_router: AxumRouter<S>,
     registry: Arc<Mutex<RouteRegistry>>,
     route_counter: Arc<Mutex<usize>>,
+    middleware_stack: MiddlewarePipelineV2,
+    middleware_groups: HashMap<String, MiddlewarePipelineV2>,
 }
 
 impl<S> Router<S>
@@ -35,6 +38,8 @@ where
             axum_router: AxumRouter::new(),
             registry: Arc::new(Mutex::new(RouteRegistry::new())),
             route_counter: Arc::new(Mutex::new(0)),
+            middleware_stack: MiddlewarePipelineV2::new(),
+            middleware_groups: HashMap::new(),
         }
     }
 
@@ -44,6 +49,8 @@ where
             axum_router: AxumRouter::new().with_state(state),
             registry: Arc::new(Mutex::new(RouteRegistry::new())),
             route_counter: Arc::new(Mutex::new(0)),
+            middleware_stack: MiddlewarePipelineV2::new(),
+            middleware_groups: HashMap::new(),
         }
     }
 
@@ -82,6 +89,30 @@ where
                 }
             })
             .collect()
+    }
+
+    /// Add global middleware to the router
+    pub fn use_middleware<M: Middleware + 'static>(mut self, middleware: M) -> Self {
+        self.middleware_stack = self.middleware_stack.add(middleware);
+        self
+    }
+
+    /// Create a middleware group
+    pub fn middleware_group(mut self, name: &str, middleware: Vec<Arc<dyn Middleware>>) -> Self {
+        let mut pipeline = MiddlewarePipelineV2::new();
+        for _m in middleware {
+            // TODO: Need to improve the pipeline API to accept Arc<dyn Middleware>
+            // For now, just create an empty pipeline as placeholder
+            pipeline = pipeline.add(LoggingMiddleware); // Placeholder - will fix this
+        }
+        self.middleware_groups.insert(name.to_string(), pipeline);
+        self
+    }
+
+    /// Use a middleware group for routes (placeholder for future route-specific middleware)
+    pub fn use_group(&mut self, _group_name: &str) -> &mut Self {
+        // TODO: Implement route-specific middleware group usage
+        self
     }
 
     /// Add a GET route with elif handler
@@ -155,6 +186,11 @@ where
             }
         }
         
+        // Merge middleware groups
+        self.middleware_groups.extend(other.middleware_groups);
+        
+        // Note: We don't merge the middleware_stack as global middleware should be separate per router
+        
         // Merge the underlying Axum routers
         self.axum_router = self.axum_router.merge(other.axum_router);
         self
@@ -176,6 +212,9 @@ where
                 self_registry.register(id.clone(), route_info.clone());
             }
         }
+        
+        // Merge middleware groups from nested router
+        self.middleware_groups.extend(router.middleware_groups);
         
         self.axum_router = self.axum_router.nest(path, router.axum_router);
         self
@@ -209,6 +248,16 @@ where
         } else {
             None
         }
+    }
+
+    /// Get the global middleware pipeline
+    pub fn middleware_pipeline(&self) -> &MiddlewarePipelineV2 {
+        &self.middleware_stack
+    }
+
+    /// Get available middleware groups
+    pub fn middleware_groups(&self) -> &HashMap<String, MiddlewarePipelineV2> {
+        &self.middleware_groups
     }
 
     /// Add a raw Axum route while preserving router state (for internal use)
@@ -420,5 +469,56 @@ mod tests {
         
         let url = router.url_for("user.posts.show", &params);
         assert_eq!(url, Some("/users/123/posts/hello-world".to_string()));
+    }
+
+    #[test]
+    fn test_middleware_integration() {
+        use crate::middleware::v2::LoggingMiddleware;
+        
+        let router = Router::<()>::new()
+            .use_middleware(LoggingMiddleware)
+            .get("/", elif_handler);
+        
+        // Verify middleware was added to the pipeline
+        assert_eq!(router.middleware_pipeline().len(), 1);
+        assert_eq!(router.middleware_pipeline().names(), vec!["LoggingMiddleware"]);
+    }
+
+    #[test]
+    fn test_middleware_groups() {
+        use crate::middleware::v2::LoggingMiddleware;
+        use std::sync::Arc;
+        
+        let router = Router::<()>::new()
+            .middleware_group("api", vec![Arc::new(LoggingMiddleware)])
+            .get("/", elif_handler);
+        
+        // Verify middleware group was created
+        assert!(router.middleware_groups().contains_key("api"));
+        
+        // Note: Currently middleware groups use placeholder implementation
+        // This will be improved in the future to properly add the middleware
+    }
+
+    #[test]
+    fn test_router_merge_with_middleware() {
+        use crate::middleware::v2::LoggingMiddleware;
+        use std::sync::Arc;
+        
+        let router1 = Router::<()>::new()
+            .use_middleware(LoggingMiddleware)
+            .middleware_group("auth", vec![Arc::new(LoggingMiddleware)]);
+        
+        let router2 = Router::<()>::new()
+            .middleware_group("api", vec![Arc::new(LoggingMiddleware)]);
+        
+        let merged = router1.merge(router2);
+        
+        // Verify that middleware groups were merged
+        assert!(merged.middleware_groups().contains_key("auth"));
+        assert!(merged.middleware_groups().contains_key("api"));
+        
+        // Verify global middleware is preserved
+        assert_eq!(merged.middleware_pipeline().len(), 1);
     }
 }

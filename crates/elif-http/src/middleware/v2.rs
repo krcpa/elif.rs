@@ -38,7 +38,7 @@ impl Next {
 
 /// New middleware trait with Laravel-style handle(request, next) pattern
 /// Uses boxed futures to be dyn-compatible
-pub trait Middleware: Send + Sync {
+pub trait Middleware: Send + Sync + std::fmt::Debug {
     /// Handle the request and call the next middleware in the chain
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static>;
     
@@ -49,6 +49,7 @@ pub trait Middleware: Send + Sync {
 }
 
 /// Middleware pipeline for the new system
+#[derive(Debug)]
 pub struct MiddlewarePipelineV2 {
     middleware: Vec<Arc<dyn Middleware>>,
 }
@@ -120,6 +121,7 @@ impl Clone for MiddlewarePipelineV2 {
 }
 
 /// Backward compatibility adapter to wrap old middleware in the new trait
+#[derive(Debug)]
 pub struct MiddlewareAdapter<T> {
     inner: Arc<T>,
 }
@@ -132,7 +134,7 @@ impl<T> MiddlewareAdapter<T> {
 
 impl<T> Middleware for MiddlewareAdapter<T> 
 where 
-    T: super::Middleware + Send + Sync + 'static,
+    T: super::Middleware + Send + Sync + 'static + std::fmt::Debug,
 {
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
         let inner = self.inner.clone();
@@ -170,6 +172,7 @@ where
 }
 
 /// Example logging middleware using the new pattern
+#[derive(Debug)]
 pub struct LoggingMiddleware;
 
 impl Middleware for LoggingMiddleware {
@@ -197,6 +200,7 @@ impl Middleware for LoggingMiddleware {
 }
 
 /// Example auth middleware using the new pattern
+#[derive(Debug)]
 pub struct SimpleAuthMiddleware {
     required_token: String,
 }
@@ -269,6 +273,7 @@ mod tests {
     use axum::http::{HeaderMap, Method};
     
     /// Test middleware that adds a header to requests
+    #[derive(Debug)]
     pub struct TestMiddleware {
         name: &'static str,
     }
@@ -330,6 +335,7 @@ mod tests {
     #[tokio::test]
     async fn test_middleware_chain_execution_order() {
         /// Test middleware that tracks execution order
+        #[derive(Debug)]
         struct OrderTestMiddleware {
             name: &'static str,
         }
@@ -470,6 +476,7 @@ mod tests {
         use axum::body::Body;
         
         // Create a simple old-style middleware
+        #[derive(Debug)]
         struct OldTestMiddleware;
         
         impl OldMiddleware for OldTestMiddleware {
