@@ -81,8 +81,7 @@ impl BaseController {
             "data": data,
             "meta": meta
         });
-        let api_response = ApiResponse::success(response_data);
-        Ok(ElifResponse::ok().json(&api_response)?)
+        Ok(ElifResponse::ok().json(&response_data)?)
     }
 
     /// Create standardized delete response
