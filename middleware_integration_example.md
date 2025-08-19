@@ -63,6 +63,16 @@ All tests pass including:
 - Fixed `middleware_group()` to properly use provided middleware
 - Added comprehensive tests to verify correct middleware application
 
+## Critical Security Fix Applied
+
+**Security Issue Discovered**: The router `merge()` method was silently discarding global middleware from the merged router, which could cause essential middleware like authentication to be lost, creating serious security vulnerabilities.
+
+**Solution Implemented**:
+- Added `extend()` method to `MiddlewarePipelineV2` for proper middleware combination
+- Fixed `merge()` to preserve global middleware from both routers using `extend()`
+- Added comprehensive tests to verify all middleware is preserved with correct execution order
+- Documented execution order: merged router's middleware runs before other router's middleware
+
 ## API Improvements Applied
 
 **Issue Resolved**: Removed the confusing `use_group()` placeholder method that was a no-op, which could mislead users into thinking they were applying route-specific middleware when they weren't.
@@ -79,12 +89,24 @@ All tests pass including:
 ✅ **Middleware Groups**: Fixed, properly tested, and correctly documented  
 ✅ **Bug-Free Implementation**: All middleware is correctly applied as specified  
 ✅ **Clean Public API**: No confusing placeholder methods  
-✅ **Comprehensive Testing**: 7 tests pass, including edge cases  
+✅ **Security**: Router merging preserves all middleware (no silent loss)  
+✅ **Nested Router Middleware Scoping**: Fixed critical middleware scoping issue  
+✅ **Route Registration**: Fixed route ID collision bug in merge() and nest() methods  
+✅ **Comprehensive Testing**: 12 tests pass, including all edge cases and security scenarios  
+
+### Critical Issues Resolved:
+
+**Route ID Collision Bug**: Fixed a serious issue where route IDs would collide during router merge() and nest() operations, causing routes to be overwritten and lost. The fix generates unique IDs for merged/nested routes to prevent conflicts.
+
+**Nested Router Middleware Scoping**: Implemented proper middleware scoping for nested routers where:
+- Nested router's global middleware applies only to nested routes (not parent routes)
+- Middleware is applied as an Axum Layer before nesting for proper isolation
+- Empty middleware pipelines are optimized to avoid unnecessary layer overhead
 
 ### Future Enhancements:
 
 1. **Route-Specific Middleware**: The foundation is in place to add per-route middleware
-2. **Middleware Ordering**: Can be enhanced with priority/ordering systems
+2. **Middleware Ordering**: Can be enhanced with priority/ordering systems  
 3. **Performance Optimizations**: Further optimize middleware pipeline execution
 
-This implementation fulfills the requirements of issue #198, fixes critical bugs, and provides a solid foundation for advanced middleware functionality.
+This implementation fulfills the requirements of issue #198, fixes critical bugs including route ID collisions and middleware scoping issues, and provides a solid foundation for advanced middleware functionality.

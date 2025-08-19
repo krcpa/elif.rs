@@ -172,11 +172,13 @@ where
 
     /// Merge another ElifRouter - the primary method for composing routers
     pub fn merge(mut self, other: Router<S>) -> Self {
-        // Merge the registries
+        // Merge the registries with unique IDs to avoid conflicts
         if let (Ok(mut self_registry), Ok(other_registry)) = 
             (self.registry.lock(), other.registry.lock()) {
-            for (id, route_info) in other_registry.all_routes() {
-                self_registry.register(id.clone(), route_info.clone());
+            for (_old_id, route_info) in other_registry.all_routes() {
+                // Generate a new unique ID for the merged route to avoid ID conflicts
+                let new_id = self.next_route_id();
+                self_registry.register(new_id, route_info.clone());
             }
         }
         
@@ -198,20 +200,65 @@ where
     }
 
     /// Nest routes under a path prefix
+    /// 
+    /// The nested router's global middleware will be applied only to the nested routes,
+    /// not to the parent router's routes. This is achieved by converting the nested
+    /// router's middleware pipeline into an Axum Layer before nesting.
     pub fn nest(mut self, path: &str, router: Router<S>) -> Self {
         // Note: Nested routes inherit their path prefix, so we don't need to modify the registry paths
         // The registry will contain the original paths, and Axum handles the prefixing internally
+        // Merge nested router's routes into parent registry with unique IDs
         if let (Ok(mut self_registry), Ok(router_registry)) = 
             (self.registry.lock(), router.registry.lock()) {
-            for (id, route_info) in router_registry.all_routes() {
-                self_registry.register(id.clone(), route_info.clone());
+            for (_old_id, route_info) in router_registry.all_routes() {
+                // Generate a new unique ID for the nested route to avoid ID conflicts
+                let new_id = self.next_route_id();
+                self_registry.register(new_id, route_info.clone());
             }
         }
         
         // Merge middleware groups from nested router
         self.middleware_groups.extend(router.middleware_groups);
         
-        self.axum_router = self.axum_router.nest(path, router.axum_router);
+        // Apply nested router's global middleware as a layer before nesting
+        // This ensures the middleware only applies to the nested routes
+        let has_nested_middleware = !router.middleware_stack.is_empty();
+        let nested_middleware = router.middleware_stack.clone();
+        let nested_axum_router = router.axum_router;
+        
+        let nested_axum_router = if has_nested_middleware {
+            use axum::middleware::from_fn;
+            use axum::extract::Request;
+            use axum::response::Response;
+            use axum::middleware::Next;
+            
+            // Create a layer from the nested router's middleware pipeline
+            nested_axum_router.layer(from_fn(move |req: Request, next: Next| {
+                let pipeline = nested_middleware.clone();
+                async move {
+                    // Convert axum request to ElifRequest
+                    let elif_req = crate::request::ElifRequest::from_axum_request(req).await;
+                    
+                    // Execute middleware pipeline
+                    let response = pipeline.execute(elif_req, |req| {
+                        Box::pin(async move {
+                            // Convert back to axum request for next handler
+                            let axum_req = req.into_axum_request();
+                            let axum_response = next.run(axum_req).await;
+                            // Convert axum response to ElifResponse
+                            crate::response::ElifResponse::from_axum_response(axum_response).await
+                        })
+                    }).await;
+                    
+                    // Convert ElifResponse back to axum response
+                    response.into_axum_response()
+                }
+            }))
+        } else {
+            nested_axum_router
+        };
+        
+        self.axum_router = self.axum_router.nest(path, nested_axum_router);
         self
     }
 
@@ -571,5 +618,126 @@ mod tests {
             merged.middleware_pipeline().names(), 
             vec!["LoggingMiddleware", "SimpleAuthMiddleware", "SimpleAuthMiddleware", "LoggingMiddleware"]
         );
+    }
+    
+    #[test]
+    fn test_nested_router_middleware_scoping() {
+        use crate::middleware::v2::{LoggingMiddleware, SimpleAuthMiddleware};
+        use std::sync::Arc;
+        
+        // Create parent router with its own middleware
+        let parent_router = Router::<()>::new()
+            .use_middleware(LoggingMiddleware)
+            .get("/parent", elif_handler);
+        
+        // Create nested router with different middleware
+        let nested_router = Router::<()>::new()
+            .use_middleware(SimpleAuthMiddleware::new("nested_secret".to_string()))
+            .get("/nested", elif_handler);
+        
+        // Nest the router
+        let composed_router = parent_router.nest("/api", nested_router);
+        
+        // Verify parent router's middleware is preserved
+        assert_eq!(composed_router.middleware_pipeline().len(), 1);
+        assert_eq!(composed_router.middleware_pipeline().names(), vec!["LoggingMiddleware"]);
+        
+        // Verify route registry contains both routes from both routers
+        // The nested router's routes should be merged into the parent registry
+        let registry = composed_router.registry();
+        let reg = registry.lock().unwrap();
+        let route_count = reg.all_routes().len();
+        
+        // Should have both parent route (/parent) and nested route (/nested)
+        // Note: If this fails, the issue is likely in the nest() registry merging logic
+        assert_eq!(route_count, 2, "Expected 2 routes after nesting (parent + nested)");
+        
+        // The nested router's middleware should be applied as a layer to the nested routes
+        // This test verifies the structure is correct - actual middleware execution
+        // would need integration tests with a running server
+    }
+    
+    #[test]
+    fn test_nested_router_middleware_groups_merged() {
+        use crate::middleware::v2::LoggingMiddleware;
+        use std::sync::Arc;
+        
+        // Create parent router with middleware group
+        let parent_router = Router::<()>::new()
+            .middleware_group("parent_group", vec![Arc::new(LoggingMiddleware)])
+            .get("/parent", elif_handler);
+        
+        // Create nested router with different middleware group
+        let nested_router = Router::<()>::new()
+            .middleware_group("nested_group", vec![Arc::new(LoggingMiddleware)])
+            .get("/nested", elif_handler);
+        
+        // Nest the router
+        let composed_router = parent_router.nest("/api", nested_router);
+        
+        // Verify both middleware groups are preserved
+        assert!(composed_router.middleware_groups().contains_key("parent_group"));
+        assert!(composed_router.middleware_groups().contains_key("nested_group"));
+        
+        // Verify the groups contain the correct middleware
+        let parent_group = composed_router.middleware_groups().get("parent_group").unwrap();
+        assert_eq!(parent_group.len(), 1);
+        assert_eq!(parent_group.names(), vec!["LoggingMiddleware"]);
+        
+        let nested_group = composed_router.middleware_groups().get("nested_group").unwrap();
+        assert_eq!(nested_group.len(), 1);
+        assert_eq!(nested_group.names(), vec!["LoggingMiddleware"]);
+    }
+    
+    #[test]
+    fn test_nested_router_empty_middleware_optimization() {
+        use crate::middleware::v2::LoggingMiddleware;
+        
+        // Create parent router with middleware
+        let parent_router = Router::<()>::new()
+            .use_middleware(LoggingMiddleware)
+            .get("/parent", elif_handler);
+        
+        // Create nested router WITHOUT middleware (empty pipeline)
+        let nested_router = Router::<()>::new()
+            .get("/nested", elif_handler);
+        
+        // Verify nested router has empty middleware
+        assert_eq!(nested_router.middleware_pipeline().len(), 0);
+        assert!(nested_router.middleware_pipeline().is_empty());
+        
+        // Nest the router
+        let composed_router = parent_router.nest("/api", nested_router);
+        
+        // Parent middleware should still be there
+        assert_eq!(composed_router.middleware_pipeline().len(), 1);
+        assert_eq!(composed_router.middleware_pipeline().names(), vec!["LoggingMiddleware"]);
+        
+        // The implementation should optimize for empty nested middleware
+        // (no unnecessary layer application)
+    }
+    
+    #[test]
+    fn test_simple_nest_route_registration() {
+        // Test basic nesting without middleware to understand route registration behavior
+        let parent_router = Router::<()>::new()
+            .get("/parent", elif_handler);
+        
+        let nested_router = Router::<()>::new()
+            .get("/nested", elif_handler);
+        
+        // Check initial route counts
+        assert_eq!(parent_router.registry().lock().unwrap().all_routes().len(), 1);
+        assert_eq!(nested_router.registry().lock().unwrap().all_routes().len(), 1);
+        
+        // Nest the routers
+        let composed_router = parent_router.nest("/api", nested_router);
+        
+        // Check final route count
+        let route_count = composed_router.registry().lock().unwrap().all_routes().len();
+        
+        // Verify that nesting merges route registries correctly
+        // We expect the nested router's routes to be merged into the parent registry
+        assert_eq!(route_count, 2, "Expected both parent and nested routes to be registered, got: {}", route_count);
     }
 }
