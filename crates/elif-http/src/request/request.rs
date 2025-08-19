@@ -3,8 +3,9 @@
 //! Provides rich request parsing and data extraction capabilities.
 
 use std::collections::HashMap;
+use std::any::{Any, TypeId};
 use axum::{
-    http::{HeaderValue, Uri},
+    http::Uri,
     body::Bytes,
 };
 use serde::de::DeserializeOwned;
@@ -21,6 +22,7 @@ pub struct ElifRequest {
     pub headers: ElifHeaderMap,
     pub path_params: HashMap<String, String>,
     pub query_params: HashMap<String, String>,
+    pub extensions: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
     body_bytes: Option<Bytes>,
 }
 
@@ -37,6 +39,7 @@ impl ElifRequest {
             headers,
             path_params: HashMap::new(),
             query_params: HashMap::new(),
+            extensions: HashMap::new(),
             body_bytes: None,
         }
     }
@@ -338,6 +341,28 @@ impl ElifRequest {
             body_bytes,
         )
     }
+
+    /// Get a reference to the extensions map for reading middleware-added data
+    pub fn extensions(&self) -> &HashMap<TypeId, Box<dyn Any + Send + Sync>> {
+        &self.extensions
+    }
+
+    /// Get a mutable reference to the extensions map for adding middleware data
+    pub fn extensions_mut(&mut self) -> &mut HashMap<TypeId, Box<dyn Any + Send + Sync>> {
+        &mut self.extensions
+    }
+
+    /// Insert typed data into request extensions (helper for middleware)
+    pub fn insert_extension<T: Send + Sync + 'static>(&mut self, data: T) {
+        self.extensions.insert(TypeId::of::<T>(), Box::new(data));
+    }
+
+    /// Get typed data from request extensions (helper for middleware)
+    pub fn get_extension<T: Send + Sync + 'static>(&self) -> Option<&T> {
+        self.extensions
+            .get(&TypeId::of::<T>())
+            .and_then(|any| any.downcast_ref::<T>())
+    }
 }
 
 #[cfg(test)]
@@ -450,9 +475,11 @@ mod tests {
         request.add_header("x-middleware", "processed").unwrap();
         request.add_header("x-custom", "value").unwrap();
         
-        assert!(request.headers.contains_key("x-middleware"));
-        assert!(request.headers.contains_key("x-custom"));
-        assert_eq!(request.headers.get("x-middleware").unwrap(), "processed");
+        let middleware_header = crate::response::headers::ElifHeaderName::from_str("x-middleware").unwrap();
+        let custom_header = crate::response::headers::ElifHeaderName::from_str("x-custom").unwrap();
+        assert!(request.headers.contains_key(&middleware_header));
+        assert!(request.headers.contains_key(&custom_header));
+        assert_eq!(request.headers.get(&middleware_header).unwrap().to_str().unwrap(), "processed");
     }
 
     #[test]
@@ -503,7 +530,8 @@ mod tests {
         request.add_query_param("enriched", "true");
         
         // Verify all modifications were applied
-        assert!(request.headers.contains_key("x-request-id"));
+        let request_id_header = crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap();
+        assert!(request.headers.contains_key(&request_id_header));
         assert_eq!(request.path_param("user_id"), Some(&"456".to_string()));
         assert_eq!(request.query_param("enriched"), Some(&"true".to_string()));
     }

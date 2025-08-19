@@ -1,31 +1,30 @@
 //! HTTP error response formatting
 
 use super::HttpError;
-use crate::response::{ElifResponse, IntoElifResponse};
-use axum::http::StatusCode;
+use crate::response::{ElifResponse, ElifStatusCode, IntoElifResponse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
 
 impl HttpError {
     /// Get the appropriate HTTP status code for this error
-    pub fn status_code(&self) -> StatusCode {
+    pub fn status_code(&self) -> ElifStatusCode {
         match self {
-            HttpError::StartupFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::ShutdownFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::ConfigError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::ServiceResolutionFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::RequestTimeout => StatusCode::REQUEST_TIMEOUT,
-            HttpError::RequestTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
-            HttpError::BadRequest { .. } => StatusCode::BAD_REQUEST,
-            HttpError::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::HealthCheckFailed { .. } => StatusCode::SERVICE_UNAVAILABLE,
-            HttpError::DatabaseError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HttpError::ValidationError { .. } => StatusCode::UNPROCESSABLE_ENTITY,
-            HttpError::NotFound { .. } => StatusCode::NOT_FOUND,
-            HttpError::Conflict { .. } => StatusCode::CONFLICT,
-            HttpError::Unauthorized => StatusCode::UNAUTHORIZED,
-            HttpError::Forbidden { .. } => StatusCode::FORBIDDEN,
+            HttpError::StartupFailed { .. } => ElifStatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::ShutdownFailed { .. } => ElifStatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::ConfigError { .. } => ElifStatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::ServiceResolutionFailed { .. } => ElifStatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::RequestTimeout => ElifStatusCode::REQUEST_TIMEOUT,
+            HttpError::RequestTooLarge { .. } => ElifStatusCode::PAYLOAD_TOO_LARGE,
+            HttpError::BadRequest { .. } => ElifStatusCode::BAD_REQUEST,
+            HttpError::InternalError { .. } => ElifStatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::HealthCheckFailed { .. } => ElifStatusCode::SERVICE_UNAVAILABLE,
+            HttpError::DatabaseError { .. } => ElifStatusCode::INTERNAL_SERVER_ERROR,
+            HttpError::ValidationError { .. } => ElifStatusCode::UNPROCESSABLE_ENTITY,
+            HttpError::NotFound { .. } => ElifStatusCode::NOT_FOUND,
+            HttpError::Conflict { .. } => ElifStatusCode::CONFLICT,
+            HttpError::Unauthorized => ElifStatusCode::UNAUTHORIZED,
+            HttpError::Forbidden { .. } => ElifStatusCode::FORBIDDEN,
         }
     }
 
@@ -60,7 +59,7 @@ impl IntoElifResponse for HttpError {
 // Implement IntoResponse for automatic HTTP error responses (Axum compatibility)
 impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
-        let status = self.status_code();
+        let status = self.status_code().to_axum(); // Convert to Axum StatusCode
         let body = json!({
             "error": {
                 "code": self.error_code(),
@@ -79,22 +78,22 @@ mod tests {
 
     #[test]
     fn test_error_status_codes() {
-        assert_eq!(HttpError::bad_request("test").status_code(), StatusCode::BAD_REQUEST);
-        assert_eq!(HttpError::RequestTimeout.status_code(), StatusCode::REQUEST_TIMEOUT);
+        assert_eq!(HttpError::bad_request("test").status_code(), crate::response::status::ElifStatusCode::BAD_REQUEST);
+        assert_eq!(HttpError::RequestTimeout.status_code(), crate::response::status::ElifStatusCode::REQUEST_TIMEOUT);
         assert_eq!(
             HttpError::RequestTooLarge { size: 100, limit: 50 }.status_code(), 
-            StatusCode::PAYLOAD_TOO_LARGE
+            crate::response::status::ElifStatusCode::PAYLOAD_TOO_LARGE
         );
         assert_eq!(
             HttpError::health_check("Database unavailable").status_code(), 
-            StatusCode::SERVICE_UNAVAILABLE
+            crate::response::status::ElifStatusCode::SERVICE_UNAVAILABLE
         );
     }
 
     #[test]
     fn test_validation_error_status_code() {
         let validation_error = HttpError::validation_error("Field is required");
-        assert_eq!(validation_error.status_code(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(validation_error.status_code(), crate::response::status::ElifStatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[test]
@@ -116,6 +115,6 @@ mod tests {
         let error = HttpError::not_found("User");
         let response = AxumIntoResponse::into_response(error);
         
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
     }
 }

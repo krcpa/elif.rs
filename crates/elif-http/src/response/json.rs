@@ -93,10 +93,13 @@ where
             }
             Err(err) => {
                 tracing::error!("JSON serialization failed: {}", err);
-                (
-                    ElifStatusCode::INTERNAL_SERVER_ERROR,
-                    "Internal server error: JSON serialization failed"
-                ).into_response()
+                let mut response = Response::new("Internal server error: JSON serialization failed".into());
+                *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
+                response.headers_mut().insert(
+                    axum::http::header::CONTENT_TYPE,
+                    axum::http::HeaderValue::from_static("text/plain"),
+                );
+                response
             }
         }
     }
@@ -190,14 +193,25 @@ impl IntoResponse for JsonError {
             })
         };
 
-        match ElifResponse::with_status(self.status)
-            .json_value(error_body)
-            .build()
-        {
-            Ok(response) => response,
+        match serde_json::to_vec(&error_body) {
+            Ok(bytes) => {
+                let mut response = Response::new(bytes.into());
+                *response.status_mut() = self.status.to_axum();
+                response.headers_mut().insert(
+                    axum::http::header::CONTENT_TYPE,
+                    axum::http::HeaderValue::from_static("application/json"),
+                );
+                response
+            }
             Err(_) => {
                 // Fallback error response
-                (self.status, self.message).into_response()
+                let mut response = Response::new(self.message.into());
+                *response.status_mut() = self.status.to_axum();
+                response.headers_mut().insert(
+                    axum::http::header::CONTENT_TYPE,
+                    axum::http::HeaderValue::from_static("text/plain"),
+                );
+                response
             }
         }
     }

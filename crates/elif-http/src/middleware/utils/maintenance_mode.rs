@@ -21,7 +21,7 @@ pub enum MaintenanceResponse {
     Html(String),
     /// Custom response with status code and body
     Custom {
-        status_code: StatusCode,
+        status_code: ElifStatusCode,
         content_type: String,
         body: Vec<u8>,
     },
@@ -159,7 +159,7 @@ pub struct MaintenanceModeConfig {
     /// Paths that should be allowed during maintenance mode
     pub allowed_paths: Vec<PathMatch>,
     /// HTTP methods that should be allowed during maintenance mode
-    pub allowed_methods: HashSet<Method>,
+    pub allowed_methods: HashSet<ElifMethod>,
     /// IP addresses that should bypass maintenance mode
     pub allowed_ips: HashSet<String>,
     /// Custom header to bypass maintenance mode
@@ -260,7 +260,7 @@ impl MaintenanceModeMiddleware {
     }
     
     /// Add allowed HTTP method
-    pub fn allow_method(mut self, method: Method) -> Self {
+    pub fn allow_method(mut self, method: ElifMethod) -> Self {
         self.config.allowed_methods.insert(method);
         self
     }
@@ -449,7 +449,7 @@ impl Default for MaintenanceModeBuilder {
 mod tests {
     use super::*;
     use crate::response::ElifResponse;
-    use crate::request::ElifHeaderMap;
+    use crate::response::headers::ElifHeaderMap;
     use crate::request::ElifRequest;
     
     #[test]
@@ -589,7 +589,7 @@ mod tests {
         
         // Request with correct bypass header
         let mut headers = ElifHeaderMap::new();
-        headers.insert("x-admin-key", "secret123".parse().unwrap());
+        headers.insert(crate::response::headers::ElifHeaderName::from_str("x-admin-key").unwrap(), "secret123".parse().unwrap());
         let request = ElifRequest::new(
             ElifMethod::GET,
             "/admin/panel".parse().unwrap(),
@@ -607,7 +607,7 @@ mod tests {
         
         // Request with wrong bypass header
         let mut headers = ElifHeaderMap::new();
-        headers.insert("x-admin-key", "wrong-key".parse().unwrap());
+        headers.insert(crate::response::headers::ElifHeaderName::from_str("x-admin-key").unwrap(), "wrong-key".parse().unwrap());
         let request = ElifRequest::new(
             ElifMethod::GET,
             "/admin/panel".parse().unwrap(),
@@ -632,7 +632,7 @@ mod tests {
         
         // Request from allowed IP
         let mut headers = ElifHeaderMap::new();
-        headers.insert("x-forwarded-for", "192.168.1.100".parse().unwrap());
+        headers.insert(crate::response::headers::ElifHeaderName::from_str("x-forwarded-for").unwrap(), "192.168.1.100".parse().unwrap());
         let request = ElifRequest::new(
             ElifMethod::GET,
             "/api/data".parse().unwrap(),

@@ -59,10 +59,8 @@ pub use middleware::{
     // V2 Middleware System (default)
     v2::{
         Middleware, MiddlewarePipelineV2 as MiddlewarePipeline, Next, 
-        LoggingMiddleware, SimpleAuthMiddleware, MiddlewareAdapter
+        LoggingMiddleware, SimpleAuthMiddleware
     },
-    // Legacy V1 system
-    Middleware as LegacyMiddleware, MiddlewarePipeline as LegacyMiddlewarePipeline, ErrorHandlingMiddleware as LegacyErrorHandlingMiddleware, BoxFuture as MiddlewareBoxFuture,
     // Core middleware
     error_handler::{
         ErrorHandlerMiddleware, ErrorHandlerConfig, ErrorHandlerLayer,
@@ -74,7 +72,7 @@ pub use middleware::{
     timing::{TimingMiddleware, RequestStartTime, format_duration},
     tracing::{TracingMiddleware, TracingConfig, RequestMetadata},
     timeout::{TimeoutMiddleware, TimeoutConfig, TimeoutInfo, apply_timeout},
-    body_limit::{BodyLimitMiddleware, BodyLimitConfig, BodyLimitInfo, limit_body_size, limits},
+    body_limit::{BodyLimitMiddleware, BodyLimitConfig, BodyLimitInfo},
     // Versioning middleware
     versioning::{
         VersioningMiddleware, VersioningConfig, VersionStrategy, ApiVersion, VersionInfo,
