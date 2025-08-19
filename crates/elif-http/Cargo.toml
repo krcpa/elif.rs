@@ -19,7 +19,7 @@ elif-auth = { version = "0.3.1", path = "../elif-auth", optional = true }
 # HTTP server
 axum = { workspace = true, features = ["ws"] }
 tower = { workspace = true }
-tower-http = { workspace = true }
+tower-http = { workspace = true, features = ["compression-gzip", "compression-br"] }
 hyper = { workspace = true }
 
 # WebSocket server
@@ -29,7 +29,7 @@ axum-extra = { version = "0.9", features = ["typed-header"] }
 futures-util = "0.3"
 
 # Async runtime
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal", "time", "sync", "net"] }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal", "time", "sync", "net", "fs"] }
 
 # Serialization
 serde = { workspace = true }
@@ -46,6 +46,13 @@ log = "0.4"
 service-builder = "0.3.0"
 regex = "1.10"
 once_cell = "1.21"
+
+# Compression
+flate2 = "1.0"
+brotli = "3.4"
+
+# Content negotiation
+html-escape = "0.2"
 
 # Security
 argon2 = "0.5"
