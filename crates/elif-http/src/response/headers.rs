@@ -46,6 +46,7 @@ impl fmt::Display for ElifHeaderName {
 }
 
 /// Framework-native header value wrapper that hides Axum internals
+#[repr(transparent)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ElifHeaderValue(axum::http::HeaderValue);
 
