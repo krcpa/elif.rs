@@ -73,6 +73,11 @@ impl MiddlewarePipelineV2 {
         self.middleware.push(Arc::new(middleware));
         self
     }
+    
+    /// Add middleware to the pipeline (mutable version)
+    pub fn add_mut<M: Middleware + 'static>(&mut self, middleware: M) {
+        self.middleware.push(Arc::new(middleware));
+    }
 
     /// Create a pipeline from a vector of Arc<dyn Middleware>
     pub fn from_middleware_vec(middleware: Vec<Arc<dyn Middleware>>) -> Self {

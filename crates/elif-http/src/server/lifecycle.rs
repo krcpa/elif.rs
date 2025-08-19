@@ -5,6 +5,7 @@ use crate::{
     errors::{HttpError, HttpResult},
     routing::ElifRouter,
     server::health::health_check_handler,
+    middleware::v2::MiddlewarePipelineV2,
 };
 use elif_core::Container;
 use std::net::SocketAddr;
@@ -17,6 +18,7 @@ pub async fn build_internal_router(
     container: Arc<Container>,
     config: HttpConfig,
     user_router: Option<ElifRouter>,
+    middleware: MiddlewarePipelineV2,
 ) -> HttpResult<axum::Router> {
     // Create health check handler with captured context
     let health_container = container.clone();
@@ -38,6 +40,9 @@ pub async fn build_internal_router(
 
     // Add health check route
     router = router.get(&config.health_check_path, health_handler);
+    
+    // Apply server middleware to router
+    router = router.extend_middleware(middleware);
 
     // Convert to Axum router
     Ok(router.into_axum_router())

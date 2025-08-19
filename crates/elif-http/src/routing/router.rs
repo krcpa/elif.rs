@@ -96,6 +96,13 @@ where
         self.middleware_stack = self.middleware_stack.add(middleware);
         self
     }
+    
+    /// Extend router middleware with external middleware pipeline
+    /// External middleware will be executed before the router's own middleware
+    pub fn extend_middleware(mut self, external_middleware: MiddlewarePipelineV2) -> Self {
+        self.middleware_stack = external_middleware.extend(self.middleware_stack);
+        self
+    }
 
     /// Create a named middleware group for future use with route-specific middleware
     /// 
