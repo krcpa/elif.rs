@@ -6,8 +6,9 @@ use crate::{
     errors::HttpError,
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
-    response::{ElifResponse, IntoElifResponse},
+    response::IntoElifResponse,
 };
+use futures_util::future::FutureExt;
 
 /// Error handling middleware configuration
 #[derive(Debug, Clone)]
@@ -17,9 +18,6 @@ pub struct ErrorHandlerConfig {
     
     /// Whether to log errors
     pub log_errors: bool,
-    
-    /// Custom error handler function
-    pub custom_error_handler: Option<fn(&dyn std::error::Error) -> HttpError>,
 }
 
 impl Default for ErrorHandlerConfig {
@@ -27,7 +25,6 @@ impl Default for ErrorHandlerConfig {
         Self {
             include_panic_details: cfg!(debug_assertions), // Only in debug builds
             log_errors: true,
-            custom_error_handler: None,
         }
     }
 }
@@ -63,11 +60,6 @@ impl ErrorHandlerMiddleware {
         self
     }
 
-    /// Set custom error handler
-    pub fn with_custom_handler(mut self, handler: fn(&dyn std::error::Error) -> HttpError) -> Self {
-        self.config.custom_error_handler = Some(handler);
-        self
-    }
 }
 
 impl Default for ErrorHandlerMiddleware {
@@ -78,11 +70,41 @@ impl Default for ErrorHandlerMiddleware {
 
 impl Middleware for ErrorHandlerMiddleware {
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
-        let _config = self.config.clone();
+        let config = self.config.clone();
         Box::pin(async move {
-            // Execute next middleware - for now just pass through
-            // TODO: Implement proper async panic recovery in future iteration
-            next.run(request).await
+            // The future from `next.run()` might panic, so we catch it.
+            // `AssertUnwindSafe` is used because the handler might not be `UnwindSafe`.
+            let result = std::panic::AssertUnwindSafe(next.run(request))
+                .catch_unwind()
+                .await;
+
+            match result {
+                Ok(response) => response,
+                Err(panic_info) => {
+                    // A panic occurred, so we create an error response.
+                    let panic_message = if let Some(s) = panic_info.downcast_ref::<String>() {
+                        s.clone()
+                    } else if let Some(s) = panic_info.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else {
+                        "Unknown panic occurred".to_string()
+                    };
+
+                    if config.log_errors {
+                        // Using tracing::error for logging panics.
+                        tracing::error!("Panic in request handler: {}", panic_message);
+                    }
+
+                    let error_message = if config.include_panic_details {
+                        format!("Internal server error: {}", panic_message)
+                    } else {
+                        "Internal server error occurred".to_string()
+                    };
+
+                    let http_error = HttpError::internal(error_message);
+                    http_error.into_response()
+                }
+            }
         })
     }
 
@@ -115,12 +137,10 @@ mod tests {
         let config = ErrorHandlerConfig {
             include_panic_details: true,
             log_errors: false,
-            custom_error_handler: None,
         };
 
         assert!(config.include_panic_details);
         assert!(!config.log_errors);
-        assert!(config.custom_error_handler.is_none());
     }
 
     #[tokio::test]
@@ -181,19 +201,7 @@ mod tests {
         // Should include panic details only in debug mode
         assert_eq!(config.include_panic_details, cfg!(debug_assertions));
         assert!(config.log_errors);
-        assert!(config.custom_error_handler.is_none());
     }
 
-    #[tokio::test]
-    async fn test_custom_error_handler() {
-        let custom_handler = |_error: &dyn std::error::Error| -> HttpError {
-            HttpError::bad_request("Custom error handling")
-        };
-        
-        let middleware = ErrorHandlerMiddleware::new()
-            .with_custom_handler(custom_handler);
-        
-        // Test that middleware was created with custom handler
-        assert!(middleware.config.custom_error_handler.is_some());
-    }
+
 }
