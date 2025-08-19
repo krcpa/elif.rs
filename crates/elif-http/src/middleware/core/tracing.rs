@@ -128,7 +128,7 @@ impl TracingMiddleware {
     }
 
     /// Format headers for tracing
-    fn format_headers(&self, headers: &crate::request::ElifHeaderMap) -> String {
+    fn format_headers(&self, headers: &crate::response::ElifHeaderMap) -> String {
         let mut header_strings = Vec::new();
         
         for name in headers.keys() {

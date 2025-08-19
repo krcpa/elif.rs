@@ -11,6 +11,7 @@ use crate::{
 };
 
 /// Request timing middleware that tracks request duration and adds timing headers
+#[derive(Debug)]
 pub struct TimingMiddleware {
     /// Whether to add X-Response-Time header to responses
     add_header: bool,

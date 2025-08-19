@@ -11,6 +11,7 @@ use crate::{
 };
 
 /// HTTP request logging middleware that logs request details and response status
+#[derive(Debug)]
 pub struct LoggingMiddleware {
     /// Whether to log request body (careful with sensitive data)
     log_body: bool,

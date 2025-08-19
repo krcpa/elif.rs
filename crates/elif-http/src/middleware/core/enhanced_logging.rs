@@ -297,7 +297,7 @@ impl EnhancedLoggingMiddleware {
     }
     
     /// Extract safe headers for logging (filtering out sensitive ones)
-    fn extract_safe_headers(&self, headers: &crate::request::ElifHeaderMap) -> HashMap<String, String> {
+    fn extract_safe_headers(&self, headers: &crate::response::ElifHeaderMap) -> HashMap<String, String> {
         let mut safe_headers = HashMap::new();
         
         for name in headers.keys() {
