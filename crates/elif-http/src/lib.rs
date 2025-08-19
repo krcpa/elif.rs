@@ -62,7 +62,7 @@ pub use middleware::{
         LoggingMiddleware, SimpleAuthMiddleware, MiddlewareAdapter
     },
     // Legacy V1 system
-    Middleware as LegacyMiddleware, MiddlewarePipeline as LegacyMiddlewarePipeline, ErrorHandlingMiddleware, BoxFuture as MiddlewareBoxFuture,
+    Middleware as LegacyMiddleware, MiddlewarePipeline as LegacyMiddlewarePipeline, ErrorHandlingMiddleware as LegacyErrorHandlingMiddleware, BoxFuture as MiddlewareBoxFuture,
     // Core middleware
     error_handler::{
         ErrorHandlerMiddleware, ErrorHandlerConfig, ErrorHandlerLayer,
