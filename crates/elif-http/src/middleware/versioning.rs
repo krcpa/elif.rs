@@ -2,7 +2,7 @@ use crate::{
     errors::{HttpError, HttpResult},
     request::ElifRequest,
     response::{ElifResponse, ElifHeaderMap, ElifStatusCode},
-    middleware::{Middleware, BoxFuture},
+    middleware::v2::{Middleware, Next, NextFuture},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

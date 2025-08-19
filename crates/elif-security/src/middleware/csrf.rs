@@ -5,19 +5,16 @@
 
 use std::sync::Arc;
 use std::collections::HashMap;
-use axum::{
-    extract::Request,
-    http::{HeaderMap, Method, header},
-    response::{Response, IntoResponse},
-};
 use elif_http::{
-    middleware::{Middleware, BoxFuture},
-    ElifStatusCode,  // Use framework-native status codes
+    middleware::v2::{Middleware, Next, NextFuture},
+    request::{ElifRequest, ElifMethod},
+    response::{ElifResponse, ElifStatusCode},
 };
 use sha2::{Sha256, Digest};
 use rand::{thread_rng, Rng};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use service_builder::builder;
+use serde_json;
 
 pub use crate::config::CsrfConfig;
 use crate::SecurityError;
@@ -139,16 +136,16 @@ impl CsrfMiddleware {
     }
     
     /// Extract CSRF token from request
-    fn extract_token(&self, headers: &HeaderMap) -> Option<String> {
+    fn extract_token(&self, headers: &elif_http::response::ElifHeaderMap) -> Option<String> {
         // Try header first
-        if let Some(header_value) = headers.get(&self.config.token_header) {
+        if let Some(header_value) = headers.get_str(&self.config.token_header) {
             if let Ok(token) = header_value.to_str() {
                 return Some(token.to_string());
             }
         }
         
         // Try cookie (would need cookie parsing here - simplified for now)
-        if let Some(cookie_header) = headers.get(header::COOKIE) {
+        if let Some(cookie_header) = headers.get_str("cookie") {
             if let Ok(cookies) = cookie_header.to_str() {
                 for cookie in cookies.split(';') {
                     let cookie = cookie.trim();
@@ -167,45 +164,38 @@ impl CsrfMiddleware {
 
 /// Implementation of our Middleware trait for CSRF protection
 impl Middleware for CsrfMiddleware {
-    fn process_request<'a>(
-        &'a self, 
-        request: Request
-    ) -> BoxFuture<'a, Result<Request, Response>> {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
         Box::pin(async move {
-            let method = request.method();
-            let uri = request.uri();
-            let headers = request.headers();
-            
             // Skip CSRF protection for safe methods (GET, HEAD, OPTIONS)
-            if matches!(method, &Method::GET | &Method::HEAD | &Method::OPTIONS) {
-                return Ok(request);
+            if matches!(request.method, ElifMethod::GET | ElifMethod::HEAD | ElifMethod::OPTIONS) {
+                return next.run(request).await;
             }
             
             // Skip exempt paths
-            if self.is_exempt_path(uri.path()) {
-                return Ok(request);
+            if self.is_exempt_path(request.uri.path()) {
+                return next.run(request).await;
             }
             
             // Extract and validate token
-            let user_agent = headers.get(header::USER_AGENT)
+            let user_agent = request.headers.get_str("user-agent")
                 .and_then(|h| h.to_str().ok());
                 
-            if let Some(token) = self.extract_token(headers) {
+            if let Some(token) = self.extract_token(&request.headers) {
                 if self.validate_token(&token, user_agent).await {
                     // Consume token for single-use (optional - can be configured)
                     // self.consume_token(&token).await;
-                    return Ok(request);
+                    return next.run(request).await;
                 }
             }
             
             // CSRF validation failed - return 403 Forbidden
-            let error_response = Response::builder()
-                .status(ElifStatusCode::FORBIDDEN)
-                .header("Content-Type", "application/json")
-                .body(r#"{"error":{"code":"CSRF_VALIDATION_FAILED","message":"CSRF token validation failed"}}"#.into())
-                .unwrap();
-                
-            Err(error_response)
+            ElifResponse::with_status(ElifStatusCode::FORBIDDEN)
+                .json(serde_json::json!({
+                    "error": {
+                        "code": "CSRF_VALIDATION_FAILED",
+                        "message": "CSRF token validation failed"
+                    }
+                }))
         })
     }
     
@@ -214,18 +204,6 @@ impl Middleware for CsrfMiddleware {
     }
 }
 
-impl IntoResponse for SecurityError {
-    fn into_response(self) -> Response {
-        let (status, message) = match self {
-            SecurityError::CsrfValidationFailed => {
-                (ElifStatusCode::FORBIDDEN, "CSRF token validation failed")
-            }
-            _ => (ElifStatusCode::INTERNAL_SERVER_ERROR, "Security error"),
-        };
-        
-        (status, message).into_response()
-    }
-}
 
 /// Configuration for CSRF middleware builder  
 #[derive(Debug, Clone)]
@@ -308,8 +286,9 @@ impl CsrfMiddlewareConfigBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{HeaderValue, Method};
-    use elif_http::middleware::MiddlewarePipeline;
+    use elif_http::middleware::v2::MiddlewarePipelineV2;
+    use elif_http::request::ElifRequest;
+    use elif_http::response::ElifHeaderMap;
     use std::collections::HashSet;
 
 
@@ -418,86 +397,113 @@ mod tests {
     #[tokio::test]
     async fn test_csrf_middleware_get_requests() {
         let middleware = create_test_middleware();
-        let pipeline = MiddlewarePipeline::new().add(middleware);
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
         // Create GET request
-        let request = Request::builder()
-            .method(Method::GET)
-            .uri("/test")
-            .body(axum::body::Body::empty())
-            .unwrap();
+        let mut headers = ElifHeaderMap::new();
+        let request = ElifRequest::new(
+            ElifMethod::GET,
+            "/test".parse().unwrap(),
+            headers,
+        );
         
         // GET requests should pass without CSRF token
-        let result = pipeline.process_request(request).await;
-        assert!(result.is_ok());
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move {
+                ElifResponse::ok().text("Success")
+            })
+        }).await;
+        
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
     }
 
     #[tokio::test]
     async fn test_csrf_middleware_post_without_token() {
         let middleware = create_test_middleware();
-        let pipeline = MiddlewarePipeline::new().add(middleware);
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
         // Create POST request without CSRF token
-        let request = Request::builder()
-            .method(Method::POST)
-            .uri("/test")
-            .body(axum::body::Body::empty())
-            .unwrap();
+        let mut headers = ElifHeaderMap::new();
+        let request = ElifRequest::new(
+            ElifMethod::POST,
+            "/test".parse().unwrap(),
+            headers,
+        );
         
         // POST without CSRF token should fail
-        let result = pipeline.process_request(request).await;
-        assert!(result.is_err());
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move {
+                ElifResponse::ok().text("Should not reach handler")
+            })
+        }).await;
         
         // Check that it returns 403 Forbidden
-        if let Err(response) = result {
-            assert_eq!(response.status(), ElifStatusCode::FORBIDDEN);
-        }
+        assert_eq!(response.status_code(), ElifStatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
     async fn test_csrf_middleware_post_with_valid_token() {
         let middleware = create_test_middleware();
         let token = middleware.generate_token(Some("TestAgent")).await;
-        let pipeline = MiddlewarePipeline::new().add(middleware);
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
         // Create POST request with valid CSRF token
-        let request = Request::builder()
-            .method(Method::POST)
-            .uri("/test")
-            .header("X-CSRF-Token", &token)
-            .header("User-Agent", "TestAgent")
-            .body(axum::body::Body::empty())
-            .unwrap();
+        let mut headers = ElifHeaderMap::new();
+        headers.insert("x-csrf-token".parse().unwrap(), token.parse().unwrap());
+        headers.insert("user-agent".parse().unwrap(), "TestAgent".parse().unwrap());
+        
+        let request = ElifRequest::new(
+            ElifMethod::POST,
+            "/test".parse().unwrap(),
+            headers,
+        );
         
         // POST with valid CSRF token should pass
-        let result = pipeline.process_request(request).await;
-        assert!(result.is_ok());
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move {
+                ElifResponse::ok().text("Success")
+            })
+        }).await;
+        
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
     }
 
     #[tokio::test]
     async fn test_csrf_middleware_exempt_paths() {
         let middleware = create_test_middleware();
-        let pipeline = MiddlewarePipeline::new().add(middleware);
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
         // Test exempt exact path
-        let request1 = Request::builder()
-            .method(Method::POST)
-            .uri("/api/webhook")
-            .body(axum::body::Body::empty())
-            .unwrap();
+        let mut headers1 = ElifHeaderMap::new();
+        let request1 = ElifRequest::new(
+            ElifMethod::POST,
+            "/api/webhook".parse().unwrap(),
+            headers1,
+        );
         
-        let result1 = pipeline.process_request(request1).await;
-        assert!(result1.is_ok());
+        let response1 = pipeline.execute(request1, |_req| {
+            Box::pin(async move {
+                ElifResponse::ok().text("Success")
+            })
+        }).await;
+        
+        assert_eq!(response1.status_code(), ElifStatusCode::OK);
         
         // Test exempt glob path
-        let request2 = Request::builder()
-            .method(Method::POST)
-            .uri("/public/upload")
-            .body(axum::body::Body::empty())
-            .unwrap();
+        let mut headers2 = ElifHeaderMap::new();
+        let request2 = ElifRequest::new(
+            ElifMethod::POST,
+            "/public/upload".parse().unwrap(),
+            headers2,
+        );
         
-        let result2 = pipeline.process_request(request2).await;
-        assert!(result2.is_ok());
+        let response2 = pipeline.execute(request2, |_req| {
+            Box::pin(async move {
+                ElifResponse::ok().text("Success")
+            })
+        }).await;
+        
+        assert_eq!(response2.status_code(), ElifStatusCode::OK);
     }
 
     #[tokio::test]
@@ -535,12 +541,12 @@ mod tests {
     #[tokio::test]
     async fn test_csrf_cookie_extraction() {
         let middleware = create_test_middleware();
-        let mut headers = HeaderMap::new();
+        let mut headers = ElifHeaderMap::new();
         
         // Test cookie extraction
         headers.insert(
-            header::COOKIE,
-            HeaderValue::from_str("_csrf_token=test_token_123; other_cookie=value").unwrap()
+            "cookie".parse().unwrap(),
+            "_csrf_token=test_token_123; other_cookie=value".parse().unwrap()
         );
         
         let token = middleware.extract_token(&headers);
@@ -548,8 +554,8 @@ mod tests {
         
         // Test header extraction (should take precedence)
         headers.insert(
-            "X-CSRF-Token",
-            HeaderValue::from_str("header_token_456").unwrap()
+            "X-CSRF-Token".parse().unwrap(),
+            "header_token_456".parse().unwrap()
         );
         
         let token = middleware.extract_token(&headers);

@@ -4,9 +4,8 @@
 //! Supports custom responses, whitelisted paths, and dynamic enable/disable.
 
 use crate::middleware::v2::{Middleware, Next, NextFuture};
-use crate::request::ElifRequest;
-use crate::response::ElifResponse;
-use axum::http::{StatusCode, Method};
+use crate::request::{ElifRequest, ElifMethod};
+use crate::response::{ElifResponse, ElifStatusCode};
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 use std::path::Path;
@@ -47,15 +46,15 @@ impl MaintenanceResponse {
     pub async fn to_elif_response(&self) -> ElifResponse {
         match self {
             Self::Text(text) => {
-                ElifResponse::with_status(StatusCode::SERVICE_UNAVAILABLE).text(text.clone())
+                ElifResponse::with_status(ElifStatusCode::SERVICE_UNAVAILABLE).text(text.clone())
             }
             Self::Json(json) => {
-                ElifResponse::with_status(StatusCode::SERVICE_UNAVAILABLE).json_value(json.clone())
+                ElifResponse::with_status(ElifStatusCode::SERVICE_UNAVAILABLE).json_value(json.clone())
             }
             Self::Html(html) => {
-                ElifResponse::with_status(StatusCode::SERVICE_UNAVAILABLE)
+                ElifResponse::with_status(ElifStatusCode::SERVICE_UNAVAILABLE)
                     .content_type("text/html")
-                    .unwrap_or_else(|_| ElifResponse::with_status(StatusCode::SERVICE_UNAVAILABLE))
+                    .unwrap_or_else(|_| ElifResponse::with_status(ElifStatusCode::SERVICE_UNAVAILABLE))
                     .text(html.clone())
             }
             Self::Custom { status_code, content_type, body } => {
@@ -77,14 +76,14 @@ impl MaintenanceResponse {
                             _ => "text/plain",
                         };
                         
-                        ElifResponse::with_status(StatusCode::SERVICE_UNAVAILABLE)
+                        ElifResponse::with_status(ElifStatusCode::SERVICE_UNAVAILABLE)
                             .content_type(content_type)
-                            .unwrap_or_else(|_| ElifResponse::with_status(StatusCode::SERVICE_UNAVAILABLE))
+                            .unwrap_or_else(|_| ElifResponse::with_status(ElifStatusCode::SERVICE_UNAVAILABLE))
                             .bytes(axum::body::Bytes::from(content))
                     }
                     Err(_) => {
                         // File not found, return default response
-                        ElifResponse::with_status(StatusCode::SERVICE_UNAVAILABLE).json_value(serde_json::json!({
+                        ElifResponse::with_status(ElifStatusCode::SERVICE_UNAVAILABLE).json_value(serde_json::json!({
                             "error": {
                                 "code": "maintenance_mode",
                                 "message": "Service temporarily unavailable"
@@ -172,7 +171,7 @@ pub struct MaintenanceModeConfig {
 impl Default for MaintenanceModeConfig {
     fn default() -> Self {
         let mut allowed_methods = HashSet::new();
-        allowed_methods.insert(Method::GET); // Allow health checks by default
+        allowed_methods.insert(ElifMethod::GET); // Allow health checks by default
         
         Self {
             enabled: Arc::new(RwLock::new(false)),
@@ -347,7 +346,7 @@ impl MaintenanceModeMiddleware {
         // Add Retry-After header if configured
         if let Some(retry_after) = self.config.add_retry_after {
             response = response.header("retry-after", &retry_after.to_string())
-                .unwrap_or_else(|_| ElifResponse::with_status(StatusCode::SERVICE_UNAVAILABLE));
+                .unwrap_or_else(|_| ElifResponse::with_status(ElifStatusCode::SERVICE_UNAVAILABLE));
         }
         
         response
@@ -450,7 +449,7 @@ impl Default for MaintenanceModeBuilder {
 mod tests {
     use super::*;
     use crate::response::ElifResponse;
-    use axum::http::{HeaderMap, Method, StatusCode};
+    use crate::request::ElifHeaderMap;
     use crate::request::ElifRequest;
     
     #[test]
@@ -479,28 +478,28 @@ mod tests {
         // Text response
         let text_response = MaintenanceResponse::Text("Under maintenance".to_string());
         let response = text_response.to_elif_response().await;
-        assert_eq!(response.status_code(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status_code(), ElifStatusCode::SERVICE_UNAVAILABLE);
         
         // JSON response
         let json_response = MaintenanceResponse::Json(serde_json::json!({
             "error": "maintenance"
         }));
         let response = json_response.to_elif_response().await;
-        assert_eq!(response.status_code(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status_code(), ElifStatusCode::SERVICE_UNAVAILABLE);
         
         // HTML response
         let html_response = MaintenanceResponse::Html("<h1>Maintenance</h1>".to_string());
         let response = html_response.to_elif_response().await;
-        assert_eq!(response.status_code(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status_code(), ElifStatusCode::SERVICE_UNAVAILABLE);
         
         // Custom response
         let custom_response = MaintenanceResponse::Custom {
-            status_code: StatusCode::LOCKED,
+            status_code: ElifStatusCode::LOCKED,
             content_type: "text/plain".to_string(),
             body: b"Locked".to_vec(),
         };
         let response = custom_response.to_elif_response().await;
-        assert_eq!(response.status_code(), StatusCode::LOCKED);
+        assert_eq!(response.status_code(), ElifStatusCode::LOCKED);
     }
     
     #[tokio::test]
@@ -508,9 +507,9 @@ mod tests {
         let middleware = MaintenanceModeMiddleware::new(); // Disabled by default
         
         let request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/api/data".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         let next = Next::new(|_req| {
@@ -520,7 +519,7 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
     }
     
     #[tokio::test]
@@ -528,9 +527,9 @@ mod tests {
         let middleware = MaintenanceModeMiddleware::new().enabled();
         
         let request = ElifRequest::new(
-            Method::POST,
+            ElifMethod::POST,
             "/api/data".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         let next = Next::new(|_req| {
@@ -540,7 +539,7 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status_code(), ElifStatusCode::SERVICE_UNAVAILABLE);
     }
     
     #[tokio::test]
@@ -551,9 +550,9 @@ mod tests {
         
         // Health check should be allowed
         let request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/health".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         let next = Next::new(|_req| {
@@ -563,13 +562,13 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
         
         // Other paths should be blocked
         let request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/api/data".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         let next = Next::new(|_req| {
@@ -579,7 +578,7 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status_code(), ElifStatusCode::SERVICE_UNAVAILABLE);
     }
     
     #[tokio::test]
@@ -589,10 +588,10 @@ mod tests {
             .bypass_header("x-admin-key", "secret123");
         
         // Request with correct bypass header
-        let mut headers = HeaderMap::new();
+        let mut headers = ElifHeaderMap::new();
         headers.insert("x-admin-key", "secret123".parse().unwrap());
         let request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/admin/panel".parse().unwrap(),
             headers,
         );
@@ -604,13 +603,13 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
         
         // Request with wrong bypass header
-        let mut headers = HeaderMap::new();
+        let mut headers = ElifHeaderMap::new();
         headers.insert("x-admin-key", "wrong-key".parse().unwrap());
         let request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/admin/panel".parse().unwrap(),
             headers,
         );
@@ -622,7 +621,7 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status_code(), ElifStatusCode::SERVICE_UNAVAILABLE);
     }
     
     #[tokio::test]
@@ -632,10 +631,10 @@ mod tests {
             .allow_ip("192.168.1.100");
         
         // Request from allowed IP
-        let mut headers = HeaderMap::new();
+        let mut headers = ElifHeaderMap::new();
         headers.insert("x-forwarded-for", "192.168.1.100".parse().unwrap());
         let request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/api/data".parse().unwrap(),
             headers,
         );
@@ -647,7 +646,7 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::OK);
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
     }
     
     #[tokio::test]
@@ -662,9 +661,9 @@ mod tests {
         assert!(builder.is_enabled());
         
         let request = ElifRequest::new(
-            Method::GET,
+            ElifMethod::GET,
             "/api/data".parse().unwrap(),
-            HeaderMap::new(),
+            ElifHeaderMap::new(),
         );
         
         let next = Next::new(|_req| {
@@ -674,7 +673,7 @@ mod tests {
         });
         
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status_code(), ElifStatusCode::SERVICE_UNAVAILABLE);
         
         // Disable and test again
         builder.disable();
@@ -686,7 +685,7 @@ mod tests {
         let middleware = MaintenanceModeMiddleware::new()
             .allow_path("/health")
             .allow_prefix("/status")
-            .allow_method(Method::OPTIONS)
+            .allow_method(ElifMethod::OPTIONS)
             .allow_ip("127.0.0.1")
             .bypass_header("x-bypass", "secret")
             .retry_after(7200)
@@ -694,7 +693,7 @@ mod tests {
         
         assert!(middleware.is_enabled());
         assert_eq!(middleware.config.allowed_paths.len(), 5); // 3 default + 2 added
-        assert!(middleware.config.allowed_methods.contains(&Method::OPTIONS));
+        assert!(middleware.config.allowed_methods.contains(&ElifMethod::OPTIONS));
         assert!(middleware.config.allowed_ips.contains("127.0.0.1"));
         assert_eq!(middleware.config.bypass_header, Some(("x-bypass".to_string(), "secret".to_string())));
         assert_eq!(middleware.config.add_retry_after, Some(7200));

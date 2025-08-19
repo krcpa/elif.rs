@@ -62,6 +62,26 @@ impl ElifResponse {
         self.status
     }
 
+    /// Get response headers
+    pub fn headers(&self) -> &ElifHeaderMap {
+        &self.headers
+    }
+
+    /// Get mutable reference to response headers
+    pub fn headers_mut(&mut self) -> &mut ElifHeaderMap {
+        &mut self.headers
+    }
+
+    /// Check if response has a specific header
+    pub fn has_header<K: AsRef<str>>(&self, key: K) -> bool {
+        self.headers.contains_key_str(key.as_ref())
+    }
+
+    /// Get header value by name
+    pub fn get_header<K: AsRef<str>>(&self, key: K) -> Option<&ElifHeaderValue> {
+        self.headers.get_str(key.as_ref())
+    }
+
     /// Add header to response (consuming)
     pub fn header<K, V>(mut self, key: K, value: V) -> HttpResult<Self>
     where

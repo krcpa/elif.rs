@@ -1,19 +1,15 @@
 //! # Body Limit Middleware
 //!
-//! Framework middleware for request body size limiting.
+//! Framework middleware for request body size limiting using V2 system.
 //! Replaces tower-http RequestBodyLimitLayer with framework-native implementation.
 
-use axum::{
-    extract::Request,
-    response::{Response, IntoResponse},
-    body::Body,
-    http::{StatusCode, HeaderValue},
-};
 use tracing::warn;
 
 use crate::{
-    middleware::{Middleware, BoxFuture},
-    HttpError,
+    middleware::v2::{Middleware, Next, NextFuture},
+    request::ElifRequest,
+    response::{ElifResponse, ElifStatusCode},
+    errors::HttpError,
 };
 
 /// Configuration for body limit middleware
@@ -75,6 +71,7 @@ impl BodyLimitConfig {
 }
 
 /// Framework body limit middleware for HTTP requests
+#[derive(Debug)]
 pub struct BodyLimitMiddleware {
     config: BodyLimitConfig,
 }
@@ -123,17 +120,23 @@ impl BodyLimitMiddleware {
     }
 
     /// Create body limit exceeded error response
-    fn create_error_response(&self, content_length: Option<usize>) -> Response {
-        let error = match content_length {
-            Some(size) => HttpError::payload_too_large(size, self.config.max_size),
-            None => HttpError::payload_too_large(0, self.config.max_size),
+    fn create_error_response(&self, content_length: Option<usize>) -> ElifResponse {
+        let mut response = match content_length {
+            Some(size) => {
+                let error_msg = format!("Request body size {} bytes exceeds limit of {} bytes", 
+                                      size, self.config.max_size);
+                ElifResponse::with_status(ElifStatusCode::PAYLOAD_TOO_LARGE)
+                    .text(error_msg)
+            },
+            None => {
+                ElifResponse::with_status(ElifStatusCode::PAYLOAD_TOO_LARGE)
+                    .text(&self.config.error_message)
+            }
         };
-
-        let mut response = error.into_response();
         
         if self.config.include_headers {
-            if let Ok(max_size_header) = HeaderValue::from_str(&self.config.max_size.to_string()) {
-                response.headers_mut().insert("X-Max-Body-Size", max_size_header);
+            if let Err(e) = response.add_header("X-Max-Body-Size", &self.config.max_size.to_string()) {
+                warn!("Failed to add X-Max-Body-Size header: {}", e);
             }
         }
 
@@ -141,8 +144,8 @@ impl BodyLimitMiddleware {
     }
 
     /// Check content-length header against limit
-    fn check_content_length(&self, request: &Request) -> Result<Option<usize>, Response> {
-        if let Some(content_length) = request.headers().get("content-length") {
+    fn check_content_length(&self, request: &ElifRequest) -> Result<Option<usize>, ElifResponse> {
+        if let Some(content_length) = request.headers.get_str("content-length") {
             if let Ok(content_length_str) = content_length.to_str() {
                 if let Ok(content_length) = content_length_str.parse::<usize>() {
                     if content_length > self.config.max_size {
@@ -170,41 +173,51 @@ impl Default for BodyLimitMiddleware {
 }
 
 impl Middleware for BodyLimitMiddleware {
-    fn process_request<'a>(
-        &'a self,
-        request: Request
-    ) -> BoxFuture<'a, Result<Request, Response>> {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        let config = self.config.clone();
         Box::pin(async move {
             // First, check Content-Length header if present
-            let content_length = match self.check_content_length(&request) {
-                Ok(length) => length,
-                Err(response) => return Err(response),
+            let content_length = {
+                if let Some(content_length) = request.headers.get_str("content-length") {
+                    if let Ok(content_length_str) = content_length.to_str() {
+                        if let Ok(content_length) = content_length_str.parse::<usize>() {
+                            if content_length > config.max_size {
+                                if config.log_oversized {
+                                    warn!(
+                                        "Request body size {} bytes exceeds limit of {} bytes (Content-Length check)",
+                                        content_length,
+                                        config.max_size
+                                    );
+                                }
+                                
+                                let mut response = ElifResponse::with_status(ElifStatusCode::PAYLOAD_TOO_LARGE)
+                                    .text(format!("Request body size {} bytes exceeds limit of {} bytes", 
+                                                content_length, config.max_size));
+                                
+                                if config.include_headers {
+                                    if let Err(e) = response.add_header("X-Max-Body-Size", &config.max_size.to_string()) {
+                                        warn!("Failed to add X-Max-Body-Size header: {}", e);
+                                    }
+                                }
+                                
+                                return response;
+                            }
+                            Some(content_length)
+                        } else { None }
+                    } else { None }
+                } else { None }
             };
-
-            // Store body limit info in request extensions
-            let mut request = request;
-            request.extensions_mut().insert(BodyLimitInfo {
-                max_size: self.config.max_size,
-                content_length,
-                error_message: self.config.error_message.clone(),
-            });
 
             // For streaming bodies or cases where Content-Length is not reliable,
             // we need to check the actual body size during consumption.
-            // This is typically handled by axum's built-in body limiting or
+            // This is typically handled by the framework's built-in body limiting or
             // custom extractors that check size during body reading.
 
-            Ok(request)
-        })
-    }
+            // Continue to next middleware/handler
+            let response = next.run(request).await;
 
-    fn process_response<'a>(
-        &'a self,
-        response: Response
-    ) -> BoxFuture<'a, Response> {
-        Box::pin(async move {
             // Log if we're returning a payload too large error
-            if response.status() == StatusCode::PAYLOAD_TOO_LARGE && self.config.log_oversized {
+            if response.status_code() == ElifStatusCode::PAYLOAD_TOO_LARGE && config.log_oversized {
                 warn!("Returned 413 Payload Too Large response due to body size limit");
             }
 
@@ -217,59 +230,13 @@ impl Middleware for BodyLimitMiddleware {
     }
 }
 
-/// Body limit information stored in request extensions
+/// Body limit information for tracking
 #[derive(Debug, Clone)]
 pub struct BodyLimitInfo {
     pub max_size: usize,
     pub content_length: Option<usize>,
     pub error_message: String,
 }
-
-/// Helper function to create a body-limited body wrapper
-pub fn limit_body_size(body: Body, max_size: usize) -> LimitedBody {
-    LimitedBody {
-        body,
-        max_size,
-        consumed: 0,
-    }
-}
-
-/// Wrapper around axum::body::Body that enforces size limits
-pub struct LimitedBody {
-    body: Body,
-    max_size: usize,
-    consumed: usize,
-}
-
-impl LimitedBody {
-    /// Create new limited body
-    pub fn new(body: Body, max_size: usize) -> Self {
-        Self {
-            body,
-            max_size,
-            consumed: 0,
-        }
-    }
-
-    /// Get remaining allowed bytes
-    pub fn remaining(&self) -> usize {
-        self.max_size.saturating_sub(self.consumed)
-    }
-
-    /// Get total consumed bytes
-    pub fn consumed(&self) -> usize {
-        self.consumed
-    }
-
-    /// Check if limit has been exceeded
-    pub fn is_exceeded(&self) -> bool {
-        self.consumed > self.max_size
-    }
-}
-
-// Note: Full implementation of LimitedBody would require implementing
-// the Body trait and handling streaming chunks with size checking.
-// For now, this serves as the structure for future implementation.
 
 /// Utility functions for common body size limits
 pub mod limits {
@@ -322,36 +289,33 @@ pub mod limits {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::Method;
+    use crate::middleware::v2::MiddlewarePipelineV2;
+    use crate::request::{ElifRequest, ElifMethod, ElifHeaderMap};
 
     #[tokio::test]
-    async fn test_body_limit_middleware_basic() {
+    async fn test_body_limit_middleware_v2() {
         let middleware = BodyLimitMiddleware::new();
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
-        let request = Request::builder()
-            .method(Method::POST)
-            .uri("/test")
-            .body(Body::empty())
-            .unwrap();
+        let headers = ElifHeaderMap::new();
+        let request = ElifRequest::new(
+            ElifMethod::POST,
+            "/test".parse().unwrap(),
+            headers,
+        );
 
-        let result = middleware.process_request(request).await;
-        assert!(result.is_ok());
-
-        let processed_request = result.unwrap();
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move {
+                ElifResponse::ok().text("Success")
+            })
+        }).await;
         
-        // Check that body limit info was added to extensions
-        let body_limit_info = processed_request.extensions().get::<BodyLimitInfo>();
-        assert!(body_limit_info.is_some());
-        
-        let body_limit_info = body_limit_info.unwrap();
-        assert_eq!(body_limit_info.max_size, 2 * 1024 * 1024); // 2MB default
-        assert!(body_limit_info.content_length.is_none());
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
     }
 
     #[tokio::test]
     async fn test_body_limit_middleware_custom_limit() {
         let middleware = BodyLimitMiddleware::with_limit(1024); // 1KB
-        
         assert_eq!(middleware.limit(), 1024);
     }
 
@@ -370,45 +334,48 @@ mod tests {
     #[tokio::test]
     async fn test_content_length_check_within_limit() {
         let middleware = BodyLimitMiddleware::with_limit(1000);
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
-        let request = Request::builder()
-            .method(Method::POST)
-            .header("content-length", "500")
-            .uri("/test")
-            .body(Body::empty())
-            .unwrap();
+        let mut headers = ElifHeaderMap::new();
+        headers.insert("content-length".parse().unwrap(), "500".parse().unwrap());
+        
+        let request = ElifRequest::new(
+            ElifMethod::POST,
+            "/test".parse().unwrap(),
+            headers,
+        );
 
-        let result = middleware.process_request(request).await;
-        assert!(result.is_ok());
-
-        let processed_request = result.unwrap();
-        let body_limit_info = processed_request.extensions().get::<BodyLimitInfo>().unwrap();
-        assert_eq!(body_limit_info.content_length, Some(500));
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move {
+                ElifResponse::ok().text("Success")
+            })
+        }).await;
+        
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
     }
 
     #[tokio::test]
     async fn test_content_length_check_exceeds_limit() {
         let middleware = BodyLimitMiddleware::with_limit(100);
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
-        let request = Request::builder()
-            .method(Method::POST)
-            .header("content-length", "200")
-            .uri("/test")
-            .body(Body::empty())
-            .unwrap();
-
-        let result = middleware.process_request(request).await;
-        assert!(result.is_err());
-
-        let error_response = result.unwrap_err();
-        assert_eq!(error_response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let mut headers = ElifHeaderMap::new();
+        headers.insert("content-length".parse().unwrap(), "200".parse().unwrap());
         
-        // Check for custom header
-        assert!(error_response.headers().contains_key("X-Max-Body-Size"));
-        assert_eq!(
-            error_response.headers().get("X-Max-Body-Size").unwrap(),
-            "100"
+        let request = ElifRequest::new(
+            ElifMethod::POST,
+            "/test".parse().unwrap(),
+            headers,
         );
+
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move {
+                ElifResponse::ok().text("Should not reach here")
+            })
+        }).await;
+        
+        assert_eq!(response.status_code(), ElifStatusCode::PAYLOAD_TOO_LARGE);
+        assert!(response.has_header("X-Max-Body-Size"));
     }
 
     #[tokio::test]
@@ -430,16 +397,6 @@ mod tests {
     async fn test_body_limit_middleware_name() {
         let middleware = BodyLimitMiddleware::new();
         assert_eq!(middleware.name(), "BodyLimitMiddleware");
-    }
-
-    #[tokio::test]
-    async fn test_limited_body_creation() {
-        let body = Body::empty();
-        let limited = limit_body_size(body, 1024);
-        
-        assert_eq!(limited.remaining(), 1024);
-        assert_eq!(limited.consumed(), 0);
-        assert!(!limited.is_exceeded());
     }
 
     #[tokio::test]
@@ -469,20 +426,24 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_content_length_header() {
         let middleware = BodyLimitMiddleware::with_limit(1000);
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
         
-        let request = Request::builder()
-            .method(Method::POST)
-            .header("content-length", "not-a-number")
-            .uri("/test")
-            .body(Body::empty())
-            .unwrap();
+        let mut headers = ElifHeaderMap::new();
+        headers.insert("content-length".parse().unwrap(), "not-a-number".parse().unwrap());
+        
+        let request = ElifRequest::new(
+            ElifMethod::POST,
+            "/test".parse().unwrap(),
+            headers,
+        );
 
         // Should not error on invalid content-length, just ignore it
-        let result = middleware.process_request(request).await;
-        assert!(result.is_ok());
-
-        let processed_request = result.unwrap();
-        let body_limit_info = processed_request.extensions().get::<BodyLimitInfo>().unwrap();
-        assert!(body_limit_info.content_length.is_none());
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move {
+                ElifResponse::ok().text("Success")
+            })
+        }).await;
+        
+        assert_eq!(response.status_code(), ElifStatusCode::OK);
     }
 }
