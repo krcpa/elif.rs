@@ -38,7 +38,10 @@ impl FromStr for ElifHeaderName {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_str(s)
+        // Call the inherent method through the full path to avoid recursion
+        axum::http::HeaderName::from_str(s)
+            .map(Self)
+            .map_err(ParseError::from)
     }
 }
 
@@ -98,7 +101,10 @@ impl FromStr for ElifHeaderValue {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_str(s)
+        // Call axum directly to avoid recursion with inherent method
+        axum::http::HeaderValue::from_str(s)
+            .map(Self)
+            .map_err(ParseError::from)
     }
 }
 

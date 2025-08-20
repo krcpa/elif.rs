@@ -82,6 +82,46 @@ impl ElifResponse {
         self.headers.get_str(key.as_ref())
     }
 
+    // Simple panic-safe convenience methods for development ease
+
+    /// Add header to response (Simple - never panics)
+    /// 
+    /// Simple equivalent: `$response->header('X-Custom', 'value')`
+    /// Returns 500 error response on invalid header names/values
+    pub fn with_header<K, V>(self, key: K, value: V) -> Self
+    where
+        K: AsRef<str>,
+        V: AsRef<str>,
+    {
+        self.header(key, value)
+            .unwrap_or_else(|_| ElifResponse::internal_server_error())
+    }
+
+    /// Set JSON body (Simple - never panics)
+    /// 
+    /// Simple equivalent: `$response->json($data)`
+    /// Returns 500 error response on serialization failure
+    pub fn with_json<T: Serialize>(self, data: &T) -> Self {
+        self.json(data)
+            .unwrap_or_else(|_| ElifResponse::internal_server_error())
+    }
+
+    /// Set text body (Simple - never fails)
+    /// 
+    /// Simple equivalent: `response($text)`
+    pub fn with_text<S: AsRef<str>>(mut self, content: S) -> Self {
+        self.body = ResponseBody::Text(content.as_ref().to_string());
+        self
+    }
+
+    /// Set HTML body with content-type (Simple - never fails)
+    /// 
+    /// Simple equivalent: `response($html)->header('Content-Type', 'text/html')`
+    pub fn with_html<S: AsRef<str>>(self, content: S) -> Self {
+        self.with_text(content)
+            .with_header("content-type", "text/html; charset=utf-8")
+    }
+
     /// Add header to response (consuming)
     pub fn header<K, V>(mut self, key: K, value: V) -> HttpResult<Self>
     where
