@@ -669,7 +669,7 @@ impl ElifResponse {
         Ok(self)
     }
 
-    /// Generate simple ETag based on response status and headers
+    /// Generate content-based ETag including response body
     fn generate_etag(&self) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -682,6 +682,22 @@ impl ElifResponse {
             key.as_str().hash(&mut hasher);
             if let Ok(value_str) = value.to_str() {
                 value_str.hash(&mut hasher);
+            }
+        }
+        
+        // Hash the response body for a correct content-based ETag
+        match &self.body {
+            ResponseBody::Empty => "empty".hash(&mut hasher),
+            ResponseBody::Text(text) => text.hash(&mut hasher),
+            ResponseBody::Bytes(bytes) => bytes.hash(&mut hasher),
+            ResponseBody::Json(value) => {
+                // Use canonical JSON string representation for consistent hashing
+                if let Ok(json_string) = serde_json::to_string(value) {
+                    json_string.hash(&mut hasher);
+                } else {
+                    // Fallback if serialization fails
+                    "invalid_json".hash(&mut hasher);
+                }
             }
         }
         
@@ -950,5 +966,120 @@ mod tests {
         assert!(response_headers.contains_key("x-middleware-1"));
         assert!(response_headers.contains_key("x-middleware-2")); 
         assert!(response_headers.contains_key("x-custom"));
+    }
+
+    #[test]
+    fn test_etag_generation_includes_body_content() {
+        // Test that ETag generation properly includes response body content
+        
+        // Same status and headers, different text bodies
+        let response1 = ElifResponse::ok().with_text("Hello World");
+        let response2 = ElifResponse::ok().with_text("Different Content");
+        
+        let etag1 = response1.generate_etag();
+        let etag2 = response2.generate_etag();
+        
+        assert_ne!(etag1, etag2, "ETags should be different for different text content");
+        
+        // Same status and headers, different JSON bodies
+        let json1 = serde_json::json!({"name": "Alice", "age": 30});
+        let json2 = serde_json::json!({"name": "Bob", "age": 25});
+        
+        let response3 = ElifResponse::ok().with_json(&json1);
+        let response4 = ElifResponse::ok().with_json(&json2);
+        
+        let etag3 = response3.generate_etag();
+        let etag4 = response4.generate_etag();
+        
+        assert_ne!(etag3, etag4, "ETags should be different for different JSON content");
+        
+        // Same content should produce same ETag
+        let response5 = ElifResponse::ok().with_text("Hello World");
+        let etag5 = response5.generate_etag();
+        
+        assert_eq!(etag1, etag5, "ETags should be identical for identical content");
+        
+        // Different response types with same logical content should be different
+        let response6 = ElifResponse::ok().with_json(&serde_json::json!("Hello World"));
+        let etag6 = response6.generate_etag();
+        
+        assert_ne!(etag1, etag6, "ETags should be different for different body types even with same content");
+    }
+
+    #[test]
+    fn test_etag_generation_different_body_types() {
+        // Test ETag generation for all body types
+        
+        let empty_response = ElifResponse::ok();
+        let text_response = ElifResponse::ok().with_text("test content");
+        let bytes_response = ElifResponse::ok().bytes(Bytes::from("test content"));
+        let json_response = ElifResponse::ok().with_json(&serde_json::json!({"key": "value"}));
+        
+        let empty_etag = empty_response.generate_etag();
+        let text_etag = text_response.generate_etag();
+        let bytes_etag = bytes_response.generate_etag();
+        let json_etag = json_response.generate_etag();
+        
+        // All ETags should be different
+        let etags = vec![&empty_etag, &text_etag, &bytes_etag, &json_etag];
+        for i in 0..etags.len() {
+            for j in (i + 1)..etags.len() {
+                assert_ne!(etags[i], etags[j], 
+                    "ETags should be unique for different body types: {} vs {}", etags[i], etags[j]);
+            }
+        }
+        
+        // ETags should be consistent for same content
+        let text_response2 = ElifResponse::ok().with_text("test content");
+        let text_etag2 = text_response2.generate_etag();
+        assert_eq!(text_etag, text_etag2, "ETags should be consistent for identical text content");
+    }
+
+    #[test]
+    fn test_etag_generation_with_status_and_headers() {
+        // Verify that status codes and headers still affect ETag generation
+        
+        let base_content = "same content";
+        
+        // Different status codes should produce different ETags
+        let response_200 = ElifResponse::ok().with_text(base_content);
+        let response_201 = ElifResponse::created().with_text(base_content);
+        
+        let etag_200 = response_200.generate_etag();
+        let etag_201 = response_201.generate_etag();
+        
+        assert_ne!(etag_200, etag_201, "ETags should be different for different status codes");
+        
+        // Different headers should produce different ETags
+        let response_no_header = ElifResponse::ok().with_text(base_content);
+        let response_with_header = ElifResponse::ok()
+            .with_text(base_content)
+            .with_header("x-custom", "value");
+        
+        let etag_no_header = response_no_header.generate_etag();
+        let etag_with_header = response_with_header.generate_etag();
+        
+        assert_ne!(etag_no_header, etag_with_header, "ETags should be different when headers differ");
+    }
+
+    #[test]
+    fn test_etag_conditional_response() {
+        let response = ElifResponse::ok().with_text("Test content");
+        let etag = response.generate_etag();
+        let etag_quoted = format!("\"{}\"", etag);
+        
+        // Test If-None-Match with matching ETag (should return 304)
+        let conditional_response = response.conditional(Some(&etag_quoted));
+        assert_eq!(conditional_response.status_code(), ElifStatusCode::NOT_MODIFIED);
+        
+        // Test If-None-Match with non-matching ETag (should return original response)
+        let response2 = ElifResponse::ok().with_text("Test content");
+        let different_etag = "\"different_etag_value\"";
+        let conditional_response2 = response2.conditional(Some(different_etag));
+        assert_eq!(conditional_response2.status_code(), ElifStatusCode::OK);
+        
+        // Test wildcard match
+        let wildcard_response = ElifResponse::ok().with_text("Test content").conditional(Some("*"));
+        assert_eq!(wildcard_response.status_code(), ElifStatusCode::NOT_MODIFIED);
     }
 }
