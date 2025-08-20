@@ -38,7 +38,7 @@ impl ElifStatusCode {
     pub fn from_u16(src: u16) -> Result<Self, ParseError> {
         axum::http::StatusCode::from_u16(src)
             .map(Self)
-            .map_err(ParseError::from)
+            .map_err(|_| ParseError::invalid_status_code(src))
     }
 
     /// Get status code as u16

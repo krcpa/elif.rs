@@ -5,8 +5,9 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,no_run
 //! use elif_http::response::{json, json_status, redirect, html};
+//! use elif_http::{HttpResult, ElifResponse, ElifStatusCode};
 //!
 //! // Simple one-liners
 //! async fn get_users() -> HttpResult<ElifResponse> {
@@ -15,8 +16,8 @@
 //! }
 //!
 //! async fn create_user() -> HttpResult<ElifResponse> {
-//!     let user = User::new("Alice");
-//!     Ok(json_status(&user, ElifStatusCode::CREATED))
+//!     let user_data = serde_json::json!({"name": "Alice"});
+//!     Ok(json_status(&user_data, ElifStatusCode::CREATED))
 //! }
 //! ```
 
