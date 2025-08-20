@@ -15,6 +15,7 @@ categories = ["web-programming", "network-programming"]
 # Framework dependencies
 elif-core = { version = "0.5.0", path = "../core" }
 elif-auth = { version = "0.4.0", path = "../elif-auth", optional = true }
+elif-http-derive = { version = "0.1.0", path = "../elif-http-derive", optional = true }
 
 # HTTP server
 axum = { workspace = true, features = ["ws"] }
@@ -61,6 +62,7 @@ argon2 = "0.5"
 default = []
 auth = ["elif-auth"]
 orm = []
+derive = ["elif-http-derive"]
 
 [dev-dependencies]
 elif-testing = "0.3.0"
