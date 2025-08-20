@@ -1,0 +1,22 @@
+[package]
+name = "elif-http-derive"
+version = "0.1.0"
+edition = "2021"
+description = "Derive macros for elif-http declarative routing and controller system"
+license = "MIT"
+repository = "https://github.com/krcpa/elif.rs"
+homepage = "https://github.com/krcpa/elif.rs"
+documentation = "https://docs.rs/elif-http-derive"
+keywords = ["web", "http", "macro", "routing", "controller"]
+categories = ["web-programming", "development-tools"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+
+[dev-dependencies]
+trybuild = "1.0"

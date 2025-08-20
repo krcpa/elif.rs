@@ -100,6 +100,13 @@ pub use controller::{
 // Re-export from specific modules to avoid conflicts
 pub use controller::pagination::{QueryParams, PaginationMeta};
 
+// Re-export derive macros (if derive feature is enabled)
+#[cfg(feature = "derive")]
+pub use elif_http_derive::{
+    controller, get, post, put, delete, patch, head, options,
+    middleware, param, body
+};
+
 // Re-export handler types
 pub use handlers::{ElifHandler, elif_handler};
 

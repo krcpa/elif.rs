@@ -1,0 +1,7 @@
+error: unexpected end of input, expected string literal
+ --> tests/ui/fail/controller_no_args.rs:6:1
+  |
+6 | #[controller]
+  | ^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `controller` (in Nightly builds, run with -Z macro-backtrace for more info)
