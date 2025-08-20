@@ -1,21 +1,37 @@
 //! HTTP routing system for elif.rs
 //!
 //! This module provides flexible HTTP routing with:
-//! - Route parameter extraction
-//! - HTTP method handling
+//! - Framework-independent route pattern matching
+//! - Advanced parameter extraction with type conversion
+//! - Route compilation and optimization
+//! - Efficient route resolution
 //! - Route groups and prefixes
 //! - Route naming and URL generation
-//! - Parameter validation
+//! - Parameter validation and constraints
 
+// Legacy modules (will be refactored to use new engine)
 pub mod params;
 pub mod router;
 pub mod group;
 pub mod versioned;
 
+// New framework-independent routing engine
+pub mod pattern;
+pub mod matcher;
+pub mod extraction;
+pub mod compiler;
+
+// Legacy exports (for backward compatibility)
 pub use router::{Router as ElifRouter, Router, Route, RouteBuilder};
 pub use params::{PathParams, RouteParam, ParamError, ParamType};
 pub use group::{RouteGroup, GroupBuilder};
 pub use versioned::{VersionedRouter, VersionedRouteBuilder, versioned_router, path_versioned_router, header_versioned_router};
+
+// New engine exports
+pub use pattern::{RoutePattern, PathSegment, ParamConstraint, CompiledRoute, RouteMatch};
+pub use matcher::{RouteMatcher, RouteDefinition, MatcherStats, RouteMatcherBuilder};
+pub use extraction::{ParameterExtractor, ExtractedParams, TypedExtractorBuilder, ExtractionError};
+pub use compiler::{RouteCompiler, CompilableRoute, CompilationResult, CompilationStats, RouteCompilerBuilder};
 
 use axum::http::Method;
 use std::collections::HashMap;
