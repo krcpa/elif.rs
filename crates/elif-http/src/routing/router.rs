@@ -124,65 +124,68 @@ where
     }
 
 
-    /// Add a GET route with elif handler
-    pub fn get<F, Fut, R>(mut self, path: &str, handler: F) -> Self
+    /// Private helper method to add routes with less duplication
+    fn add_route<F, Fut, R, M>(mut self, method: HttpMethod, path: &str, handler: F, method_router_fn: M) -> Self
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
+        M: FnOnce(crate::handlers::handler::ElifHandlerWrapper<F, Fut, R>) -> axum::routing::MethodRouter<S>,
     {
-        self.register_route(HttpMethod::GET, path, None);
-        let method_router = get(elif_handler(handler));
+        self.register_route(method, path, None);
+        let method_router = method_router_fn(elif_handler(handler));
         self.axum_router = self.axum_router.route(path, method_router);
         self
     }
 
-    /// Add a POST route with elif handler
-    pub fn post<F, Fut, R>(mut self, path: &str, handler: F) -> Self
+    /// Add a GET route with elif handler
+    pub fn get<F, Fut, R>(self, path: &str, handler: F) -> Self
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        self.register_route(HttpMethod::POST, path, None);
-        self.axum_router = self.axum_router.route(path, post(elif_handler(handler)));
-        self
+        self.add_route(HttpMethod::GET, path, handler, get)
+    }
+
+    /// Add a POST route with elif handler
+    pub fn post<F, Fut, R>(self, path: &str, handler: F) -> Self
+    where
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
+    {
+        self.add_route(HttpMethod::POST, path, handler, post)
     }
 
     /// Add a PUT route with elif handler
-    pub fn put<F, Fut, R>(mut self, path: &str, handler: F) -> Self
+    pub fn put<F, Fut, R>(self, path: &str, handler: F) -> Self
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        self.register_route(HttpMethod::PUT, path, None);
-        self.axum_router = self.axum_router.route(path, put(elif_handler(handler)));
-        self
+        self.add_route(HttpMethod::PUT, path, handler, put)
     }
 
     /// Add a DELETE route with elif handler
-    pub fn delete<F, Fut, R>(mut self, path: &str, handler: F) -> Self
+    pub fn delete<F, Fut, R>(self, path: &str, handler: F) -> Self
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        self.register_route(HttpMethod::DELETE, path, None);
-        self.axum_router = self.axum_router.route(path, delete(elif_handler(handler)));
-        self
+        self.add_route(HttpMethod::DELETE, path, handler, delete)
     }
 
     /// Add a PATCH route with elif handler
-    pub fn patch<F, Fut, R>(mut self, path: &str, handler: F) -> Self
+    pub fn patch<F, Fut, R>(self, path: &str, handler: F) -> Self
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        self.register_route(HttpMethod::PATCH, path, None);
-        self.axum_router = self.axum_router.route(path, patch(elif_handler(handler)));
-        self
+        self.add_route(HttpMethod::PATCH, path, handler, patch)
     }
 
     /// Register a controller with automatic route registration
@@ -451,70 +454,69 @@ where
         self
     }
 
-    /// Add a GET route with elif handler
-    pub fn get<F, Fut, R>(mut self, handler: F) -> Router<S>
+    /// Private helper method for RouteBuilder route registration
+    fn add_method_route<F, Fut, R, M>(mut self, method: HttpMethod, handler: F, method_router_fn: M) -> Router<S>
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
+        M: FnOnce(crate::handlers::handler::ElifHandlerWrapper<F, Fut, R>) -> axum::routing::MethodRouter<S>,
     {
-        let route_id = self.router.register_route(HttpMethod::GET, &self.path, self.name.clone());
+        let route_id = self.router.register_route(method, &self.path, self.name.clone());
         self.router.route_middleware.insert(route_id, self.middleware_groups);
-        let method_router = get(elif_handler(handler));
+        let method_router = method_router_fn(elif_handler(handler));
         self.router.axum_router = self.router.axum_router.route(&self.path, method_router);
         self.router
     }
 
-    /// Add a POST route with elif handler
-    pub fn post<F, Fut, R>(mut self, handler: F) -> Router<S>
+    /// Add a GET route with elif handler
+    pub fn get<F, Fut, R>(self, handler: F) -> Router<S>
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        let route_id = self.router.register_route(HttpMethod::POST, &self.path, self.name.clone());
-        self.router.route_middleware.insert(route_id, self.middleware_groups);
-        self.router.axum_router = self.router.axum_router.route(&self.path, post(elif_handler(handler)));
-        self.router
+        self.add_method_route(HttpMethod::GET, handler, get)
+    }
+
+    /// Add a POST route with elif handler
+    pub fn post<F, Fut, R>(self, handler: F) -> Router<S>
+    where
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
+    {
+        self.add_method_route(HttpMethod::POST, handler, post)
     }
 
     /// Add a PUT route with elif handler
-    pub fn put<F, Fut, R>(mut self, handler: F) -> Router<S>
+    pub fn put<F, Fut, R>(self, handler: F) -> Router<S>
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        let route_id = self.router.register_route(HttpMethod::PUT, &self.path, self.name.clone());
-        self.router.route_middleware.insert(route_id, self.middleware_groups);
-        self.router.axum_router = self.router.axum_router.route(&self.path, put(elif_handler(handler)));
-        self.router
+        self.add_method_route(HttpMethod::PUT, handler, put)
     }
 
     /// Add a DELETE route with elif handler
-    pub fn delete<F, Fut, R>(mut self, handler: F) -> Router<S>
+    pub fn delete<F, Fut, R>(self, handler: F) -> Router<S>
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        let route_id = self.router.register_route(HttpMethod::DELETE, &self.path, self.name.clone());
-        self.router.route_middleware.insert(route_id, self.middleware_groups);
-        self.router.axum_router = self.router.axum_router.route(&self.path, delete(elif_handler(handler)));
-        self.router
+        self.add_method_route(HttpMethod::DELETE, handler, delete)
     }
 
     /// Add a PATCH route with elif handler
-    pub fn patch<F, Fut, R>(mut self, handler: F) -> Router<S>
+    pub fn patch<F, Fut, R>(self, handler: F) -> Router<S>
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        let route_id = self.router.register_route(HttpMethod::PATCH, &self.path, self.name.clone());
-        self.router.route_middleware.insert(route_id, self.middleware_groups);
-        self.router.axum_router = self.router.axum_router.route(&self.path, patch(elif_handler(handler)));
-        self.router
+        self.add_method_route(HttpMethod::PATCH, handler, patch)
     }
 }
 
