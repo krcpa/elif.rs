@@ -430,7 +430,8 @@ pub mod introspection {
         pub fn record_execution(&mut self, duration: Duration) {
             self.executions += 1;
             self.total_time += duration;
-            self.avg_time = self.total_time / self.executions as u32;
+            // Safe division using u128 to avoid overflow and division-by-zero
+            self.avg_time = Duration::from_nanos((self.total_time.as_nanos() / self.executions as u128) as u64);
             self.last_execution = Some(Instant::now());
         }
     }
@@ -481,17 +482,17 @@ pub mod introspection {
 
         /// Get execution statistics for all middleware
         pub fn stats(&self) -> HashMap<String, MiddlewareStats> {
-            self.stats.lock().unwrap().clone()
+            self.stats.lock().expect("Stats mutex should not be poisoned").clone()
         }
 
         /// Get statistics for a specific middleware
         pub fn middleware_stats(&self, name: &str) -> Option<MiddlewareStats> {
-            self.stats.lock().unwrap().get(name).cloned()
+            self.stats.lock().expect("Stats mutex should not be poisoned").get(name).cloned()
         }
 
         /// Reset all statistics
         pub fn reset_stats(&self) {
-            let mut stats = self.stats.lock().unwrap();
+            let mut stats = self.stats.lock().expect("Stats mutex should not be poisoned");
             for (name, stat) in stats.iter_mut() {
                 *stat = MiddlewareStats::new(name.clone());
             }
@@ -531,12 +532,12 @@ pub mod introspection {
 
         /// Get the current statistics for this middleware
         pub fn stats(&self) -> MiddlewareStats {
-            self.stats.lock().unwrap().clone()
+            self.stats.lock().expect("Middleware stats mutex should not be poisoned").clone()
         }
 
         /// Reset statistics for this middleware
         pub fn reset_stats(&self) {
-            let mut stats = self.stats.lock().unwrap();
+            let mut stats = self.stats.lock().expect("Middleware stats mutex should not be poisoned");
             *stats = MiddlewareStats::new(self.name.clone());
         }
     }
@@ -551,7 +552,7 @@ pub mod introspection {
                 let response = middleware_result.await;
                 let duration = start.elapsed();
                 
-                stats.lock().unwrap().record_execution(duration);
+                stats.lock().expect("Middleware stats mutex should not be poisoned").record_execution(duration);
                 response
             })
         }
@@ -573,6 +574,8 @@ pub struct RateLimitMiddleware {
     window: Duration,
     // Simple in-memory store - in production you'd use Redis or similar
     requests: Arc<Mutex<HashMap<String, (std::time::Instant, u32)>>>,
+    // Last cleanup time to avoid O(N) cleanup on every request
+    last_cleanup: Arc<Mutex<std::time::Instant>>,
 }
 
 impl std::fmt::Debug for RateLimitMiddleware {
@@ -580,16 +583,19 @@ impl std::fmt::Debug for RateLimitMiddleware {
         f.debug_struct("RateLimitMiddleware")
             .field("requests_per_window", &self.requests_per_window)
             .field("window", &self.window)
+            .field("last_cleanup", &"<Mutex<Instant>>")
             .finish()
     }
 }
 
 impl RateLimitMiddleware {
     pub fn new() -> Self {
+        let now = std::time::Instant::now();
         Self {
             requests_per_window: 60, // Default: 60 requests per minute
             window: Duration::from_secs(60),
             requests: Arc::new(Mutex::new(HashMap::new())),
+            last_cleanup: Arc::new(Mutex::new(now)),
         }
     }
 
@@ -612,11 +618,26 @@ impl RateLimitMiddleware {
     }
 
     fn is_rate_limited(&self, client_id: &str) -> bool {
-        let mut requests = self.requests.lock().unwrap();
         let now = std::time::Instant::now();
-
-        // Clean up old entries
-        requests.retain(|_, (timestamp, _)| now.duration_since(*timestamp) < self.window);
+        
+        // Periodic cleanup to avoid O(N) operation on every request
+        // Only clean up every 30 seconds to balance memory usage vs performance
+        const CLEANUP_INTERVAL: Duration = Duration::from_secs(30);
+        
+        {
+            let mut last_cleanup = self.last_cleanup.lock().expect("Cleanup time mutex should not be poisoned");
+            if now.duration_since(*last_cleanup) > CLEANUP_INTERVAL {
+                // Time for cleanup - acquire requests lock and clean
+                let mut requests = self.requests.lock().expect("Rate limiter mutex should not be poisoned");
+                requests.retain(|_, (timestamp, _)| now.duration_since(*timestamp) < self.window);
+                *last_cleanup = now;
+                // Release both locks before continuing
+                drop(requests);
+            }
+        }
+        
+        // Now handle the actual rate limiting logic
+        let mut requests = self.requests.lock().expect("Rate limiter mutex should not be poisoned");
 
         // Check current rate
         if let Some((timestamp, count)) = requests.get_mut(client_id) {
@@ -706,29 +727,22 @@ impl Middleware for CorsMiddleware {
         Box::pin(async move {
             // Handle preflight OPTIONS request
             if request.method == ElifMethod::OPTIONS {
-                return ElifResponse::ok()
-                    .header("Access-Control-Allow-Origin", allowed_origins.join(","))
-                    .unwrap_or_else(|_| ElifResponse::ok())
-                    .header("Access-Control-Allow-Methods", allowed_methods.join(","))
-                    .unwrap_or_else(|_| ElifResponse::ok())
-                    .header("Access-Control-Allow-Headers", allowed_headers.join(","))
-                    .unwrap_or_else(|_| ElifResponse::ok());
+                let mut preflight_response = ElifResponse::ok();
+                // Add headers safely - ignore failures to avoid replacing response
+                let _ = preflight_response.add_header("Access-Control-Allow-Origin", allowed_origins.join(","));
+                let _ = preflight_response.add_header("Access-Control-Allow-Methods", allowed_methods.join(","));
+                let _ = preflight_response.add_header("Access-Control-Allow-Headers", allowed_headers.join(","));
+                return preflight_response;
             }
 
-            let response = next.run(request).await;
+            let mut response = next.run(request).await;
             
-            // Add CORS headers to response - chain the operations
-            let response_with_origin = response
-                .header("Access-Control-Allow-Origin", allowed_origins.join(","))
-                .unwrap_or_else(|_| ElifResponse::ok());
-                
-            let response_with_methods = response_with_origin
-                .header("Access-Control-Allow-Methods", allowed_methods.join(","))
-                .unwrap_or_else(|_| ElifResponse::ok());
-                
-            response_with_methods
-                .header("Access-Control-Allow-Headers", allowed_headers.join(","))
-                .unwrap_or_else(|_| ElifResponse::ok())
+            // Add CORS headers to response safely - never replace the response on failure
+            let _ = response.add_header("Access-Control-Allow-Origin", allowed_origins.join(","));
+            let _ = response.add_header("Access-Control-Allow-Methods", allowed_methods.join(","));
+            let _ = response.add_header("Access-Control-Allow-Headers", allowed_headers.join(","));
+
+            response
         })
     }
 

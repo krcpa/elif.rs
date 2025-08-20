@@ -53,7 +53,8 @@
       "Bash(diff:*)",
       "Bash(timeout 60 cargo test --package elif-http --lib)",
       "Bash(RUSTFLAGS=\"-A warnings\" cargo build -p elifrs)",
-      "Bash(RUSTFLAGS=\"-A warnings\" cargo check -p elifrs)"
+      "Bash(RUSTFLAGS=\"-A warnings\" cargo check -p elifrs)",
+      "WebFetch(domain:127.0.0.1)"
     ],
     "deny": []
   }
