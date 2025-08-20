@@ -30,8 +30,9 @@ pub struct RouteDefinition {
 /// High-performance route matcher
 #[derive(Debug)]
 pub struct RouteMatcher {
-    /// Static routes for O(1) lookup
-    static_routes: HashMap<(HttpMethod, String), RouteId>,
+    /// Static routes for O(1) lookup - nested to avoid string allocation
+    /// Structure: method -> path -> route_id
+    static_routes: HashMap<HttpMethod, HashMap<String, RouteId>>,
     /// Dynamic routes sorted by priority
     dynamic_routes: Vec<CompiledRoute>,
     /// All route definitions for introspection
@@ -59,9 +60,11 @@ impl RouteMatcher {
         self.route_definitions.insert(definition.id.clone(), definition.clone());
         
         if pattern.is_static() {
-            // Static route - add to fast lookup table
-            let key = (definition.method.clone(), definition.path.clone());
-            self.static_routes.insert(key, definition.id);
+            // Static route - add to nested lookup table
+            self.static_routes
+                .entry(definition.method.clone())
+                .or_insert_with(HashMap::new)
+                .insert(definition.path.clone(), definition.id);
         } else {
             // Dynamic route - compile and add to sorted list
             let compiled_route = CompiledRoute::new(definition.id, definition.method, pattern);
@@ -79,12 +82,14 @@ impl RouteMatcher {
 
     /// Resolve an incoming request to a matching route
     pub fn resolve(&self, method: &HttpMethod, path: &str) -> Option<RouteMatch> {
-        // Fast path: check static routes first
-        if let Some(route_id) = self.static_routes.get(&(method.clone(), path.to_string())) {
-            return Some(RouteMatch {
-                route_id: route_id.clone(),
-                params: HashMap::new(),
-            });
+        // Fast path: check static routes first (no allocation!)
+        if let Some(method_routes) = self.static_routes.get(method) {
+            if let Some(route_id) = method_routes.get(path) {
+                return Some(RouteMatch {
+                    route_id: route_id.clone(),
+                    params: HashMap::new(),
+                });
+            }
         }
         
         // Dynamic route matching
@@ -105,12 +110,13 @@ impl RouteMatcher {
     fn check_conflicts(&self, new_route: &RouteDefinition, new_pattern: &RoutePattern) -> Result<(), RouteMatchError> {
         // Check against static routes
         if new_pattern.is_static() {
-            let key = (new_route.method.clone(), new_route.path.clone());
-            if let Some(existing_id) = self.static_routes.get(&key) {
-                return Err(RouteMatchError::RouteConflict(
-                    new_route.id.clone(),
-                    existing_id.clone(),
-                ));
+            if let Some(method_routes) = self.static_routes.get(&new_route.method) {
+                if let Some(existing_id) = method_routes.get(&new_route.path) {
+                    return Err(RouteMatchError::RouteConflict(
+                        new_route.id.clone(),
+                        existing_id.clone(),
+                    ));
+                }
             }
         }
         
@@ -155,8 +161,13 @@ impl RouteMatcher {
 
     /// Get statistics about the matcher
     pub fn stats(&self) -> MatcherStats {
+        let static_routes_count = self.static_routes
+            .values()
+            .map(|method_routes| method_routes.len())
+            .sum();
+        
         MatcherStats {
-            static_routes: self.static_routes.len(),
+            static_routes: static_routes_count,
             dynamic_routes: self.dynamic_routes.len(),
             total_routes: self.route_definitions.len(),
         }
@@ -441,5 +452,58 @@ mod tests {
         
         assert!(matcher.resolve(&HttpMethod::GET, "/nonexistent").is_none());
         assert!(matcher.resolve(&HttpMethod::POST, "/").is_none());
+    }
+
+    #[test]
+    fn test_static_route_lookup_performance() {
+        // Create a matcher with many static routes across different methods
+        let mut builder = RouteMatcherBuilder::new();
+        
+        for i in 0..100 {
+            builder = builder
+                .get(format!("get_{}", i), format!("/static/path/{}", i))
+                .post(format!("post_{}", i), format!("/api/v1/{}", i))
+                .put(format!("put_{}", i), format!("/resource/{}", i));
+        }
+        
+        let matcher = builder.build().unwrap();
+        let stats = matcher.stats();
+        
+        // Verify we have static routes
+        assert_eq!(stats.static_routes, 300); // 100 routes × 3 methods
+        assert_eq!(stats.dynamic_routes, 0);
+        
+        // Test lookup performance - these should be O(1) with no allocations
+        let start = std::time::Instant::now();
+        
+        // Perform many lookups
+        for i in 0..1000 {
+            let test_index = i % 100;
+            
+            // These lookups should not allocate strings
+            let result = matcher.resolve(&HttpMethod::GET, &format!("/static/path/{}", test_index));
+            assert!(result.is_some());
+            
+            let result = matcher.resolve(&HttpMethod::POST, &format!("/api/v1/{}", test_index));
+            assert!(result.is_some());
+            
+            let result = matcher.resolve(&HttpMethod::PUT, &format!("/resource/{}", test_index));
+            assert!(result.is_some());
+            
+            // Test non-existent path
+            let result = matcher.resolve(&HttpMethod::GET, "/nonexistent/path");
+            assert!(result.is_none());
+        }
+        
+        let elapsed = start.elapsed();
+        
+        // This test primarily verifies that the optimization doesn't break functionality
+        // The performance benefit (no string allocation) can't be directly tested in a unit test,
+        // but the nested HashMap structure ensures we only do &str lookups
+        
+        // Should complete very quickly due to O(1) lookups
+        assert!(elapsed.as_millis() < 100, "Static route lookups took too long: {}ms", elapsed.as_millis());
+        
+        println!("3000 static route lookups completed in {}μs", elapsed.as_micros());
     }
 }
