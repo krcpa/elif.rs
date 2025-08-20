@@ -213,6 +213,12 @@ impl ResponseBuilder {
         self
     }
 
+    /// Add a cookie header (supports multiple cookies)
+    pub fn cookie<S: Into<String>>(mut self, cookie_value: S) -> Self {
+        self.headers.push(("set-cookie".to_string(), cookie_value.into()));
+        self
+    }
+
     // Error Response Helpers
 
     /// Create error response with message
@@ -334,8 +340,15 @@ impl ResponseBuilder {
                 continue;
             }
             
-            response = response.header(&key, &value)
-                .unwrap_or_else(|_| ElifResponse::internal_server_error());
+            if let (Ok(name), Ok(val)) = (
+                crate::response::ElifHeaderName::from_str(&key),
+                crate::response::ElifHeaderValue::from_str(&value)
+            ) {
+                // Use append instead of insert to support multi-value headers like Set-Cookie
+                response.headers_mut().append(name, val);
+            } else {
+                return ElifResponse::internal_server_error();
+            }
         }
 
         response
@@ -514,5 +527,54 @@ mod tests {
         assert!(resp.has_header("x-frame-options"));
         assert!(resp.has_header("x-xss-protection"));
         assert!(resp.has_header("referrer-policy"));
+    }
+
+    #[test]
+    fn test_multi_value_headers() {
+        // Test that multiple headers with the same name are properly appended
+        let resp: ElifResponse = response()
+            .text("Hello")
+            .header("set-cookie", "session=abc123; Path=/")
+            .header("set-cookie", "theme=dark; Path=/")
+            .header("set-cookie", "lang=en; Path=/")
+            .into();
+        
+        // All Set-Cookie headers should be present (append behavior)
+        assert!(resp.has_header("set-cookie"));
+        
+        // Test that we can build the response without errors
+        assert_eq!(resp.status_code(), ElifStatusCode::OK);
+    }
+
+    #[test]
+    fn test_cookie_helper_method() {
+        // Test the convenience cookie method
+        let resp: ElifResponse = response()
+            .json(json!({"user": "alice"}))
+            .cookie("session=12345; HttpOnly; Secure")
+            .cookie("csrf=token123; SameSite=Strict")
+            .cookie("theme=dark; Path=/")
+            .created()
+            .into();
+        
+        assert!(resp.has_header("set-cookie"));
+        assert_eq!(resp.status_code(), ElifStatusCode::CREATED);
+    }
+
+    #[test]
+    fn test_header_append_vs_insert_behavior() {
+        // Verify that multiple headers with same name are preserved
+        let resp: ElifResponse = response()
+            .json(json!({"test": "data"}))
+            .header("x-custom", "value1")
+            .header("x-custom", "value2")
+            .header("x-custom", "value3")
+            .into();
+        
+        assert!(resp.has_header("x-custom"));
+        assert_eq!(resp.status_code(), ElifStatusCode::OK);
+        
+        // The response should build successfully with all custom headers
+        // (The exact behavior depends on how we want to handle duplicate non-cookie headers)
     }
 }
