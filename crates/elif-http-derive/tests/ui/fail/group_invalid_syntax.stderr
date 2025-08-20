@@ -1,0 +1,13 @@
+error: expected string literal
+ --> tests/ui/fail/group_invalid_syntax.rs:6:9
+  |
+6 | #[group(invalid_syntax_here)]
+  |         ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `get`
+ --> tests/ui/fail/group_invalid_syntax.rs:3:31
+  |
+3 | use elif_http_derive::{group, get};
+  |                               ^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default

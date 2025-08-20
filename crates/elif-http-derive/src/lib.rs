@@ -16,7 +16,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
     parse_macro_input, ItemFn, ItemStruct, ItemImpl, ImplItem,
-    Attribute, Meta, Signature, FnArg, Pat, PatIdent
+    Attribute, Meta, Signature, FnArg, Pat, PatIdent, parse::Parse, parse::ParseStream, Token, LitStr
 };
 
 #[cfg(test)]
@@ -217,9 +217,18 @@ pub fn body(_args: TokenStream, input: TokenStream) -> TokenStream {
 pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
     let input_impl = parse_macro_input!(input as ItemImpl);
     let impl_name = if let syn::Type::Path(type_path) = &*input_impl.self_ty {
-        &type_path.path.segments.last().unwrap().ident
+        if let Some(segment) = type_path.path.segments.last() {
+            &segment.ident
+        } else {
+            return syn::Error::new_spanned(
+                &input_impl.self_ty,
+                "Cannot get identifier from an empty type path",
+            )
+            .to_compile_error()
+            .into();
+        }
     } else {
-        return syn::Error::new_spanned(&input_impl.self_ty, "Expected simple type path")
+        return syn::Error::new_spanned(&input_impl.self_ty, "Expected a simple type for the impl block")
             .to_compile_error()
             .into();
     };
@@ -320,13 +329,25 @@ pub fn resource(args: TokenStream, input: TokenStream) -> TokenStream {
 pub fn group(args: TokenStream, input: TokenStream) -> TokenStream {
     let input_impl = parse_macro_input!(input as ItemImpl);
     
-    // Parse group arguments (path and optional middleware)
-    let group_config = parse_group_args(args);
+    // Parse group arguments (path and optional middleware) 
+    let group_config = match parse_group_args_robust(args) {
+        Ok(config) => config,
+        Err(err) => return err.to_compile_error().into(),
+    };
     
     let impl_name = if let syn::Type::Path(type_path) = &*input_impl.self_ty {
-        &type_path.path.segments.last().unwrap().ident
+        if let Some(segment) = type_path.path.segments.last() {
+            &segment.ident
+        } else {
+            return syn::Error::new_spanned(
+                &input_impl.self_ty,
+                "Cannot get identifier from an empty type path",
+            )
+            .to_compile_error()
+            .into();
+        }
     } else {
-        return syn::Error::new_spanned(&input_impl.self_ty, "Expected simple type path")
+        return syn::Error::new_spanned(&input_impl.self_ty, "Expected a simple type for the impl block")
             .to_compile_error()
             .into();
     };
@@ -388,8 +409,8 @@ fn extract_http_method_info(attrs: &[Attribute]) -> Option<(proc_macro2::Ident, 
                 _ => None,
             }?;
             
-            // Extract path from the attribute arguments
-            let path = extract_path_from_meta_list(&meta_list.tokens);
+            // Extract path from the attribute arguments using proper syn parsing
+            let path = extract_path_from_meta_list_robust(&meta_list.tokens);
             return Some((method_ident, path));
         } else if let Meta::Path(path) = &attr.meta {
             let path_name = path.get_ident()?.to_string();
@@ -415,27 +436,49 @@ fn extract_resource_info(attrs: &[Attribute]) -> Option<String> {
     for attr in attrs {
         if let Meta::List(meta_list) = &attr.meta {
             if meta_list.path.is_ident("resource") {
-                // Extract path from the attribute arguments
-                return Some(extract_path_from_meta_list(&meta_list.tokens));
+                // Extract path from the attribute arguments using proper syn parsing
+                return Some(extract_path_from_meta_list_robust(&meta_list.tokens));
             }
         }
     }
     None
 }
 
-/// Extract path string from token stream (handles both ("path") and empty cases)
-fn extract_path_from_meta_list(tokens: &proc_macro2::TokenStream) -> String {
-    let tokens_str = tokens.to_string();
-    // Simple string extraction - in production would need more robust parsing
-    if tokens_str.is_empty() {
-        "".to_string()
-    } else if tokens_str.starts_with("(\"") && tokens_str.ends_with("\")") {
-        tokens_str[2..tokens_str.len()-2].to_string()
-    } else if tokens_str.starts_with("\"") && tokens_str.ends_with("\"") {
-        tokens_str[1..tokens_str.len()-1].to_string()  
-    } else {
-        "".to_string()
+/// Extract path string from token stream using proper syn parsing
+fn extract_path_from_meta_list_robust(tokens: &proc_macro2::TokenStream) -> String {
+    // If tokens are empty, return empty string
+    if tokens.is_empty() {
+        return String::new();
     }
+    
+    // Try to parse as a string literal directly
+    if let Ok(lit_str) = syn::parse2::<LitStr>(tokens.clone()) {
+        return lit_str.value();
+    }
+    
+    // Try to parse as a parenthesized string literal: ("path")
+    if let Ok(group) = syn::parse2::<proc_macro2::Group>(tokens.clone()) {
+        if group.delimiter() == proc_macro2::Delimiter::Parenthesis {
+            if let Ok(inner_lit) = syn::parse2::<LitStr>(group.stream()) {
+                return inner_lit.value();
+            }
+        }
+    }
+    
+    // Try to manually extract from parentheses format
+    let tokens_iter = tokens.clone().into_iter().collect::<Vec<_>>();
+    if tokens_iter.len() == 1 {
+        if let proc_macro2::TokenTree::Group(group) = &tokens_iter[0] {
+            if group.delimiter() == proc_macro2::Delimiter::Parenthesis {
+                if let Ok(inner_lit) = syn::parse2::<LitStr>(group.stream()) {
+                    return inner_lit.value();
+                }
+            }
+        }
+    }
+    
+    // Fall back to empty string if we can't parse properly
+    String::new()
 }
 
 #[derive(Debug, Default)]
@@ -444,27 +487,89 @@ struct GroupConfig {
     middleware: Vec<String>,
 }
 
-/// Parse group attribute arguments
-fn parse_group_args(args: TokenStream) -> GroupConfig {
-    let mut config = GroupConfig::default();
+/// Parsing struct for group arguments like: "/api/v1", middleware = [cors, auth]
+struct GroupArgs {
+    prefix: LitStr,
+    _comma: Option<Token![,]>,
+    middleware_assignment: Option<(syn::Ident, Token![=], syn::Expr)>,
+}
+
+impl Parse for GroupArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let prefix = input.parse()?;
+        
+        let _comma = if input.peek(Token![,]) {
+            Some(input.parse()?)
+        } else {
+            None
+        };
+        
+        let middleware_assignment = if !input.is_empty() {
+            let ident: syn::Ident = input.parse()?;
+            if ident != "middleware" {
+                return Err(syn::Error::new_spanned(
+                    ident,
+                    "Expected 'middleware' keyword"
+                ));
+            }
+            let eq: Token![=] = input.parse()?;
+            let expr: syn::Expr = input.parse()?;
+            Some((ident, eq, expr))
+        } else {
+            None
+        };
+        
+        Ok(GroupArgs {
+            prefix,
+            _comma,
+            middleware_assignment,
+        })
+    }
+}
+
+/// Parse group attribute arguments using robust syn parsing
+fn parse_group_args_robust(args: TokenStream) -> syn::Result<GroupConfig> {
+    let parsed_args = syn::parse::<GroupArgs>(args)?;
     
-    // Simple parsing for the example format: "/api/v1", middleware = [cors, auth]
-    let args_str = args.to_string();
+    let mut config = GroupConfig {
+        prefix: parsed_args.prefix.value(),
+        middleware: Vec::new(),
+    };
     
-    // Extract prefix (first string literal)
-    if let Some(start) = args_str.find('"') {
-        if let Some(end) = args_str[start + 1..].find('"') {
-            config.prefix = args_str[start + 1..start + 1 + end].to_string();
+    // Extract middleware from expression if present
+    if let Some((_ident, _eq, expr)) = parsed_args.middleware_assignment {
+        // Try to parse middleware list from various expression forms
+        match &expr {
+            syn::Expr::Array(array) => {
+                for elem in &array.elems {
+                    if let syn::Expr::Path(path) = elem {
+                        if let Some(ident) = path.path.get_ident() {
+                            config.middleware.push(ident.to_string());
+                        }
+                    }
+                }
+            }
+            syn::Expr::Path(path) => {
+                // Single middleware item
+                if let Some(ident) = path.path.get_ident() {
+                    config.middleware.push(ident.to_string());
+                }
+            }
+            _ => {
+                // For now, ignore other expression types
+                // In production, you might want to handle more complex expressions
+            }
         }
     }
     
-    // Extract middleware (simplified parsing)
-    if args_str.contains("middleware") {
-        // This would need more sophisticated parsing in production
-        // For now, just acknowledge the presence
-    }
-    
-    config
+    Ok(config)
+}
+
+/// Parse group attribute arguments (legacy - kept for compatibility)
+#[allow(dead_code)]
+fn parse_group_args(args: TokenStream) -> GroupConfig {
+    // Use the robust parser and fall back to default on error
+    parse_group_args_robust(args).unwrap_or_default()
 }
 
 /// Extract path parameters from a route path (e.g., "/users/{id}" -> ["id"])
