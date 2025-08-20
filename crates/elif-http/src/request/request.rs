@@ -386,6 +386,153 @@ impl ElifRequest {
     }
 }
 
+/// Enhanced parameter extraction methods with better error handling and type safety
+impl ElifRequest {
+    /// Extract and parse a path parameter with proper error handling
+    /// 
+    /// This is the preferred method for extracting path parameters as it provides
+    /// better error messages and type safety compared to the legacy methods.
+    pub fn path_param_typed<T>(&self, name: &str) -> Result<T, crate::request::pipeline::ParamError>
+    where
+        T: std::str::FromStr,
+        T::Err: std::fmt::Debug + std::fmt::Display,
+    {
+        crate::request::pipeline::parameter_extraction::extract_path_param(self, name)
+    }
+
+    /// Extract and parse a path parameter as i32
+    pub fn path_param_int(&self, name: &str) -> Result<i32, crate::request::pipeline::ParamError> {
+        self.path_param_typed(name)
+    }
+
+    /// Extract and parse a path parameter as u32
+    pub fn path_param_u32(&self, name: &str) -> Result<u32, crate::request::pipeline::ParamError> {
+        self.path_param_typed(name)
+    }
+
+    /// Extract and parse a path parameter as i64
+    pub fn path_param_i64(&self, name: &str) -> Result<i64, crate::request::pipeline::ParamError> {
+        self.path_param_typed(name)
+    }
+
+    /// Extract and parse a path parameter as u64
+    pub fn path_param_u64(&self, name: &str) -> Result<u64, crate::request::pipeline::ParamError> {
+        self.path_param_typed(name)
+    }
+
+    /// Extract and parse a path parameter as UUID
+    pub fn path_param_uuid(&self, name: &str) -> Result<uuid::Uuid, crate::request::pipeline::ParamError> {
+        self.path_param_typed(name)
+    }
+
+    /// Extract and parse a path parameter as String (validates non-empty)
+    pub fn path_param_string(&self, name: &str) -> Result<String, crate::request::pipeline::ParamError> {
+        let value: String = self.path_param_typed(name)?;
+        if value.is_empty() {
+            return Err(crate::request::pipeline::ParamError::ParseError {
+                param: name.to_string(),
+                value: value.clone(),
+                error: "Parameter cannot be empty".to_string(),
+            });
+        }
+        Ok(value)
+    }
+
+    /// Extract and parse an optional query parameter with proper error handling
+    pub fn query_param_typed_new<T>(&self, name: &str) -> Result<Option<T>, crate::request::pipeline::ParamError>
+    where
+        T: std::str::FromStr,
+        T::Err: std::fmt::Debug + std::fmt::Display,
+    {
+        crate::request::pipeline::parameter_extraction::extract_query_param(self, name)
+    }
+
+    /// Extract and parse a required query parameter with proper error handling  
+    pub fn query_param_required_typed<T>(&self, name: &str) -> Result<T, crate::request::pipeline::ParamError>
+    where
+        T: std::str::FromStr,
+        T::Err: std::fmt::Debug + std::fmt::Display,
+    {
+        crate::request::pipeline::parameter_extraction::extract_required_query_param(self, name)
+    }
+
+    /// Extract query parameter as optional i32
+    pub fn query_param_int_new(&self, name: &str) -> Result<Option<i32>, crate::request::pipeline::ParamError> {
+        self.query_param_typed_new(name)
+    }
+
+    /// Extract query parameter as required i32
+    pub fn query_param_int_required(&self, name: &str) -> Result<i32, crate::request::pipeline::ParamError> {
+        self.query_param_required_typed(name)
+    }
+
+    /// Extract query parameter as optional u32
+    pub fn query_param_u32_new(&self, name: &str) -> Result<Option<u32>, crate::request::pipeline::ParamError> {
+        self.query_param_typed_new(name)
+    }
+
+    /// Extract query parameter as required u32
+    pub fn query_param_u32_required(&self, name: &str) -> Result<u32, crate::request::pipeline::ParamError> {
+        self.query_param_required_typed(name)
+    }
+
+    /// Extract query parameter as optional bool
+    pub fn query_param_bool_new(&self, name: &str) -> Result<Option<bool>, crate::request::pipeline::ParamError> {
+        self.query_param_typed_new(name)
+    }
+
+    /// Extract query parameter as required bool
+    pub fn query_param_bool_required(&self, name: &str) -> Result<bool, crate::request::pipeline::ParamError> {
+        self.query_param_required_typed(name)
+    }
+
+    /// Extract query parameter as optional String
+    pub fn query_param_string_new(&self, name: &str) -> Result<Option<String>, crate::request::pipeline::ParamError> {
+        self.query_param_typed_new(name)
+    }
+
+    /// Extract query parameter as required String
+    pub fn query_param_string_required(&self, name: &str) -> Result<String, crate::request::pipeline::ParamError> {
+        self.query_param_required_typed(name)
+    }
+
+    /// Validate that path parameter exists and is not empty
+    pub fn validate_path_param(&self, name: &str) -> Result<&String, crate::request::pipeline::ParamError> {
+        let param = self.path_params.get(name)
+            .ok_or_else(|| crate::request::pipeline::ParamError::Missing(name.to_string()))?;
+        
+        if param.is_empty() {
+            return Err(crate::request::pipeline::ParamError::ParseError {
+                param: name.to_string(),
+                value: param.clone(),
+                error: "Parameter cannot be empty".to_string(),
+            });
+        }
+        
+        Ok(param)
+    }
+
+    /// Check if request has a specific path parameter
+    pub fn has_path_param(&self, name: &str) -> bool {
+        self.path_params.contains_key(name)
+    }
+
+    /// Check if request has a specific query parameter
+    pub fn has_query_param(&self, name: &str) -> bool {
+        self.query_params.contains_key(name)
+    }
+
+    /// Get all path parameter names
+    pub fn path_param_names(&self) -> Vec<&String> {
+        self.path_params.keys().collect()
+    }
+
+    /// Get all query parameter names
+    pub fn query_param_names(&self) -> Vec<&String> {
+        self.query_params.keys().collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -477,6 +477,325 @@ impl ElifResponse {
             .header("content-type", content_type)?
             .bytes(content))
     }
+
+    /// Create file response from filesystem path
+    pub fn file<P: AsRef<std::path::Path>>(path: P) -> HttpResult<Self> {
+        let path = path.as_ref();
+        let content = std::fs::read(path)
+            .map_err(|e| HttpError::internal(format!("Failed to read file: {}", e)))?;
+        
+        let mime_type = Self::guess_mime_type(path);
+        
+        Ok(Self::ok()
+            .header("content-type", mime_type)?
+            .bytes(Bytes::from(content)))
+    }
+    
+    /// Guess MIME type from file extension
+    fn guess_mime_type(path: &std::path::Path) -> &'static str {
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some("html") | Some("htm") => "text/html; charset=utf-8",
+            Some("css") => "text/css",
+            Some("js") => "application/javascript",
+            Some("json") => "application/json",
+            Some("xml") => "application/xml",
+            Some("pdf") => "application/pdf",
+            Some("txt") => "text/plain; charset=utf-8",
+            Some("png") => "image/png",
+            Some("jpg") | Some("jpeg") => "image/jpeg",
+            Some("gif") => "image/gif",
+            Some("svg") => "image/svg+xml",
+            Some("ico") => "image/x-icon",
+            Some("woff") => "font/woff",
+            Some("woff2") => "font/woff2",
+            Some("ttf") => "font/ttf",
+            Some("mp4") => "video/mp4",
+            Some("webm") => "video/webm",
+            Some("mp3") => "audio/mpeg",
+            Some("wav") => "audio/wav",
+            Some("zip") => "application/zip",
+            Some("tar") => "application/x-tar",
+            Some("gz") => "application/gzip",
+            _ => "application/octet-stream",
+        }
+    }
+}
+
+/// Enhanced response helper methods for common patterns
+impl ElifResponse {
+    /// Create JSON response with data and optional status
+    pub fn json_with_status<T: Serialize>(status: ElifStatusCode, data: &T) -> HttpResult<Self> {
+        Self::with_status(status).json(data)
+    }
+
+    /// Create JSON response from serde_json::Value
+    pub fn json_raw(value: serde_json::Value) -> Self {
+        Self::ok().json_value(value)
+    }
+
+    /// Create JSON response from serde_json::Value with status
+    pub fn json_raw_with_status(status: ElifStatusCode, value: serde_json::Value) -> Self {
+        Self::with_status(status).json_value(value)
+    }
+
+    /// Create text response with custom content type
+    pub fn text_with_type(content: &str, content_type: &str) -> HttpResult<Self> {
+        Self::ok()
+            .text(content)
+            .header("content-type", content_type)
+    }
+
+    /// Create XML response
+    pub fn xml<S: AsRef<str>>(content: S) -> HttpResult<Self> {
+        Self::text_with_type(content.as_ref(), "application/xml; charset=utf-8")
+    }
+
+    /// Create CSV response
+    pub fn csv<S: AsRef<str>>(content: S) -> HttpResult<Self> {
+        Self::text_with_type(content.as_ref(), "text/csv; charset=utf-8")
+    }
+
+    /// Create JavaScript response
+    pub fn javascript<S: AsRef<str>>(content: S) -> HttpResult<Self> {
+        Self::text_with_type(content.as_ref(), "application/javascript; charset=utf-8")
+    }
+
+    /// Create CSS response
+    pub fn css<S: AsRef<str>>(content: S) -> HttpResult<Self> {
+        Self::text_with_type(content.as_ref(), "text/css; charset=utf-8")
+    }
+
+    /// Create streaming response with chunked transfer encoding
+    pub fn stream() -> HttpResult<Self> {
+        Self::ok()
+            .header("transfer-encoding", "chunked")
+    }
+
+    /// Create Server-Sent Events (SSE) response
+    pub fn sse() -> HttpResult<Self> {
+        Self::ok()
+            .header("content-type", "text/event-stream")?
+            .header("cache-control", "no-cache")?
+            .header("connection", "keep-alive")
+    }
+
+    /// Create JSONP response with callback
+    pub fn jsonp<T: Serialize>(callback: &str, data: &T) -> HttpResult<Self> {
+        let json_data = serde_json::to_string(data)
+            .map_err(|e| HttpError::internal(format!("JSON serialization failed: {}", e)))?;
+        
+        let jsonp_content = format!("{}({});", callback, json_data);
+        
+        Self::ok()
+            .text(jsonp_content)
+            .header("content-type", "application/javascript; charset=utf-8")
+    }
+
+    /// Create image response from bytes with format detection
+    pub fn image(content: Bytes, format: ImageFormat) -> HttpResult<Self> {
+        let content_type = match format {
+            ImageFormat::Png => "image/png",
+            ImageFormat::Jpeg => "image/jpeg",
+            ImageFormat::Gif => "image/gif",
+            ImageFormat::WebP => "image/webp",
+            ImageFormat::Svg => "image/svg+xml",
+        };
+
+        Ok(Self::ok()
+            .header("content-type", content_type)?
+            .bytes(content))
+    }
+
+    /// Create binary response with custom MIME type
+    pub fn binary(content: Bytes, mime_type: &str) -> HttpResult<Self> {
+        Ok(Self::ok()
+            .header("content-type", mime_type)?
+            .bytes(content))
+    }
+
+    /// Create CORS preflight response
+    pub fn cors_preflight(
+        allowed_origins: &[&str],
+        allowed_methods: &[&str], 
+        allowed_headers: &[&str],
+        max_age: Option<u32>
+    ) -> HttpResult<Self> {
+        let mut response = Self::no_content()
+            .header("access-control-allow-origin", allowed_origins.join(","))?
+            .header("access-control-allow-methods", allowed_methods.join(","))?
+            .header("access-control-allow-headers", allowed_headers.join(","))?;
+
+        if let Some(max_age) = max_age {
+            response = response.header("access-control-max-age", max_age.to_string())?;
+        }
+
+        Ok(response)
+    }
+
+    /// Add CORS headers to existing response
+    pub fn with_cors(
+        mut self,
+        origin: &str,
+        credentials: bool,
+        exposed_headers: Option<&[&str]>
+    ) -> HttpResult<Self> {
+        self = self.header("access-control-allow-origin", origin)?;
+        
+        if credentials {
+            self = self.header("access-control-allow-credentials", "true")?;
+        }
+        
+        if let Some(headers) = exposed_headers {
+            self = self.header("access-control-expose-headers", headers.join(","))?;
+        }
+        
+        Ok(self)
+    }
+
+    /// Create response with caching headers
+    pub fn with_cache(mut self, max_age: u32, public: bool) -> HttpResult<Self> {
+        let cache_control = if public {
+            format!("public, max-age={}", max_age)
+        } else {
+            format!("private, max-age={}", max_age)
+        };
+        
+        self = self.header("cache-control", cache_control)?;
+        
+        // Add ETag for cache validation (simple content-based)
+        let etag = format!("\"{}\"", self.generate_etag());
+        self = self.header("etag", etag)?;
+        
+        Ok(self)
+    }
+
+    /// Generate simple ETag based on response status and headers
+    fn generate_etag(&self) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        self.status.as_u16().hash(&mut hasher);
+        
+        // Hash header keys and values for ETag generation
+        for (key, value) in self.headers.iter() {
+            key.as_str().hash(&mut hasher);
+            if let Ok(value_str) = value.to_str() {
+                value_str.hash(&mut hasher);
+            }
+        }
+        
+        format!("{:x}", hasher.finish())
+    }
+
+    /// Create conditional response based on If-None-Match header
+    pub fn conditional(self, request_etag: Option<&str>) -> Self {
+        if let Some(request_etag) = request_etag {
+            let response_etag = self.generate_etag();
+            let response_etag_quoted = format!("\"{}\"", response_etag);
+            
+            if request_etag == response_etag_quoted || request_etag == "*" {
+                return ElifResponse::with_status(ElifStatusCode::NOT_MODIFIED);
+            }
+        }
+        self
+    }
+
+    /// Add security headers to response
+    pub fn with_security_headers(mut self) -> HttpResult<Self> {
+        self = self.header("x-content-type-options", "nosniff")?;
+        self = self.header("x-frame-options", "DENY")?;
+        self = self.header("x-xss-protection", "1; mode=block")?;
+        self = self.header("referrer-policy", "strict-origin-when-cross-origin")?;
+        self = self.header("content-security-policy", "default-src 'self'")?;
+        Ok(self)
+    }
+
+    /// Add performance headers
+    pub fn with_performance_headers(mut self) -> HttpResult<Self> {
+        self = self.header("x-dns-prefetch-control", "on")?;
+        self = self.header("x-powered-by", "elif.rs")?;
+        Ok(self)
+    }
+}
+
+/// Image format enumeration for typed image responses
+#[derive(Debug, Clone, Copy)]
+pub enum ImageFormat {
+    Png,
+    Jpeg,
+    Gif,
+    WebP,
+    Svg,
+}
+
+/// Response transformation helpers
+impl ElifResponse {
+    /// Transform response body with a closure
+    pub fn transform_body<F>(mut self, transform: F) -> Self 
+    where
+        F: FnOnce(ResponseBody) -> ResponseBody,
+    {
+        self.body = transform(self.body);
+        self
+    }
+
+    /// Add multiple headers at once
+    pub fn with_headers<I, K, V>(mut self, headers: I) -> HttpResult<Self>
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<str>,
+        V: AsRef<str>,
+    {
+        for (key, value) in headers {
+            self = self.header(key, value)?;
+        }
+        Ok(self)
+    }
+
+    /// Create response and immediately build to Axum Response
+    pub fn build_axum(self) -> Response<axum::body::Body> {
+        match self.build() {
+            Ok(response) => response,
+            Err(e) => {
+                // Fallback error response
+                (ElifStatusCode::INTERNAL_SERVER_ERROR.to_axum(), 
+                 format!("Response build failed: {}", e)).into_response()
+            }
+        }
+    }
+
+    /// Check if response is an error (4xx or 5xx status)
+    pub fn is_error(&self) -> bool {
+        self.status.as_u16() >= 400
+    }
+
+    /// Check if response is successful (2xx status)
+    pub fn is_success(&self) -> bool {
+        let status_code = self.status.as_u16();
+        status_code >= 200 && status_code < 300
+    }
+
+    /// Check if response is a redirect (3xx status)
+    pub fn is_redirect(&self) -> bool {
+        let status_code = self.status.as_u16();
+        status_code >= 300 && status_code < 400
+    }
+
+    /// Get response body size estimate
+    pub fn body_size_estimate(&self) -> usize {
+        match &self.body {
+            ResponseBody::Empty => 0,
+            ResponseBody::Text(text) => text.len(),
+            ResponseBody::Bytes(bytes) => bytes.len(),
+            ResponseBody::Json(value) => {
+                // Estimate JSON serialization size
+                serde_json::to_string(value)
+                    .map(|s| s.len())
+                    .unwrap_or(0)
+            }
+        }
+    }
 }
 
 #[cfg(test)]
