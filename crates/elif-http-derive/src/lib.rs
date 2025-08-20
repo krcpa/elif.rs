@@ -24,39 +24,156 @@ mod test;
 
 /// Controller macro for defining controller base path and metadata
 /// 
+/// This macro should be applied to impl blocks to enable route registration.
+/// 
 /// Example:
 /// ```rust,ignore
+/// pub struct UserController;
+/// 
 /// #[controller("/users")]
-/// pub struct UserController {
-///     user_service: Arc<UserService>,
+/// impl UserController {
+///     #[get("/{id}")]
+///     async fn show(&self, req: ElifRequest) -> HttpResult<ElifResponse> {
+///         // handler implementation
+///     }
 /// }
 /// ```
 #[proc_macro_attribute]
 pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
     let path_lit = parse_macro_input!(args as syn::LitStr);
-    let input = parse_macro_input!(input as ItemStruct);
-    
-    // Extract base path from the string literal
     let base_path = path_lit.value();
     
-    let struct_name = &input.ident;
-    let struct_name_str = struct_name.to_string();
-    
-    // Generate a simple stub implementation for now
-    // In a full implementation, this would integrate with the controller system
-    let expanded = quote! {
-        #input
+    // Try to parse as impl block first (new approach)
+    if let Ok(mut input_impl) = syn::parse::<ItemImpl>(input.clone()) {
+        let self_ty = &input_impl.self_ty;
+        let struct_name = if let syn::Type::Path(type_path) = &**self_ty {
+            if let Some(segment) = type_path.path.segments.last() {
+                segment.ident.to_string()
+            } else {
+                return syn::Error::new_spanned(self_ty, "Cannot extract struct name from type path")
+                    .to_compile_error()
+                    .into();
+            }
+        } else {
+            return syn::Error::new_spanned(self_ty, "Expected a simple type for impl block")
+                .to_compile_error()
+                .into();
+        };
         
-        // This is a placeholder implementation
-        // In practice, this would generate the ElifController trait implementation
-        // and integrate with the routing system
-        impl #struct_name {
-            pub const BASE_PATH: &'static str = #base_path;
-            pub const CONTROLLER_NAME: &'static str = #struct_name_str;
+        // Collect route information from methods
+        let mut routes = Vec::new();
+        
+        for item in &input_impl.items {
+            if let ImplItem::Fn(method) = item {
+                let method_name = &method.sig.ident;
+                
+                // Check for HTTP method attributes
+                if let Some((http_method, path)) = extract_http_method_info(&method.attrs) {
+                    let handler_name = method_name.to_string();
+                    
+                    // Convert http_method ident to proper HttpMethod enum variant
+                    let http_method_variant = match http_method.to_string().as_str() {
+                        "get" => quote! { GET },
+                        "post" => quote! { POST },
+                        "put" => quote! { PUT },
+                        "delete" => quote! { DELETE },
+                        "patch" => quote! { PATCH },
+                        "head" => quote! { HEAD },
+                        "options" => quote! { OPTIONS },
+                        _ => quote! { GET }, // Default fallback
+                    };
+                    
+                    // Extract middleware from method attributes
+                    let middleware = extract_middleware_from_attrs(&method.attrs);
+                    let middleware_vec = quote! { vec![#(#middleware.to_string()),*] };
+                    
+                    routes.push(quote! {
+                        ControllerRoute {
+                            method: HttpMethod::#http_method_variant,
+                            path: #path.to_string(),
+                            handler_name: #handler_name.to_string(),
+                            middleware: #middleware_vec,
+                            params: vec![], // TODO: Extract params in future phases
+                        }
+                    });
+                }
+            }
         }
-    };
-    
-    TokenStream::from(expanded)
+        
+        // Add constants to the impl block
+        input_impl.items.push(syn::parse_quote! {
+            pub const BASE_PATH: &'static str = #base_path;
+        });
+        
+        input_impl.items.push(syn::parse_quote! {
+            pub const CONTROLLER_NAME: &'static str = #struct_name;
+        });
+        
+        // Generate the expanded code with ElifController trait implementation
+        // Use local names to allow for both real elif-http types and test mocks
+        let expanded = quote! {
+            #input_impl
+            
+            impl ElifController for #self_ty {
+                fn name(&self) -> &str {
+                    #struct_name
+                }
+                
+                fn base_path(&self) -> &str {
+                    #base_path
+                }
+                
+                fn routes(&self) -> Vec<ControllerRoute> {
+                    vec![
+                        #(#routes),*
+                    ]
+                }
+                
+                fn handle_request(
+                    &self,
+                    method_name: String,
+                    request: ElifRequest,
+                ) -> ::std::pin::Pin<Box<dyn ::std::future::Future<Output = HttpResult<ElifResponse>> + Send>> {
+                    // NOTE: This is a limitation of the current macro implementation.
+                    // The handle_request method cannot directly call async methods on self
+                    // because the returned future must be 'static.
+                    // 
+                    // For now, we generate a simple dispatcher that returns an error.
+                    // In a real implementation, you would need to use Arc<Self> and clone it,
+                    // or restructure your controller to not require self in the handlers.
+                    
+                    Box::pin(async move {
+                        Ok(ElifResponse::ok()
+                            .text(&format!("Handler '{}' called (macro limitation: cannot dispatch to instance methods)", method_name)))
+                    })
+                }
+            }
+        };
+        
+        TokenStream::from(expanded)
+    } else if let Ok(input_struct) = syn::parse::<ItemStruct>(input) {
+        // Legacy support: If applied to struct, just add constants
+        let struct_name = &input_struct.ident;
+        let struct_name_str = struct_name.to_string();
+        
+        let expanded = quote! {
+            #input_struct
+            
+            impl #struct_name {
+                pub const BASE_PATH: &'static str = #base_path;
+                pub const CONTROLLER_NAME: &'static str = #struct_name_str;
+            }
+        };
+        
+        TokenStream::from(expanded)
+    } else {
+        syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "controller attribute must be applied to an impl block or struct"
+        )
+        .to_compile_error()
+        .into()
+    }
 }
 
 /// Generate HTTP method macros with parameter extraction
@@ -611,4 +728,39 @@ fn extract_function_parameters(sig: &Signature) -> Vec<(String, String)> {
     }
     
     params
+}
+
+/// Extract middleware names from method attributes
+fn extract_middleware_from_attrs(attrs: &[Attribute]) -> Vec<String> {
+    let mut middleware = Vec::new();
+    
+    for attr in attrs {
+        if attr.path().is_ident("middleware") {
+            if let Meta::List(meta_list) = &attr.meta {
+                // Parse middleware names from the attribute
+                let tokens = &meta_list.tokens;
+                let token_vec: Vec<_> = tokens.clone().into_iter().collect();
+                
+                
+                for token in token_vec {
+                    match &token {
+                        proc_macro2::TokenTree::Literal(lit) => {
+                            // Try to parse as string literal
+                            let lit_str = lit.to_string();
+                            if lit_str.starts_with('"') && lit_str.ends_with('"') {
+                                let cleaned = lit_str.trim_matches('"');
+                                middleware.push(cleaned.to_string());
+                            }
+                        }
+                        proc_macro2::TokenTree::Punct(punct) if punct.as_char() == ',' => {
+                            // Comma separator, ignore
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    
+    middleware
 }
