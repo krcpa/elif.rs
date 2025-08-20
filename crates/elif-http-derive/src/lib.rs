@@ -62,6 +62,7 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
         
         // Collect route information from methods
         let mut routes = Vec::new();
+        let mut method_handlers = Vec::new();
         
         for item in &input_impl.items {
             if let ImplItem::Fn(method) = item {
@@ -70,6 +71,7 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
                 // Check for HTTP method attributes
                 if let Some((http_method, path)) = extract_http_method_info(&method.attrs) {
                     let handler_name = method_name.to_string();
+                    let handler_name_lit = syn::LitStr::new(&handler_name, method_name.span());
                     
                     // Convert http_method ident to proper HttpMethod enum variant
                     let http_method_variant = match http_method.to_string().as_str() {
@@ -96,6 +98,16 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
                             params: vec![], // TODO: Extract params in future phases
                         }
                     });
+                    
+                    // Generate handler for Arc<Self> dispatch
+                    method_handlers.push(quote! {
+                        #handler_name_lit => {
+                            let this = self.clone(); // Arc<Self> clone, cheap operation
+                            ::std::boxed::Box::pin(async move {
+                                this.#method_name(request).await
+                            })
+                        }
+                    });
                 }
             }
         }
@@ -113,6 +125,25 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
         // Use local names to allow for both real elif-http types and test mocks
         let expanded = quote! {
             #input_impl
+            
+            impl #self_ty {
+                /// Internal method that works with Arc<Self> for proper async dispatch
+                pub fn handle_request_arc(
+                    self: ::std::sync::Arc<Self>,
+                    method_name: String,
+                    request: ElifRequest,
+                ) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = HttpResult<ElifResponse>> + Send + 'static>> {
+                    match method_name.as_str() {
+                        #(#method_handlers,)*
+                        _ => {
+                            ::std::boxed::Box::pin(async move {
+                                Ok(ElifResponse::not_found()
+                                    .text(&format!("Handler '{}' not found", method_name)))
+                            })
+                        }
+                    }
+                }
+            }
             
             impl ElifController for #self_ty {
                 fn name(&self) -> &str {
@@ -134,17 +165,19 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
                     method_name: String,
                     request: ElifRequest,
                 ) -> ::std::pin::Pin<Box<dyn ::std::future::Future<Output = HttpResult<ElifResponse>> + Send>> {
-                    // NOTE: This is a limitation of the current macro implementation.
-                    // The handle_request method cannot directly call async methods on self
-                    // because the returned future must be 'static.
+                    // The ElifController trait requires &self, but we need Arc<Self> for async dispatch.
+                    // This is a known limitation that requires the controller to be wrapped in Arc
+                    // when used with the Router (which is what Router::controller does).
                     // 
-                    // For now, we generate a simple dispatcher that returns an error.
-                    // In a real implementation, you would need to use Arc<Self> and clone it,
-                    // or restructure your controller to not require self in the handlers.
+                    // For now, we return a message indicating this limitation.
+                    // In practice, the router should use handle_request_arc directly.
                     
                     Box::pin(async move {
-                        Ok(ElifResponse::ok()
-                            .text(&format!("Handler '{}' called (macro limitation: cannot dispatch to instance methods)", method_name)))
+                        Ok(ElifResponse::internal_server_error()
+                            .text(&format!(
+                                "Handler '{}' requires Arc<Self>. Use handle_request_arc() or wrap controller in Arc.",
+                                method_name
+                            )))
                     })
                 }
             }
