@@ -8,23 +8,33 @@
 //! use elif_http::response::response;
 //! use elif_http::{HttpResult, ElifResponse};
 //! 
-//! // Clean Laravel-style syntax
+//! // Clean Laravel-style syntax with terminal methods
 //! async fn list_users() -> HttpResult<ElifResponse> {
 //!     let users = vec!["Alice", "Bob"];
-//!     Ok(response().json(users).into())
+//!     response().json(users).send()
 //! }
 //! 
 //! async fn create_user() -> HttpResult<ElifResponse> {
 //!     let user = serde_json::json!({"id": 1, "name": "Alice"});
-//!     Ok(response().json(user).created().location("/users/1").into())
+//!     response().json(user).created().location("/users/1").send()
 //! }
 //! 
 //! async fn redirect_user() -> HttpResult<ElifResponse> {
-//!     Ok(response().redirect("/login").permanent().into())
+//!     response().redirect("/login").permanent().send()
+//! }
+//! 
+//! // Alternative: using .finish() or traditional Ok(.into())
+//! async fn other_examples() -> HttpResult<ElifResponse> {
+//!     // Using finish()
+//!     response().json("data").finish()
+//!     
+//!     // Traditional approach still works
+//!     // Ok(response().json("data").into())
 //! }
 //! ```
 
 use crate::response::{ElifResponse, ElifStatusCode, ResponseBody};
+use crate::errors::HttpResult;
 use serde::Serialize;
 use axum::body::Bytes;
 
@@ -297,6 +307,23 @@ impl ResponseBuilder {
         self
     }
 
+    // Terminal Methods (convert to Result)
+
+    /// Build and return the response wrapped in Ok()
+    /// 
+    /// This enables Laravel-style terminal chaining: response().json(data).send()
+    /// Alternative to: Ok(response().json(data).into())
+    pub fn send(self) -> HttpResult<ElifResponse> {
+        Ok(self.build())
+    }
+
+    /// Build and return the response wrapped in Ok() - alias for send()
+    /// 
+    /// This enables Laravel-style terminal chaining: response().json(data).finish()
+    pub fn finish(self) -> HttpResult<ElifResponse> {
+        Ok(self.build())
+    }
+
     /// Build the final ElifResponse
     pub fn build(self) -> ElifResponse {
         let mut response = ElifResponse::new();
@@ -559,6 +586,49 @@ mod tests {
         
         assert!(resp.has_header("set-cookie"));
         assert_eq!(resp.status_code(), ElifStatusCode::CREATED);
+    }
+
+    #[test]
+    fn test_terminal_methods() {
+        // Test .send() terminal method
+        let result: HttpResult<ElifResponse> = response()
+            .json(json!({"data": "test"}))
+            .created()
+            .send();
+        
+        assert!(result.is_ok());
+        let resp = result.unwrap();
+        assert_eq!(resp.status_code(), ElifStatusCode::CREATED);
+
+        // Test .finish() terminal method
+        let result: HttpResult<ElifResponse> = response()
+            .text("Hello World")
+            .cache_control("no-cache")
+            .finish();
+        
+        assert!(result.is_ok());
+        let resp = result.unwrap();
+        assert_eq!(resp.status_code(), ElifStatusCode::OK);
+        assert!(resp.has_header("cache-control"));
+    }
+
+    #[test]
+    fn test_laravel_style_chaining() {
+        // Test the complete Laravel-style chain without Ok() wrapper
+        let result: HttpResult<ElifResponse> = response()
+            .json(json!({"user_id": 123}))
+            .created()
+            .location("/users/123") 
+            .cookie("session=abc123; HttpOnly")
+            .header("x-custom", "value")
+            .send();
+
+        assert!(result.is_ok());
+        let resp = result.unwrap();
+        assert_eq!(resp.status_code(), ElifStatusCode::CREATED);
+        assert!(resp.has_header("location"));
+        assert!(resp.has_header("set-cookie"));
+        assert!(resp.has_header("x-custom"));
     }
 
     #[test]
