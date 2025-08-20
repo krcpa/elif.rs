@@ -104,7 +104,7 @@ pub use controller::pagination::{QueryParams, PaginationMeta};
 #[cfg(feature = "derive")]
 pub use elif_http_derive::{
     controller, get, post, put, delete, patch, head, options,
-    middleware, param, body
+    middleware, param, body, routes, resource, group
 };
 
 // Re-export handler types

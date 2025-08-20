@@ -1,0 +1,5 @@
+error: expected type, found `{`
+ --> tests/ui/fail/routes_empty_type_path.rs:7:9
+  |
+7 | impl <> {
+  |         ^ expected type

@@ -1390,7 +1390,7 @@ dependencies = [
  "elif-auth",
  "elif-cache",
  "elif-core 0.5.0",
- "elif-http 0.7.0",
+ "elif-http 0.8.0",
  "elif-orm 0.7.0",
  "env_logger",
  "proc-macro2",
