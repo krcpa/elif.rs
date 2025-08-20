@@ -214,17 +214,13 @@ impl<M> ConditionalMiddleware<M> {
         false
     }
 
-    /// Simple glob-style path matching (supports * wildcard)
+    /// Simple glob-style path matching (supports single * wildcard)
     fn path_matches(path: &str, pattern: &str) -> bool {
-        if pattern.contains('*') {
-            let parts: Vec<&str> = pattern.split('*').collect();
-            if parts.len() == 2 {
-                let prefix = parts[0];
-                let suffix = parts[1];
-                return path.starts_with(prefix) && path.ends_with(suffix);
-            }
+        if let Some((prefix, suffix)) = pattern.split_once('*') {
+            path.starts_with(prefix) && path.ends_with(suffix)
+        } else {
+            path == pattern
         }
-        path == pattern
     }
 
     /// Check if the request should be processed by this middleware
