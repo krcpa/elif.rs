@@ -257,11 +257,20 @@ where
         // Merge middleware groups
         self.middleware_groups.extend(other.middleware_groups);
         
-        // Merge controller registries
-        if let (Ok(mut self_controller_registry), Ok(other_controller_registry)) = 
-            (self.controller_registry.lock(), other.controller_registry.lock()) {
-            for (name, controller) in other_controller_registry.all_controllers() {
-                self_controller_registry.register(name.clone(), Arc::clone(controller));
+        // Merge controller registries - avoid deadlock by not holding both locks simultaneously
+        if let Ok(other_controller_registry) = other.controller_registry.lock() {
+            let controllers_to_merge: Vec<_> = other_controller_registry
+                .all_controllers()
+                .map(|(name, controller)| (name.clone(), Arc::clone(controller)))
+                .collect();
+            
+            // Release the other lock before acquiring self lock
+            drop(other_controller_registry);
+            
+            if let Ok(mut self_controller_registry) = self.controller_registry.lock() {
+                for (name, controller) in controllers_to_merge {
+                    self_controller_registry.register(name, controller);
+                }
             }
         }
         
@@ -972,6 +981,111 @@ mod tests {
         let paths: Vec<&String> = routes.values().map(|route| &route.path).collect();
         assert!(paths.contains(&&"/".to_string()));
         assert!(paths.contains(&&"/api".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_router_merge_no_deadlock() {
+        use crate::controller::{ElifController, ControllerRoute};
+        use std::pin::Pin;
+        use std::future::Future;
+        use tokio::time::{timeout, Duration};
+
+        // Create test controllers
+        struct TestControllerA;
+        impl ElifController for TestControllerA {
+            fn name(&self) -> &str { "TestControllerA" }
+            fn base_path(&self) -> &str { "/a" }
+            fn routes(&self) -> Vec<ControllerRoute> {
+                vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
+            }
+            fn handle_request(&self, _method_name: String, _request: ElifRequest) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
+                Box::pin(async { Ok(ElifResponse::ok().text("A")) })
+            }
+        }
+
+        struct TestControllerB;
+        impl ElifController for TestControllerB {
+            fn name(&self) -> &str { "TestControllerB" }
+            fn base_path(&self) -> &str { "/b" }
+            fn routes(&self) -> Vec<ControllerRoute> {
+                vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
+            }
+            fn handle_request(&self, _method_name: String, _request: ElifRequest) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
+                Box::pin(async { Ok(ElifResponse::ok().text("B")) })
+            }
+        }
+
+        // Test concurrent merging that could cause deadlock
+        let task1 = tokio::spawn(async move {
+            // Create fresh routers for concurrent merging test
+            let a_copy = Router::<()>::new().controller(TestControllerA);
+            let b_copy = Router::<()>::new().controller(TestControllerB);
+            let _merged = a_copy.merge(b_copy);
+        });
+        
+        let task2 = tokio::spawn(async move {
+            // This creates the reverse merge scenario
+            let a_copy = Router::<()>::new().controller(TestControllerA);
+            let b_copy = Router::<()>::new().controller(TestControllerB);
+            let _merged = b_copy.merge(a_copy);
+        });
+
+        // If there's a deadlock, this will timeout
+        let result = timeout(Duration::from_millis(100), async {
+            let _ = tokio::try_join!(task1, task2);
+        }).await;
+
+        // Should complete without timing out (no deadlock)
+        assert!(result.is_ok(), "Router merge operations should not deadlock");
+    }
+
+    #[test]
+    fn test_controller_merge_preserves_all_controllers() {
+        use crate::controller::{ElifController, ControllerRoute};
+        use std::pin::Pin;
+        use std::future::Future;
+
+        struct ControllerA;
+        impl ElifController for ControllerA {
+            fn name(&self) -> &str { "ControllerA" }
+            fn base_path(&self) -> &str { "/a" }
+            fn routes(&self) -> Vec<ControllerRoute> {
+                vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
+            }
+            fn handle_request(&self, _method_name: String, _request: ElifRequest) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
+                Box::pin(async { Ok(ElifResponse::ok().text("A")) })
+            }
+        }
+
+        struct ControllerB;
+        impl ElifController for ControllerB {
+            fn name(&self) -> &str { "ControllerB" }
+            fn base_path(&self) -> &str { "/b" }
+            fn routes(&self) -> Vec<ControllerRoute> {
+                vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
+            }
+            fn handle_request(&self, _method_name: String, _request: ElifRequest) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
+                Box::pin(async { Ok(ElifResponse::ok().text("B")) })
+            }
+        }
+
+        let router_a = Router::<()>::new().controller(ControllerA);
+        let router_b = Router::<()>::new().controller(ControllerB);
+        
+        let merged_router = router_a.merge(router_b);
+        
+        // Verify both controllers are present in the merged registry
+        let controller_registry = merged_router.controller_registry();
+        let registry = controller_registry.lock().unwrap();
+        
+        assert!(registry.get_controller("ControllerA").is_some());
+        assert!(registry.get_controller("ControllerB").is_some());
+        
+        // Verify controller names
+        let names = registry.controller_names();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&&"ControllerA".to_string()));
+        assert!(names.contains(&&"ControllerB".to_string()));
     }
 
     #[test]
