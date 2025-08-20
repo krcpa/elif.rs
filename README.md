@@ -13,10 +13,10 @@
 
 ```bash
 # Install elif
-cargo install elif
+cargo install elifrs
 
 # Create a new project
-elif new my-app
+elifrs new my-app
 cd my-app
 
 # Start building
@@ -26,34 +26,37 @@ cargo run
 ### Your First App
 
 ```rust
-let app = elif::new();
-app.run(":3000").await?;
-```
-
-Yes, it's that simple. Here's a real example:
-
-```rust
-use elif::prelude::*;
+use elif_http::{Server, HttpConfig, ElifRouter, ElifResponse};
 
 #[tokio::main]
-async fn main() {
-    let app = elif::new()
-        .get("/", || "Hello from elif.rs!")
-        .get("/users", || json!({
-            "users": [
-                {"id": 1, "name": "Alice"},
-                {"id": 2, "name": "Bob"}
-            ]
-        }));
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let router = ElifRouter::new()
+        .get("/", || async { 
+            ElifResponse::ok().text("Hello from elif.rs!") 
+        })
+        .get("/users", || async {
+            ElifResponse::ok().json(&serde_json::json!({
+                "users": [
+                    {"id": 1, "name": "Alice"},
+                    {"id": 2, "name": "Bob"}
+                ]
+            }))
+        });
+
+    let config = HttpConfig::default();
+    let mut server = Server::new(config);
+    server.use_router(router);
     
-    app.run(":3000").await.unwrap();
+    println!("🚀 Server running at http://localhost:3000");
+    server.run("0.0.0.0:3000").await?;
+    Ok(())
 }
 ```
 
 ## 🎯 Why elif.rs?
 
 ### **DX** Developer Experience
-- **Zero Boilerplate**: Start with 2 lines of code
+- **Zero Boilerplate**: Start with minimal code
 - **Instant Feedback**: Hot reloading that actually works
 - **Type Safe**: If it compiles, it works
 - **Clear Errors**: Helpful messages that guide you
@@ -70,41 +73,55 @@ async fn main() {
 Sub-millisecond response times. No runtime overhead. Just pure Rust performance.
 
 ```rust
-// Handles millions of concurrent connections
-app.get("/fast", || "Response in 0.68ms");
+async fn fast_handler(_req: &ElifRequest) -> HttpResult<ElifResponse> {
+    Ok(ElifResponse::ok().text("Response in 0.68ms"))
+}
 ```
 
 ### Type Safe
 Catch errors at compile time. Ship with confidence.
 
 ```rust
-// This won't compile if User doesn't impl Serialize
-app.get("/user/:id", |id: u32| -> User {
-    User::find(id)
-});
+#[derive(Serialize)]
+struct User { id: u32, name: String }
+
+async fn get_user(req: &ElifRequest) -> HttpResult<ElifResponse> {
+    let id: u32 = req.path_param_parsed("id")?;
+    let user = User { id, name: format!("User {}", id) };
+    Ok(ElifResponse::ok().json(&user)?)
+}
 ```
 
-### Async First
-Built on Tokio with intuitive async/await throughout.
+### Modern Middleware (V2)
+Clean, composable middleware with the pattern you expect:
 
 ```rust
-app.get("/async", async || {
-    let data = fetch_data().await?;
-    process(data).await
-});
+use elif_http::middleware::v2::{Middleware, Next, NextFuture};
+
+impl Middleware for AuthMiddleware {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        Box::pin(async move {
+            if !is_authenticated(&request) {
+                return ElifResponse::unauthorized();
+            }
+            next.run(request).await
+        })
+    }
+}
 ```
 
 ### Modular Design
 Start small. Scale big. No rewrites.
 
 ```rust
-// Start simple
-let app = elif::new();
+use elif_http::middleware::v2::{factories, composition};
 
-// Add features as needed
-app.use(Auth::new());
-app.use(Database::postgres());
-app.use(Cache::redis());
+// Compose middleware easily
+let api_middleware = composition::compose3(
+    factories::rate_limit(100),
+    factories::cors_with_origins(vec!["https://yourdomain.com".to_string()]),
+    factories::timeout(Duration::from_secs(30))
+);
 ```
 
 ## 📦 Ecosystem
@@ -112,74 +129,103 @@ app.use(Cache::redis());
 ### Core Packages
 ```toml
 [dependencies]
-elif = "0.9.1"              # Everything you need
-elif-orm = "0.9.1"          # Database ORM
-elif-auth = "0.9.1"         # Authentication
+elif-core = "0.5.0"         # Core architecture
+elif-http = "0.7.0"         # HTTP server & WebSocket
+elif-orm = "0.7.0"          # Database ORM
+elif-auth = "0.4.0"         # Authentication
+elif-cache = "0.3.0"        # Caching system
 ```
 
 ### DX Tools
 ```bash
-elif-cli        # Scaffold, build, deploy
-elif-watch      # Hot reload everything
-elif-test       # Testing made simple
-elif-debug      # Visual debugging
+elifrs new <app>            # Create new project
+elifrs serve --reload       # Hot reload development
+elifrs test                # Testing utilities
+elifrs migrate             # Database migrations
 ```
 
 ### AX Integration
 ```bash
-elif-ai         # LLM-ready APIs
-elif-docs       # Auto documentation
-elif-complete   # Smart completions
-elif-analyze    # Code insights
+elifrs generate            # AI-powered code generation
+elifrs openapi generate    # Auto-generate API docs
 ```
 
 ## 🏗️ Real-World Example
 
 ```rust
-use elif::prelude::*;
+use elif_http::{Server, HttpConfig, ElifRouter, ElifRequest, ElifResponse, HttpResult};
+use elif_orm::Database;
+use serde::{Deserialize, Serialize};
 
-// Define your app state
-#[derive(Clone)]
-struct AppState {
-    db: Database,
-    cache: Cache,
+#[derive(Debug, Serialize, Deserialize)]
+struct User {
+    id: u32,
+    name: String,
+    email: String,
 }
 
-// Create your app
-#[tokio::main]
-async fn main() {
-    let state = AppState {
-        db: Database::connect().await,
-        cache: Cache::new(),
-    };
-
-    let app = elif::new()
-        .state(state)
-        .middleware(Logger::new())
-        .middleware(RateLimit::new(100))
-        .routes(api_routes())
-        .static_files("/assets");
-
-    app.run(":3000").await.unwrap();
+#[derive(Debug, Deserialize)]
+struct CreateUserRequest {
+    name: String,
+    email: String,
 }
 
-// Define routes
-fn api_routes() -> Router {
-    Router::new()
+// Define routes with framework-native types
+fn api_routes() -> ElifRouter {
+    ElifRouter::new()
+        .get("/users", list_users)
         .post("/users", create_user)
         .get("/users/:id", get_user)
-        .put("/users/:id", update_user)
-        .delete("/users/:id", delete_user)
 }
 
-// Handlers with automatic extraction
-async fn create_user(
-    Json(input): Json<CreateUser>,
-    state: State<AppState>,
-) -> Result<Json<User>> {
-    let user = state.db.users().create(input).await?;
-    state.cache.set(&user.id, &user).await?;
-    Ok(Json(user))
+async fn list_users(_req: &ElifRequest) -> HttpResult<ElifResponse> {
+    let users = vec![
+        User { id: 1, name: "Alice".into(), email: "alice@example.com".into() },
+        User { id: 2, name: "Bob".into(), email: "bob@example.com".into() },
+    ];
+    Ok(ElifResponse::ok().json(&users)?)
+}
+
+async fn create_user(req: &ElifRequest) -> HttpResult<ElifResponse> {
+    let input: CreateUserRequest = req.json()?;
+    let user = User {
+        id: 1,
+        name: input.name,
+        email: input.email,
+    };
+    Ok(ElifResponse::with_status(201).json(&user)?)
+}
+
+async fn get_user(req: &ElifRequest) -> HttpResult<ElifResponse> {
+    let id: u32 = req.path_param_parsed("id")?;
+    let user = User {
+        id,
+        name: format!("User {}", id),
+        email: format!("user{}@example.com", id),
+    };
+    Ok(ElifResponse::ok().json(&user)?)
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Set up middleware pipeline
+    use elif_http::middleware::v2::{MiddlewarePipelineV2, factories};
+    
+    let middleware = MiddlewarePipelineV2::new()
+        .add(factories::logger())
+        .add(factories::cors())
+        .add(factories::rate_limit(100));
+    
+    // Configure and start server
+    let config = HttpConfig::default();
+    let mut server = Server::new(config);
+    
+    server.use_router(api_routes());
+    server.use_middleware(middleware);
+    
+    println!("🚀 Server running at http://localhost:3000");
+    server.run("0.0.0.0:3000").await?;
+    Ok(())
 }
 ```
 
@@ -187,44 +233,23 @@ async fn create_user(
 
 ```bash
 # Project Management
-elif new <name>         # Create new project
-elif init              # Initialize in existing directory
-elif check             # Validate project
+elifrs new <name>          # Create new project
+elifrs generate            # Generate from AI specs
+elifrs check              # Validate project
 
 # Development
-elif dev               # Start with hot reload
-elif build             # Build for production
-elif test              # Run tests
+elifrs serve --reload      # Start with hot reload
+cargo test                # Run tests
+cargo build --release     # Build for production
 
 # Database
-elif db migrate        # Run migrations
-elif db create         # Create migration
-elif db rollback       # Rollback migration
+elifrs migrate run        # Run migrations
+elifrs migrate create     # Create migration
+elifrs migrate rollback   # Rollback migration
 
-# Deployment
-elif deploy            # Deploy to production
-elif scale <n>         # Scale to n instances
-```
-
-## 🚦 Middleware
-
-Clean, composable middleware with the pattern you expect:
-
-```rust
-#[async_trait]
-impl Middleware for AuthMiddleware {
-    async fn handle(&self, req: Request, next: Next) -> Response {
-        if let Some(user) = authenticate(&req).await {
-            req.set_extension(user);
-            next.run(req).await
-        } else {
-            Response::unauthorized()
-        }
-    }
-}
-
-// Use it
-app.use(AuthMiddleware::new());
+# API Documentation
+elifrs openapi generate   # Generate OpenAPI spec
+elifrs openapi serve      # Start Swagger UI
 ```
 
 ## 🔌 WebSockets
@@ -232,14 +257,42 @@ app.use(AuthMiddleware::new());
 Real-time made simple:
 
 ```rust
-app.ws("/chat", |ws: WebSocket| async move {
-    let (tx, rx) = ws.split();
+use elif_http::websocket::{WebSocketConnection, WebSocketMessage};
+
+async fn websocket_handler(connection: WebSocketConnection) -> Result<(), Box<dyn std::error::Error>> {
+    let (sender, mut receiver) = connection.split();
     
-    // Handle incoming messages
-    rx.for_each(|msg| async {
-        println!("Received: {:?}", msg);
-    }).await;
-});
+    while let Some(message) = receiver.next().await {
+        match message? {
+            WebSocketMessage::Text(text) => {
+                let response = WebSocketMessage::Text(format!("Echo: {}", text));
+                sender.send(response).await?;
+            }
+            WebSocketMessage::Close(_) => break,
+            _ => {}
+        }
+    }
+    Ok(())
+}
+```
+
+## 💾 Database & ORM
+
+```rust
+use elif_orm::{Database, QueryBuilder};
+
+// Connect to database
+let db = Database::connect("postgresql://localhost/myapp").await?;
+
+// Query with the builder
+let users = QueryBuilder::new()
+    .table("users")
+    .select(&["id", "name", "email"])
+    .where_clause("email LIKE $1", vec!["%@example.com".to_string()])
+    .order_by("created_at DESC")
+    .limit(10)
+    .fetch_all(&db)
+    .await?;
 ```
 
 ## 📊 Performance
@@ -259,14 +312,7 @@ elif.rs pioneered AI-native framework design:
 - **GPT-4**: Extensive testing and generation
 - **Cursor/Copilot**: First-class support
 
-Every API is designed to be understood by both humans and AI:
-
-```rust
-// AI understands intent
-let api = app.api_builder()
-    .with_context("user_service")
-    .auto_generate();
-```
+Every API is designed to be understood by both humans and AI, making it perfect for AI-assisted development.
 
 ## 🗺️ Roadmap
 
@@ -281,13 +327,13 @@ let api = app.api_builder()
 - 🔄 Streaming responses
 - 🔄 gRPC support
 - 🔄 GraphQL integration
-- 🔄 Deploy anywhere
+- 🔄 Edge deployment
 
 ### Future
 - 📱 Mobile SDKs
-- 🌍 Edge computing
+- 🌍 Global CDN
 - 🤖 AI copilot
-- 🚀 Cloud native
+- 🚀 One-click deploy
 
 ## 🤝 Contributing
 
@@ -302,10 +348,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## 📚 Documentation
 
-- **Getting Started**: [docs.elif.rs/quickstart](https://docs.elif.rs/quickstart)
-- **API Reference**: [docs.elif.rs/api](https://docs.elif.rs/api)
-- **Examples**: [github.com/krcpa/elif.rs/examples](https://github.com/krcpa/elif.rs/examples)
-- **Community**: [discord.elif.rs](https://discord.elif.rs)
+- **Getting Started**: [docs.rs/elifrs](https://docs.rs/elifrs)
+- **Examples**: [github.com/krcpa/elif.rs/examples](https://github.com/krcpa/elif.rs/tree/main/examples)
+- **API Reference**: Full API documentation on docs.rs
+- **Architecture**: [FRAMEWORK_ARCHITECTURE.md](docs/FRAMEWORK_ARCHITECTURE.md)
 
 ## 📄 License
 
@@ -320,6 +366,6 @@ Built for humans, optimized for AI<br>
 <br>
 <a href="https://elif.rs">elif.rs</a> • 
 <a href="https://github.com/krcpa/elif.rs">GitHub</a> • 
-<a href="https://docs.elif.rs">Docs</a> • 
-<a href="https://discord.elif.rs">Discord</a>
+<a href="https://docs.rs/elifrs">Docs</a> • 
+<a href="https://discord.gg/elifrs">Discord</a>
 </p>
