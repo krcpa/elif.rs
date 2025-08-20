@@ -137,16 +137,23 @@ impl RouteMatcher {
 
     /// Check if two patterns would conflict (ambiguous matching)
     fn patterns_conflict(&self, pattern1: &RoutePattern, pattern2: &RoutePattern) -> bool {
-        // Only exact static matches conflict
-        // Parameters and catch-alls are resolved by precedence, not conflicts
-        
-        // Both must be static routes to conflict
-        if !pattern1.is_static() || !pattern2.is_static() {
+        // Two patterns conflict if they are structurally identical.
+        // This means they have the same number of segments, and each corresponding
+        // segment is of the same type with the same static value or constraint.
+        if pattern1.segments.len() != pattern2.segments.len() {
             return false;
         }
         
-        // Static routes conflict only if they have the exact same path
-        pattern1.original_path == pattern2.original_path
+        for (seg1, seg2) in pattern1.segments.iter().zip(pattern2.segments.iter()) {
+            match (seg1, seg2) {
+                (super::pattern::PathSegment::Static(s1), super::pattern::PathSegment::Static(s2)) if s1 == s2 => continue,
+                (super::pattern::PathSegment::Parameter { constraint: c1, .. }, super::pattern::PathSegment::Parameter { constraint: c2, .. }) if c1 == c2 => continue,
+                (super::pattern::PathSegment::CatchAll { .. }, super::pattern::PathSegment::CatchAll { .. }) => continue,
+                _ => return false, // Segments are not structurally identical
+            }
+        }
+        
+        true // All segments are structurally identical, so the patterns conflict.
     }
 
     /// Get all route definitions for introspection
@@ -363,6 +370,134 @@ mod tests {
         
         assert!(result.is_err());
         assert!(matches!(result, Err(RouteMatchError::RouteConflict(_, _))));
+    }
+
+    #[test]
+    fn test_advanced_conflict_detection() {
+        let mut matcher = RouteMatcher::new();
+        
+        // Test 1: Parameter routes with same structure should conflict
+        matcher.add_route(RouteDefinition {
+            id: "users_by_id".to_string(),
+            method: HttpMethod::GET,
+            path: "/users/{id}".to_string(),
+        }).unwrap();
+        
+        let result = matcher.add_route(RouteDefinition {
+            id: "users_by_name".to_string(),
+            method: HttpMethod::GET,
+            path: "/users/{name}".to_string(),
+        });
+        assert!(result.is_err(), "Parameters with different names should conflict");
+        
+        // Test 2: Different methods should not conflict
+        let result = matcher.add_route(RouteDefinition {
+            id: "users_post".to_string(),
+            method: HttpMethod::POST,
+            path: "/users/{id}".to_string(),
+        });
+        assert!(result.is_ok(), "Different methods should not conflict");
+        
+        // Test 3: Different static segments should not conflict
+        let result = matcher.add_route(RouteDefinition {
+            id: "posts_by_id".to_string(),
+            method: HttpMethod::GET,
+            path: "/posts/{id}".to_string(),
+        });
+        assert!(result.is_ok(), "Different static segments should not conflict");
+        
+        // Test 4: Catch-all routes with same structure should conflict
+        matcher.add_route(RouteDefinition {
+            id: "files_serve".to_string(),
+            method: HttpMethod::GET,
+            path: "/files/*path".to_string(),
+        }).unwrap();
+        
+        let result = matcher.add_route(RouteDefinition {
+            id: "files_download".to_string(),
+            method: HttpMethod::GET,
+            path: "/files/*file_path".to_string(),
+        });
+        assert!(result.is_err(), "Catch-all routes with same structure should conflict");
+        
+        // Test 5: Different segment types should not conflict
+        let result = matcher.add_route(RouteDefinition {
+            id: "admin_static".to_string(),
+            method: HttpMethod::GET,
+            path: "/admin/dashboard".to_string(),
+        });
+        assert!(result.is_ok(), "Static vs parameter segments should not conflict");
+    }
+
+    #[test] 
+    fn test_constraint_based_conflicts() {
+        let mut matcher = RouteMatcher::new();
+        
+        // Test 1: Same constraints should conflict
+        matcher.add_route(RouteDefinition {
+            id: "user_by_int_id".to_string(),
+            method: HttpMethod::GET,
+            path: "/users/{id:int}".to_string(),
+        }).unwrap();
+        
+        let result = matcher.add_route(RouteDefinition {
+            id: "user_by_int_uid".to_string(),
+            method: HttpMethod::GET,
+            path: "/users/{uid:int}".to_string(),
+        });
+        assert!(result.is_err(), "Same constraints should conflict");
+        
+        // Test 2: Different constraints should not conflict (they have different precedence)
+        let result = matcher.add_route(RouteDefinition {
+            id: "user_by_uuid".to_string(),
+            method: HttpMethod::GET,
+            path: "/users/{id:uuid}".to_string(),
+        });
+        assert!(result.is_ok(), "Different constraints should not conflict");
+        
+        // Test 3: Constrained vs unconstrained should not conflict
+        let result = matcher.add_route(RouteDefinition {
+            id: "user_by_string".to_string(),
+            method: HttpMethod::GET,
+            path: "/users/{name}".to_string(),
+        });
+        assert!(result.is_ok(), "Constrained vs unconstrained should not conflict");
+    }
+
+    #[test]
+    fn test_complex_pattern_conflicts() {
+        let mut matcher = RouteMatcher::new();
+        
+        // Test complex multi-segment patterns
+        matcher.add_route(RouteDefinition {
+            id: "api_user_posts".to_string(),
+            method: HttpMethod::GET,
+            path: "/api/v1/users/{user_id}/posts/{post_id}".to_string(),
+        }).unwrap();
+        
+        // Same structure should conflict
+        let result = matcher.add_route(RouteDefinition {
+            id: "api_member_articles".to_string(),
+            method: HttpMethod::GET,
+            path: "/api/v1/users/{member_id}/posts/{article_id}".to_string(),
+        });
+        assert!(result.is_err(), "Structurally identical complex patterns should conflict");
+        
+        // Different static segment should not conflict
+        let result = matcher.add_route(RouteDefinition {
+            id: "api_user_comments".to_string(),
+            method: HttpMethod::GET,
+            path: "/api/v1/users/{user_id}/comments/{comment_id}".to_string(),
+        });
+        assert!(result.is_ok(), "Different static segments should not conflict");
+        
+        // Different segment count should not conflict
+        let result = matcher.add_route(RouteDefinition {
+            id: "api_user_profile".to_string(),
+            method: HttpMethod::GET,
+            path: "/api/v1/users/{user_id}/profile".to_string(),
+        });
+        assert!(result.is_ok(), "Different segment count should not conflict");
     }
 
     #[test]
