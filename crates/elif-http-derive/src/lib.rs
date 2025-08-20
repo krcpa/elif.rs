@@ -99,14 +99,9 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     });
                     
-                    // Generate handler for Arc<Self> dispatch
+                    // Generate handler for async dispatch
                     method_handlers.push(quote! {
-                        #handler_name_lit => {
-                            let this = self.clone(); // Arc<Self> clone, cheap operation
-                            ::std::boxed::Box::pin(async move {
-                                this.#method_name(request).await
-                            })
-                        }
+                        #handler_name_lit => self.#method_name(request).await
                     });
                 }
             }
@@ -121,30 +116,15 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
             pub const CONTROLLER_NAME: &'static str = #struct_name;
         });
         
+        // Generate method handlers for async dispatch
+        let method_match_arms = method_handlers.iter().enumerate().map(|(_, handler)| handler);
+        
         // Generate the expanded code with ElifController trait implementation
-        // Use local names to allow for both real elif-http types and test mocks
+        // Using async-trait for proper async method support
         let expanded = quote! {
             #input_impl
             
-            impl #self_ty {
-                /// Internal method that works with Arc<Self> for proper async dispatch
-                pub fn handle_request_arc(
-                    self: ::std::sync::Arc<Self>,
-                    method_name: String,
-                    request: ElifRequest,
-                ) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = HttpResult<ElifResponse>> + Send + 'static>> {
-                    match method_name.as_str() {
-                        #(#method_handlers,)*
-                        _ => {
-                            ::std::boxed::Box::pin(async move {
-                                Ok(ElifResponse::not_found()
-                                    .text(&format!("Handler '{}' not found", method_name)))
-                            })
-                        }
-                    }
-                }
-            }
-            
+            #[::async_trait::async_trait]
             impl ElifController for #self_ty {
                 fn name(&self) -> &str {
                     #struct_name
@@ -160,25 +140,18 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
                     ]
                 }
                 
-                fn handle_request(
+                async fn handle_request(
                     &self,
                     method_name: String,
                     request: ElifRequest,
-                ) -> ::std::pin::Pin<Box<dyn ::std::future::Future<Output = HttpResult<ElifResponse>> + Send>> {
-                    // The ElifController trait requires &self, but we need Arc<Self> for async dispatch.
-                    // This is a known limitation that requires the controller to be wrapped in Arc
-                    // when used with the Router (which is what Router::controller does).
-                    // 
-                    // For now, we return a message indicating this limitation.
-                    // In practice, the router should use handle_request_arc directly.
-                    
-                    Box::pin(async move {
-                        Ok(ElifResponse::internal_server_error()
-                            .text(&format!(
-                                "Handler '{}' requires Arc<Self>. Use handle_request_arc() or wrap controller in Arc.",
-                                method_name
-                            )))
-                    })
+                ) -> HttpResult<ElifResponse> {
+                    match method_name.as_str() {
+                        #(#method_match_arms,)*
+                        _ => {
+                            Ok(ElifResponse::not_found()
+                                .text(&format!("Handler '{}' not found", method_name)))
+                        }
+                    }
                 }
             }
         };
