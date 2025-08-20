@@ -101,13 +101,8 @@ impl From<axum::http::header::ToStrError> for ParseError {
     }
 }
 
-impl From<axum::http::status::InvalidStatusCode> for ParseError {
-    fn from(_err: axum::http::status::InvalidStatusCode) -> Self {
-        ParseError::InvalidStatusCode { 
-            code: 0 // InvalidStatusCode doesn't expose the invalid value
-        }
-    }
-}
+// Note: From<InvalidStatusCode> implementation removed because it hardcodes code: 0
+// which produces incorrect error messages. Use ParseError::invalid_status_code(actual_code) instead.
 
 impl From<axum::extract::rejection::JsonRejection> for ParseError {
     fn from(err: axum::extract::rejection::JsonRejection) -> Self {

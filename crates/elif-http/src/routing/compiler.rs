@@ -442,6 +442,56 @@ mod tests {
     }
 
     #[test]
+    fn test_constraint_based_priority_ordering() {
+        // Test that routes are properly ordered by constraint specificity
+        let result = RouteCompilerBuilder::new()
+            .optimize(true)
+            // Add routes in reverse priority order to test sorting
+            .get("catch_all".to_string(), "/users/*path".to_string())
+            .get("unconstrained".to_string(), "/users/{name}".to_string()) 
+            .get("alpha_slug".to_string(), "/users/{slug:alpha}".to_string())
+            .get("custom_regex".to_string(), "/users/{id:[0-9]+}".to_string())
+            .get("int_id".to_string(), "/users/{id:int}".to_string())
+            .get("uuid_id".to_string(), "/users/{id:uuid}".to_string())
+            .get("static_me".to_string(), "/users/me".to_string())
+            .build()
+            .unwrap();
+        
+        let matcher = result.matcher;
+        
+        // Test that most specific routes match first
+        
+        // Static route (highest priority)
+        let route_match = matcher.resolve(&HttpMethod::GET, "/users/me").unwrap();
+        assert_eq!(route_match.route_id, "static_me");
+        
+        // UUID constraint (specific)
+        let route_match = matcher.resolve(&HttpMethod::GET, "/users/550e8400-e29b-41d4-a716-446655440000").unwrap();
+        assert_eq!(route_match.route_id, "uuid_id");
+        
+        // Integer constraint (specific)  
+        let route_match = matcher.resolve(&HttpMethod::GET, "/users/123").unwrap();
+        assert_eq!(route_match.route_id, "int_id");
+        
+        // Custom regex constraint (medium-high priority)
+        let route_match = matcher.resolve(&HttpMethod::GET, "/users/456").unwrap();
+        // Note: This should match int_id since it has higher priority than custom regex
+        assert_eq!(route_match.route_id, "int_id");
+        
+        // Alpha constraint (general)
+        let route_match = matcher.resolve(&HttpMethod::GET, "/users/johnsmith").unwrap();
+        assert_eq!(route_match.route_id, "alpha_slug");
+        
+        // Unconstrained parameter (contains characters that don't match any specific constraint)
+        let route_match = matcher.resolve(&HttpMethod::GET, "/users/user_with_underscores").unwrap();
+        assert_eq!(route_match.route_id, "unconstrained");
+        
+        // Catch-all (lowest priority)
+        let route_match = matcher.resolve(&HttpMethod::GET, "/users/path/to/resource").unwrap();
+        assert_eq!(route_match.route_id, "catch_all");
+    }
+
+    #[test]
     fn test_conflict_detection() {
         let result = RouteCompilerBuilder::new()
             .detect_conflicts(true)

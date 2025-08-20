@@ -310,14 +310,33 @@ impl RoutePattern {
     }
 
     /// Calculate priority for route matching (lower = higher priority)
+    /// 
+    /// Priority system accounts for constraint specificity:
+    /// - Static segment: 1 (highest priority)
+    /// - Parameter with specific constraint (Int, Uuid): 5
+    /// - Parameter with general constraint (Alpha, Slug): 8  
+    /// - Parameter with custom regex constraint: 6 (between specific and general)
+    /// - Parameter with no constraint: 10
+    /// - Catch-all segment: 100 (lowest priority)
     pub fn priority(&self) -> usize {
         let mut priority = 0;
         
         for segment in &self.segments {
             match segment {
-                PathSegment::Static(_) => priority += 1,        // Highest priority
-                PathSegment::Parameter { .. } => priority += 10, // Medium priority
-                PathSegment::CatchAll { .. } => priority += 100, // Lowest priority
+                PathSegment::Static(_) => {
+                    priority += 1; // Highest priority - exact match
+                }
+                PathSegment::Parameter { constraint, .. } => {
+                    priority += match constraint {
+                        ParamConstraint::Int | ParamConstraint::Uuid => 5,    // Specific constraints
+                        ParamConstraint::Custom(_) => 6,                      // Custom regex (medium-high)
+                        ParamConstraint::Alpha | ParamConstraint::Slug => 8,  // General constraints  
+                        ParamConstraint::None => 10,                          // No constraint (most general)
+                    };
+                }
+                PathSegment::CatchAll { .. } => {
+                    priority += 100; // Lowest priority - catches everything
+                }
             }
         }
         
@@ -476,8 +495,67 @@ mod tests {
         assert!(static_pattern.priority() < param_pattern.priority());
         assert!(param_pattern.priority() < catch_all_pattern.priority());
         
-        // Mixed pattern: 4 static + 2 parameters = 4*1 + 2*10 = 24
+        // Mixed pattern: 4 static + 2 unconstrained parameters = 4*1 + 2*10 = 24
         assert_eq!(mixed_pattern.priority(), 24);
+    }
+
+    #[test]
+    fn test_constraint_based_priorities() {
+        // Test that more specific constraints have higher priority (lower numbers)
+        let static_route = RoutePattern::parse("/users/123").unwrap();
+        let int_constraint = RoutePattern::parse("/users/{id:int}").unwrap();
+        let custom_constraint = RoutePattern::parse("/users/{id:[0-9]+}").unwrap();
+        let alpha_constraint = RoutePattern::parse("/users/{slug:alpha}").unwrap();
+        let no_constraint = RoutePattern::parse("/users/{name}").unwrap();
+        let catch_all = RoutePattern::parse("/users/*path").unwrap();
+        
+        // Priority order: static < int < custom < alpha < none < catch-all
+        assert!(static_route.priority() < int_constraint.priority());
+        assert!(int_constraint.priority() < custom_constraint.priority());
+        assert!(custom_constraint.priority() < alpha_constraint.priority());
+        assert!(alpha_constraint.priority() < no_constraint.priority());
+        assert!(no_constraint.priority() < catch_all.priority());
+        
+        // Verify exact priority values
+        assert_eq!(static_route.priority(), 2);     // 2 static segments: 2*1 = 2
+        assert_eq!(int_constraint.priority(), 6);   // 1 static + 1 int param: 1*1 + 1*5 = 6
+        assert_eq!(custom_constraint.priority(), 7); // 1 static + 1 custom param: 1*1 + 1*6 = 7
+        assert_eq!(alpha_constraint.priority(), 9);  // 1 static + 1 alpha param: 1*1 + 1*8 = 9
+        assert_eq!(no_constraint.priority(), 11);    // 1 static + 1 unconstrained param: 1*1 + 1*10 = 11
+        assert_eq!(catch_all.priority(), 101);       // 1 static + 1 catch-all: 1*1 + 1*100 = 101
+    }
+
+    #[test]
+    fn test_complex_priority_scenarios() {
+        // Test realistic routing scenarios where order matters
+        
+        // Scenario 1: API versioning with different constraint specificity
+        let api_v1_int = RoutePattern::parse("/api/v1/users/{id:int}").unwrap();
+        let api_v1_uuid = RoutePattern::parse("/api/v1/users/{id:uuid}").unwrap();
+        let api_v1_slug = RoutePattern::parse("/api/v1/users/{slug:alpha}").unwrap();
+        let api_v1_any = RoutePattern::parse("/api/v1/users/{identifier}").unwrap();
+        
+        // More specific constraints should have higher priority
+        assert!(api_v1_int.priority() == api_v1_uuid.priority()); // Both specific constraints
+        assert!(api_v1_int.priority() < api_v1_slug.priority());  // Specific < general
+        assert!(api_v1_slug.priority() < api_v1_any.priority());  // General < unconstrained
+        
+        // Scenario 2: Mixed static and dynamic routing
+        let users_profile = RoutePattern::parse("/users/{id:int}/profile").unwrap();
+        let users_posts = RoutePattern::parse("/users/{id:int}/posts/{post_id:int}").unwrap();
+        let users_files = RoutePattern::parse("/users/{id:int}/files/*path").unwrap();
+        
+        // More static segments = higher priority
+        assert!(users_profile.priority() < users_posts.priority()); // profile is more specific
+        assert!(users_posts.priority() < users_files.priority());   // files has catch-all
+        
+        // Verify calculations
+        // users_profile: 2 static + 1 int = 2*1 + 1*5 = 7
+        assert_eq!(users_profile.priority(), 7);
+        // users_posts: 2 static + 2 int = 2*1 + 2*5 = 12  
+        assert_eq!(users_posts.priority(), 12);
+        // users_files: 2 static + 1 int + 1 catch-all = 2*1 + 1*5 + 1*100 = 107
+        assert_eq!(users_files.priority(), 107);
     }
 
     #[test]
