@@ -1,0 +1,7 @@
+error: unexpected end of input, expected string literal
+ --> tests/ui/fail/resource_no_path.rs:5:1
+  |
+5 | #[resource]
+  | ^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `resource` (in Nightly builds, run with -Z macro-backtrace for more info)
