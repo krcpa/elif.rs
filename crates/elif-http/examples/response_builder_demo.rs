@@ -66,6 +66,12 @@ impl UserController {
     pub async fn redirect_permanent(&self) -> HttpResult<ElifResponse> {
         response().redirect("/users").permanent().send()
     }
+
+    /// Demonstrate order independence - permanent first, then redirect
+    pub async fn redirect_order_independent(&self) -> HttpResult<ElifResponse> {
+        // This works the same as redirect().permanent() thanks to the fix
+        response().permanent().redirect("/users").send()
+    }
     
     /// Error response - not found
     pub async fn user_not_found(&self) -> HttpResult<ElifResponse> {
@@ -203,6 +209,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("Validation error", controller.validation_error().await?),
         ("API response", controller.api_response().await?),
         ("Login with cookies", controller.login_response().await?),
+        ("Order independent redirect", controller.redirect_order_independent().await?),
     ];
     
     for (name, response) in responses {
@@ -244,6 +251,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  • Error messages include actual error details in response body");
     println!("  • No more silent failures - errors are visible in logs");
     println!("  • Better developer experience for troubleshooting");
+    
+    println!("\n🔧 Builder Robustness:");
+    println!("  • Method call order independence: .permanent().redirect() == .redirect().permanent()");
+    println!("  • Robust API that works regardless of call order");
+    println!("  • Fixed confusing behavior where .permanent().redirect() was temporary");
     
     Ok(())
 }
