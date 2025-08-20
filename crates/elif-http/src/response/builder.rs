@@ -182,17 +182,13 @@ impl ResponseBuilder {
 
     /// Set redirect as permanent (301)
     pub fn permanent(mut self) -> Self {
-        if self.headers.iter().any(|(k, _)| k == "location") {
-            self.status = Some(ElifStatusCode::MOVED_PERMANENTLY);
-        }
+        self.status = Some(ElifStatusCode::MOVED_PERMANENTLY);
         self
     }
 
     /// Set redirect as temporary (302) - default
     pub fn temporary(mut self) -> Self {
-        if self.headers.iter().any(|(k, _)| k == "location") {
-            self.status = Some(ElifStatusCode::FOUND);
-        }
+        self.status = Some(ElifStatusCode::FOUND);
         self
     }
 
@@ -482,6 +478,67 @@ mod tests {
 
         let resp: ElifResponse = response().redirect("/users").permanent().into();
         assert_eq!(resp.status_code(), ElifStatusCode::MOVED_PERMANENTLY);
+    }
+
+    #[test]
+    fn test_redirect_method_call_order_independence() {
+        // Test that permanent() works regardless of call order
+        
+        // Order 1: redirect first, then permanent
+        let resp1: ElifResponse = response().redirect("/test").permanent().into();
+        assert_eq!(resp1.status_code(), ElifStatusCode::MOVED_PERMANENTLY);
+        assert!(resp1.has_header("location"));
+        
+        // Order 2: permanent first, then redirect  
+        let resp2: ElifResponse = response().permanent().redirect("/test").into();
+        assert_eq!(resp2.status_code(), ElifStatusCode::MOVED_PERMANENTLY);
+        assert!(resp2.has_header("location"));
+        
+        // Both should have the same final status
+        assert_eq!(resp1.status_code(), resp2.status_code());
+    }
+
+    #[test]
+    fn test_temporary_method_call_order_independence() {
+        // Test that temporary() works regardless of call order
+        
+        // Order 1: redirect first, then temporary
+        let resp1: ElifResponse = response().redirect("/test").temporary().into();
+        assert_eq!(resp1.status_code(), ElifStatusCode::FOUND);
+        assert!(resp1.has_header("location"));
+        
+        // Order 2: temporary first, then redirect
+        let resp2: ElifResponse = response().temporary().redirect("/test").into();
+        assert_eq!(resp2.status_code(), ElifStatusCode::FOUND);
+        assert!(resp2.has_header("location"));
+        
+        // Both should have the same final status
+        assert_eq!(resp1.status_code(), resp2.status_code());
+    }
+
+    #[test]
+    fn test_redirect_status_override_behavior() {
+        // Test that redirect() respects pre-set status codes
+        
+        // Default redirect (should be 302 FOUND)
+        let resp: ElifResponse = response().redirect("/default").into();
+        assert_eq!(resp.status_code(), ElifStatusCode::FOUND);
+        
+        // Pre-set permanent status should be preserved
+        let resp: ElifResponse = response().permanent().redirect("/perm").into();  
+        assert_eq!(resp.status_code(), ElifStatusCode::MOVED_PERMANENTLY);
+        
+        // Pre-set temporary status should be preserved
+        let resp: ElifResponse = response().temporary().redirect("/temp").into();
+        assert_eq!(resp.status_code(), ElifStatusCode::FOUND);
+        
+        // Last status wins (permanent overrides default)
+        let resp: ElifResponse = response().redirect("/test").permanent().into();
+        assert_eq!(resp.status_code(), ElifStatusCode::MOVED_PERMANENTLY);
+        
+        // Last status wins (temporary overrides permanent) 
+        let resp: ElifResponse = response().redirect("/test").permanent().temporary().into();
+        assert_eq!(resp.status_code(), ElifStatusCode::FOUND);
     }
 
     #[test]
