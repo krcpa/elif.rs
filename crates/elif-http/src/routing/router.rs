@@ -3,10 +3,12 @@
 use super::{HttpMethod, RouteInfo, RouteRegistry, params::{ParamExtractor, ParamType}};
 use crate::handlers::elif_handler;
 use crate::request::ElifRequest;
-use crate::response::IntoElifResponse;
+use crate::response::{IntoElifResponse, ElifResponse};
 use crate::errors::HttpResult;
 use crate::middleware::v2::{Middleware, MiddlewarePipelineV2};
+use crate::controller::ElifController;
 use service_builder::builder;
+use std::pin::Pin;
 use axum::{
     Router as AxumRouter,
     routing::{get, post, put, delete, patch},
@@ -26,6 +28,7 @@ where
     route_counter: Arc<Mutex<usize>>,
     middleware_stack: MiddlewarePipelineV2,
     middleware_groups: HashMap<String, MiddlewarePipelineV2>,
+    controller_registry: Arc<Mutex<ControllerRegistry>>,
 }
 
 impl<S> Router<S>
@@ -40,6 +43,7 @@ where
             route_counter: Arc::new(Mutex::new(0)),
             middleware_stack: MiddlewarePipelineV2::new(),
             middleware_groups: HashMap::new(),
+            controller_registry: Arc::new(Mutex::new(ControllerRegistry::new())),
         }
     }
 
@@ -51,6 +55,7 @@ where
             route_counter: Arc::new(Mutex::new(0)),
             middleware_stack: MiddlewarePipelineV2::new(),
             middleware_groups: HashMap::new(),
+            controller_registry: Arc::new(Mutex::new(ControllerRegistry::new())),
         }
     }
 
@@ -177,6 +182,59 @@ where
         self
     }
 
+    /// Register a controller with automatic route registration
+    pub fn controller<C>(mut self, controller: C) -> Self
+    where
+        C: ElifController + 'static,
+    {
+        let base_path = controller.base_path().to_string();
+        let controller_name = controller.name().to_string();
+        let controller_arc = Arc::new(controller);
+        
+        // Register all controller routes
+        for route in controller_arc.routes() {
+            let full_path = self.combine_paths(&base_path, &route.path);
+            let handler = controller_handler(Arc::clone(&controller_arc), route.handler_name.clone());
+            
+            self = match route.method {
+                HttpMethod::GET => self.get(&full_path, handler),
+                HttpMethod::POST => self.post(&full_path, handler),
+                HttpMethod::PUT => self.put(&full_path, handler),
+                HttpMethod::DELETE => self.delete(&full_path, handler),
+                HttpMethod::PATCH => self.patch(&full_path, handler),
+                _ => {
+                    // For unsupported HTTP methods, we'll skip for now
+                    // This can be extended to support more methods
+                    continue;
+                }
+            };
+            
+            // TODO: Apply route-specific middleware
+            // This will be implemented when middleware system is enhanced
+        }
+        
+        // Store controller reference for introspection
+        if let Ok(mut registry) = self.controller_registry.lock() {
+            registry.register(controller_name, controller_arc as Arc<dyn ElifController>);
+        }
+        
+        self
+    }
+    
+    /// Helper method to combine base path and route path
+    fn combine_paths(&self, base: &str, route: &str) -> String {
+        let base = base.trim_end_matches('/');
+        let route = route.trim_start_matches('/');
+        
+        if route.is_empty() {
+            base.to_string()
+        } else if base.is_empty() {
+            format!("/{}", route)
+        } else {
+            format!("{}/{}", base, route)
+        }
+    }
+
     /// Merge another ElifRouter - the primary method for composing routers
     pub fn merge(mut self, other: Router<S>) -> Self {
         // Merge the registries with unique IDs to avoid conflicts
@@ -191,6 +249,14 @@ where
         
         // Merge middleware groups
         self.middleware_groups.extend(other.middleware_groups);
+        
+        // Merge controller registries
+        if let (Ok(mut self_controller_registry), Ok(other_controller_registry)) = 
+            (self.controller_registry.lock(), other.controller_registry.lock()) {
+            for (name, controller) in other_controller_registry.all_controllers() {
+                self_controller_registry.register(name.clone(), Arc::clone(controller));
+            }
+        }
         
         // Merge global middleware stacks. The middleware from `self` will run first.
         self.middleware_stack = self.middleware_stack.extend(other.middleware_stack);
@@ -300,6 +366,11 @@ where
     /// Get available middleware groups
     pub fn middleware_groups(&self) -> &HashMap<String, MiddlewarePipelineV2> {
         &self.middleware_groups
+    }
+
+    /// Get the controller registry for introspection
+    pub fn controller_registry(&self) -> Arc<Mutex<ControllerRegistry>> {
+        Arc::clone(&self.controller_registry)
     }
 
     /// Add a raw Axum route while preserving router state (for internal use)
@@ -716,6 +787,59 @@ mod tests {
         // (no unnecessary layer application)
     }
     
+    #[test]
+    fn test_controller_registration() {
+        use crate::controller::{ElifController, ControllerRoute, RouteParam};
+        use crate::routing::params::ParamType;
+        use std::pin::Pin;
+        use std::future::Future;
+
+        // Create a test controller
+        struct TestController;
+
+        impl ElifController for TestController {
+            fn name(&self) -> &str { "TestController" }
+            fn base_path(&self) -> &str { "/test" }
+            
+            fn routes(&self) -> Vec<ControllerRoute> {
+                vec![
+                    ControllerRoute::new(HttpMethod::GET, "", "list"),
+                    ControllerRoute::new(HttpMethod::GET, "/{id}", "show")
+                        .add_param(RouteParam::new("id", ParamType::Integer)),
+                    ControllerRoute::new(HttpMethod::POST, "", "create"),
+                ]
+            }
+            
+            fn handle_request(
+                &self,
+                method_name: String,
+                _request: ElifRequest,
+            ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
+                Box::pin(async move {
+                    match method_name.as_str() {
+                        "list" => Ok(ElifResponse::ok().text("List method")),
+                        "show" => Ok(ElifResponse::ok().text("Show method")),
+                        "create" => Ok(ElifResponse::ok().text("Create method")),
+                        _ => Ok(ElifResponse::not_found().text("Method not found")),
+                    }
+                })
+            }
+        }
+
+        let controller = TestController;
+        let router = Router::<()>::new().controller(controller);
+        
+        // Check that routes were registered
+        let registry = router.registry();
+        let reg = registry.lock().unwrap();
+        assert_eq!(reg.all_routes().len(), 3);
+        
+        // Check that controller was registered
+        let controller_registry = router.controller_registry();
+        let ctrl_reg = controller_registry.lock().unwrap();
+        assert!(ctrl_reg.get_controller("TestController").is_some());
+    }
+
     #[test]
     fn test_simple_nest_route_registration() {
         // Test basic nesting without middleware to understand route registration behavior
@@ -1156,5 +1280,57 @@ mod integration_tests {
         }).await;
         
         assert_eq!(response_invalid_auth.status_code(), crate::response::status::ElifStatusCode::UNAUTHORIZED);
+    }
+}
+
+/// Create a controller handler function
+pub fn controller_handler<C>(controller: Arc<C>, method_name: String) -> impl Fn(ElifRequest) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> + Clone + Send + Sync + 'static
+where
+    C: ElifController + 'static,
+{
+    move |request: ElifRequest| {
+        let controller = Arc::clone(&controller);
+        let method_name = method_name.clone();
+        
+        Box::pin(async move {
+            controller.handle_request(method_name, request).await
+        })
+    }
+}
+
+/// Registry for managing registered controllers
+pub struct ControllerRegistry {
+    controllers: HashMap<String, Arc<dyn ElifController>>,
+}
+
+impl std::fmt::Debug for ControllerRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ControllerRegistry")
+            .field("controllers", &format!("{} controllers", self.controllers.len()))
+            .finish()
+    }
+}
+
+impl ControllerRegistry {
+    pub fn new() -> Self {
+        Self {
+            controllers: HashMap::new(),
+        }
+    }
+    
+    pub fn register(&mut self, name: String, controller: Arc<dyn ElifController>) {
+        self.controllers.insert(name, controller);
+    }
+    
+    pub fn get_controller(&self, name: &str) -> Option<&Arc<dyn ElifController>> {
+        self.controllers.get(name)
+    }
+    
+    pub fn all_controllers(&self) -> impl Iterator<Item = (&String, &Arc<dyn ElifController>)> {
+        self.controllers.iter()
+    }
+    
+    pub fn controller_names(&self) -> Vec<&String> {
+        self.controllers.keys().collect()
     }
 }
