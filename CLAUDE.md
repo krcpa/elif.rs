@@ -1,11 +1,17 @@
 # CLAUDE.md — elif.rs
 
 ## What is elif?
-A Rust web framework designed for both AI agents and developers. Think Laravel or NestJS but for Rust - simple, intuitive, productive.
+**The Laravel of Rust** - A web framework designed for both AI agents and developers. Simple, intuitive, productive.
+
+Just like Laravel revolutionized PHP development with elegant syntax and convention over configuration, elif.rs brings that same philosophy to Rust. Write less code, ship faster, maintain easily.
 
 ## Core Philosophy
+**The Laravel of Rust** - Convention over configuration, zero boilerplate, maximum productivity
+
+- **Convention Over Configuration**: Sensible defaults, minimal setup required
+- **Zero Boilerplate**: If you want a router → `router()`, response → `response()`, just easy stuff
 - **Developer Experience First**: APIs should be obvious, like `handle(req, next)` for middleware
-- **AI-Friendly**: LLMs can understand and generate code easily
+- **AI-Friendly**: LLMs can understand and generate code easily - simple, intuitive patterns
 - **Pure Framework Types**: Never expose internal dependencies (Axum, Hyper) to users
 - **Spec-First**: Generate code from specifications, not the other way around
 
@@ -100,12 +106,69 @@ impl UserController {
 
 **Benefits**: ~70% reduction in boilerplate vs manual route registration
 
+## Laravel-Style Patterns
+**Simple, intuitive APIs that just work** - no ceremony, maximum productivity
+
+```rust
+// Server setup - one line
+Server::new().listen("127.0.0.1:3000").await?;
+
+// Routing - obvious and clean  
+Router::new()
+    .route("/", get(home))
+    .route("/users", get(users_index))
+    .controller(UserController);
+
+// Responses - what you'd expect
+Response::json(&data)           // JSON response
+Response::ok()                  // 200 OK  
+Response::created()             // 201 Created
+Response::not_found()           // 404 Not Found
+
+// Request handling - Laravel-inspired
+req.json::<User>()              // Parse JSON body
+req.path_param("id")            // Get path parameter  
+req.query_param("page")         // Get query parameter
+
+// Database (when available)
+User::find(1)                   // Find by ID
+User::where("active", true)     // Query builder
+User::create(data)              // Insert record
+
+// Validation (planned)
+validate!(data, {
+    "name": required|min:2,
+    "email": required|email,
+});
+
+// Cache (when available)  
+cache().set("key", value)       // Set cache
+cache().get("key")              // Get cache
+```
+
+**Philosophy**: If it takes more than one line, we're doing it wrong
+
+## Design Patterns to Follow
+**Laravel-inspired design principles for elif.rs**
+
+- **Fluent APIs**: Chain methods naturally - `Response::ok().json(data).header("X-Custom", "value")`
+- **Sensible defaults**: `Server::new()` should work immediately, no required configuration
+- **Named constructors**: `Response::json()`, `Response::redirect()`, `Error::not_found()`  
+- **Magic happens**: Route parameters auto-parsed, middleware auto-applied, types auto-converted
+- **Helper functions**: Global helpers where they make sense - `route()`, `response()`, `cache()`
+- **Facade pattern**: Simple static-like interfaces hiding complex implementations
+- **Service container**: Automatic dependency injection, zero configuration required
+- **Artisan-style CLI**: `elifrs make:controller`, `elifrs serve`, `elifrs migrate`
+
 ## Key Rules
 - **MARKER blocks**: Only edit inside `// <<<ELIF:BEGIN ...>>>` markers
 - **SQL safety**: Always use parameters (`$1, $2`), never string concat
 - **Type wrapping**: Wrap all external types (Request → ElifRequest)
 - **Error format**: `{ "error": { "code": "...", "message": "...", "hint": "..." } }`
 - **Controller macros**: Use `#[controller("/path")]` for declarative routing (requires derive feature)
+- **Laravel-style simplicity**: Keep it simple - `Server::new().listen()`, `Response::json()`, `Router::new().route()`
+- **Convention over configuration**: Follow established patterns, provide sensible defaults
+- **Zero boilerplate philosophy**: Every line of code should add value, not ceremony
 - **Builder patterns**: Use `#[builder]` macro from service-builder 0.3.0
   - Use `#[builder(optional)]` for `Option<T>` fields that default to `None`
   - Use `#[builder(default)]` for fields using `Default::default()`
@@ -116,10 +179,18 @@ impl UserController {
   - Use `build_with_defaults()` for configuration patterns
   - Use `build()?` for service construction patterns
 
-## Known Limitations
+## Known Limitations & Roadmap
+**Current limitations - being addressed to achieve Laravel-level simplicity**
+
 - **Response body caching**: Not possible yet - bodies can only be read once (see #130, #131)
-- **Controller macros**: Current implementation is foundational - runtime route registration and advanced features coming in future releases (Epic #236, tasks 8-12)
-- **Middleware complexity**: Current trait system too complex, needs simplification
+- **Controller macros**: Foundational implementation complete - runtime route registration and advanced features coming (Epic #236, tasks 8-12)
+- **Middleware complexity**: Current trait system too complex, needs Laravel-style simplification
+- **Service container**: Basic DI available, need Laravel-style auto-resolution and facades
+- **Database ORM**: Working but needs Laravel Eloquent-style query builder and relationships
+- **Validation**: Needs Laravel-style validation rules and form requests
+- **Artisan CLI**: Basic commands available, need full generator suite like Laravel Artisan
+
+**Goal**: Match Laravel's developer experience - simple, elegant, productive
 
 ## Service-Builder Pattern Guidelines
 - **Suggest, don't force**: Only migrate to service-builder when it provides clear benefits
