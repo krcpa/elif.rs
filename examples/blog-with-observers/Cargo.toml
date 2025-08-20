@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 description = "Example demonstrating elif.rs model events and observers"
 
+# This is a standalone example, not part of the main workspace
+[workspace]
+
 [[bin]]
 name = "main"
 path = "main.rs"

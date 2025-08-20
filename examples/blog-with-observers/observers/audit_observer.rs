@@ -2,9 +2,11 @@ use elif_orm::{ModelObserver, EventError};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
+use super::models::{User, Post};
 
 // Audit log entry
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct AuditLog {
     pub id: i64,
     pub table_name: String,
@@ -67,12 +69,14 @@ impl AuditObserver {
         }
     }
     
+    #[allow(dead_code)]
     fn extract_id<T>(&self, _model: &T) -> i64 {
         // In real implementation, this would extract the primary key
         // This might use reflection or a trait to get the ID
         1 // Mock ID
     }
     
+    #[allow(dead_code)]
     fn serialize_model<T>(&self, _model: &T) -> Result<Value, EventError> {
         // In real implementation, this would serialize the model to JSON
         // This might use serde or custom serialization
@@ -84,14 +88,6 @@ impl AuditObserver {
 
 // We need to implement ModelObserver for specific types
 // In a real implementation, this might be done with macros or generics
-
-// Example implementation for a User type
-#[derive(Debug, Clone)]
-pub struct User {
-    pub id: i64,
-    pub name: String,
-    pub email: String,
-}
 
 #[async_trait]
 impl ModelObserver<User> for AuditObserver {
@@ -175,8 +171,108 @@ impl ModelObserver<User> for AuditObserver {
     }
 }
 
+// Implementation for Post model
+#[async_trait]
+impl ModelObserver<Post> for AuditObserver {
+    async fn created(&self, model: &Post) -> Result<(), EventError> {
+        let audit_entry = AuditLog {
+            id: 0, // Would be set by database
+            table_name: self.table_name.clone(),
+            record_id: model.id,
+            action: "INSERT".to_string(),
+            old_values: None,
+            new_values: Some(serde_json::json!({
+                "id": model.id,
+                "title": model.title,
+                "content": model.content,
+                "author_id": model.author_id,
+                "published": model.published,
+                "published_at": model.published_at,
+                "slug": model.slug,
+            })),
+            user_id: AuditService::get_current_user_id(),
+            ip_address: AuditService::get_client_ip(),
+            user_agent: AuditService::get_user_agent(),
+            timestamp: Utc::now(),
+        };
+        
+        if let Err(e) = AuditService::log_audit(audit_entry).await {
+            return Err(EventError::observer(&format!("Failed to log audit: {}", e)));
+        }
+        
+        Ok(())
+    }
+    
+    async fn updated(&self, model: &Post, original: &Post) -> Result<(), EventError> {
+        let audit_entry = AuditLog {
+            id: 0,
+            table_name: self.table_name.clone(),
+            record_id: model.id,
+            action: "UPDATE".to_string(),
+            old_values: Some(serde_json::json!({
+                "id": original.id,
+                "title": original.title,
+                "content": original.content,
+                "author_id": original.author_id,
+                "published": original.published,
+                "published_at": original.published_at,
+                "slug": original.slug,
+            })),
+            new_values: Some(serde_json::json!({
+                "id": model.id,
+                "title": model.title,
+                "content": model.content,
+                "author_id": model.author_id,
+                "published": model.published,
+                "published_at": model.published_at,
+                "slug": model.slug,
+            })),
+            user_id: AuditService::get_current_user_id(),
+            ip_address: AuditService::get_client_ip(),
+            user_agent: AuditService::get_user_agent(),
+            timestamp: Utc::now(),
+        };
+        
+        if let Err(e) = AuditService::log_audit(audit_entry).await {
+            return Err(EventError::observer(&format!("Failed to log audit: {}", e)));
+        }
+        
+        Ok(())
+    }
+    
+    async fn deleted(&self, model: &Post) -> Result<(), EventError> {
+        let audit_entry = AuditLog {
+            id: 0,
+            table_name: self.table_name.clone(),
+            record_id: model.id,
+            action: "DELETE".to_string(),
+            old_values: Some(serde_json::json!({
+                "id": model.id,
+                "title": model.title,
+                "content": model.content,
+                "author_id": model.author_id,
+                "published": model.published,
+                "published_at": model.published_at,
+                "slug": model.slug,
+            })),
+            new_values: None,
+            user_id: AuditService::get_current_user_id(),
+            ip_address: AuditService::get_client_ip(),
+            user_agent: AuditService::get_user_agent(),
+            timestamp: Utc::now(),
+        };
+        
+        if let Err(e) = AuditService::log_audit(audit_entry).await {
+            return Err(EventError::observer(&format!("Failed to log audit: {}", e)));
+        }
+        
+        Ok(())
+    }
+}
+
 // Security audit observer for sensitive operations
 pub struct SecurityAuditObserver {
+    #[allow(dead_code)]
     table_name: String,
 }
 
@@ -288,6 +384,72 @@ mod tests {
         };
         
         let result = observer.creating(&mut user).await;
+        assert!(result.is_ok());
+    }
+    
+    #[tokio::test]
+    async fn test_audit_observer_post_created() {
+        use chrono::Utc;
+        
+        let observer = AuditObserver::new("posts");
+        let post = Post {
+            id: 1,
+            title: "Test Post".to_string(),
+            content: "Test content".to_string(),
+            author_id: 1,
+            published: true,
+            published_at: Some(Utc::now()),
+            slug: "test-post".to_string(),
+        };
+        
+        let result = observer.created(&post).await;
+        assert!(result.is_ok());
+    }
+    
+    #[tokio::test]
+    async fn test_audit_observer_post_updated() {
+        use chrono::Utc;
+        
+        let observer = AuditObserver::new("posts");
+        let original = Post {
+            id: 1,
+            title: "Original Title".to_string(),
+            content: "Original content".to_string(),
+            author_id: 1,
+            published: false,
+            published_at: None,
+            slug: "original-title".to_string(),
+        };
+        let updated = Post {
+            id: 1,
+            title: "Updated Title".to_string(),
+            content: "Updated content".to_string(),
+            author_id: 1,
+            published: true,
+            published_at: Some(Utc::now()),
+            slug: "updated-title".to_string(),
+        };
+        
+        let result = observer.updated(&updated, &original).await;
+        assert!(result.is_ok());
+    }
+    
+    #[tokio::test]
+    async fn test_audit_observer_post_deleted() {
+        use chrono::Utc;
+        
+        let observer = AuditObserver::new("posts");
+        let post = Post {
+            id: 1,
+            title: "Test Post".to_string(),
+            content: "Test content".to_string(),
+            author_id: 1,
+            published: true,
+            published_at: Some(Utc::now()),
+            slug: "test-post".to_string(),
+        };
+        
+        let result = observer.deleted(&post).await;
         assert!(result.is_ok());
     }
 }

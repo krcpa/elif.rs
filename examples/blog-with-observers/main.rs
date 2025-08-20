@@ -1,12 +1,11 @@
-use elif_orm::{ModelLifecycle, ObserverManager, EventError};
+use elif_orm::{ModelLifecycle, EventError};
 
 mod observers;
 
-use observers::user_observer::{User, UserObserver};
-use observers::post_observer::{Post, PostObserver};
-use observers::audit_observer::{AuditObserver, SecurityAuditObserver};
-
-use chrono::Utc;
+use observers::{
+    User, Post,
+    UserObserver, PostObserver, AuditObserver, SecurityAuditObserver
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

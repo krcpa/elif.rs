@@ -1,13 +1,6 @@
 use elif_orm::{ModelObserver, EventError};
 use async_trait::async_trait;
-
-// Example User model (simplified)
-#[derive(Debug, Clone)]
-pub struct User {
-    pub id: i64,
-    pub name: String,
-    pub email: String,
-}
+use super::models::{User, Profile};
 
 // Email service example (simplified)
 pub struct EmailService;
@@ -17,30 +10,6 @@ impl EmailService {
         println!("Sending welcome email to {}", user.email);
         // In real implementation, this would send an actual email
         Ok(())
-    }
-}
-
-// Profile model example (simplified)
-#[derive(Debug, Clone)]
-pub struct Profile {
-    pub user_id: i64,
-    pub display_name: String,
-}
-
-impl Profile {
-    pub async fn create(_pool: &str, profile: Profile) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Creating profile for user {}: {}", profile.user_id, profile.display_name);
-        // In real implementation, this would create a database record
-        Ok(())
-    }
-}
-
-impl Default for Profile {
-    fn default() -> Self {
-        Self {
-            user_id: 0,
-            display_name: String::new(),
-        }
     }
 }
 

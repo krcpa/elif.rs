@@ -1,18 +1,7 @@
 use elif_orm::{ModelObserver, EventError};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-
-// Example Post model (simplified)
-#[derive(Debug, Clone)]
-pub struct Post {
-    pub id: i64,
-    pub title: String,
-    pub content: String,
-    pub author_id: i64,
-    pub published: bool,
-    pub published_at: Option<DateTime<Utc>>,
-    pub slug: String,
-}
+use chrono::Utc;
+use super::models::Post;
 
 // Search indexing service example (simplified)
 pub struct SearchIndexService;
