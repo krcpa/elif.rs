@@ -1,13 +1,12 @@
 //! Core routing functionality
 
-use super::{HttpMethod, RouteInfo, RouteRegistry, params::{ParamExtractor, ParamType}};
+use super::{HttpMethod, RouteInfo, RouteRegistry};
 use crate::handlers::elif_handler;
 use crate::request::ElifRequest;
 use crate::response::{IntoElifResponse, ElifResponse};
 use crate::errors::HttpResult;
 use crate::middleware::v2::{Middleware, MiddlewarePipelineV2};
 use crate::controller::ElifController;
-use service_builder::builder;
 use std::pin::Pin;
 use axum::{
     Router as AxumRouter,
@@ -28,6 +27,7 @@ where
     route_counter: Arc<Mutex<usize>>,
     middleware_stack: MiddlewarePipelineV2,
     middleware_groups: HashMap<String, MiddlewarePipelineV2>,
+    route_middleware: HashMap<String, Vec<String>>, // route_id -> middleware group names
     controller_registry: Arc<Mutex<ControllerRegistry>>,
 }
 
@@ -43,6 +43,7 @@ where
             route_counter: Arc::new(Mutex::new(0)),
             middleware_stack: MiddlewarePipelineV2::new(),
             middleware_groups: HashMap::new(),
+            route_middleware: HashMap::new(),
             controller_registry: Arc::new(Mutex::new(ControllerRegistry::new())),
         }
     }
@@ -55,6 +56,7 @@ where
             route_counter: Arc::new(Mutex::new(0)),
             middleware_stack: MiddlewarePipelineV2::new(),
             middleware_groups: HashMap::new(),
+            route_middleware: HashMap::new(),
             controller_registry: Arc::new(Mutex::new(ControllerRegistry::new())),
         }
     }
@@ -109,77 +111,81 @@ where
         self
     }
 
-    /// Create a named middleware group for future use with route-specific middleware
-    /// 
-    /// Currently, middleware groups are stored but not actively used for request processing.
-    /// This method prepares middleware groups for future route-specific middleware functionality.
-    /// For now, use `use_middleware()` to add global middleware that will be applied to all routes.
+    /// Create a named middleware group for use with route-specific middleware
     pub fn middleware_group(mut self, name: &str, middleware: Vec<Arc<dyn Middleware>>) -> Self {
         let pipeline = MiddlewarePipelineV2::from(middleware);
         self.middleware_groups.insert(name.to_string(), pipeline);
         self
     }
 
+    /// Create a route builder for defining routes with middleware groups
+    pub fn route(self, path: &str) -> RouteBuilder<S> {
+        RouteBuilder::new(self, path.to_string())
+    }
 
-    /// Add a GET route with elif handler
-    pub fn get<F, Fut, R>(mut self, path: &str, handler: F) -> Self
+
+    /// Private helper method to add routes with less duplication
+    fn add_route<F, Fut, R, M>(mut self, method: HttpMethod, path: &str, handler: F, method_router_fn: M) -> Self
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
+        M: FnOnce(crate::handlers::handler::ElifHandlerWrapper<F, Fut, R>) -> axum::routing::MethodRouter<S>,
     {
-        self.register_route(HttpMethod::GET, path, None);
-        let method_router = get(elif_handler(handler));
+        self.register_route(method, path, None);
+        let method_router = method_router_fn(elif_handler(handler));
         self.axum_router = self.axum_router.route(path, method_router);
         self
     }
 
-    /// Add a POST route with elif handler
-    pub fn post<F, Fut, R>(mut self, path: &str, handler: F) -> Self
+    /// Add a GET route with elif handler
+    pub fn get<F, Fut, R>(self, path: &str, handler: F) -> Self
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        self.register_route(HttpMethod::POST, path, None);
-        self.axum_router = self.axum_router.route(path, post(elif_handler(handler)));
-        self
+        self.add_route(HttpMethod::GET, path, handler, get)
+    }
+
+    /// Add a POST route with elif handler
+    pub fn post<F, Fut, R>(self, path: &str, handler: F) -> Self
+    where
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
+    {
+        self.add_route(HttpMethod::POST, path, handler, post)
     }
 
     /// Add a PUT route with elif handler
-    pub fn put<F, Fut, R>(mut self, path: &str, handler: F) -> Self
+    pub fn put<F, Fut, R>(self, path: &str, handler: F) -> Self
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        self.register_route(HttpMethod::PUT, path, None);
-        self.axum_router = self.axum_router.route(path, put(elif_handler(handler)));
-        self
+        self.add_route(HttpMethod::PUT, path, handler, put)
     }
 
     /// Add a DELETE route with elif handler
-    pub fn delete<F, Fut, R>(mut self, path: &str, handler: F) -> Self
+    pub fn delete<F, Fut, R>(self, path: &str, handler: F) -> Self
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        self.register_route(HttpMethod::DELETE, path, None);
-        self.axum_router = self.axum_router.route(path, delete(elif_handler(handler)));
-        self
+        self.add_route(HttpMethod::DELETE, path, handler, delete)
     }
 
     /// Add a PATCH route with elif handler
-    pub fn patch<F, Fut, R>(mut self, path: &str, handler: F) -> Self
+    pub fn patch<F, Fut, R>(self, path: &str, handler: F) -> Self
     where
         F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
         Fut: Future<Output = HttpResult<R>> + Send + 'static,
         R: IntoElifResponse + Send + 'static,
     {
-        self.register_route(HttpMethod::PATCH, path, None);
-        self.axum_router = self.axum_router.route(path, patch(elif_handler(handler)));
-        self
+        self.add_route(HttpMethod::PATCH, path, handler, patch)
     }
 
     /// Register a controller with automatic route registration
@@ -254,8 +260,9 @@ where
             }
         }
         
-        // Merge middleware groups
+        // Merge middleware groups and route-specific middleware mappings
         self.middleware_groups.extend(other.middleware_groups);
+        self.route_middleware.extend(other.route_middleware);
         
         // Merge controller registries - avoid deadlock by not holding both locks simultaneously
         if let Ok(other_controller_registry) = other.controller_registry.lock() {
@@ -306,8 +313,9 @@ where
             }
         }
         
-        // Merge middleware groups from nested router
+        // Merge middleware groups and route-specific middleware mappings from nested router
         self.middleware_groups.extend(router.middleware_groups);
+        self.route_middleware.extend(router.route_middleware);
         
         // Apply nested router's global middleware as a layer before nesting
         // This ensures the middleware only applies to the nested routes
@@ -384,6 +392,11 @@ where
         &self.middleware_groups
     }
 
+    /// Get route-specific middleware mappings
+    pub fn route_middleware(&self) -> &HashMap<String, Vec<String>> {
+        &self.route_middleware
+    }
+
     /// Get the controller registry for introspection
     pub fn controller_registry(&self) -> Arc<Mutex<ControllerRegistry>> {
         Arc::clone(&self.controller_registry)
@@ -405,143 +418,105 @@ where
     }
 }
 
-/// Configuration for RouteBuilder
-#[derive(Debug, Clone)]
-#[builder]
-pub struct RouteBuilderConfig {
-    #[builder(optional)]
-    pub name: Option<String>,
-    
-    #[builder(default)]
-    pub param_types: HashMap<String, ParamType>,
-    
-    #[builder(default)]
-    pub middleware: Vec<String>, // Placeholder for future middleware support
+/// Builder for creating routes with middleware groups and additional metadata
+pub struct RouteBuilder<S = ()>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    router: Router<S>,
+    path: String,
+    middleware_groups: Vec<String>,
+    name: Option<String>,
 }
 
-impl RouteBuilderConfig {
-    /// Build a Route from the config
-    pub fn build_route(self) -> Route {
-        Route {
-            name: self.name,
-            param_types: self.param_types,
-            middleware: self.middleware,
-        }
-    }
-}
-
-// Add convenience methods to the generated builder
-impl RouteBuilderConfigBuilder {
-    /// Add parameter type specification
-    pub fn add_param(self, name: &str, param_type: ParamType) -> Self {
-        let mut param_types_map = self.param_types.unwrap_or_default();
-        param_types_map.insert(name.to_string(), param_type);
-        RouteBuilderConfigBuilder {
-            name: self.name,
-            param_types: Some(param_types_map),
-            middleware: self.middleware,
-        }
-    }
-    
-    /// Add multiple parameter type specifications
-    pub fn add_params(self, params: HashMap<String, ParamType>) -> Self {
-        let mut param_types_map = self.param_types.unwrap_or_default();
-        param_types_map.extend(params);
-        RouteBuilderConfigBuilder {
-            name: self.name,
-            param_types: Some(param_types_map),
-            middleware: self.middleware,
-        }
-    }
-    
-    /// Add middleware
-    pub fn add_middleware(self, middleware: &str) -> Self {
-        let mut middlewares_vec = self.middleware.unwrap_or_default();
-        middlewares_vec.push(middleware.to_string());
-        RouteBuilderConfigBuilder {
-            name: self.name,
-            param_types: self.param_types,
-            middleware: Some(middlewares_vec),
-        }
-    }
-    
-    pub fn build_config(self) -> RouteBuilderConfig {
-        self.build_with_defaults().expect("Building RouteBuilderConfig should not fail as all fields have defaults")
-    }
-}
-
-/// Builder for creating routes with additional metadata
-pub struct RouteBuilder {
-    builder_config: RouteBuilderConfigBuilder,
-}
-
-impl RouteBuilder {
-    pub fn new() -> Self {
+impl<S> RouteBuilder<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    pub fn new(router: Router<S>, path: String) -> Self {
         Self {
-            builder_config: RouteBuilderConfig::builder(),
+            router,
+            path,
+            middleware_groups: Vec::new(),
+            name: None,
         }
+    }
+
+    /// Apply a middleware group to this route
+    pub fn use_group(mut self, group_name: &str) -> Self {
+        self.middleware_groups.push(group_name.to_string());
+        self
     }
 
     /// Set route name for URL generation
-    pub fn name(self, name: &str) -> Self {
-        Self {
-            builder_config: self.builder_config.name(Some(name.to_string())),
-        }
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = Some(name.to_string());
+        self
     }
 
-    /// Add parameter type specification
-    pub fn param(self, name: &str, param_type: ParamType) -> Self {
-        Self {
-            builder_config: self.builder_config.add_param(name, param_type),
-        }
+    /// Private helper method for RouteBuilder route registration
+    fn add_method_route<F, Fut, R, M>(mut self, method: HttpMethod, handler: F, method_router_fn: M) -> Router<S>
+    where
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
+        M: FnOnce(crate::handlers::handler::ElifHandlerWrapper<F, Fut, R>) -> axum::routing::MethodRouter<S>,
+    {
+        let route_id = self.router.register_route(method, &self.path, self.name.clone());
+        self.router.route_middleware.insert(route_id, self.middleware_groups);
+        let method_router = method_router_fn(elif_handler(handler));
+        self.router.axum_router = self.router.axum_router.route(&self.path, method_router);
+        self.router
     }
 
-    /// Add multiple parameter type specifications
-    pub fn params(self, params: HashMap<String, ParamType>) -> Self {
-        Self {
-            builder_config: self.builder_config.add_params(params),
-        }
+    /// Add a GET route with elif handler
+    pub fn get<F, Fut, R>(self, handler: F) -> Router<S>
+    where
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
+    {
+        self.add_method_route(HttpMethod::GET, handler, get)
     }
 
-    /// Add middleware
-    pub fn middleware(self, middleware: &str) -> Self {
-        Self {
-            builder_config: self.builder_config.add_middleware(middleware),
-        }
+    /// Add a POST route with elif handler
+    pub fn post<F, Fut, R>(self, handler: F) -> Router<S>
+    where
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
+    {
+        self.add_method_route(HttpMethod::POST, handler, post)
     }
 
-    /// Build the route configuration
-    pub fn build(self) -> Route {
-        self.builder_config.build_config().build_route()
-    }
-}
-
-impl Default for RouteBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Route configuration
-#[derive(Debug)]
-pub struct Route {
-    pub name: Option<String>,
-    pub param_types: HashMap<String, ParamType>,
-    pub middleware: Vec<String>,
-}
-
-impl Route {
-    pub fn builder() -> RouteBuilder {
-        RouteBuilder::new()
+    /// Add a PUT route with elif handler
+    pub fn put<F, Fut, R>(self, handler: F) -> Router<S>
+    where
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
+    {
+        self.add_method_route(HttpMethod::PUT, handler, put)
     }
 
-    /// Create parameter extractor for this route
-    pub fn param_extractor(&self) -> ParamExtractor {
-        let mut extractor = ParamExtractor::new();
-        for (name, param_type) in &self.param_types {
-            extractor = extractor.param(name, param_type.clone());
-        }
-        extractor
+    /// Add a DELETE route with elif handler
+    pub fn delete<F, Fut, R>(self, handler: F) -> Router<S>
+    where
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
+    {
+        self.add_method_route(HttpMethod::DELETE, handler, delete)
+    }
+
+    /// Add a PATCH route with elif handler
+    pub fn patch<F, Fut, R>(self, handler: F) -> Router<S>
+    where
+        F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
+        Fut: Future<Output = HttpResult<R>> + Send + 'static,
+        R: IntoElifResponse + Send + 'static,
+    {
+        self.add_method_route(HttpMethod::PATCH, handler, patch)
     }
 }
 
@@ -1110,6 +1085,112 @@ mod tests {
         // Verify that nesting merges route registries correctly
         // We expect the nested router's routes to be merged into the parent registry
         assert_eq!(route_count, 2, "Expected both parent and nested routes to be registered, got: {}", route_count);
+    }
+
+    #[test]
+    fn test_route_builder_with_middleware_groups() {
+        use crate::middleware::v2::LoggingMiddleware;
+        use std::sync::Arc;
+        
+        // Create middleware groups
+        let router = Router::<()>::new()
+            .middleware_group("api", vec![Arc::new(LoggingMiddleware)])
+            .middleware_group("auth", vec![Arc::new(LoggingMiddleware)])
+            .route("/api/users")
+                .use_group("api")
+                .use_group("auth")
+                .get(elif_handler);
+        
+        // Verify middleware groups exist
+        assert!(router.middleware_groups().contains_key("api"));
+        assert!(router.middleware_groups().contains_key("auth"));
+        
+        // Verify route middleware mappings exist
+        assert_eq!(router.route_middleware().len(), 1);
+        
+        // Check that the route was assigned the correct middleware groups
+        let route_middleware = router.route_middleware().values().next().unwrap();
+        assert_eq!(route_middleware.len(), 2);
+        assert!(route_middleware.contains(&"api".to_string()));
+        assert!(route_middleware.contains(&"auth".to_string()));
+    }
+
+    #[test]
+    fn test_route_builder_chaining() {
+        use crate::middleware::v2::LoggingMiddleware;
+        use std::sync::Arc;
+        
+        let router = Router::<()>::new()
+            .middleware_group("api", vec![Arc::new(LoggingMiddleware)])
+            .route("/api/users")
+                .use_group("api")
+                .name("users.index")
+                .get(elif_handler);
+        
+        // Verify route was registered with correct name and middleware
+        let binding = router.registry();
+        let registry = binding.lock().unwrap();
+        let routes: Vec<_> = registry.all_routes().values().collect();
+        assert_eq!(routes.len(), 1);
+        
+        let route = routes[0];
+        assert_eq!(route.path, "/api/users");
+        assert_eq!(route.name, Some("users.index".to_string()));
+        assert_eq!(route.method, HttpMethod::GET);
+    }
+
+    #[test] 
+    fn test_multiple_routes_with_different_middleware() {
+        use crate::middleware::v2::{LoggingMiddleware, SimpleAuthMiddleware};
+        use std::sync::Arc;
+        
+        let router = Router::<()>::new()
+            .middleware_group("api", vec![Arc::new(LoggingMiddleware)])
+            .middleware_group("auth", vec![Arc::new(SimpleAuthMiddleware::new("secret".to_string()))])
+            .route("/api/public")
+                .use_group("api")
+                .get(elif_handler)
+            .route("/api/protected")
+                .use_group("api")
+                .use_group("auth")
+                .get(elif_handler)
+            .route("/api/admin")
+                .use_group("auth")
+                .get(elif_handler);
+        
+        // Verify all routes were created
+        assert_eq!(router.registry().lock().unwrap().all_routes().len(), 3);
+        
+        // Verify route middleware mappings
+        let route_middleware = router.route_middleware();
+        assert_eq!(route_middleware.len(), 3);
+        
+        // Check each route has correct middleware
+        let middleware_counts: Vec<usize> = route_middleware.values().map(|v| v.len()).collect();
+        middleware_counts.iter().for_each(|&count| assert!(count > 0));
+        
+        // Verify we have the right mix of middleware assignments
+        let total_middleware_assignments: usize = middleware_counts.iter().sum();
+        assert_eq!(total_middleware_assignments, 4); // 1 + 2 + 1 = 4 middleware assignments
+    }
+
+    #[test]
+    fn test_route_without_middleware_groups() {
+        let router = Router::<()>::new()
+            .route("/simple")
+                .get(elif_handler);
+        
+        // Verify route was created without middleware groups
+        let binding = router.registry();
+        let registry = binding.lock().unwrap();
+        assert_eq!(registry.all_routes().len(), 1);
+        
+        let route_middleware = router.route_middleware();
+        assert_eq!(route_middleware.len(), 1);
+        
+        // The route should have empty middleware groups list
+        let middleware_groups = route_middleware.values().next().unwrap();
+        assert_eq!(middleware_groups.len(), 0);
     }
 }
 
