@@ -577,7 +577,7 @@ mod tests {
 
         let validation_errors = json!({"email": ["Email is required"]});
         let resp: ElifResponse = response().validation_error(validation_errors).into();
-        assert_eq!(resp.status_code(), ElifStatusCode::BAD_REQUEST);
+        assert_eq!(resp.status_code(), ElifStatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[test]
