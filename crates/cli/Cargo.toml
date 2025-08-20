@@ -41,3 +41,4 @@ service-builder = "0.3.0"
 
 [dev-dependencies]
 tempfile = "3.8"
+serial_test = "3.0"

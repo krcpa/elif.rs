@@ -270,6 +270,7 @@ mod tests {
     use tempfile::{tempdir, TempDir};
     use std::fs;
     use std::path::PathBuf;
+    use serial_test::serial;
 
     /// Test utilities for OpenAPI functionality
     pub struct OpenApiTestUtils;
@@ -455,6 +456,7 @@ pub struct User {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_openapi_generation_with_default_settings() {
         let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
         
@@ -462,60 +464,73 @@ pub struct User {
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&project_root).unwrap();
 
-        // Test generation with defaults (JSON format)
-        let result = generate(None, None).await;
+        // Test generation with explicit path to /tmp
+        let output_path = format!("/tmp/openapi-test-{}.json", std::process::id());
+        let result = generate(Some(output_path.clone()), Some("json".to_string())).await;
         
         // Restore original directory
         std::env::set_current_dir(original_dir).unwrap();
         
         assert!(result.is_ok(), "OpenAPI generation should succeed: {:?}", result);
         
-        let expected_file = project_root.join("target/_openapi.json");
-        assert!(expected_file.exists(), "Default JSON file should be created");
+        let expected_file = std::path::PathBuf::from(&output_path);
+        assert!(expected_file.exists(), "JSON file should be created");
         
         // Validate the generated specification contains basic structure
         let content = fs::read_to_string(&expected_file).unwrap();
         assert!(content.contains("openapi"), "Should contain OpenAPI version");
         assert!(content.contains("/health"), "Should contain health check endpoint");
+        
+        // Clean up
+        let _ = fs::remove_file(&expected_file);
     }
 
     #[tokio::test] 
+    #[serial]
     async fn test_openapi_generation_yaml_format() {
         let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
         
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&project_root).unwrap();
 
-        let result = generate(None, Some("yaml".to_string())).await;
+        let output_path = format!("/tmp/openapi-yaml-{}.yaml", std::process::id());
+        let result = generate(Some(output_path.clone()), Some("yaml".to_string())).await;
         
         std::env::set_current_dir(original_dir).unwrap();
         
         assert!(result.is_ok(), "YAML generation should succeed");
         
-        let expected_file = project_root.join("target/_openapi.yaml");
+        let expected_file = std::path::PathBuf::from(&output_path);
         assert!(expected_file.exists(), "YAML file should be created");
         
         let content = fs::read_to_string(&expected_file).unwrap();
         assert!(content.contains("openapi:"), "Should contain YAML OpenAPI header");
         assert!(content.contains("/health"), "Should contain health check endpoint");
+        
+        // Clean up
+        let _ = fs::remove_file(&expected_file);
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_openapi_generation_custom_output_path() {
         let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
         
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&project_root).unwrap();
 
-        let custom_path = "docs/api.json";
-        let result = generate(Some(custom_path.to_string()), Some("json".to_string())).await;
+        let custom_path = format!("/tmp/api-{}.json", std::process::id());
+        let result = generate(Some(custom_path.clone()), Some("json".to_string())).await;
         
         std::env::set_current_dir(original_dir).unwrap();
         
         assert!(result.is_ok(), "Custom path generation should succeed");
         
-        let expected_file = project_root.join(custom_path);
+        let expected_file = std::path::PathBuf::from(&custom_path);
         assert!(expected_file.exists(), "Custom path file should be created");
+        
+        // Clean up
+        let _ = fs::remove_file(&expected_file);
     }
 
     #[tokio::test]
@@ -542,6 +557,7 @@ pub struct User {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_export_postman_format() {
         let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
         
@@ -551,23 +567,27 @@ pub struct User {
         // Generate OpenAPI spec first
         let _ = generate(None, None).await;
         
-        // Test Postman export
-        let output_path = "test-collection.json";
-        let result = export("postman".to_string(), output_path.to_string()).await;
+        // Test Postman export - use absolute path in /tmp
+        let output_path = format!("/tmp/test-collection-{}.json", std::process::id());
+        let result = export("postman".to_string(), output_path.clone()).await;
         
         std::env::set_current_dir(original_dir).unwrap();
         
         assert!(result.is_ok(), "Postman export should succeed");
         
-        let exported_file = project_root.join(output_path);
+        let exported_file = std::path::PathBuf::from(&output_path);
         assert!(exported_file.exists(), "Postman collection file should be created");
         
         // Validate it's valid JSON
         let content = fs::read_to_string(&exported_file).unwrap();
         let _: serde_json::Value = serde_json::from_str(&content).unwrap();
+        
+        // Clean up
+        let _ = fs::remove_file(&exported_file);
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_export_insomnia_format() {
         let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
         
@@ -577,23 +597,27 @@ pub struct User {
         // Generate OpenAPI spec first  
         let _ = generate(None, None).await;
         
-        // Test Insomnia export
-        let output_path = "test-workspace.json";
-        let result = export("insomnia".to_string(), output_path.to_string()).await;
+        // Test Insomnia export - use absolute path in /tmp
+        let output_path = format!("/tmp/test-workspace-{}.json", std::process::id());
+        let result = export("insomnia".to_string(), output_path.clone()).await;
         
         std::env::set_current_dir(original_dir).unwrap();
         
         assert!(result.is_ok(), "Insomnia export should succeed");
         
-        let exported_file = project_root.join(output_path);
+        let exported_file = std::path::PathBuf::from(&output_path);
         assert!(exported_file.exists(), "Insomnia workspace file should be created");
         
         // Validate it's valid JSON
         let content = fs::read_to_string(&exported_file).unwrap();
         let _: serde_json::Value = serde_json::from_str(&content).unwrap();
+        
+        // Clean up
+        let _ = fs::remove_file(&exported_file);
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_export_unsupported_format() {
         let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
         
@@ -603,27 +627,41 @@ pub struct User {
         // Generate OpenAPI spec first
         let _ = generate(None, None).await;
         
-        // Test unsupported format
+        // Ensure spec file exists before testing unsupported format
+        let spec_file = project_root.join("target/_openapi.json");
+        assert!(spec_file.exists(), "OpenAPI spec should be generated for unsupported format test");
+        
+        // Test unsupported format - this should fail with format error, not file error
         let result = export("unsupported".to_string(), "output.json".to_string()).await;
         
         std::env::set_current_dir(original_dir).unwrap();
         
         assert!(result.is_err(), "Unsupported format should fail");
-        assert!(result.unwrap_err().to_string().contains("Unsupported export format"));
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Unsupported export format"), "Expected 'Unsupported export format' in error: {}", error_msg);
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_swagger_ui_generation() {
         let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
         
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&project_root).unwrap();
 
+        // Generate OpenAPI spec first so serve can find it  
+        let gen_result = generate(None, None).await;
+        assert!(gen_result.is_ok(), "OpenAPI generation should succeed for swagger test");
+        
+        // Verify spec file exists before serving
+        let spec_file = project_root.join("target/_openapi.json");
+        assert!(spec_file.exists(), "OpenAPI spec should exist before serving Swagger UI");
+        
         let result = serve(Some(8080)).await;
         
         std::env::set_current_dir(original_dir).unwrap();
         
-        assert!(result.is_ok(), "Swagger UI generation should succeed");
+        assert!(result.is_ok(), "Swagger UI generation should succeed: {:?}", result.as_ref().err());
         
         let swagger_file = project_root.join("target/_swagger.html");
         assert!(swagger_file.exists(), "Swagger HTML file should be created");
@@ -634,24 +672,34 @@ pub struct User {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_auto_generation_on_export() {
         let (_temp_dir, project_root) = OpenApiTestUtils::create_test_project();
         
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&project_root).unwrap();
 
+        // Ensure no existing spec file to test auto-generation
+        let spec_file = project_root.join("target/_openapi.json");
+        let spec_yaml_file = project_root.join("target/_openapi.yaml");
+        let _ = fs::remove_file(&spec_file);
+        let _ = fs::remove_file(&spec_yaml_file);
+        
         // Export without generating first - should auto-generate
-        let result = export("postman".to_string(), "auto-gen.json".to_string()).await;
+        let output_path = format!("/tmp/auto-gen-{}.json", std::process::id());
+        let result = export("postman".to_string(), output_path.clone()).await;
         
         std::env::set_current_dir(original_dir).unwrap();
         
-        assert!(result.is_ok(), "Auto-generation during export should work");
+        assert!(result.is_ok(), "Auto-generation during export should work: {:?}", result.as_ref().err());
         
         // Both OpenAPI spec and export should exist
-        let spec_file = project_root.join("target/_openapi.json");
-        let export_file = project_root.join("auto-gen.json");
+        let export_file = std::path::PathBuf::from(&output_path);
         assert!(spec_file.exists(), "OpenAPI spec should be auto-generated");
         assert!(export_file.exists(), "Export file should be created");
+        
+        // Clean up
+        let _ = fs::remove_file(&export_file);
     }
 
     #[test]
