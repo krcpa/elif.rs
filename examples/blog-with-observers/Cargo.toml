@@ -1,0 +1,20 @@
+[package]
+name = "blog-with-observers"
+version = "0.1.0"
+edition = "2021"
+description = "Example demonstrating elif.rs model events and observers"
+
+# This is a standalone example, not part of the main workspace
+[workspace]
+
+[[bin]]
+name = "main"
+path = "main.rs"
+
+[dependencies]
+elif-orm = { path = "../../crates/orm" }
+tokio = { version = "1.0", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-trait = "0.1"

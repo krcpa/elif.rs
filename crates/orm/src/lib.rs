@@ -34,6 +34,11 @@ pub mod loading;
 pub mod migrations;
 pub mod factories;
 
+// Event system and observers
+pub mod events;
+pub mod event_error;
+pub mod observers;
+
 // Legacy modules (maintained for backward compatibility)
 pub mod model;
 pub mod error;
@@ -91,5 +96,12 @@ pub use relationships::{
 
 // Database backends
 pub use backends::{DatabaseBackendType, DatabasePoolConfig, PostgresBackend, DatabaseBackendRegistry};
+
+// Event system and observers
+pub use events::{ModelEvent, ModelObserver};
+pub use event_error::EventError;
+pub use observers::{ObserverRegistry, GlobalObserverRegistry, ObserverManager};
+pub use model::lifecycle::ModelLifecycle;
+
 // Derive macro re-exports (when implemented in future)
 // pub use elif_orm_derive::*;
