@@ -41,7 +41,7 @@ pub use foundation::{GenericHandler, IntoElifResponse, RequestExtractor, BoxFutu
 pub use routing::{
     HttpMethod, RouteInfo, RouteRegistry,
     ElifRouter, Route, RouteBuilder,
-    PathParams, RouteParam, ParamError, ParamType,
+    PathParams, RouteParam as RoutingRouteParam, ParamError, ParamType,
     RouteGroup, GroupBuilder,
     // Versioned routing
     VersionedRouter, VersionedRouteBuilder, versioned_router, path_versioned_router, header_versioned_router,
@@ -93,7 +93,10 @@ pub use logging::{
 pub use logging::context::LoggingContext;
 
 // Re-export controller types
-pub use controller::{Controller, BaseController};
+pub use controller::{
+    Controller, BaseController, 
+    ElifController, ControllerRoute, RouteParam as ControllerRouteParam
+};
 // Re-export from specific modules to avoid conflicts
 pub use controller::pagination::{QueryParams, PaginationMeta};
 

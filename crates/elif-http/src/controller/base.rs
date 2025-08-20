@@ -1,12 +1,13 @@
-//! Service-Oriented Controller System
+//! Controller System for Route Organization
 //! 
-//! Provides a clean separation between HTTP handling (controllers) and business logic (services).
-//! Controllers are thin HTTP handlers that delegate to injected services.
+//! Provides both service-oriented controllers and a new ElifController system
+//! for automatic route registration and organization.
 
 use std::{sync::Arc, pin::Pin, future::Future};
 use crate::{
-    request::{ElifState, ElifPath, ElifQuery},
+    request::{ElifState, ElifPath, ElifQuery, ElifRequest},
     response::{ElifJson, ElifResponse},
+    routing::{HttpMethod, params::ParamType},
 };
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
@@ -137,6 +138,114 @@ pub trait Controller: Send + Sync {
         container: ElifState<Arc<Container>>,
         id: ElifPath<String>,
     ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
+}
+
+/// Route parameter definition for controllers
+#[derive(Debug, Clone)]
+pub struct RouteParam {
+    pub name: String,
+    pub param_type: ParamType,
+    pub required: bool,
+    pub default: Option<String>,
+}
+
+impl RouteParam {
+    pub fn new(name: &str, param_type: ParamType) -> Self {
+        Self {
+            name: name.to_string(),
+            param_type,
+            required: true,
+            default: None,
+        }
+    }
+    
+    pub fn optional(mut self) -> Self {
+        self.required = false;
+        self
+    }
+    
+    pub fn with_default(mut self, default: &str) -> Self {
+        self.default = Some(default.to_string());
+        self.required = false;
+        self
+    }
+}
+
+/// Controller route definition
+#[derive(Debug, Clone)]
+pub struct ControllerRoute {
+    pub method: HttpMethod,
+    pub path: String,
+    pub handler_name: String,
+    pub middleware: Vec<String>,
+    pub params: Vec<RouteParam>,
+}
+
+impl ControllerRoute {
+    pub fn new(method: HttpMethod, path: &str, handler_name: &str) -> Self {
+        Self {
+            method,
+            path: path.to_string(),
+            handler_name: handler_name.to_string(),
+            middleware: vec![],
+            params: vec![],
+        }
+    }
+    
+    pub fn with_middleware(mut self, middleware: Vec<String>) -> Self {
+        self.middleware = middleware;
+        self
+    }
+    
+    pub fn with_params(mut self, params: Vec<RouteParam>) -> Self {
+        self.params = params;
+        self
+    }
+    
+    pub fn add_param(mut self, param: RouteParam) -> Self {
+        self.params.push(param);
+        self
+    }
+}
+
+/// Main trait for controllers with automatic route registration
+pub trait ElifController: Send + Sync + 'static {
+    /// Controller name for identification
+    fn name(&self) -> &str;
+    
+    /// Base path for all routes in this controller
+    fn base_path(&self) -> &str;
+    
+    /// Route definitions for this controller
+    fn routes(&self) -> Vec<ControllerRoute>;
+    
+    /// Dependencies required by this controller (optional)
+    fn dependencies(&self) -> Vec<String> { 
+        vec![] 
+    }
+    
+    /// Handle a request by dispatching to the appropriate method
+    fn handle_request(
+        &self,
+        method_name: String,
+        request: ElifRequest,
+    ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
+}
+
+/// Macro to help implement controller method dispatch
+#[macro_export]
+macro_rules! controller_dispatch {
+    ($self:expr, $method_name:expr, $request:expr, {
+        $($method:literal => $handler:expr),*
+    }) => {
+        match $method_name {
+            $($method => Box::pin($handler($self, $request)),)*
+            _ => Box::pin(async move {
+                use crate::response::ElifResponse;
+                Ok(ElifResponse::not_found().text(&format!("Handler '{}' not found", $method_name)))
+            })
+        }
+    };
 }
 
 #[cfg(test)]
