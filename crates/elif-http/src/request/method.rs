@@ -2,6 +2,7 @@
 
 use std::fmt;
 use std::str::FromStr;
+use crate::errors::ParseError;
 
 /// Framework-native HTTP method wrapper that hides Axum internals
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -20,8 +21,10 @@ impl ElifMethod {
     pub const CONNECT: Self = Self(axum::http::Method::CONNECT);
 
     /// Create method from string
-    pub fn from_str(method: &str) -> Result<Self, axum::http::method::InvalidMethod> {
-        axum::http::Method::from_str(method).map(Self)
+    pub fn from_str(method: &str) -> Result<Self, ParseError> {
+        axum::http::Method::from_str(method)
+            .map(Self)
+            .map_err(ParseError::from)
     }
 
     /// Get method as string
@@ -54,10 +57,12 @@ impl ElifMethod {
 }
 
 impl FromStr for ElifMethod {
-    type Err = axum::http::method::InvalidMethod;
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        axum::http::Method::from_str(s).map(Self)
+        axum::http::Method::from_str(s)
+            .map(Self)
+            .map_err(ParseError::from)
     }
 }
 

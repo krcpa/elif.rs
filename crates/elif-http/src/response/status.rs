@@ -1,6 +1,7 @@
 //! HTTP status code utilities
 
 use std::fmt;
+use crate::errors::ParseError;
 
 /// Framework-native status code wrapper that hides Axum internals
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,8 +35,10 @@ impl ElifStatusCode {
     pub const SERVICE_UNAVAILABLE: Self = Self(axum::http::StatusCode::SERVICE_UNAVAILABLE);
 
     /// Create status code from u16
-    pub fn from_u16(src: u16) -> Result<Self, axum::http::status::InvalidStatusCode> {
-        axum::http::StatusCode::from_u16(src).map(Self)
+    pub fn from_u16(src: u16) -> Result<Self, ParseError> {
+        axum::http::StatusCode::from_u16(src)
+            .map(Self)
+            .map_err(ParseError::from)
     }
 
     /// Get status code as u16

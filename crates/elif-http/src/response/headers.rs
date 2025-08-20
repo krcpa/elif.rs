@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
+use crate::errors::ParseError;
 
 /// Framework-native header name wrapper that hides Axum internals
 #[repr(transparent)]
@@ -11,8 +12,10 @@ pub struct ElifHeaderName(axum::http::HeaderName);
 
 impl ElifHeaderName {
     /// Create a new header name from a string
-    pub fn from_str(name: &str) -> Result<Self, axum::http::header::InvalidHeaderName> {
-        axum::http::HeaderName::from_str(name).map(Self)
+    pub fn from_str(name: &str) -> Result<Self, ParseError> {
+        axum::http::HeaderName::from_str(name)
+            .map(Self)
+            .map_err(ParseError::from)
     }
 
     /// Get header name as string
@@ -32,10 +35,11 @@ impl ElifHeaderName {
 }
 
 impl FromStr for ElifHeaderName {
-    type Err = axum::http::header::InvalidHeaderName;
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_str(s)
+        // Call our inherent method using qualified syntax to avoid recursion
+        <ElifHeaderName>::from_str(s)
     }
 }
 
@@ -52,13 +56,17 @@ pub struct ElifHeaderValue(axum::http::HeaderValue);
 
 impl ElifHeaderValue {
     /// Create a new header value from a string
-    pub fn from_str(value: &str) -> Result<Self, axum::http::header::InvalidHeaderValue> {
-        axum::http::HeaderValue::from_str(value).map(Self)
+    pub fn from_str(value: &str) -> Result<Self, ParseError> {
+        axum::http::HeaderValue::from_str(value)
+            .map(Self)
+            .map_err(ParseError::from)
     }
 
     /// Create a new header value from bytes
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, axum::http::header::InvalidHeaderValue> {
-        axum::http::HeaderValue::from_bytes(bytes).map(Self)
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParseError> {
+        axum::http::HeaderValue::from_bytes(bytes)
+            .map(Self)
+            .map_err(ParseError::from)
     }
 
     /// Create a new header value from a static string
@@ -67,8 +75,8 @@ impl ElifHeaderValue {
     }
 
     /// Get header value as string
-    pub fn to_str(&self) -> Result<&str, axum::http::header::ToStrError> {
-        self.0.to_str()
+    pub fn to_str(&self) -> Result<&str, ParseError> {
+        self.0.to_str().map_err(ParseError::from)
     }
 
     /// Get header value as bytes
@@ -88,10 +96,11 @@ impl ElifHeaderValue {
 }
 
 impl FromStr for ElifHeaderValue {
-    type Err = axum::http::header::InvalidHeaderValue;
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_str(s)
+        // Call our inherent method using qualified syntax to avoid recursion  
+        <ElifHeaderValue>::from_str(s)
     }
 }
 

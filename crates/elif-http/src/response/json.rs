@@ -132,8 +132,8 @@ impl JsonError {
         }
     }
 
-    /// Create from Axum JSON rejection
-    pub fn from_axum_json_rejection(rejection: axum::extract::rejection::JsonRejection) -> Self {
+    /// Create from Axum JSON rejection (internal use only)
+    pub(crate) fn from_axum_json_rejection(rejection: axum::extract::rejection::JsonRejection) -> Self {
         use axum::extract::rejection::JsonRejection::*;
         
         match rejection {
