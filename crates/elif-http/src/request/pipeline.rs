@@ -10,7 +10,7 @@
 use crate::routing::{RouteMatcher, RouteMatch, HttpMethod};
 use crate::middleware::v2::{MiddlewarePipelineV2, NextFuture};
 use crate::request::ElifRequest;
-use crate::response::ElifResponse;
+use crate::response::{ElifResponse, ElifStatusCode};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -20,6 +20,9 @@ use thiserror::Error;
 pub enum PipelineError {
     #[error("Route not found: {method} {path}")]
     RouteNotFound { method: HttpMethod, path: String },
+    
+    #[error("Method not allowed: {method}")]
+    MethodNotAllowed { method: String },
     
     #[error("Parameter error: {0}")]
     Parameter(#[from] ParamError),
@@ -165,7 +168,11 @@ impl RequestPipeline {
             &axum::http::Method::HEAD => HttpMethod::HEAD,
             &axum::http::Method::OPTIONS => HttpMethod::OPTIONS,
             &axum::http::Method::TRACE => HttpMethod::TRACE,
-            _ => HttpMethod::GET, // Fallback for any unknown method
+            unsupported => {
+                return Err(PipelineError::MethodNotAllowed {
+                    method: unsupported.to_string(),
+                });
+            }
         };
         
         self.matcher
@@ -205,6 +212,16 @@ impl RequestPipeline {
                         "error": {
                             "code": "not_found",
                             "message": "The requested resource was not found"
+                        }
+                    }))
+            }
+            PipelineError::MethodNotAllowed { method } => {
+                ElifResponse::with_status(ElifStatusCode::METHOD_NOT_ALLOWED)
+                    .with_json(&serde_json::json!({
+                        "error": {
+                            "code": "method_not_allowed",
+                            "message": format!("HTTP method '{}' is not supported", method),
+                            "hint": "Supported methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, TRACE"
                         }
                     }))
             }
@@ -640,5 +657,85 @@ mod tests {
         
         // The key optimization: Arc::clone is O(1) regardless of HashMap size
         // Previously this would have been O(n) for each request due to HashMap cloning
+    }
+
+    #[tokio::test]
+    async fn test_method_not_allowed_error() {
+        let matcher = RouteMatcherBuilder::new()
+            .get("test".to_string(), "/test".to_string())
+            .build()
+            .unwrap();
+
+        let pipeline = RequestPipelineBuilder::new()
+            .matcher(matcher)
+            .handler("test", |_req| {
+                Box::pin(async move {
+                    ElifResponse::ok().with_text("Test response")
+                })
+            })
+            .build()
+            .unwrap();
+
+        // Create a request with CONNECT method (unsupported)
+        let connect_method = crate::request::ElifMethod::from_axum(axum::http::Method::CONNECT);
+        let request = ElifRequest::new(
+            connect_method,
+            "/test".parse().unwrap(),
+            crate::response::ElifHeaderMap::new(),
+        );
+
+        let response = pipeline.process(request).await;
+        assert_eq!(response.status_code(), ElifStatusCode::METHOD_NOT_ALLOWED);
+        
+        // Verify error message structure
+        // Note: We can't easily test JSON content without body reading capabilities,
+        // but we can verify the status code which is the most important part
+    }
+
+    #[tokio::test] 
+    async fn test_supported_methods_work() {
+        let matcher = RouteMatcherBuilder::new()
+            .get("get_test".to_string(), "/test".to_string())
+            .post("post_test".to_string(), "/test".to_string())
+            .put("put_test".to_string(), "/test".to_string())
+            .delete("delete_test".to_string(), "/test".to_string())
+            .build()
+            .unwrap();
+
+        let pipeline = RequestPipelineBuilder::new()
+            .matcher(matcher)
+            .handler("get_test", |_req| {
+                Box::pin(async move { ElifResponse::ok().with_text("GET") })
+            })
+            .handler("post_test", |_req| {
+                Box::pin(async move { ElifResponse::ok().with_text("POST") })
+            })
+            .handler("put_test", |_req| {
+                Box::pin(async move { ElifResponse::ok().with_text("PUT") })
+            })
+            .handler("delete_test", |_req| {
+                Box::pin(async move { ElifResponse::ok().with_text("DELETE") })
+            })
+            .build()
+            .unwrap();
+
+        // Test all supported methods work correctly
+        let methods = [
+            (crate::request::ElifMethod::GET, "GET"),
+            (crate::request::ElifMethod::POST, "POST"), 
+            (crate::request::ElifMethod::PUT, "PUT"),
+            (crate::request::ElifMethod::DELETE, "DELETE"),
+        ];
+
+        for (method, _expected_response) in methods {
+            let request = ElifRequest::new(
+                method,
+                "/test".parse().unwrap(),
+                crate::response::ElifHeaderMap::new(),
+            );
+
+            let response = pipeline.process(request).await;
+            assert_eq!(response.status_code(), ElifStatusCode::OK);
+        }
     }
 }
