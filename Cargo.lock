@@ -1528,6 +1528,7 @@ dependencies = [
  "chrono",
  "elif-auth",
  "elif-core 0.5.0",
+ "elif-http-derive",
  "elif-testing 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-util",
  "html-escape",
@@ -1585,6 +1586,15 @@ dependencies = [
  "tracing-subscriber",
  "tungstenite 0.21.0",
  "uuid",
+]
+
+[[package]]
+name = "elif-http-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
 ]
 
 [[package]]

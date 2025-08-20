@@ -11,7 +11,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, ItemFn, ItemStruct, Lit, Meta, Token};
+use syn::{parse_macro_input, ItemFn, ItemStruct};
 
 #[cfg(test)]
 mod test;
@@ -27,23 +27,11 @@ mod test;
 /// ```
 #[proc_macro_attribute]
 pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args with syn::punctuated::Punctuated::<Meta, Token![,]>::parse_terminated);
+    let path_lit = parse_macro_input!(args as syn::LitStr);
     let input = parse_macro_input!(input as ItemStruct);
     
-    // Extract base path - simplified for now to just take string literals
-    let base_path = args.iter()
-        .find_map(|meta| match meta {
-            Meta::Path(path) => path.get_ident().map(|i| i.to_string()),
-            Meta::NameValue(nv) if matches!(&nv.value, syn::Expr::Lit(syn::ExprLit { lit: Lit::Str(_), .. })) => {
-                if let syn::Expr::Lit(syn::ExprLit { lit: Lit::Str(s), .. }) = &nv.value {
-                    Some(s.value())
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        })
-        .unwrap_or_else(|| "/".to_string());
+    // Extract base path from the string literal
+    let base_path = path_lit.value();
     
     let struct_name = &input.ident;
     let struct_name_str = struct_name.to_string();
@@ -69,11 +57,17 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
 macro_rules! http_method_macro {
     ($method:literal) => {
         |args: TokenStream, input: TokenStream| -> TokenStream {
-            let _args = parse_macro_input!(args with syn::punctuated::Punctuated::<Meta, Token![,]>::parse_terminated);
+            // Parse route path - can be empty for root routes
+            let _route_path = if args.is_empty() {
+                "".to_string()
+            } else {
+                let path_lit = parse_macro_input!(args as syn::LitStr);
+                path_lit.value()
+            };
             let input_fn = parse_macro_input!(input as ItemFn);
             
             // For now, just return the original function with a marker
-            // In a full implementation, this would register route information
+            // In a full implementation, this would register route information with the path
             let expanded = quote! {
                 #[allow(dead_code)]
                 #input_fn
@@ -129,9 +123,17 @@ pub fn options(args: TokenStream, input: TokenStream) -> TokenStream {
 /// Middleware application macro
 /// 
 /// Can be applied to controllers (affects all routes) or individual methods
+/// Usage: #[middleware("auth")] or #[middleware("auth", "logging")]
 #[proc_macro_attribute]
 pub fn middleware(args: TokenStream, input: TokenStream) -> TokenStream {
-    let _args = parse_macro_input!(args with syn::punctuated::Punctuated::<Meta, Token![,]>::parse_terminated);
+    // Parse middleware names - for now just acknowledge them
+    let _middleware_args = if !args.is_empty() {
+        // In a full implementation, would parse comma-separated string literals
+        // For now, just consume the args
+        Some(args.to_string())
+    } else {
+        None
+    };
     
     // Try to parse as function first, then as struct
     let input_clone = input.clone();

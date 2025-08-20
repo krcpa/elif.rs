@@ -196,12 +196,69 @@ impl PostController {
     }
 }
 
+/// Root controller to demonstrate root route handling
+pub struct HomeController;
+
+impl ElifController for HomeController {
+    fn name(&self) -> &str {
+        "HomeController"
+    }
+    
+    fn base_path(&self) -> &str {
+        "/" // Root base path
+    }
+    
+    fn routes(&self) -> Vec<ControllerRoute> {
+        vec![
+            // GET / - Home page
+            ControllerRoute::new(HttpMethod::GET, "", "home"),
+            
+            // GET /health - Health check
+            ControllerRoute::new(HttpMethod::GET, "/health", "health"),
+        ]
+    }
+    
+    fn handle_request(
+        &self,
+        method_name: String,
+        _request: ElifRequest,
+    ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
+        controller_dispatch!(self, &method_name, _request, {
+            "home" => Self::home,
+            "health" => Self::health
+        })
+    }
+}
+
+impl HomeController {
+    async fn home(&self, _request: ElifRequest) -> HttpResult<ElifResponse> {
+        Ok(ElifResponse::ok().json(&serde_json::json!({
+            "message": "Welcome to the elif.rs controller system!",
+            "version": "1.0.0",
+            "endpoints": [
+                "GET / - This home page",
+                "GET /health - Health check",
+                "GET /users - List users",
+                "GET /posts - List posts"
+            ]
+        }))?)
+    }
+    
+    async fn health(&self, _request: ElifRequest) -> HttpResult<ElifResponse> {
+        Ok(ElifResponse::ok().json(&serde_json::json!({
+            "status": "healthy",
+            "timestamp": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+        }))?)
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create router with controllers
+    // Create router with controllers - order matters for route precedence
     let router = ElifRouter::<()>::new()
-        .controller(UserController)
-        .controller(PostController);
+        .controller(HomeController)      // Root routes (/, /health)
+        .controller(UserController)      // /users/*
+        .controller(PostController);     // /posts/*
     
     // Create server with the router
     let server = Server::new()
@@ -209,15 +266,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("🚀 Server starting with controller system!");
     println!("Available routes:");
-    println!("  GET    /users          - List all users");
-    println!("  GET    /users/{{id}}    - Get user by ID");
-    println!("  POST   /users          - Create new user");
-    println!("  PUT    /users/{{id}}    - Update user");
-    println!("  DELETE /users/{{id}}    - Delete user");
-    println!("  GET    /posts          - List all posts");
-    println!("  GET    /posts/{{id}}    - Get post by ID");
+    println!("  GET    /               - Home page (HomeController)");
+    println!("  GET    /health         - Health check (HomeController)");
+    println!("  GET    /users          - List all users (UserController)");
+    println!("  GET    /users/{{id}}    - Get user by ID (UserController)");
+    println!("  POST   /users          - Create new user (UserController)");
+    println!("  PUT    /users/{{id}}    - Update user (UserController)");
+    println!("  DELETE /users/{{id}}    - Delete user (UserController)");
+    println!("  GET    /posts          - List all posts (PostController)");
+    println!("  GET    /posts/{{id}}    - Get post by ID (PostController)");
     println!("");
     println!("Example requests:");
+    println!("  curl http://localhost:3000/");
+    println!("  curl http://localhost:3000/health");
     println!("  curl http://localhost:3000/users");
     println!("  curl http://localhost:3000/users/1");
     println!("  curl -X POST http://localhost:3000/users");
