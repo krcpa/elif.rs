@@ -42,17 +42,15 @@ mod declarative_controllers {
     use super::*;
     
     /// User controller with declarative routing macros
+    /// 
+    /// Using a unit struct for simplicity in this example.
+    /// In real applications, controllers typically contain service dependencies
+    /// injected through dependency injection or passed as fields.
     #[controller("/users")]
     #[middleware("logging", "cors")]
-    pub struct UserController {
-        // In a real application, this would contain services/dependencies
-    }
+    pub struct UserController;
 
     impl UserController {
-        pub fn new() -> Self {
-            Self {}
-        }
-        
         /// GET /users - List all users
         #[get("")]
         #[middleware("cache")]
@@ -231,7 +229,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Note: This would need to be implemented in the macro system
         // For now, this is a demonstration of the intended API
         let router = ElifRouter::<()>::new()
-            .controller(UserController::new())
+            .controller(UserController)
             .controller(PostController)
             .controller(ApiController);
         

@@ -30,9 +30,7 @@ use elif_http::{controller, get, post, middleware, ElifRequest, ElifResponse, Ht
 
 #[controller("/users")]
 #[middleware("logging", "cors")]
-pub struct UserController {
-    // Your services and dependencies here
-}
+pub struct UserController;
 
 impl UserController {
     #[get("")]
