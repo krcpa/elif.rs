@@ -1,0 +1,5 @@
+error: expected `struct`
+ --> tests/ui/fail/controller_on_enum.rs:7:5
+  |
+7 | pub enum BadController {
+  |     ^^^^

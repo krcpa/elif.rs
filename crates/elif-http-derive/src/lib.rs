@@ -135,15 +135,17 @@ pub fn middleware(args: TokenStream, input: TokenStream) -> TokenStream {
         None
     };
     
+    // Convert to proc_macro2::TokenStream for cloning support
+    let input_tokens: proc_macro2::TokenStream = input.into();
+    
     // Try to parse as function first, then as struct
-    let input_clone = input.clone();
-    if let Ok(input_fn) = syn::parse::<ItemFn>(input_clone) {
+    if let Ok(input_fn) = syn::parse2::<ItemFn>(input_tokens.clone()) {
         // Method-level middleware
         let expanded = quote! {
             #input_fn
         };
         TokenStream::from(expanded)
-    } else if let Ok(input_struct) = syn::parse::<ItemStruct>(input.clone()) {
+    } else if let Ok(input_struct) = syn::parse2::<ItemStruct>(input_tokens.clone()) {
         // Controller-level middleware
         let expanded = quote! {
             #input_struct
@@ -151,7 +153,7 @@ pub fn middleware(args: TokenStream, input: TokenStream) -> TokenStream {
         TokenStream::from(expanded)
     } else {
         // Return original input if we can't parse it
-        input
+        input_tokens.into()
     }
 }
 

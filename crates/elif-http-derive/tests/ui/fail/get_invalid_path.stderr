@@ -1,0 +1,5 @@
+error: expected string literal
+ --> tests/ui/fail/get_invalid_path.rs:6:7
+  |
+6 | #[get(invalid_path)]
+  |       ^^^^^^^^^^^^

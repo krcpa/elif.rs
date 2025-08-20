@@ -1,0 +1,5 @@
+error: expected string literal
+ --> tests/ui/fail/controller_no_string.rs:6:14
+  |
+6 | #[controller(invalid_path)]
+  |              ^^^^^^^^^^^^
