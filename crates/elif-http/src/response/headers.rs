@@ -128,6 +128,11 @@ impl ElifHeaderMap {
         self.0.insert(name.0, value.0).map(ElifHeaderValue)
     }
 
+    /// Append a header to the map (supports multi-value headers like Set-Cookie)
+    pub fn append(&mut self, name: ElifHeaderName, value: ElifHeaderValue) -> bool {
+        self.0.append(name.0, value.0)
+    }
+
     /// Get a header value by name
     pub fn get(&self, name: &ElifHeaderName) -> Option<&ElifHeaderValue> {
         // SAFETY: This is safe because ElifHeaderValue is a transparent wrapper around HeaderValue

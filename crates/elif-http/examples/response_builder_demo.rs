@@ -97,6 +97,19 @@ impl UserController {
             .with_security_headers()
             .cache_control("no-cache").into())
     }
+
+    /// Response with multiple cookies - demonstrates multi-value header support
+    pub async fn login_response(&self) -> HttpResult<ElifResponse> {
+        let user = json!({"id": 1, "name": "Alice", "role": "admin"});
+        
+        Ok(response()
+            .json(user)
+            .cookie("session=abc123def456; Path=/; HttpOnly; Secure")
+            .cookie("csrf_token=xyz789; Path=/; SameSite=Strict")
+            .cookie("preferences=theme:dark,lang:en; Path=/; Max-Age=86400")
+            .header("x-auth-method", "password")
+            .created().into())
+    }
 }
 
 /// Comparison: Before vs After
@@ -184,6 +197,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("User not found", controller.user_not_found().await?),
         ("Validation error", controller.validation_error().await?),
         ("API response", controller.api_response().await?),
+        ("Login with cookies", controller.login_response().await?),
     ];
     
     for (name, response) in responses {
@@ -197,6 +211,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if response.has_header("access-control-allow-origin") {
             println!("  CORS: {:?}", response.get_header("access-control-allow-origin"));
         }
+        if response.has_header("set-cookie") {
+            println!("  Has Cookies: Multiple Set-Cookie headers supported");
+        }
+        if response.has_header("x-auth-method") {
+            println!("  Auth Method: {:?}", response.get_header("x-auth-method"));
+        }
         println!();
     }
     
@@ -204,6 +224,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🎯 Key Benefits:");
     println!("  • Laravel-style fluent API: response().json(data).created()");
     println!("  • Method chaining: .location().cache_control().header()");
+    println!("  • Multi-value header support: .cookie().cookie().cookie()");
     println!("  • No explicit error handling needed");
     println!("  • Intuitive status helpers: .ok(), .created(), .not_found()");
     println!("  • Built-in CORS and security helpers");
