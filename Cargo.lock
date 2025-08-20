@@ -1521,6 +1521,39 @@ dependencies = [
 [[package]]
 name = "elif-http"
 version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a4a6787c077f3f55a5da6cf052d554898484b192229d04b1a80af5d2c28b3e0"
+dependencies = [
+ "argon2",
+ "axum",
+ "axum-extra",
+ "chrono",
+ "elif-core 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-util",
+ "html-escape",
+ "http-body-util",
+ "hyper 1.6.0",
+ "log",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "service-builder",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-tungstenite 0.23.1",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "tungstenite 0.21.0",
+ "uuid",
+]
+
+[[package]]
+name = "elif-http"
+version = "0.8.0"
 dependencies = [
  "argon2",
  "axum",
@@ -1556,39 +1589,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "elif-http"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a4a6787c077f3f55a5da6cf052d554898484b192229d04b1a80af5d2c28b3e0"
-dependencies = [
- "argon2",
- "axum",
- "axum-extra",
- "chrono",
- "elif-core 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures-util",
- "html-escape",
- "http-body-util",
- "hyper 1.6.0",
- "log",
- "once_cell",
- "regex",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "service-builder",
- "thiserror 1.0.69",
- "tokio",
- "tokio-tungstenite 0.23.1",
- "tower 0.4.13",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
- "tungstenite 0.21.0",
- "uuid",
-]
-
-[[package]]
 name = "elif-http-derive"
 version = "0.1.0"
 dependencies = [
@@ -1616,7 +1616,7 @@ dependencies = [
  "axum",
  "chrono",
  "elif-core 0.5.0",
- "elif-http 0.7.0",
+ "elif-http 0.8.0",
  "elif-openapi-derive",
  "elif-orm 0.7.0",
  "inventory",
@@ -1732,7 +1732,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "elif-core 0.5.0",
- "elif-http 0.7.0",
+ "elif-http 0.8.0",
  "html-escape",
  "http 1.3.1",
  "log",
@@ -1789,7 +1789,7 @@ dependencies = [
  "axum",
  "chrono",
  "elif-core 0.5.0",
- "elif-http 0.7.0",
+ "elif-http 0.8.0",
  "elif-orm 0.7.0",
  "hyper 1.6.0",
  "rand 0.8.5",
@@ -1818,7 +1818,7 @@ dependencies = [
  "axum",
  "chrono",
  "elif-core 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "elif-http 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "elif-http 0.7.0",
  "elif-orm 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper 1.6.0",
  "rand 0.8.5",
