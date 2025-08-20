@@ -11,57 +11,60 @@ use serde_json::json;
 struct UserController;
 
 impl UserController {
-    /// List users - Clean Laravel-style syntax
+    /// List users - Clean Laravel-style syntax with terminal method
     pub async fn list(&self) -> HttpResult<ElifResponse> {
         let users = vec![
             json!({"id": 1, "name": "Alice"}),
             json!({"id": 2, "name": "Bob"}),
         ];
         
-        Ok(response().json(users).into())
+        response().json(users).send()
     }
     
-    /// Show user - with cache control
+    /// Show user - with cache control using .finish() terminal method
     pub async fn show(&self, _id: u32) -> HttpResult<ElifResponse> {
         let user = json!({"id": 1, "name": "Alice", "email": "alice@example.com"});
         
-        Ok(response()
+        response()
             .json(user)
             .cache_control("public, max-age=3600")
-            .header("x-cached", "true").into())
+            .header("x-cached", "true")
+            .finish()
     }
     
-    /// Create user - with location header and 201 status
+    /// Create user - with location header and 201 status using .send()
     pub async fn create(&self) -> HttpResult<ElifResponse> {
         let user = json!({"id": 123, "name": "Charlie", "created_at": "2024-01-01T00:00:00Z"});
         
-        Ok(response()
+        response()
             .json(user)
             .created()
             .location("/users/123")
-            .header("x-request-id", "abc-123").into())
+            .header("x-request-id", "abc-123")
+            .send()
     }
     
     /// Update user - using text response
     pub async fn update(&self) -> HttpResult<ElifResponse> {
-        Ok(response()
+        response()
             .text("User updated successfully")
-            .header("x-updated", "true").into())
+            .header("x-updated", "true")
+            .send()
     }
     
-    /// Delete user - no content response
+    /// Delete user - no content response  
     pub async fn delete(&self) -> HttpResult<ElifResponse> {
-        Ok(response().no_content().into())
+        response().no_content().send()
     }
     
     /// Redirect after login
     pub async fn redirect_after_login(&self) -> HttpResult<ElifResponse> {
-        Ok(response().redirect("/dashboard").into())
+        response().redirect("/dashboard").send()
     }
     
     /// Permanent redirect from old URL
     pub async fn redirect_permanent(&self) -> HttpResult<ElifResponse> {
-        Ok(response().redirect("/users").permanent().into())
+        response().redirect("/users").permanent().send()
     }
     
     /// Error response - not found
@@ -102,13 +105,14 @@ impl UserController {
     pub async fn login_response(&self) -> HttpResult<ElifResponse> {
         let user = json!({"id": 1, "name": "Alice", "role": "admin"});
         
-        Ok(response()
+        response()
             .json(user)
             .cookie("session=abc123def456; Path=/; HttpOnly; Secure")
             .cookie("csrf_token=xyz789; Path=/; SameSite=Strict")
             .cookie("preferences=theme:dark,lang:en; Path=/; Max-Age=86400")
             .header("x-auth-method", "password")
-            .created().into())
+            .created()
+            .send()
     }
 }
 
@@ -142,20 +146,21 @@ mod comparison {
     pub struct NewStyleController;
     
     impl NewStyleController {
-        /// NEW WAY (clean, Laravel-like)
+        /// NEW WAY (clean, Laravel-like with terminal methods)
         pub async fn list_new(&self) -> HttpResult<ElifResponse> {
             let users = vec!["Alice", "Bob"];
-            Ok(response().json(users).into())
+            response().json(users).send()  // <-- No Ok() wrapper needed!
         }
         
-        /// NEW WAY (fluent, readable)
+        /// NEW WAY (fluent, readable with terminal chaining)
         pub async fn create_new(&self) -> HttpResult<ElifResponse> {
             let user = json!({"id": 1, "name": "Alice"});
-            Ok(response()
+            response()
                 .json(user)
                 .created()
                 .location("/users/1")
-                .cache_control("no-cache").into())
+                .cache_control("no-cache")
+                .send()  // <-- Terminal method returns Result directly
         }
     }
 }
@@ -222,12 +227,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("✅ All response patterns work correctly!");
     println!("\n🎯 Key Benefits:");
-    println!("  • Laravel-style fluent API: response().json(data).created()");
+    println!("  • Laravel-style fluent API: response().json(data).created().send()");
     println!("  • Method chaining: .location().cache_control().header()");
     println!("  • Multi-value header support: .cookie().cookie().cookie()");
-    println!("  • No explicit error handling needed");
+    println!("  • Terminal methods: .send() and .finish() return Result directly");
+    println!("  • No explicit Ok() wrapper needed with terminal methods");
     println!("  • Intuitive status helpers: .ok(), .created(), .not_found()");
     println!("  • Built-in CORS and security helpers");
+    
+    println!("\n📝 Usage Patterns:");
+    println!("  OLD: Ok(response().json(data).created().into())");
+    println!("  NEW: response().json(data).created().send()");
     
     Ok(())
 }
