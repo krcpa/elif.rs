@@ -257,7 +257,7 @@ impl ResponseBuilder {
         self.body = Some(ResponseBody::Json(error_data));
         self.headers.push(("content-type".to_string(), "application/json".to_string()));
         if self.status.is_none() {
-            self.status = Some(ElifStatusCode::BAD_REQUEST);
+            self.status = Some(ElifStatusCode::UNPROCESSABLE_ENTITY);
         }
         self
     }
