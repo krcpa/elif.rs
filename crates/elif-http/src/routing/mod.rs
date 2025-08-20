@@ -22,7 +22,7 @@ pub mod extraction;
 pub mod compiler;
 
 // Legacy exports (for backward compatibility)
-pub use router::{Router as ElifRouter, Router, Route, RouteBuilder};
+pub use router::{Router as ElifRouter, Router, RouteBuilder};
 pub use params::{PathParams, RouteParam, ParamError, ParamType};
 pub use group::{RouteGroup, GroupBuilder};
 pub use versioned::{VersionedRouter, VersionedRouteBuilder, versioned_router, path_versioned_router, header_versioned_router};

@@ -40,7 +40,7 @@ pub use foundation::{GenericHandler, IntoElifResponse, RequestExtractor, BoxFutu
 // Re-export routing types
 pub use routing::{
     HttpMethod, RouteInfo, RouteRegistry,
-    ElifRouter, Route, RouteBuilder,
+    ElifRouter, RouteBuilder,
     PathParams, RouteParam as RoutingRouteParam, ParamError, ParamType,
     RouteGroup, GroupBuilder,
     // Versioned routing
