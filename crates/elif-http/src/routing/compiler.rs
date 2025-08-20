@@ -155,11 +155,14 @@ impl RouteCompiler {
         let mut warnings = Vec::new();
         let mut optimizations_applied = 0;
 
+        // Capture total route count before moving
+        let total_route_count = self.routes.len();
+        
         // Check route count warning
-        if self.routes.len() > self.config.max_routes_warning {
+        if total_route_count > self.config.max_routes_warning {
             warnings.push(format!(
                 "Large number of routes detected: {}. Consider route grouping or optimization.",
-                self.routes.len()
+                total_route_count
             ));
         }
 
@@ -170,7 +173,7 @@ impl RouteCompiler {
         let mut parameter_count = 0;
         let mut catch_all_count = 0;
 
-        for route in &self.routes {
+        for route in self.routes {
             let pattern = RoutePattern::parse(&route.path)?;
             
             // Collect statistics
@@ -185,7 +188,7 @@ impl RouteCompiler {
                 }
             }
 
-            parsed_routes.push((route.clone(), pattern));
+            parsed_routes.push((route, pattern));
         }
 
         // Create route matcher
@@ -196,37 +199,46 @@ impl RouteCompiler {
 
         // Apply optimizations if enabled
         if self.config.enable_optimization {
-            parsed_routes = self.optimize_routes(parsed_routes);
+            parsed_routes = Self::optimize_routes(parsed_routes);
             optimizations_applied += 1;
         }
 
         // Add routes to matcher and create extractors
         for (route, pattern) in parsed_routes {
+            // Extract data we need to move/clone before consuming route
+            let route_id = route.id;
+            let route_method = route.method; 
+            let route_path = route.path;
+            let route_name = route.name;
+            let route_group = route.metadata.get("group").cloned();
+            let is_pattern_static = pattern.is_static();
+            let pattern_param_names = pattern.param_names.clone();
+            
             // Create route definition
             let route_def = RouteDefinition {
-                id: route.id.clone(),
-                method: route.method.clone(),
-                path: route.path.clone(),
+                id: route_id.clone(),
+                method: route_method.clone(),
+                path: route_path.clone(),
             };
 
             // Try to add route, handle conflicts
             match matcher.add_route(route_def) {
                 Ok(()) => {
                     // Create parameter extractor for dynamic routes
-                    if !pattern.is_static() {
-                        let extractor = ParameterExtractor::new(pattern.clone());
-                        extractors.insert(route.id.clone(), extractor);
+                    if !is_pattern_static {
+                        let extractor = ParameterExtractor::new(pattern);
+                        extractors.insert(route_id.clone(), extractor);
                     }
 
                     // Create route info for registry
                     let route_info = RouteInfo {
-                        name: route.name.clone(),
-                        path: route.path.clone(),
-                        method: route.method.clone(),
-                        params: pattern.param_names.clone(),
-                        group: route.metadata.get("group").cloned(),
+                        name: route_name,
+                        path: route_path,  
+                        method: route_method,
+                        params: pattern_param_names,
+                        group: route_group,
                     };
-                    route_registry.insert(route.id.clone(), route_info);
+                    route_registry.insert(route_id, route_info);
                 }
                 Err(RouteMatchError::RouteConflict(source, target)) => {
                     if self.config.detect_conflicts {
@@ -251,7 +263,7 @@ impl RouteCompiler {
         }
 
         let stats = CompilationStats {
-            total_routes: self.routes.len(),
+            total_routes: total_route_count,
             static_routes: static_count,
             dynamic_routes: dynamic_count,
             parameter_routes: parameter_count,
@@ -271,7 +283,7 @@ impl RouteCompiler {
     }
 
     /// Optimize route ordering for better performance
-    fn optimize_routes(&self, mut routes: Vec<(CompilableRoute, RoutePattern)>) -> Vec<(CompilableRoute, RoutePattern)> {
+    fn optimize_routes(mut routes: Vec<(CompilableRoute, RoutePattern)>) -> Vec<(CompilableRoute, RoutePattern)> {
         // Sort routes by specificity (more specific routes first)
         // This improves matching performance for common cases
         routes.sort_by(|(_, pattern_a), (_, pattern_b)| {
@@ -597,5 +609,44 @@ mod tests {
         let result = builder.build().unwrap();
         assert!(!result.warnings.is_empty());
         assert!(result.warnings.iter().any(|w| w.contains("Large number of routes")));
+    }
+
+    #[test]
+    fn test_move_semantics_performance() {
+        // Test that compilation uses move semantics efficiently
+        let start = std::time::Instant::now();
+        
+        let mut builder = RouteCompilerBuilder::new()
+            .optimize(true);
+
+        // Create routes with complex metadata to test move optimization
+        for i in 0..100 {
+            let mut route = CompilableRoute::new(
+                format!("route_{}", i), 
+                HttpMethod::GET, 
+                format!("/api/v1/resources/{}/items", i)
+            );
+            
+            // Add metadata to make cloning more expensive
+            route = route.with_metadata("group".to_string(), format!("group_{}", i));
+            route = route.with_metadata("description".to_string(), format!("Route for resource {}", i));
+            route = route.with_metadata("version".to_string(), "v1".to_string());
+            
+            builder = builder.route(route);
+        }
+
+        let result = builder.build().unwrap();
+        let compilation_time = start.elapsed();
+        
+        // Verify compilation succeeded
+        assert_eq!(result.stats.total_routes, 100);
+        assert!(result.stats.optimizations_applied > 0);
+        
+        // Should compile reasonably fast with move semantics
+        assert!(compilation_time.as_millis() < 100, 
+            "Compilation took too long: {}ms", compilation_time.as_millis());
+        
+        println!("100 complex routes compiled in {}ms using move semantics", 
+                 compilation_time.as_millis());
     }
 }

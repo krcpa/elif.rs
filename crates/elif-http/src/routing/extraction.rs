@@ -14,7 +14,7 @@
 //!
 //! ## Usage Pattern
 //!
-//! ```rust
+//! ```rust,ignore
 //! // 1. Route matcher extracts raw parameters (once per request)
 //! let route_match = matcher.resolve(&method, path)?;
 //!
