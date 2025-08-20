@@ -2,6 +2,30 @@
 //!
 //! This module provides enhanced parameter extraction with type conversion,
 //! validation, and error handling for route parameters.
+//!
+//! ## Performance Design
+//!
+//! The extraction system is designed for optimal performance in request handling:
+//! 
+//! 1. **One-time validation**: Parameters are validated once during `ExtractedParams` 
+//!    creation, not on every access.
+//! 2. **Zero-copy access**: `get_str()` returns `&str` references without allocation.
+//! 3. **Efficient type conversion**: Only string parsing overhead, no constraint re-checking.
+//!
+//! ## Usage Pattern
+//!
+//! ```rust
+//! // 1. Route matcher extracts raw parameters (once per request)
+//! let route_match = matcher.resolve(&method, path)?;
+//!
+//! // 2. Parameter extractor validates constraints (once per request)  
+//! let extractor = extractors.get(&route_match.route_id)?;
+//! let params = extractor.extract_from_params(route_match.params)?;
+//!
+//! // 3. Multiple fast parameter accesses (no validation overhead)
+//! let user_id: i64 = params.get("id")?;        // Fast: only string->int parsing
+//! let user_name = params.get_str("name")?;     // Fast: zero-copy &str access
+//! ```
 
 use super::pattern::{ParamConstraint, RoutePattern};
 use std::collections::HashMap;
@@ -50,6 +74,9 @@ impl ExtractedParams {
     }
 
     /// Get a parameter converted to a specific type
+    /// 
+    /// Note: Parameters are pre-validated during ExtractedParams creation,
+    /// so this method only handles type conversion.
     pub fn get<T>(&self, name: &str) -> Result<T, ExtractionError>
     where
         T: FromStr,
@@ -59,20 +86,7 @@ impl ExtractedParams {
             .get(name)
             .ok_or_else(|| ExtractionError::Missing(name.to_string()))?;
 
-        // Validate against pattern constraints if available
-        if let Some(segment) = self.find_parameter_segment(name) {
-            if let super::pattern::PathSegment::Parameter { constraint, .. } = segment {
-                if !constraint.validate(value) {
-                    return Err(ExtractionError::ConstraintViolation {
-                        param: name.to_string(),
-                        constraint: format!("{:?}", constraint),
-                        value: value.clone(),
-                    });
-                }
-            }
-        }
-
-        // Convert to target type
+        // Convert to target type (constraints already validated during creation)
         value.parse::<T>().map_err(|e| ExtractionError::ConversionFailed {
             param: name.to_string(),
             error: e.to_string(),
@@ -128,29 +142,30 @@ impl ExtractedParams {
     /// Validate all parameters against their constraints
     pub fn validate_all(&self) -> Result<(), ExtractionError> {
         for (param_name, param_value) in &self.raw_params {
-            if let Some(segment) = self.find_parameter_segment(param_name) {
-                if let super::pattern::PathSegment::Parameter { constraint, .. } = segment {
-                    if !constraint.validate(param_value) {
-                        return Err(ExtractionError::ConstraintViolation {
-                            param: param_name.clone(),
-                            constraint: format!("{:?}", constraint),
-                            value: param_value.clone(),
-                        });
+            // Find the corresponding segment in the pattern
+            for segment in &self.pattern.segments {
+                match segment {
+                    super::pattern::PathSegment::Parameter { name, constraint } if name == param_name => {
+                        if !constraint.validate(param_value) {
+                            return Err(ExtractionError::ConstraintViolation {
+                                param: param_name.clone(),
+                                constraint: format!("{:?}", constraint),
+                                value: param_value.clone(),
+                            });
+                        }
+                        break;
                     }
+                    super::pattern::PathSegment::CatchAll { name } if name == param_name => {
+                        // Catch-all parameters don't have constraints to validate
+                        break;
+                    }
+                    _ => continue,
                 }
             }
         }
         Ok(())
     }
 
-    /// Find the parameter segment in the route pattern
-    fn find_parameter_segment(&self, name: &str) -> Option<&super::pattern::PathSegment> {
-        self.pattern.segments.iter().find(|segment| match segment {
-            super::pattern::PathSegment::Parameter { name: seg_name, .. } => seg_name == name,
-            super::pattern::PathSegment::CatchAll { name: seg_name } => seg_name == name,
-            _ => false,
-        })
-    }
 }
 
 /// Parameter extractor for route patterns
@@ -469,6 +484,35 @@ mod tests {
         
         let result: Result<i64, _> = extracted2.get("name");
         assert!(matches!(result.unwrap_err(), ExtractionError::ConversionFailed { .. }));
+    }
+
+    #[test]
+    fn test_parameter_access_performance() {
+        // Test that parameter access is fast (no redundant validation)
+        let pattern = RoutePattern::parse("/users/{id:int}/posts/{slug:alpha}").unwrap();
+        
+        let mut raw_params = HashMap::new();
+        raw_params.insert("id".to_string(), "123".to_string());
+        raw_params.insert("slug".to_string(), "helloworld".to_string());
+        
+        let extracted = ExtractedParams::from_route_match(raw_params, pattern).unwrap();
+        
+        let start = std::time::Instant::now();
+        
+        // Perform many parameter accesses
+        for _ in 0..10000 {
+            let id: i64 = extracted.get("id").unwrap();
+            let slug: String = extracted.get("slug").unwrap();
+            assert_eq!(id, 123);
+            assert_eq!(slug, "helloworld");
+        }
+        
+        let elapsed = start.elapsed();
+        
+        // Should be very fast since no constraint validation is done on each access
+        assert!(elapsed.as_millis() < 50, "Parameter access took too long: {}ms", elapsed.as_millis());
+        
+        println!("20,000 parameter accesses completed in {}μs", elapsed.as_micros());
     }
 
     #[test]
