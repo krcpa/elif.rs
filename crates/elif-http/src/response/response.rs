@@ -94,7 +94,10 @@ impl ElifResponse {
         V: AsRef<str>,
     {
         self.header(key, value)
-            .unwrap_or_else(|_| ElifResponse::internal_server_error())
+            .unwrap_or_else(|err| {
+                tracing::error!("Header creation failed in with_header: {}", err);
+                ElifResponse::internal_server_error()
+            })
     }
 
     /// Set JSON body (Simple - never panics)
@@ -103,7 +106,10 @@ impl ElifResponse {
     /// Returns 500 error response on serialization failure
     pub fn with_json<T: Serialize>(self, data: &T) -> Self {
         self.json(data)
-            .unwrap_or_else(|_| ElifResponse::internal_server_error())
+            .unwrap_or_else(|err| {
+                tracing::error!("JSON serialization failed in with_json: {}", err);
+                ElifResponse::internal_server_error()
+            })
     }
 
     /// Set text body (Simple - never fails)

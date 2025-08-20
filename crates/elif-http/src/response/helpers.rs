@@ -29,14 +29,20 @@ use std::collections::HashMap;
 pub fn json<T: Serialize>(data: &T) -> ElifResponse {
     ElifResponse::ok()
         .json(data)
-        .unwrap_or_else(|_| ElifResponse::internal_server_error())
+        .unwrap_or_else(|err| {
+            tracing::error!("JSON serialization failed in response helper: {}", err);
+            ElifResponse::internal_server_error()
+        })
 }
 
 /// Create a JSON response with custom status code
 pub fn json_status<T: Serialize>(data: &T, status: ElifStatusCode) -> ElifResponse {
     ElifResponse::with_status(status)
         .json(data)
-        .unwrap_or_else(|_| ElifResponse::internal_server_error())
+        .unwrap_or_else(|err| {
+            tracing::error!("JSON serialization failed in json_status helper: {}", err);
+            ElifResponse::internal_server_error()
+        })
 }
 
 /// Create a JSON response with headers
