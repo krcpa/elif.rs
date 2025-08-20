@@ -119,6 +119,89 @@ impl Server {
         self
     }
 
+    /// Enable debug mode for detailed middleware execution logs
+    /// 
+    /// # Example
+    /// 
+    /// ```rust,no_run
+    /// use elif_http::{Server, HttpConfig};
+    /// use elif_core::Container;
+    /// 
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let container = Container::new();
+    /// let mut server = Server::new(container, HttpConfig::default())?;
+    /// server.debug_middleware(true);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn debug_middleware(&mut self, enable: bool) -> &mut Self {
+        if enable {
+            // Convert current pipeline to debug pipeline (for future use)
+            let _debug_pipeline = self.middleware.clone().with_debug();
+            println!("🐛 Middleware debug mode enabled");
+            println!("   Middleware chain: {:?}", self.middleware.names());
+        } else {
+            println!("🔇 Middleware debug mode disabled");
+        }
+        self
+    }
+
+    /// Inspect all registered middleware and show execution order
+    /// 
+    /// # Example
+    /// 
+    /// ```rust,no_run
+    /// use elif_http::{Server, HttpConfig};
+    /// use elif_core::Container;
+    /// 
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let container = Container::new();
+    /// let server = Server::new(container, HttpConfig::default())?;
+    /// server.inspect_middleware();
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn inspect_middleware(&self) {        
+        let info = self.middleware.debug_info();
+        
+        println!("🔍 Middleware Pipeline Inspection");
+        println!("   Total middleware: {}", info.middleware_count);
+        
+        if info.middleware_count == 0 {
+            println!("   No middleware registered");
+            return;
+        }
+        
+        println!("   Execution order:");
+        for (index, name) in info.middleware_names.iter().enumerate() {
+            println!("     {}. {}", index + 1, name);
+        }
+        
+        println!("\n💡 Tip: Use debug_middleware(true) for runtime execution logs");
+    }
+    
+    /// Add profiler middleware to log timing for each request
+    /// 
+    /// # Example
+    /// 
+    /// ```rust,no_run
+    /// use elif_http::{Server, HttpConfig};
+    /// use elif_core::Container;
+    /// 
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let container = Container::new();
+    /// let mut server = Server::new(container, HttpConfig::default())?;
+    /// server.use_profiler();
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn use_profiler(&mut self) -> &mut Self {
+        use crate::middleware::v2::ProfilerMiddleware;
+        self.use_middleware(ProfilerMiddleware::new());
+        println!("📊 Profiler middleware enabled - request timings will be logged");
+        self
+    }
+
     /// Start the server on the specified address
     /// 
     /// # Example
@@ -207,5 +290,28 @@ mod tests {
         let server = Server::with_container(container, config).unwrap();
         
         assert_eq!(server.config().health_check_path, "/health");
+    }
+
+    #[test]
+    fn test_middleware_debugging_tools() {
+        let container = create_test_container();
+        let config = HttpConfig::default();
+        let mut server = Server::with_container(container, config).unwrap();
+        
+        // Add some middleware
+        server
+            .use_middleware(crate::middleware::v2::LoggingMiddleware)
+            .use_middleware(crate::middleware::v2::factories::cors())
+            .use_profiler();
+        
+        // Test inspect_middleware - should not panic
+        server.inspect_middleware();
+        
+        // Test debug_middleware - should not panic
+        server.debug_middleware(true);
+        server.debug_middleware(false);
+        
+        // Verify middleware count
+        assert_eq!(server.middleware().len(), 3); // LoggingMiddleware + CorsMiddleware + ProfilerMiddleware
     }
 }

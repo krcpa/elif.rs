@@ -27,7 +27,10 @@ enum Commands {
     },
     
     /// Generate code from resource specifications
-    Generate,
+    Generate {
+        #[command(subcommand)]
+        generate_command: Option<GenerateCommands>,
+    },
     
     /// Route management
     Route {
@@ -148,6 +151,27 @@ enum Commands {
     Version {
         #[command(subcommand)]
         version_command: ApiVersionCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum GenerateCommands {
+    /// Generate middleware with handle(request, next) pattern
+    Middleware {
+        /// Middleware name (e.g., Auth, RateLimit, Cors)
+        name: String,
+        
+        /// Include debugging and instrumentation
+        #[arg(long)]
+        debug: bool,
+        
+        /// Generate with conditional execution (skip paths, only methods)
+        #[arg(long)]
+        conditional: bool,
+        
+        /// Include basic tests
+        #[arg(long)]
+        tests: bool,
     },
 }
 
@@ -812,8 +836,15 @@ async fn main() -> Result<(), ElifError> {
         Commands::New { name, path } => {
             new::create_app(&name, path.as_deref()).await?;
         }
-        Commands::Generate => {
-            generate::run().await?;
+        Commands::Generate { generate_command } => {
+            match generate_command {
+                Some(GenerateCommands::Middleware { name, debug, conditional, tests }) => {
+                    generate::middleware(&name, debug, conditional, tests).await?;
+                }
+                None => {
+                    generate::run().await?;
+                }
+            }
         }
         Commands::Route { route_command } => {
             match route_command {

@@ -309,6 +309,16 @@ pub mod factories {
     pub fn body_limit(max_bytes: u64) -> BodyLimitMiddleware {
         BodyLimitMiddleware::new(max_bytes)
     }
+    
+    /// Profiler middleware factory
+    pub fn profiler() -> ProfilerMiddleware {
+        ProfilerMiddleware::new()
+    }
+    
+    /// Disabled profiler middleware factory 
+    pub fn profiler_disabled() -> ProfilerMiddleware {
+        ProfilerMiddleware::disabled()
+    }
 }
 
 /// Middleware composition utilities
@@ -844,6 +854,51 @@ impl Middleware for LoggingMiddleware {
     
     fn name(&self) -> &'static str {
         "LoggingMiddleware"
+    }
+}
+
+/// Middleware profiler that logs timing for each middleware in the pipeline
+#[derive(Debug)]
+pub struct ProfilerMiddleware {
+    enabled: bool,
+}
+
+impl ProfilerMiddleware {
+    pub fn new() -> Self {
+        Self { enabled: true }
+    }
+    
+    pub fn disabled() -> Self {
+        Self { enabled: false }
+    }
+}
+
+impl Middleware for ProfilerMiddleware {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        let enabled = self.enabled;
+        Box::pin(async move {
+            if !enabled {
+                return next.run(request).await;
+            }
+            
+            let start = std::time::Instant::now();
+            let method = request.method.clone();
+            let path = request.path().to_string();
+            
+            println!("⏱️  [PROFILER] Starting request {} {}", method, path);
+            
+            let response = next.run(request).await;
+            
+            let duration = start.elapsed();
+            println!("⏱️  [PROFILER] Completed {} {} in {:?} - Status: {}", 
+                method, path, duration, response.status_code());
+            
+            response
+        })
+    }
+    
+    fn name(&self) -> &'static str {
+        "ProfilerMiddleware"
     }
 }
 

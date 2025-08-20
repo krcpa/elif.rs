@@ -1,0 +1,74 @@
+use elif::prelude::*;
+use elif_http::middleware::v2::{Middleware, Next, NextFuture};
+use elif_http::request::ElifRequest;
+use elif_http::response::ElifResponse;
+
+/// {{DESCRIPTION}}
+#[derive(Debug)]
+pub struct {{STRUCT_NAME}} {
+    // Add your configuration fields here
+    // Example: 
+    // pub config_value: String,
+}
+
+impl {{STRUCT_NAME}} {
+    /// Create a new {{STRUCT_NAME}}
+    pub fn new(/* Add your parameters here */) -> Self {
+        Self {
+            // Initialize your fields
+        }
+    }
+}
+
+impl Middleware for {{STRUCT_NAME}} {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        Box::pin(async move {
+            // Before request processing
+            // Add your pre-processing logic here
+            
+            // Process the request through the rest of the middleware chain
+            let response = next.run(request).await;
+            
+            // After response processing
+            // Add your post-processing logic here
+            
+            response
+        })
+    }
+    
+    fn name(&self) -> &'static str {
+        "{{STRUCT_NAME}}"
+    }
+}
+
+{{CONDITIONAL_IMPL}}
+
+{{DEBUG_IMPL}}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use elif_http::request::{ElifMethod, ElifRequest};
+    use elif_http::response::ElifResponse;
+    use elif_http::middleware::v2::MiddlewarePipelineV2;
+
+    #[tokio::test]
+    async fn test_{{SNAKE_NAME}}_middleware() {
+        let middleware = {{STRUCT_NAME}}::new();
+        let pipeline = MiddlewarePipelineV2::new().add(middleware);
+
+        let request = ElifRequest::new(
+            ElifMethod::GET,
+            "/test".parse().unwrap(),
+            elif_http::response::headers::ElifHeaderMap::new(),
+        );
+
+        let response = pipeline.execute(request, |_req| {
+            Box::pin(async move {
+                ElifResponse::ok().text("Test response")
+            })
+        }).await;
+
+        assert_eq!(response.status_code(), elif_http::response::status::ElifStatusCode::OK);
+    }
+}
