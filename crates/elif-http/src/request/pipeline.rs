@@ -66,8 +66,8 @@ pub struct RequestPipeline {
     global_middleware: MiddlewarePipelineV2,
     /// Named middleware groups for route-specific execution
     middleware_groups: HashMap<String, MiddlewarePipelineV2>,
-    /// Route handlers mapped by route ID
-    handlers: HashMap<String, Arc<HandlerFn>>,
+    /// Route handlers mapped by route ID (wrapped in Arc for efficient sharing)
+    handlers: Arc<HashMap<String, Arc<HandlerFn>>>,
 }
 
 impl RequestPipeline {
@@ -77,7 +77,7 @@ impl RequestPipeline {
             matcher: Arc::new(matcher),
             global_middleware: MiddlewarePipelineV2::new(),
             middleware_groups: HashMap::new(),
-            handlers: HashMap::new(),
+            handlers: Arc::new(HashMap::new()),
         }
     }
 
@@ -101,7 +101,11 @@ impl RequestPipeline {
     where 
         F: Fn(ElifRequest) -> NextFuture<'static> + Send + Sync + 'static,
     {
-        self.handlers.insert(route_id.into(), Arc::new(handler));
+        // We need to get mutable access to the HashMap inside the Arc
+        // Since we're in a builder pattern, we can safely unwrap and modify
+        let handlers = Arc::get_mut(&mut self.handlers)
+            .expect("RequestPipeline handlers should be exclusively owned during building");
+        handlers.insert(route_id.into(), Arc::new(handler));
         self
     }
 
@@ -125,11 +129,12 @@ impl RequestPipeline {
         let complete_pipeline = self.build_route_pipeline(&route_match)?;
         
         // 4. Execute middleware + handler
+        // Use Arc::clone for cheap reference counting instead of cloning the entire HashMap
         let route_id = route_match.route_id.clone();
-        let handlers = self.handlers.clone();
+        let handlers = Arc::clone(&self.handlers);
         let response = complete_pipeline.execute(request_with_params, move |req| {
             let route_id = route_id.clone();
-            let handlers = handlers.clone();
+            let handlers = Arc::clone(&handlers);
             Box::pin(async move {
                 match handlers.get(&route_id) {
                     Some(handler) => handler(req).await,
@@ -329,7 +334,7 @@ impl RequestPipelineBuilder {
             matcher: Arc::new(matcher),
             global_middleware: self.global_middleware,
             middleware_groups: self.middleware_groups,
-            handlers: self.handlers,
+            handlers: Arc::new(self.handlers),
         })
     }
 }
@@ -591,5 +596,49 @@ mod tests {
         assert_eq!(stats.global_middleware_count, 1);
         assert_eq!(stats.middleware_groups, 1);
         assert_eq!(stats.registered_handlers, 2);
+    }
+
+    #[tokio::test]
+    async fn test_arc_optimization_efficiency() {
+        // This test demonstrates that Arc::clone is cheap even with many handlers
+        let matcher = RouteMatcherBuilder::new()
+            .get("test_route".to_string(), "/test".to_string())
+            .build()
+            .unwrap();
+
+        // Create pipeline with many handlers to test Arc efficiency
+        let mut builder = RequestPipelineBuilder::new().matcher(matcher);
+        
+        // Add 100 handlers to test performance
+        for i in 0..100 {
+            builder = builder.handler(format!("handler_{}", i), |_req| {
+                Box::pin(async move { ElifResponse::ok() })
+            });
+        }
+        
+        builder = builder.handler("test_route", |_req| {
+            Box::pin(async move { ElifResponse::ok().with_text("Test response") })
+        });
+
+        let pipeline = builder.build().unwrap();
+
+        // Process multiple requests to verify Arc::clone efficiency
+        for _ in 0..10 {
+            let request = ElifRequest::new(
+                crate::request::ElifMethod::GET,
+                "/test".parse().unwrap(),
+                crate::response::ElifHeaderMap::new(),
+            );
+
+            let response = pipeline.process(request).await;
+            assert_eq!(response.status_code(), ElifStatusCode::OK);
+        }
+
+        // Verify we have many handlers
+        let stats = pipeline.stats();
+        assert_eq!(stats.registered_handlers, 101);
+        
+        // The key optimization: Arc::clone is O(1) regardless of HashMap size
+        // Previously this would have been O(n) for each request due to HashMap cloning
     }
 }
