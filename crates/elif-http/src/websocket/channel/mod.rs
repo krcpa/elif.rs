@@ -21,19 +21,20 @@
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let manager = ChannelManager::new();
-//!     let connection_id = ConnectionId::new();
+//!     let creator_id = ConnectionId::new();
+//!     let joiner_id = ConnectionId::new();
 //!     
 //!     // Create a public channel
 //!     let channel_id = manager.create_channel(
 //!         "general".to_string(),
 //!         ChannelType::Public,
-//!         Some(connection_id),
+//!         Some(creator_id),
 //!     ).await?;
 //!     
-//!     // Join the channel
+//!     // Join the channel with a different connection
 //!     manager.join_channel(
 //!         channel_id,
-//!         connection_id,
+//!         joiner_id,
 //!         None, // No password needed for public channels
 //!         Some("Alice".to_string()),
 //!     ).await?;

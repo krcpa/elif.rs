@@ -35,18 +35,22 @@ impl Auth {
 
 impl Middleware for Auth {
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
-        Box::pin(async move {
-            // Before request processing
-            // Add your pre-processing logic here
-            
-            // Process the request through the rest of the middleware chain
-            let response = next.run(request).await;
-            
-            // After response processing
-            // Add your post-processing logic here
-            
-            response
-        })
+        // Simple pass-through - clean and concise!
+        next.call(request)
+        
+        // For more complex middleware with pre/post processing:
+        // Box::pin(async move {
+        //     // Before request processing
+        //     // Add your pre-processing logic here
+        //     
+        //     // Process the request through the rest of the middleware chain
+        //     let response = next.run(request).await;
+        //     
+        //     // After response processing
+        //     // Add your post-processing logic here
+        //     
+        //     response
+        // })
     }
     
     fn name(&self) -> &'static str {
@@ -69,6 +73,55 @@ let mut server = Server::new(container, HttpConfig::default())?;
 // Add middleware
 server.use_middleware(Auth::new());
 ```
+
+## API Simplification: `next.call()` vs `Box::pin(async move {})`
+
+Elif provides two approaches for middleware implementation:
+
+### ✅ Recommended: `next.call()` for Simple Pass-through
+
+For middleware that only need pre-processing or simple pass-through:
+
+```rust
+impl Middleware for SimpleAuth {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        // Add headers, validate, etc.
+        let validated_request = validate_request(request);
+        
+        // Clean, concise API!
+        next.call(validated_request)
+    }
+}
+```
+
+### Advanced: `Box::pin(async move {})` for Complex Logic
+
+Use the full async pattern when you need:
+- Post-processing of responses
+- Conditional returns (early exits)
+- Complex async operations
+
+```rust
+impl Middleware for ComplexAuth {
+    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+        Box::pin(async move {
+            // Pre-processing with early returns
+            if request.path().starts_with("/public/") {
+                return next.run(request).await;
+            }
+            
+            // Process request
+            let response = next.run(request).await;
+            
+            // Post-processing
+            response.add_header("X-Processed", "true")
+                .unwrap_or(response)
+        })
+    }
+}
+```
+
+**Rule of thumb**: Start with `next.call()` and only use `Box::pin()` when you need the extra complexity.
 
 ## Middleware Concepts
 

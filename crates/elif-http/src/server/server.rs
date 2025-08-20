@@ -98,11 +98,16 @@ impl Server {
     /// use elif_core::Container;
     /// use std::sync::Arc;
     /// 
+    /// # #[derive(Debug)]
     /// # struct LoggingMiddleware;
     /// # impl LoggingMiddleware { 
     /// #     fn default() -> Self { LoggingMiddleware } 
     /// # }
-    /// # impl elif_http::Middleware for LoggingMiddleware {}
+    /// # impl elif_http::Middleware for LoggingMiddleware {
+    /// #     fn handle(&self, request: elif_http::ElifRequest, next: elif_http::Next) -> std::pin::Pin<Box<dyn std::future::Future<Output = elif_http::ElifResponse> + Send + 'static>> {
+    /// #         next.call(request)
+    /// #     }
+    /// # }
     /// 
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let container = Container::new();

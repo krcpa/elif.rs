@@ -3,16 +3,16 @@ use elif_http::middleware::v2::{Middleware, Next, NextFuture};
 use elif_http::request::ElifRequest;
 use elif_http::response::ElifResponse;
 
-/// {{DESCRIPTION}}
+/// Auth middleware
 #[derive(Debug)]
-pub struct {{STRUCT_NAME}} {
+pub struct Auth {
     // Add your configuration fields here
     // Example: 
     // pub config_value: String,
 }
 
-impl {{STRUCT_NAME}} {
-    /// Create a new {{STRUCT_NAME}}
+impl Auth {
+    /// Create a new Auth
     pub fn new(/* Add your parameters here */) -> Self {
         Self {
             // Initialize your fields
@@ -20,7 +20,7 @@ impl {{STRUCT_NAME}} {
     }
 }
 
-impl Middleware for {{STRUCT_NAME}} {
+impl Middleware for Auth {
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
         // Before request processing
         // Add your pre-processing logic here
@@ -29,22 +29,37 @@ impl Middleware for {{STRUCT_NAME}} {
         next.call(request)
         
         // Note: For post-processing, you would still need Box::pin(async move { ... })
-        // Example with post-processing:
-        // Box::pin(async move {
-        //     let response = next.run(request).await;
-        //     // Your post-processing logic here
-        //     response
-        // })
+        // but most middleware only need pre-processing or simple pass-through
     }
     
     fn name(&self) -> &'static str {
-        "{{STRUCT_NAME}}"
+        "Auth"
     }
 }
 
-{{CONDITIONAL_IMPL}}
 
-{{DEBUG_IMPL}}
+/// Conditional wrapper for Auth
+pub type ConditionalAuth = elif_http::middleware::v2::ConditionalMiddleware<Auth>;
+
+impl Auth {
+    /// Create a conditional version of this middleware
+    pub fn conditional(self) -> ConditionalAuth {
+        elif_http::middleware::v2::ConditionalMiddleware::new(self)
+    }
+}
+
+
+
+/// Debug instrumentation for Auth
+pub type InstrumentedAuth = elif_http::middleware::v2::introspection::InstrumentedMiddleware<Auth>;
+
+impl Auth {
+    /// Create an instrumented version of this middleware for debugging
+    pub fn instrumented(self, name: String) -> InstrumentedAuth {
+        elif_http::middleware::v2::introspection::instrument(self, name)
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -54,8 +69,8 @@ mod tests {
     use elif_http::middleware::v2::MiddlewarePipelineV2;
 
     #[tokio::test]
-    async fn test_{{SNAKE_NAME}}_middleware() {
-        let middleware = {{STRUCT_NAME}}::new();
+    async fn test_auth_middleware() {
+        let middleware = Auth::new();
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
 
         let request = ElifRequest::new(
