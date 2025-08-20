@@ -226,12 +226,19 @@ where
         let base = base.trim_end_matches('/');
         let route = route.trim_start_matches('/');
         
-        if route.is_empty() {
+        let path = if route.is_empty() {
             base.to_string()
         } else if base.is_empty() {
             format!("/{}", route)
         } else {
             format!("{}/{}", base, route)
+        };
+
+        // Ensure path is never empty to prevent Axum panics
+        if path.is_empty() {
+            "/".to_string()
+        } else {
+            path
         }
     }
 
@@ -838,6 +845,133 @@ mod tests {
         let controller_registry = router.controller_registry();
         let ctrl_reg = controller_registry.lock().unwrap();
         assert!(ctrl_reg.get_controller("TestController").is_some());
+    }
+
+    #[test]
+    fn test_combine_paths_edge_cases() {
+        let router = Router::<()>::new();
+        
+        // Test normal cases
+        assert_eq!(router.combine_paths("/users", "/posts"), "/users/posts");
+        assert_eq!(router.combine_paths("/users", "posts"), "/users/posts");
+        assert_eq!(router.combine_paths("users", "/posts"), "users/posts");
+        assert_eq!(router.combine_paths("users", "posts"), "users/posts");
+        
+        // Test edge cases that could produce empty paths
+        assert_eq!(router.combine_paths("", ""), "/");  // Both empty -> root
+        assert_eq!(router.combine_paths("/", ""), "/"); // Base is root, route empty
+        assert_eq!(router.combine_paths("", "/"), "/"); // Base empty, route is root
+        assert_eq!(router.combine_paths("/", "/"), "/"); // Both are root
+        
+        // Test with trailing/leading slashes
+        assert_eq!(router.combine_paths("/users/", ""), "/users");
+        assert_eq!(router.combine_paths("/users/", "/posts"), "/users/posts");
+        assert_eq!(router.combine_paths("/", "posts"), "/posts");
+        assert_eq!(router.combine_paths("users", "/"), "users");
+    }
+
+    #[test]
+    fn test_controller_with_root_base_path() {
+        use crate::controller::{ElifController, ControllerRoute};
+        use std::pin::Pin;
+        use std::future::Future;
+
+        // Create a controller with root base path
+        struct RootController;
+
+        impl ElifController for RootController {
+            fn name(&self) -> &str { "RootController" }
+            fn base_path(&self) -> &str { "/" } // Root base path
+            
+            fn routes(&self) -> Vec<ControllerRoute> {
+                vec![
+                    ControllerRoute::new(HttpMethod::GET, "", "home"), // Should become "/"
+                    ControllerRoute::new(HttpMethod::GET, "/health", "health"), // Should become "/health"
+                ]
+            }
+            
+            fn handle_request(
+                &self,
+                method_name: String,
+                _request: ElifRequest,
+            ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
+                Box::pin(async move {
+                    match method_name.as_str() {
+                        "home" => Ok(ElifResponse::ok().text("Home")),
+                        "health" => Ok(ElifResponse::ok().text("Health")),
+                        _ => Ok(ElifResponse::not_found().text("Not found")),
+                    }
+                })
+            }
+        }
+
+        let controller = RootController;
+        let router = Router::<()>::new().controller(controller);
+        
+        // Check that routes were registered correctly
+        let registry = router.registry();
+        let reg = registry.lock().unwrap();
+        let routes = reg.all_routes();
+        
+        // Should have 2 routes
+        assert_eq!(routes.len(), 2);
+        
+        // Verify paths are correct (one should be "/" and one should be "/health")
+        let paths: Vec<&String> = routes.values().map(|route| &route.path).collect();
+        assert!(paths.contains(&&"/".to_string()));
+        assert!(paths.contains(&&"/health".to_string()));
+    }
+
+    #[test]
+    fn test_controller_with_empty_base_path() {
+        use crate::controller::{ElifController, ControllerRoute};
+        use std::pin::Pin;
+        use std::future::Future;
+
+        // Create a controller with empty base path
+        struct EmptyBaseController;
+
+        impl ElifController for EmptyBaseController {
+            fn name(&self) -> &str { "EmptyBaseController" }
+            fn base_path(&self) -> &str { "" } // Empty base path
+            
+            fn routes(&self) -> Vec<ControllerRoute> {
+                vec![
+                    ControllerRoute::new(HttpMethod::GET, "", "root"), // Should become "/"
+                    ControllerRoute::new(HttpMethod::GET, "/api", "api"), // Should become "/api"
+                ]
+            }
+            
+            fn handle_request(
+                &self,
+                method_name: String,
+                _request: ElifRequest,
+            ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
+                Box::pin(async move {
+                    match method_name.as_str() {
+                        "root" => Ok(ElifResponse::ok().text("Root")),
+                        "api" => Ok(ElifResponse::ok().text("API")),
+                        _ => Ok(ElifResponse::not_found().text("Not found")),
+                    }
+                })
+            }
+        }
+
+        let controller = EmptyBaseController;
+        let router = Router::<()>::new().controller(controller);
+        
+        // Check that routes were registered correctly
+        let registry = router.registry();
+        let reg = registry.lock().unwrap();
+        let routes = reg.all_routes();
+        
+        // Should have 2 routes  
+        assert_eq!(routes.len(), 2);
+        
+        // Verify paths are correct
+        let paths: Vec<&String> = routes.values().map(|route| &route.path).collect();
+        assert!(paths.contains(&&"/".to_string()));
+        assert!(paths.contains(&&"/api".to_string()));
     }
 
     #[test]
