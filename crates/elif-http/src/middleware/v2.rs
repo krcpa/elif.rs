@@ -36,6 +36,12 @@ impl Next {
     pub async fn run(self, request: ElifRequest) -> ElifResponse {
         (self.handler)(request).await
     }
+
+    /// Run the rest of the middleware chain and return a boxed future
+    /// This is a convenience method for middleware implementations
+    pub fn call(self, request: ElifRequest) -> NextFuture<'static> {
+        Box::pin(async move { self.run(request).await })
+    }
 }
 
 /// New middleware trait with Laravel-style handle(request, next) pattern
