@@ -181,23 +181,18 @@ fn generate_injected_method(
                         modified_inputs.push(input.clone());
                         has_existing_request_param = true;
                     } else {
-                        // Check if this parameter is supported
-                        if !has_request_attr {
-                            // Without #[request], unsupported parameter type - generate compile-time error
-                            return syn::Error::new_spanned(
-                                pat_type,
-                                format!(
-                                    "Unsupported parameter '{}' of type '{}'. Only path parameters (specified in route) and ElifRequest are supported. \
-                                    Hint: Remove this parameter, add it to the route path like '/users/{{{}}}' and annotate with #[param({}: type)], or use #[request] to enable automatic request injection.",
-                                    param_name, param_type_str, param_name, param_name
-                                )
+                        // Unsupported parameter type - generate compile-time error
+                        // Any parameter that is not a path parameter or ElifRequest is not supported
+                        return syn::Error::new_spanned(
+                            pat_type,
+                            format!(
+                                "Unsupported parameter '{}' of type '{}'. Only path parameters (specified in route) and ElifRequest are supported. \
+                                Hint: Remove this parameter, add it to the route path like '/users/{{{}}}' and annotate with #[param({}: type)], or use #[request] to enable automatic request injection.",
+                                param_name, param_type_str, param_name, param_name
                             )
-                            .to_compile_error()
-                            .into();
-                        }
-                        // Regular parameter with #[request] - keep as-is
-                        call_args.push(quote! { #pat_ident });
-                        modified_inputs.push(input.clone());
+                        )
+                        .to_compile_error()
+                        .into();
                     }
                 }
             }
