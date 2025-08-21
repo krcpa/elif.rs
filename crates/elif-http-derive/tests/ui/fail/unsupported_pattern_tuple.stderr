@@ -1,0 +1,5 @@
+error: Unsupported tuple destructuring pattern in parameter. Hint: Use individual parameters instead of tuple destructuring. Example: Change '(a, b): (Type1, Type2)' to 'a: Type1, b: Type2'.
+  --> tests/ui/fail/unsupported_pattern_tuple.rs:18:9
+   |
+18 |     pub async fn get_coords(&self, (x, y): (u32, u32)) -> String {
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
