@@ -13,8 +13,8 @@ fn get_user_by_name(name: String) -> String {
 }
 
 #[post("/users")]
-#[body(UserData)]  // Type safety for request body
-fn create_user(data: ElifJson<UserData>) -> String {
+#[body(data: UserData)]  // Type safety for request body
+fn create_user(data: UserData) -> String {
     "created".to_string()
 }
 
@@ -22,9 +22,6 @@ struct UserData {
     name: String,
     email: String,
 }
-
-// Mock ElifJson for compilation
-struct ElifJson<T>(T);
 
 fn main() {
     println!("Type safety test compilation successful");

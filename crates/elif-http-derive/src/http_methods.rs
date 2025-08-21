@@ -6,7 +6,8 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemFn};
 
-use crate::utils::{validate_route_path, extract_path_parameters, extract_function_parameters, extract_param_types_from_attrs, has_request_attribute, extract_request_param_name};
+use crate::utils::{validate_route_path, extract_path_parameters, extract_function_parameters, extract_param_types_from_attrs, has_request_attribute, extract_request_param_name, has_body_attribute, extract_body_param_from_attrs};
+use crate::params::BodyParamType;
 use std::collections::HashMap;
 
 /// Generate HTTP method macros with parameter extraction
@@ -51,18 +52,23 @@ pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStrea
     // Apply injection if:
     // 1. Traditional: There are path parameters + #[param] annotations
     // 2. New: #[request] attribute is present (automatic ElifRequest injection)
+    // 3. New: #[body] attribute is present (automatic body parameter injection)
     let has_self = input_fn.sig.inputs.iter().any(|arg| matches!(arg, syn::FnArg::Receiver(_)));
     let has_param_annotations = !param_types.is_empty();
     let has_request_attr = has_request_attribute(&input_fn.attrs);
+    let has_body_attr = has_body_attribute(&input_fn.attrs);
     let has_path_param_injection = !path_params.is_empty() 
         && has_self
         && has_param_annotations
         && has_injectable_params(&fn_params, &path_params);
-    let needs_injection = has_path_param_injection || (has_self && has_request_attr);
+    let needs_injection = has_path_param_injection || (has_self && has_request_attr) || (has_self && has_body_attr);
     
     if needs_injection {
+        // Extract body parameter information
+        let body_param = extract_body_param_from_attrs(&input_fn.attrs);
+        
         // Generate wrapper method with parameter injection
-        generate_injected_method(&input_fn, &path_params, &param_types, has_request_attr)
+        generate_injected_method(&input_fn, &path_params, &param_types, has_request_attr, body_param)
     } else {
         // Generate parameter validation comments
         let param_docs = if !path_params.is_empty() {
@@ -130,12 +136,13 @@ fn has_injectable_params(fn_params: &[(String, String)], path_params: &[String])
     false
 }
 
-/// Generate a wrapper method that injects path parameters and/or request into the original method
+/// Generate a wrapper method that injects path parameters, body parameters, and/or request into the original method
 fn generate_injected_method(
     input_fn: &ItemFn, 
     path_params: &[String], 
     param_types: &HashMap<String, String>,
-    has_request_attr: bool
+    has_request_attr: bool,
+    body_param: Option<(String, BodyParamType)>
 ) -> TokenStream {
     let original_name = &input_fn.sig.ident;
     let original_fn_name = quote::format_ident!("{}_original", original_name);
@@ -180,15 +187,34 @@ fn generate_injected_method(
                         call_args.push(quote! { request });
                         modified_inputs.push(input.clone());
                         has_existing_request_param = true;
+                    } else if let Some((body_param_name, _)) = &body_param {
+                        if param_name == *body_param_name {
+                            // This is a body parameter - will be handled below
+                            let param_ident = &pat_ident.ident;
+                            call_args.push(quote! { #param_ident });
+                            modified_inputs.push(input.clone());
+                        } else {
+                            // Unsupported parameter type - generate compile-time error
+                            return syn::Error::new_spanned(
+                                pat_type,
+                                format!(
+                                    "Unsupported parameter '{}' of type '{}'. Only path parameters (specified in route), body parameters (annotated with #[body]), and ElifRequest are supported. \
+                                    Hint: Remove this parameter, add it to the route path like '/users/{{{}}}' and annotate with #[param({}: type)], annotate with #[body({}: Type)], or use #[request] to enable automatic request injection.",
+                                    param_name, param_type_str, param_name, param_name, param_name
+                                )
+                            )
+                            .to_compile_error()
+                            .into();
+                        }
                     } else {
                         // Unsupported parameter type - generate compile-time error
                         // Any parameter that is not a path parameter or ElifRequest is not supported
                         return syn::Error::new_spanned(
                             pat_type,
                             format!(
-                                "Unsupported parameter '{}' of type '{}'. Only path parameters (specified in route) and ElifRequest are supported. \
-                                Hint: Remove this parameter, add it to the route path like '/users/{{{}}}' and annotate with #[param({}: type)], or use #[request] to enable automatic request injection.",
-                                param_name, param_type_str, param_name, param_name
+                                "Unsupported parameter '{}' of type '{}'. Only path parameters (specified in route), body parameters (annotated with #[body]), and ElifRequest are supported. \
+                                Hint: Remove this parameter, add it to the route path like '/users/{{{}}}' and annotate with #[param({}: type)], annotate with #[body({}: Type)], or use #[request] to enable automatic request injection.",
+                                param_name, param_type_str, param_name, param_name, param_name
                             )
                         )
                         .to_compile_error()
@@ -209,6 +235,35 @@ fn generate_injected_method(
         call_args.push(quote! { request });
     }
     
+    // Add body parameter extraction if present
+    if let Some((body_param_name, body_param_type)) = &body_param {
+        let body_param_ident = quote::format_ident!("{}", body_param_name);
+        
+        // Generate body parsing code based on the body parameter type
+        let body_extraction = match body_param_type {
+            BodyParamType::Custom(_) => {
+                quote! {
+                    let #body_param_ident = request.json().await
+                        .map_err(|e| HttpError::bad_request(format!("Invalid JSON body: {:?}", e)))?;
+                }
+            }
+            BodyParamType::Form => {
+                quote! {
+                    let #body_param_ident = request.form().await
+                        .map_err(|e| HttpError::bad_request(format!("Invalid form data: {:?}", e)))?;
+                }
+            }
+            BodyParamType::Bytes => {
+                quote! {
+                    let #body_param_ident = request.bytes().await
+                        .map_err(|e| HttpError::bad_request(format!("Failed to read body bytes: {:?}", e)))?;
+                }
+            }
+        };
+        
+        param_extractions.push(body_extraction);
+    }
+    
     // Get the original function's components
     let original_attrs = &input_fn.attrs.iter()
         .filter(|attr| !attr.path().is_ident("get") && 
@@ -219,7 +274,8 @@ fn generate_injected_method(
                        !attr.path().is_ident("head") &&
                        !attr.path().is_ident("options") &&
                        !attr.path().is_ident("param") &&
-                       !attr.path().is_ident("request"))
+                       !attr.path().is_ident("request") &&
+                       !attr.path().is_ident("body"))
         .collect::<Vec<_>>();
     let original_vis = &input_fn.vis;
     let original_block = &input_fn.block;

@@ -3,6 +3,7 @@
 use syn::{Attribute, Meta, Signature, FnArg, Pat, PatIdent};
 use quote::quote;
 use std::collections::HashMap;
+use crate::params::{BodyParamType, BodySpec};
 
 /// Extract HTTP method and path from method attributes
 pub fn extract_http_method_info(attrs: &[Attribute]) -> Option<(proc_macro2::Ident, String)> {
@@ -321,4 +322,26 @@ pub fn extract_request_param_name(attrs: &[Attribute]) -> String {
         }
     }
     "req".to_string()
+}
+
+/// Check if method has #[body] attribute for body parameter injection
+pub fn has_body_attribute(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| attr.path().is_ident("body"))
+}
+
+/// Extract body parameter specification from #[body] attribute
+/// Returns (param_name, body_param_type) if found
+pub fn extract_body_param_from_attrs(attrs: &[Attribute]) -> Option<(String, BodyParamType)> {
+    for attr in attrs {
+        if attr.path().is_ident("body") {
+            if let Meta::List(meta_list) = &attr.meta {
+                // Try to parse body specification from tokens
+                if let Ok(body_spec) = syn::parse2::<BodySpec>(meta_list.tokens.clone()) {
+                    let param_name = body_spec.name.to_string();
+                    return Some((param_name, body_spec.body_type));
+                }
+            }
+        }
+    }
+    None
 }

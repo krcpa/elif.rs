@@ -16,6 +16,13 @@ pub struct ParamSpec {
     pub param_type: ParamType,
 }
 
+/// Body parameter specification for injection
+#[derive(Debug, Clone)]
+pub struct BodySpec {
+    pub name: Ident,
+    pub body_type: BodyParamType,
+}
+
 /// Supported parameter types for validation
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParamType {
@@ -25,6 +32,14 @@ pub enum ParamType {
     Float,
     Bool,
     Uuid,
+}
+
+/// Supported body parameter types for injection
+#[derive(Debug, Clone, PartialEq)]
+pub enum BodyParamType {
+    Custom(Type),  // Custom deserializable type
+    Form,          // HashMap<String, String> from form data
+    Bytes,         // Vec<u8> for raw bytes
 }
 
 impl std::fmt::Display for ParamType {
@@ -62,6 +77,38 @@ impl Parse for ParamSpec {
         };
         
         Ok(ParamSpec { name, param_type })
+    }
+}
+
+impl Parse for BodySpec {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let name: Ident = input.parse()?;
+        input.parse::<Token![:]>()?;
+        
+        // Check for special types first (form, bytes)
+        if input.peek(syn::Ident) {
+            let lookahead = input.fork();
+            if let Ok(type_ident) = lookahead.parse::<Ident>() {
+                match type_ident.to_string().as_str() {
+                    "form" => {
+                        input.parse::<Ident>()?; // consume the 'form' ident
+                        return Ok(BodySpec { name, body_type: BodyParamType::Form });
+                    }
+                    "bytes" => {
+                        input.parse::<Ident>()?; // consume the 'bytes' ident
+                        return Ok(BodySpec { name, body_type: BodyParamType::Bytes });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        
+        // Parse as custom type
+        let custom_type: Type = input.parse()?;
+        Ok(BodySpec { 
+            name, 
+            body_type: BodyParamType::Custom(custom_type) 
+        })
     }
 }
 
@@ -116,6 +163,8 @@ pub fn get_compatible_rust_types(param_type: &ParamType) -> Vec<&'static str> {
 }
 
 /// Validate that function signature is compatible with the specified body type
+/// NOTE: This function is deprecated - use validate_body_param_consistency for new parameter injection system
+#[allow(dead_code)]
 pub fn validate_body_compatibility(body_type: &Type, sig: &Signature) -> Result<(), String> {
     let body_type_str = quote! { #body_type }.to_string().replace(" ", "");
     
@@ -151,6 +200,65 @@ pub fn validate_body_compatibility(body_type: &Type, sig: &Signature) -> Result<
             "No compatible body parameter found for type '{}'. Expected parameter like ElifJson<{}>",
             body_type_str, body_type_str
         ));
+    }
+    
+    Ok(())
+}
+
+/// Validate that body parameter specification matches function signature
+pub fn validate_body_param_consistency(body_spec: &BodySpec, sig: &Signature) -> Result<(), String> {
+    let param_name = body_spec.name.to_string();
+    
+    // Find the parameter in the function signature
+    let mut found_param = None;
+    for input in &sig.inputs {
+        if let FnArg::Typed(pat_type) = input {
+            if let Pat::Ident(PatIdent { ident, .. }) = pat_type.pat.as_ref() {
+                if *ident == param_name {
+                    found_param = Some(&*pat_type.ty);
+                    break;
+                }
+            }
+        }
+    }
+    
+    let param_type = match found_param {
+        Some(ty) => ty,
+        None => return Err(format!("Body parameter '{}' not found in function signature", param_name)),
+    };
+    
+    // Validate type compatibility based on body type
+    let type_str = quote! { #param_type }.to_string().replace(" ", "");
+    
+    match &body_spec.body_type {
+        BodyParamType::Custom(expected_type) => {
+            let expected_type_str = quote! { #expected_type }.to_string().replace(" ", "");
+            // For custom types, the function parameter should match exactly
+            if type_str != expected_type_str {
+                return Err(format!(
+                    "Body parameter '{}' has type '{}' but expected '{}'",
+                    param_name, type_str, expected_type_str
+                ));
+            }
+        }
+        BodyParamType::Form => {
+            // Form data should be HashMap<String, String>
+            if !type_str.contains("HashMap") || !type_str.contains("String") {
+                return Err(format!(
+                    "Body parameter '{}' has type '{}' but expected 'HashMap<String, String>' for form data",
+                    param_name, type_str
+                ));
+            }
+        }
+        BodyParamType::Bytes => {
+            // Bytes should be Vec<u8>
+            if !type_str.contains("Vec") || !type_str.contains("u8") {
+                return Err(format!(
+                    "Body parameter '{}' has type '{}' but expected 'Vec<u8>' for bytes data",
+                    param_name, type_str
+                ));
+            }
+        }
     }
     
     Ok(())
@@ -202,14 +310,14 @@ pub fn param_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 pub fn body_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(input as ItemFn);
     
-    // Parse body type specification from args
-    let body_type = if !args.is_empty() {
-        match syn::parse::<Type>(args) {
-            Ok(ty) => Some(ty),
+    // Parse body parameter specification from args
+    let body_spec = if !args.is_empty() {
+        match syn::parse::<BodySpec>(args) {
+            Ok(spec) => Some(spec),
             Err(err) => {
                 return syn::Error::new(
                     err.span(),
-                    format!("Invalid body type specification: {}. Hint: Use #[body(UserData)] where UserData is a valid type", err)
+                    format!("Invalid body specification: {}. Hint: Use #[body(param_name: Type)] for parameter injection or #[body(user_data: CreateUserRequest)]", err)
                 )
                 .to_compile_error()
                 .into();
@@ -218,18 +326,18 @@ pub fn body_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     } else {
         return syn::Error::new(
             proc_macro2::Span::call_site(),
-            "Body type specification required. Hint: Use #[body(MyType)] to specify the expected request body type."
+            "Body specification required. Hint: Use #[body(param_name: Type)] to specify the body parameter."
         )
         .to_compile_error()
         .into();
     };
     
-    // Validate that function signature can handle the body type
-    if let Some(body_ty) = &body_type {
-        if let Err(msg) = validate_body_compatibility(body_ty, &input_fn.sig) {
+    // Validate that function signature matches body specification
+    if let Some(spec) = &body_spec {
+        if let Err(msg) = validate_body_param_consistency(spec, &input_fn.sig) {
             return syn::Error::new_spanned(
                 &input_fn.sig,
-                format!("Body type compatibility issue: {}. Hint: Ensure function accepts ElifJson<{}> or similar parameter.", msg, quote! { #body_ty })
+                format!("Body parameter mismatch: {}. Hint: Ensure function parameter name and type match #[body] declaration.", msg)
             )
             .to_compile_error()
             .into();

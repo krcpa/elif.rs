@@ -1,0 +1,82 @@
+site_name: elif.rs Docs
+site_description: Full-stack web framework for Rust developers and teams — learnable without prior Rust knowledge.
+repo_url: https://example.com/elif
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - toc.integrate
+    - content.code.copy
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Introduction: getting-started/introduction.md
+      - Installation: getting-started/installation.md
+      - Quickstart (No Rust): getting-started/quickstart-no-rust.md
+      - Project Structure: getting-started/project-structure.md
+      - Configuration: getting-started/configuration.md
+  - Basics:
+      - Routing: basics/routing.md
+      - Controllers: basics/controllers.md
+      - Requests: basics/requests.md
+      - Responses: basics/responses.md
+      - Middleware: basics/middleware.md
+      - Validation: basics/validation.md
+      - Error Handling: basics/error-handling.md
+      - Dependency Injection: basics/dependency-injection.md
+  - Database:
+      - Introduction: database/introduction.md
+      - Configuration: database/configuration.md
+      - Migrations: database/migrations.md
+      - Models: database/models.md
+      - Query Builder: database/query-builder.md
+      - Relationships: database/relationships.md
+      - Transactions: database/transactions.md
+      - Seeding: database/seeding.md
+  - Security:
+      - Authentication: security/authentication.md
+      - Authorization: security/authorization.md
+      - CORS & CSRF: security/cors-csrf.md
+      - Encryption & Hashing: security/encryption-hashing.md
+  - Services:
+      - Cache: services/cache.md
+      - Queue: services/queue.md
+      - Mail: services/mail.md
+      - Storage: services/storage.md
+      - WebSockets: services/websockets.md
+  - API:
+      - Versioning: API_VERSIONING.md
+      - OpenAPI & Swagger: api/openapi.md
+      - Pagination: api/pagination.md
+      - Rate Limiting: api/rate-limiting.md
+  - CLI:
+      - Overview: cli/overview.md
+      - Commands: cli/commands.md
+      - Generators: cli/generators.md
+      - OpenAPI: cli/openapi.md
+  - Testing:
+      - Introduction: testing/introduction.md
+      - HTTP Testing: testing/http-testing.md
+      - Database Testing: testing/database-testing.md
+      - Mocking: testing/mocking.md
+  - Deployment:
+      - Overview: deployment/overview.md
+      - Configuration: deployment/configuration.md
+      - Docker: deployment/docker.md
+      - Observability & Logging: deployment/observability-logging.md
+  - Cookbook:
+      - Index: cookbook/index.md
+  - Release Notes:
+      - Overview: release-notes/index.md
+  - Upgrade Guides:
+      - Overview: upgrade-guides/index.md
+  - Internals:
+      - Architecture: FRAMEWORK_ARCHITECTURE.md
+      - Middleware Redesign: middleware/redesign_plan.md
+      - Borrowing API: BORROWING_API.md
+      - Release Process: RELEASE_PROCESS.md
+      - Version Bump Plan: VERSION_BUMP_PLAN.md
+  - Showcase:
+      - Landing Page Examples: examples_for_landing.md

@@ -56,7 +56,8 @@
       "Bash(RUSTFLAGS=\"-A warnings\" cargo check -p elifrs)",
       "WebFetch(domain:127.0.0.1)",
       "Bash(rustc:*)",
-      "Bash(touch:*)"
+      "Bash(touch:*)",
+      "Bash(RUSTFLAGS=\"-A unused-imports\" cargo test -p elif-http-derive ui_fail_tests)"
     ],
     "deny": []
   }

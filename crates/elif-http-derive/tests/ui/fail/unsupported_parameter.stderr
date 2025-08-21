@@ -1,4 +1,4 @@
-error: Unsupported parameter 'extra_param' of type 'String'. Only path parameters (specified in route) and ElifRequest are supported. Hint: Remove this parameter, add it to the route path like '/users/{extra_param}' and annotate with #[param(extra_param: type)], or use #[request] to enable automatic request injection.
+error: Unsupported parameter 'extra_param' of type 'String'. Only path parameters (specified in route), body parameters (annotated with #[body]), and ElifRequest are supported. Hint: Remove this parameter, add it to the route path like '/users/{extra_param}' and annotate with #[param(extra_param: type)], annotate with #[body(extra_param: Type)], or use #[request] to enable automatic request injection.
   --> tests/ui/fail/unsupported_parameter.rs:17:39
    |
 17 |     pub async fn show(&self, id: i32, extra_param: String, req: ElifRequest) -> String {
