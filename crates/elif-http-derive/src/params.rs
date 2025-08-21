@@ -56,7 +56,7 @@ impl Parse for ParamSpec {
             _ => {
                 return Err(syn::Error::new_spanned(
                     type_ident,
-                    format!("Unsupported parameter type. Supported types: string, int, uint, float, bool, uuid")
+"Unsupported parameter type. Supported types: string, int, uint, float, bool, uuid".to_string()
                 ));
             }
         };
@@ -74,7 +74,7 @@ pub fn validate_param_consistency(param_spec: &ParamSpec, sig: &Signature) -> Re
     for input in &sig.inputs {
         if let FnArg::Typed(pat_type) = input {
             if let Pat::Ident(PatIdent { ident, .. }) = pat_type.pat.as_ref() {
-                if ident.to_string() == param_name {
+                if *ident == param_name {
                     found_param = Some(&*pat_type.ty);
                     break;
                 }
@@ -180,7 +180,7 @@ pub fn param_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     
     // Validate that function signature matches param specification
     if let Some(spec) = &param_spec {
-        if let Err(msg) = validate_param_consistency(&spec, &input_fn.sig) {
+        if let Err(msg) = validate_param_consistency(spec, &input_fn.sig) {
             return syn::Error::new_spanned(
                 &input_fn.sig,
                 format!("Parameter type mismatch: {}. Hint: Ensure function parameter type matches #[param] declaration.", msg)
@@ -236,6 +236,60 @@ pub fn body_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     }
     
+    let expanded = quote! {
+        #input_fn
+    };
+    
+    TokenStream::from(expanded)
+}
+
+/// Request injection macro for automatic ElifRequest parameter injection
+/// Marks methods that should receive an ElifRequest parameter automatically
+pub fn request_impl(args: TokenStream, input: TokenStream) -> TokenStream {
+    let input_fn = parse_macro_input!(input as ItemFn);
+    
+    // Parse optional parameter name from args (for future extensibility)
+    let req_param_name = if !args.is_empty() {
+        match syn::parse::<Ident>(args) {
+            Ok(name) => name.to_string(),
+            Err(_) => {
+                return syn::Error::new(
+                    proc_macro2::Span::call_site(),
+                    "Invalid request parameter name. Hint: Use #[request] or #[request(req)] for custom naming."
+                )
+                .to_compile_error()
+                .into();
+            }
+        }
+    } else {
+        "req".to_string()
+    };
+    
+    // Check if the function already has a parameter that conflicts with the request name
+    for input in &input_fn.sig.inputs {
+        if let FnArg::Typed(pat_type) = input {
+            if let Pat::Ident(PatIdent { ident, .. }) = pat_type.pat.as_ref() {
+                if *ident == req_param_name {
+                    // A parameter with the same name exists. Check if it's a conflict.
+                    let param_type_str = quote! { #pat_type.ty }.to_string();
+                    if !param_type_str.contains("ElifRequest") {
+                        // It's a conflict if the type is not ElifRequest.
+                        return syn::Error::new_spanned(
+                            &input_fn.sig,
+                            format!("Function already has a parameter named '{}' which conflicts with #[request]. Either rename the parameter or change its type to ElifRequest.", req_param_name)
+                        )
+                        .to_compile_error()
+                        .into();
+                    }
+                    // If it is an ElifRequest, it's not a conflict. We can stop checking.
+                    break;
+                }
+            }
+        }
+    }
+    
+    // The actual signature modification will be handled by the HTTP method macros
+    // This macro validates the function and marks it for request parameter injection
     let expanded = quote! {
         #input_fn
     };

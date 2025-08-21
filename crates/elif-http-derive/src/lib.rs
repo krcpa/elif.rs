@@ -8,6 +8,7 @@
 //! - `#[middleware]`: Apply middleware to controllers and methods
 //! - `#[param]`: Route parameter specifications
 //! - `#[body]`: Request body type specifications
+//! - `#[request]`: Automatic ElifRequest parameter injection
 //! - `#[routes]`: Generate route registration code from impl blocks
 //! - `#[resource]`: Automatic RESTful resource registration
 //! - `#[group]`: Route grouping with shared attributes
@@ -90,6 +91,12 @@ pub fn param(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn body(args: TokenStream, input: TokenStream) -> TokenStream {
     params::body_impl(args, input)
+}
+
+/// Request injection macro for automatic ElifRequest parameter injection
+#[proc_macro_attribute]
+pub fn request(args: TokenStream, input: TokenStream) -> TokenStream {
+    params::request_impl(args, input)
 }
 
 /// Route registration macro for impl blocks

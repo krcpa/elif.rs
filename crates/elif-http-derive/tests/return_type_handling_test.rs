@@ -1,6 +1,6 @@
 //! Test return type handling in HTTP method macros
 
-use elif_http_derive::{get, controller, param};
+use elif_http_derive::{get, controller};
 
 // Mock the required types
 pub struct ElifRequest;
