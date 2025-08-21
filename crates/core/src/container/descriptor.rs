@@ -39,6 +39,23 @@ impl ServiceId {
 /// We use Any here to avoid circular references with Container
 pub type ServiceFactory = Box<dyn Fn() -> Result<Box<dyn Any + Send + Sync>, CoreError> + Send + Sync>;
 
+/// Strategy for activating/creating service instances
+pub enum ServiceActivationStrategy {
+    /// Service created via factory function (traditional approach)
+    Factory(ServiceFactory),
+    /// Service created via auto-wiring (Injectable trait)
+    AutoWired,
+}
+
+impl std::fmt::Debug for ServiceActivationStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ServiceActivationStrategy::Factory(_) => write!(f, "Factory(<factory_fn>)"),
+            ServiceActivationStrategy::AutoWired => write!(f, "AutoWired"),
+        }
+    }
+}
+
 /// Service descriptor containing all metadata for a service
 pub struct ServiceDescriptor {
     /// Service identifier (type + optional name)
@@ -47,8 +64,8 @@ pub struct ServiceDescriptor {
     pub implementation_id: TypeId,
     /// Service lifetime/scope
     pub lifetime: ServiceScope,
-    /// Factory for creating instances
-    pub factory: ServiceFactory,
+    /// Strategy for creating instances
+    pub activation_strategy: ServiceActivationStrategy,
     /// Dependencies this service requires
     pub dependencies: Vec<ServiceId>,
 }
@@ -59,11 +76,12 @@ impl std::fmt::Debug for ServiceDescriptor {
             .field("service_id", &self.service_id)
             .field("implementation_id", &self.implementation_id)
             .field("lifetime", &self.lifetime)
-            .field("factory", &"<factory>")
+            .field("activation_strategy", &self.activation_strategy)
             .field("dependencies", &self.dependencies)
             .finish()
     }
 }
+
 
 impl ServiceDescriptor {
     /// Create a new service descriptor with type binding
@@ -84,6 +102,28 @@ impl ServiceDescriptor {
     /// Create a transient service descriptor
     pub fn transient<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>() -> ServiceDescriptorBuilder<TInterface, TImpl> {
         ServiceDescriptorBuilder::new().with_lifetime(ServiceScope::Transient)
+    }
+    
+    /// Create an auto-wired service descriptor
+    pub fn autowired<T: 'static>(dependencies: Vec<ServiceId>) -> ServiceDescriptor {
+        ServiceDescriptor {
+            service_id: ServiceId::of::<T>(),
+            implementation_id: TypeId::of::<T>(),
+            lifetime: ServiceScope::Transient,
+            activation_strategy: ServiceActivationStrategy::AutoWired,
+            dependencies,
+        }
+    }
+    
+    /// Create an auto-wired singleton service descriptor
+    pub fn autowired_singleton<T: 'static>(dependencies: Vec<ServiceId>) -> ServiceDescriptor {
+        ServiceDescriptor {
+            service_id: ServiceId::of::<T>(),
+            implementation_id: TypeId::of::<T>(),
+            lifetime: ServiceScope::Singleton,
+            activation_strategy: ServiceActivationStrategy::AutoWired,
+            dependencies,
+        }
     }
 }
 
@@ -148,7 +188,7 @@ impl<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static> Servi
             service_id,
             implementation_id: TypeId::of::<TImpl>(),
             lifetime: self.lifetime,
-            factory,
+            activation_strategy: ServiceActivationStrategy::Factory(factory),
             dependencies: self.dependencies,
         }
     }
@@ -217,7 +257,7 @@ impl<TInterface: ?Sized + 'static> ServiceDescriptorFactoryBuilder<TInterface> {
             service_id,
             implementation_id: TypeId::of::<()>(), // Unknown for factory-based services
             lifetime: self.lifetime,
-            factory,
+            activation_strategy: ServiceActivationStrategy::Factory(factory),
             dependencies: self.dependencies,
         })
     }

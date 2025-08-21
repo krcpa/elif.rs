@@ -119,17 +119,28 @@ impl IocContainer {
         // Resolve dependencies first
         self.resolve_dependencies(&descriptor.dependencies)?;
         
-        // Create the service instance
-        let instance = (descriptor.factory)()?;
-        let typed_instance = instance.downcast::<T>()
-            .map_err(|_| CoreError::ServiceNotFound {
-                service_type: format!("{}({})", 
-                    std::any::type_name::<T>(),
-                    service_id.name.as_deref().unwrap_or("default")
-                ),
-            })?;
-        
-        let arc_instance = Arc::new(*typed_instance);
+        // Create the service instance based on activation strategy
+        let arc_instance = match &descriptor.activation_strategy {
+            crate::container::descriptor::ServiceActivationStrategy::Factory(factory) => {
+                let instance = factory()?;
+                let typed_instance = instance.downcast::<T>()
+                    .map_err(|_| CoreError::ServiceNotFound {
+                        service_type: format!("{}({})", 
+                            std::any::type_name::<T>(),
+                            service_id.name.as_deref().unwrap_or("default")
+                        ),
+                    })?;
+                Arc::new(*typed_instance)
+            },
+            crate::container::descriptor::ServiceActivationStrategy::AutoWired => {
+                return Err(CoreError::InvalidServiceDescriptor {
+                    message: format!(
+                        "Service {} is marked as auto-wired but resolve_by_id was called instead of resolve_injectable. Use resolve_injectable() for auto-wired services.",
+                        std::any::type_name::<T>()
+                    ),
+                });
+            }
+        };
         
         // Cache if singleton
         if descriptor.lifetime == ServiceScope::Singleton {
@@ -192,18 +203,34 @@ impl IocContainer {
             }
         }
         
-        // Create the service using Injectable
-        let service_instance = T::create(self)?;
-        let arc_instance = Arc::new(service_instance);
-        
-        // Cache if singleton (we need to check the descriptor for this)
-        if let Some(descriptor) = self.bindings.get_descriptor(&service_id) {
-            if descriptor.lifetime == ServiceScope::Singleton {
-                let mut instances = self.instances.write().map_err(|_| CoreError::LockError {
-                    resource: "service_instances".to_string(),
-                })?;
-                instances.insert(service_id, ServiceInstance::Singleton(arc_instance.clone()));
+        // Verify the service is configured for auto-wiring
+        let descriptor = self.bindings.get_descriptor(&service_id)
+            .ok_or_else(|| CoreError::ServiceNotFound {
+                service_type: std::any::type_name::<T>().to_string(),
+            })?;
+            
+        let arc_instance = match &descriptor.activation_strategy {
+            crate::container::descriptor::ServiceActivationStrategy::AutoWired => {
+                // Create the service using Injectable
+                let service_instance = T::create(self)?;
+                Arc::new(service_instance)
+            },
+            crate::container::descriptor::ServiceActivationStrategy::Factory(_) => {
+                return Err(CoreError::InvalidServiceDescriptor {
+                    message: format!(
+                        "Service {} is configured with a factory but resolve_injectable was called. Use resolve() for factory-based services.",
+                        std::any::type_name::<T>()
+                    ),
+                });
             }
+        };
+        
+        // Cache if singleton
+        if descriptor.lifetime == ServiceScope::Singleton {
+            let mut instances = self.instances.write().map_err(|_| CoreError::LockError {
+                resource: "service_instances".to_string(),
+            })?;
+            instances.insert(service_id, ServiceInstance::Singleton(arc_instance.clone()));
         }
         
         Ok(arc_instance)
