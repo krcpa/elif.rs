@@ -10,6 +10,9 @@ pub enum ServiceScope {
     Scoped,
 }
 
+/// Service lifetime type alias for compatibility
+pub type ServiceLifetime = ServiceScope;
+
 impl ServiceScope {
     /// Check if the scope is singleton
     pub fn is_singleton(&self) -> bool {
@@ -58,25 +61,64 @@ impl std::str::FromStr for ServiceScope {
     }
 }
 
+/// Unique scope identifier
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ScopeId(uuid::Uuid);
+
+impl ScopeId {
+    /// Create a new scope ID
+    pub fn new() -> Self {
+        Self(uuid::Uuid::new_v4())
+    }
+    
+    /// Get the inner UUID
+    pub fn as_uuid(&self) -> uuid::Uuid {
+        self.0
+    }
+}
+
+impl Default for ScopeId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for ScopeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Scoped service manager for managing services within a specific scope
 #[derive(Debug)]
 pub struct ScopedServiceManager {
-    scope_id: uuid::Uuid,
+    scope_id: ScopeId,
     services: std::collections::HashMap<std::any::TypeId, Box<dyn std::any::Any + Send + Sync>>,
+    parent: Option<std::sync::Arc<ScopedServiceManager>>,
 }
 
 impl ScopedServiceManager {
     /// Create a new scoped service manager
     pub fn new() -> Self {
         Self {
-            scope_id: uuid::Uuid::new_v4(),
+            scope_id: ScopeId::new(),
             services: std::collections::HashMap::new(),
+            parent: None,
+        }
+    }
+    
+    /// Create a child scope with this scope as parent
+    pub fn create_child(&self) -> ScopedServiceManager {
+        ScopedServiceManager {
+            scope_id: ScopeId::new(),
+            services: std::collections::HashMap::new(),
+            parent: Some(std::sync::Arc::new(self.clone())),
         }
     }
     
     /// Get the scope ID
-    pub fn scope_id(&self) -> uuid::Uuid {
-        self.scope_id
+    pub fn scope_id(&self) -> &ScopeId {
+        &self.scope_id
     }
     
     /// Add a service to this scope
@@ -88,17 +130,40 @@ impl ScopedServiceManager {
         self.services.insert(type_id, Box::new(service));
     }
     
-    /// Get a service from this scope
+    /// Get a service from this scope, checking parent scopes if not found
     pub fn get_service<T>(&self) -> Option<&T>
     where
         T: Send + Sync + 'static,
     {
         let type_id = std::any::TypeId::of::<T>();
-        self.services.get(&type_id)?.downcast_ref::<T>()
+        
+        // Check current scope first
+        if let Some(service) = self.services.get(&type_id) {
+            return service.downcast_ref::<T>();
+        }
+        
+        // Check parent scopes recursively
+        self.parent.as_ref()?.get_service::<T>()
     }
     
-    /// Check if a service exists in this scope
+    /// Check if a service exists in this scope or parent scopes
     pub fn has_service<T>(&self) -> bool
+    where
+        T: Send + Sync + 'static,
+    {
+        let type_id = std::any::TypeId::of::<T>();
+        
+        // Check current scope first
+        if self.services.contains_key(&type_id) {
+            return true;
+        }
+        
+        // Check parent scopes
+        self.parent.as_ref().map_or(false, |p| p.has_service::<T>())
+    }
+    
+    /// Check if a service exists in this specific scope (not parent scopes)
+    pub fn has_service_local<T>(&self) -> bool
     where
         T: Send + Sync + 'static,
     {
@@ -114,6 +179,21 @@ impl ScopedServiceManager {
     /// Get the number of services in this scope
     pub fn service_count(&self) -> usize {
         self.services.len()
+    }
+    
+    /// Get parent scope
+    pub fn parent(&self) -> Option<&std::sync::Arc<ScopedServiceManager>> {
+        self.parent.as_ref()
+    }
+}
+
+impl Clone for ScopedServiceManager {
+    fn clone(&self) -> Self {
+        Self {
+            scope_id: self.scope_id.clone(),
+            services: std::collections::HashMap::new(), // Don't clone services, create empty
+            parent: self.parent.clone(),
+        }
     }
 }
 

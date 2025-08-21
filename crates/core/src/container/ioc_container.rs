@@ -6,7 +6,8 @@ use crate::container::binding::{ServiceBinder, ServiceBindings};
 use crate::container::descriptor::ServiceId;
 use crate::container::resolver::DependencyResolver as GraphDependencyResolver;
 use crate::container::autowiring::{DependencyResolver, Injectable};
-use crate::container::scope::ServiceScope;
+use crate::container::scope::{ServiceScope, ScopedServiceManager, ScopeId};
+use crate::container::lifecycle::ServiceLifecycleManager;
 use crate::errors::CoreError;
 
 /// Service instance storage
@@ -14,6 +15,8 @@ use crate::errors::CoreError;
 enum ServiceInstance {
     /// Singleton instance
     Singleton(Arc<dyn Any + Send + Sync>),
+    /// Scoped instances by scope ID
+    Scoped(HashMap<ScopeId, Arc<dyn Any + Send + Sync>>),
 }
 
 /// Modern IoC container with proper dependency injection
@@ -25,6 +28,10 @@ pub struct IocContainer {
     resolver: Option<GraphDependencyResolver>,
     /// Instantiated services
     instances: Arc<RwLock<HashMap<ServiceId, ServiceInstance>>>,
+    /// Service lifecycle manager
+    lifecycle_manager: ServiceLifecycleManager,
+    /// Active scopes
+    scopes: Arc<RwLock<HashMap<ScopeId, ScopedServiceManager>>>,
     /// Whether the container is built and ready
     is_built: bool,
 }
@@ -36,6 +43,8 @@ impl IocContainer {
             bindings: ServiceBindings::new(),
             resolver: None,
             instances: Arc::new(RwLock::new(HashMap::new())),
+            lifecycle_manager: ServiceLifecycleManager::new(),
+            scopes: Arc::new(RwLock::new(HashMap::new())),
             is_built: false,
         }
     }
@@ -46,6 +55,8 @@ impl IocContainer {
             bindings,
             resolver: None,
             instances: Arc::new(RwLock::new(HashMap::new())),
+            lifecycle_manager: ServiceLifecycleManager::new(),
+            scopes: Arc::new(RwLock::new(HashMap::new())),
             is_built: false,
         }
     }
@@ -70,10 +81,107 @@ impl IocContainer {
         Ok(())
     }
     
+    /// Initialize all async services
+    pub async fn initialize_async(&mut self) -> Result<(), CoreError> {
+        self.lifecycle_manager.initialize_all().await
+    }
+    
+    /// Initialize all async services with timeout
+    pub async fn initialize_async_with_timeout(
+        &mut self, 
+        timeout: std::time::Duration
+    ) -> Result<(), CoreError> {
+        self.lifecycle_manager.initialize_all_with_timeout(timeout).await
+    }
+    
+    /// Create a new service scope
+    pub fn create_scope(&self) -> Result<ScopeId, CoreError> {
+        let scope_manager = ScopedServiceManager::new();
+        let scope_id = scope_manager.scope_id().clone();
+        
+        let mut scopes = self.scopes.write().map_err(|_| CoreError::LockError {
+            resource: "scopes".to_string(),
+        })?;
+        
+        scopes.insert(scope_id.clone(), scope_manager);
+        Ok(scope_id)
+    }
+    
+    /// Create a child scope from an existing scope
+    pub fn create_child_scope(&self, parent_scope_id: &ScopeId) -> Result<ScopeId, CoreError> {
+        let scopes = self.scopes.read().map_err(|_| CoreError::LockError {
+            resource: "scopes".to_string(),
+        })?;
+        
+        let parent_scope = scopes.get(parent_scope_id).ok_or_else(|| CoreError::ServiceNotFound {
+            service_type: format!("parent scope {}", parent_scope_id),
+        })?;
+        
+        let child_scope = parent_scope.create_child();
+        let child_scope_id = child_scope.scope_id().clone();
+        
+        drop(scopes);
+        
+        let mut scopes = self.scopes.write().map_err(|_| CoreError::LockError {
+            resource: "scopes".to_string(),
+        })?;
+        
+        scopes.insert(child_scope_id.clone(), child_scope);
+        Ok(child_scope_id)
+    }
+    
+    /// Dispose of a scope and all its services
+    pub async fn dispose_scope(&self, scope_id: &ScopeId) -> Result<(), CoreError> {
+        let mut scopes = self.scopes.write().map_err(|_| CoreError::LockError {
+            resource: "scopes".to_string(),
+        })?;
+        
+        if let Some(_scope) = scopes.remove(scope_id) {
+            // Remove scoped instances for this scope
+            let mut instances = self.instances.write().map_err(|_| CoreError::LockError {
+                resource: "service_instances".to_string(),
+            })?;
+            
+            for (_, instance) in instances.iter_mut() {
+                if let ServiceInstance::Scoped(scoped_instances) = instance {
+                    scoped_instances.remove(scope_id);
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Dispose all scoped services and lifecycle managed services
+    pub async fn dispose_all(&mut self) -> Result<(), CoreError> {
+        // Dispose all scoped services first
+        let scope_ids: Vec<ScopeId> = {
+            let scopes = self.scopes.read().map_err(|_| CoreError::LockError {
+                resource: "scopes".to_string(),
+            })?;
+            scopes.keys().cloned().collect()
+        };
+        
+        for scope_id in scope_ids {
+            self.dispose_scope(&scope_id).await?;
+        }
+        
+        // Dispose lifecycle managed services
+        self.lifecycle_manager.dispose_all().await?;
+        
+        Ok(())
+    }
+    
     /// Resolve a service by type
     pub fn resolve<T: Send + Sync + 'static>(&self) -> Result<Arc<T>, CoreError> {
         let service_id = ServiceId::of::<T>();
         self.resolve_by_id(&service_id)
+    }
+    
+    /// Resolve a scoped service by type
+    pub fn resolve_scoped<T: Send + Sync + 'static>(&self, scope_id: &ScopeId) -> Result<Arc<T>, CoreError> {
+        let service_id = ServiceId::of::<T>();
+        self.resolve_by_id_scoped(&service_id, scope_id)
     }
     
     /// Resolve a named service
@@ -223,6 +331,103 @@ impl IocContainer {
         }
         
         Ok(arc_instance)
+    }
+    
+    /// Resolve a service by service ID in a specific scope
+    fn resolve_by_id_scoped<T: Send + Sync + 'static>(&self, service_id: &ServiceId, scope_id: &ScopeId) -> Result<Arc<T>, CoreError> {
+        if !self.is_built {
+            return Err(CoreError::InvalidServiceDescriptor {
+                message: "Container must be built before resolving services".to_string(),
+            });
+        }
+        
+        // Get service descriptor first to check lifetime
+        let descriptor = self.bindings.get_descriptor(service_id)
+            .ok_or_else(|| CoreError::ServiceNotFound {
+                service_type: format!("{}({})", 
+                    std::any::type_name::<T>(),
+                    service_id.name.as_deref().unwrap_or("default")
+                ),
+            })?;
+        
+        // Handle based on lifetime
+        match descriptor.lifetime {
+            ServiceScope::Singleton => {
+                // For singleton, ignore scope and use regular resolution
+                self.resolve_by_id(service_id)
+            },
+            ServiceScope::Transient => {
+                // For transient, create new instance every time
+                self.create_service_instance::<T>(service_id, descriptor)
+            },
+            ServiceScope::Scoped => {
+                // Check if we have a cached instance for this scope
+                {
+                    let instances = self.instances.read().map_err(|_| CoreError::LockError {
+                        resource: "service_instances".to_string(),
+                    })?;
+                    
+                    if let Some(ServiceInstance::Scoped(scoped_instances)) = instances.get(service_id) {
+                        if let Some(instance) = scoped_instances.get(scope_id) {
+                            return instance.clone().downcast::<T>()
+                                .map_err(|_| CoreError::ServiceNotFound {
+                                    service_type: format!("{}({})", 
+                                        std::any::type_name::<T>(),
+                                        service_id.name.as_deref().unwrap_or("default")
+                                    ),
+                                });
+                        }
+                    }
+                }
+                
+                // Create new scoped instance
+                let arc_instance = self.create_service_instance::<T>(service_id, descriptor)?;
+                
+                // Cache it for this scope
+                let mut instances = self.instances.write().map_err(|_| CoreError::LockError {
+                    resource: "service_instances".to_string(),
+                })?;
+                
+                let entry = instances.entry(service_id.clone()).or_insert_with(|| {
+                    ServiceInstance::Scoped(HashMap::new())
+                });
+                
+                if let ServiceInstance::Scoped(scoped_instances) = entry {
+                    scoped_instances.insert(scope_id.clone(), arc_instance.clone());
+                }
+                
+                Ok(arc_instance)
+            }
+        }
+    }
+    
+    /// Create a service instance
+    fn create_service_instance<T: Send + Sync + 'static>(&self, service_id: &ServiceId, descriptor: &crate::container::descriptor::ServiceDescriptor) -> Result<Arc<T>, CoreError> {
+        // Resolve dependencies first
+        self.resolve_dependencies(&descriptor.dependencies)?;
+        
+        // Create the service instance based on activation strategy
+        match &descriptor.activation_strategy {
+            crate::container::descriptor::ServiceActivationStrategy::Factory(factory) => {
+                let instance = factory()?;
+                let typed_instance = instance.downcast::<T>()
+                    .map_err(|_| CoreError::ServiceNotFound {
+                        service_type: format!("{}({})", 
+                            std::any::type_name::<T>(),
+                            service_id.name.as_deref().unwrap_or("default")
+                        ),
+                    })?;
+                Ok(Arc::new(*typed_instance))
+            },
+            crate::container::descriptor::ServiceActivationStrategy::AutoWired => {
+                Err(CoreError::InvalidServiceDescriptor {
+                    message: format!(
+                        "Service {} is marked as auto-wired but create_service_instance was called. Use resolve_injectable() for auto-wired services.",
+                        std::any::type_name::<T>()
+                    ),
+                })
+            }
+        }
     }
     
     /// Resolve all dependencies for a service

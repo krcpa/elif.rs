@@ -78,6 +78,12 @@ pub enum CoreError {
         message: String,
         hint: Option<String>,
     },
+    
+    #[error("Service initialization failed for '{service_type}': {source}")]
+    ServiceInitializationFailed {
+        service_type: String,
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 }
 
 impl CoreError {
