@@ -128,23 +128,26 @@ impl IocContainer {
     
     /// Dispose of a scope and all its services
     pub async fn dispose_scope(&self, scope_id: &ScopeId) -> Result<(), CoreError> {
-        let mut scopes = self.scopes.write().map_err(|_| CoreError::LockError {
-            resource: "scopes".to_string(),
-        })?;
-        
-        if let Some(_scope) = scopes.remove(scope_id) {
+        let was_removed = {
+            let mut scopes = self.scopes.write().map_err(|_| CoreError::LockError {
+                resource: "scopes".to_string(),
+            })?;
+            scopes.remove(scope_id).is_some()
+        };
+
+        if was_removed {
             // Remove scoped instances for this scope
             let mut instances = self.instances.write().map_err(|_| CoreError::LockError {
                 resource: "service_instances".to_string(),
             })?;
-            
+
             for (_, instance) in instances.iter_mut() {
                 if let ServiceInstance::Scoped(scoped_instances) = instance {
                     scoped_instances.remove(scope_id);
                 }
             }
         }
-        
+
         Ok(())
     }
     

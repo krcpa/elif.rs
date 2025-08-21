@@ -25,6 +25,8 @@ pub mod simple_lifecycle_tests;
 pub mod race_condition_tests;
 #[cfg(test)]
 pub mod scoped_singleton_conflict_test;
+#[cfg(test)]
+pub mod deadlock_prevention_test;
 
 pub use container::Container;
 pub use builder::ContainerBuilder;
