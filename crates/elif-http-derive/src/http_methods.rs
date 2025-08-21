@@ -213,6 +213,44 @@ fn generate_injected_method(
         quote! { self.#original_fn_name(#(#call_args),*) }
     };
     
+    // Analyze the return type to determine how to handle the response
+    let return_category = analyze_return_type(original_return);
+    
+    // Generate appropriate response handling based on return type
+    let response_handling = match return_category {
+        ReturnTypeCategory::HttpResultElifResponse => {
+            // Already returns HttpResult<ElifResponse> - pass through directly
+            quote! { #method_call }
+        }
+        ReturnTypeCategory::ElifResponse => {
+            // Returns ElifResponse - wrap in Ok()
+            quote! { Ok(#method_call) }
+        }
+        ReturnTypeCategory::ResultType => {
+            // Returns Result<T, E> - map the Ok case to JSON, pass through errors
+            quote! { 
+                match #method_call {
+                    Ok(result) => Ok(ElifResponse::ok().json(&result)?),
+                    Err(e) => Err(HttpError::internal_server_error(format!("Handler error: {:?}", e)).into()),
+                }
+            }
+        }
+        ReturnTypeCategory::Unit => {
+            // Returns () - return empty OK response
+            quote! { 
+                #method_call;
+                Ok(ElifResponse::ok())
+            }
+        }
+        ReturnTypeCategory::SerializableType => {
+            // Returns serializable type - wrap in JSON response
+            quote! { 
+                let result = #method_call;
+                Ok(ElifResponse::ok().json(&result)?)
+            }
+        }
+    };
+    
     let expanded = quote! {
         // Keep the original method with renamed identifier
         #(#original_attrs)*
@@ -223,15 +261,49 @@ fn generate_injected_method(
             // Parameter extraction
             #(#param_extractions)*
             
-            // Call original method with extracted parameters
-            let result = #method_call;
-            
-            // Convert result to HTTP response
-            Ok(ElifResponse::ok().json(&result)?)
+            // Handle result based on original function's return type
+            #response_handling
         }
     };
     
     TokenStream::from(expanded)
+}
+
+/// Determine how to handle the return value based on the original function's return type
+fn analyze_return_type(return_type: &syn::ReturnType) -> ReturnTypeCategory {
+    match return_type {
+        syn::ReturnType::Default => ReturnTypeCategory::Unit,
+        syn::ReturnType::Type(_, ty) => {
+            let type_str = quote! { #ty }.to_string();
+            
+            // Check for HttpResult<ElifResponse>
+            if type_str.contains("HttpResult") && type_str.contains("ElifResponse") {
+                ReturnTypeCategory::HttpResultElifResponse
+            }
+            // Check for ElifResponse
+            else if type_str.contains("ElifResponse") {
+                ReturnTypeCategory::ElifResponse
+            }
+            // Check for Result types (including HttpResult<T> where T != ElifResponse)
+            else if type_str.contains("Result") || type_str.contains("HttpResult") {
+                ReturnTypeCategory::ResultType
+            }
+            // Everything else (serializable types)
+            else {
+                ReturnTypeCategory::SerializableType
+            }
+        }
+    }
+}
+
+/// Categories of return types for response handling
+#[derive(Debug, PartialEq)]
+enum ReturnTypeCategory {
+    Unit,                      // () - return empty response
+    ElifResponse,              // ElifResponse - pass through
+    HttpResultElifResponse,    // HttpResult<ElifResponse> - pass through  
+    ResultType,                // Result<T, E> - handle error, serialize T
+    SerializableType,          // T - serialize to JSON
 }
 
 /// Get the appropriate extraction method name based on parameter type
@@ -245,7 +317,7 @@ fn get_extraction_method(
         return match param_type.as_str() {
             "Integer" => quote::format_ident!("path_param_int"),
             "String" => quote::format_ident!("path_param_string"),
-            "Uuid" => quote::format_ident!("path_param_string"), // UUID is handled as string
+            "Uuid" => quote::format_ident!("path_param_uuid"), // UUID should be parsed with its specific method
             _ => quote::format_ident!("path_param_string"), // Default to string
         };
     }
