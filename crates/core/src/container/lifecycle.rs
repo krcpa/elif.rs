@@ -50,6 +50,8 @@ pub struct ServiceLifecycleManager {
     initializable_services: Vec<Arc<dyn AsyncInitializable>>,
     /// Services that need disposal (in reverse order of creation)
     disposable_services: Vec<Arc<dyn Disposable>>,
+    /// Service type names for initializable services (parallel to initializable_services)
+    initializable_service_types: Vec<String>,
     /// Current state of the lifecycle manager
     state: ServiceState,
     /// Optional handle for background disposal task
@@ -73,6 +75,7 @@ impl ServiceLifecycleManager {
         Self {
             initializable_services: Vec::new(),
             disposable_services: Vec::new(),
+            initializable_service_types: Vec::new(),
             state: ServiceState::Registered,
             disposal_handle: None,
         }
@@ -81,6 +84,7 @@ impl ServiceLifecycleManager {
     /// Add a service that needs async initialization
     pub fn add_initializable<T: AsyncInitializable + 'static>(&mut self, service: Arc<T>) {
         self.initializable_services.push(service);
+        self.initializable_service_types.push(std::any::type_name::<T>().to_string());
     }
     
     /// Add a service that needs disposal
@@ -92,6 +96,7 @@ impl ServiceLifecycleManager {
     pub fn add_lifecycle_managed<T: LifecycleManaged + 'static>(&mut self, service: Arc<T>) {
         let service_clone = service.clone();
         self.initializable_services.push(service_clone);
+        self.initializable_service_types.push(std::any::type_name::<T>().to_string());
         self.disposable_services.push(service);
     }
     
@@ -106,9 +111,14 @@ impl ServiceLifecycleManager {
         self.state = ServiceState::Created;
         
         // Initialize services in registration order
-        for service in &self.initializable_services {
+        for (index, service) in self.initializable_services.iter().enumerate() {
+            let service_type = self.initializable_service_types
+                .get(index)
+                .map(|s| s.as_str())
+                .unwrap_or("unknown");
+            
             service.initialize().await.map_err(|e| CoreError::ServiceInitializationFailed {
-                service_type: "unknown".to_string(),
+                service_type: service_type.to_string(),
                 source: Box::new(e),
             })?;
         }
@@ -370,5 +380,39 @@ mod tests {
         
         // Service should be disposed by Drop
         assert!(service.disposed.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn test_initialization_error_with_service_type() {
+        #[derive(Default)]
+        struct FailingService;
+
+        #[async_trait]
+        impl AsyncInitializable for FailingService {
+            async fn initialize(&self) -> Result<(), CoreError> {
+                Err(CoreError::InvalidServiceDescriptor {
+                    message: "Test initialization failure".to_string(),
+                })
+            }
+        }
+
+        let mut manager = ServiceLifecycleManager::new();
+        let service = Arc::new(FailingService::default());
+        
+        manager.add_initializable(service);
+        
+        // Should fail with proper service type name
+        let result = manager.initialize_all().await;
+        
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        
+        if let CoreError::ServiceInitializationFailed { service_type, .. } = error {
+            // Check that it contains the actual service type name
+            assert!(service_type.contains("FailingService"));
+            assert!(!service_type.eq("unknown"));
+        } else {
+            panic!("Expected ServiceInitializationFailed error, got: {:?}", error);
+        }
     }
 }
