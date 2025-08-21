@@ -1,4 +1,4 @@
-error: Body type specification required. Hint: Use #[body(MyType)] to specify the expected request body type.
+error: Body specification required. Hint: Use #[body(param_name: Type)] to specify the body parameter.
  --> tests/ui/fail/body_no_args.rs:4:1
   |
 4 | #[body]  // Missing body type argument
