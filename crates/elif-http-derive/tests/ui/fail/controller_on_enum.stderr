@@ -1,4 +1,4 @@
-error: controller attribute must be applied to an impl block or struct
+error: controller attribute must be applied to an impl block or struct. Hint: Use `#[controller("/path")] impl MyController { ... }` or `#[controller("/path")] struct MyController;`
  --> tests/ui/fail/controller_on_enum.rs:6:1
   |
 6 | #[controller("/api")]

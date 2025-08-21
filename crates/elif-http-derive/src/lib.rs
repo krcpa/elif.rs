@@ -16,7 +16,8 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
     parse_macro_input, ItemFn, ItemStruct, ItemImpl, ImplItem,
-    Attribute, Meta, Signature, FnArg, Pat, PatIdent, parse::Parse, parse::ParseStream, Token, LitStr
+    Attribute, Meta, Signature, FnArg, Pat, PatIdent, parse::Parse, parse::ParseStream, Token, LitStr,
+    Ident, Type
 };
 
 #[cfg(test)]
@@ -50,14 +51,20 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
             if let Some(segment) = type_path.path.segments.last() {
                 segment.ident.to_string()
             } else {
-                return syn::Error::new_spanned(self_ty, "Cannot extract struct name from type path")
-                    .to_compile_error()
-                    .into();
-            }
-        } else {
-            return syn::Error::new_spanned(self_ty, "Expected a simple type for impl block")
+                return syn::Error::new_spanned(
+                    self_ty, 
+                    "Cannot extract struct name from type path. Hint: Use a simple struct name like `MyController`."
+                )
                 .to_compile_error()
                 .into();
+            }
+        } else {
+            return syn::Error::new_spanned(
+                self_ty, 
+                "Expected a simple type for impl block. Hint: Apply #[controller] to `impl MyStruct { ... }` not complex types."
+            )
+            .to_compile_error()
+            .into();
         };
         
         // Collect route information from methods
@@ -99,7 +106,7 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     });
                     
-                    // Generate handler for async dispatch
+                    // Generate handler for async dispatch with Arc<Self>
                     method_handlers.push(quote! {
                         #handler_name_lit => self.#method_name(request).await
                     });
@@ -141,7 +148,7 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
                 
                 async fn handle_request(
-                    &self,
+                    self: std::sync::Arc<Self>,
                     method_name: String,
                     request: ElifRequest,
                 ) -> HttpResult<ElifResponse> {
@@ -175,7 +182,7 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
     } else {
         syn::Error::new(
             proc_macro2::Span::call_site(),
-            "controller attribute must be applied to an impl block or struct"
+            "controller attribute must be applied to an impl block or struct. Hint: Use `#[controller(\"/path\")] impl MyController { ... }` or `#[controller(\"/path\")] struct MyController;`"
         )
         .to_compile_error()
         .into()
@@ -190,8 +197,30 @@ macro_rules! http_method_macro {
             let route_path = if args.is_empty() {
                 "".to_string()
             } else {
-                let path_lit = parse_macro_input!(args as syn::LitStr);
-                path_lit.value()
+                let path_lit = match syn::parse::<syn::LitStr>(args) {
+                    Ok(lit) => lit,
+                    Err(_) => {
+                        return syn::Error::new(
+                            proc_macro2::Span::call_site(),
+                            format!("Invalid path argument for {} macro. Hint: Use a string literal like #[{}(\"/users/{{id}}\")]", $method, $method.to_lowercase())
+                        )
+                        .to_compile_error()
+                        .into();
+                    }
+                };
+                let path = path_lit.value();
+                
+                // Validate path format
+                if let Err(msg) = validate_route_path(&path) {
+                    return syn::Error::new_spanned(
+                        &path_lit,
+                        format!("Invalid route path '{}': {}. Hint: Use format like '/users/{{id}}' with proper parameter syntax.", path, msg)
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+                
+                path
             };
             let input_fn = parse_macro_input!(input as ItemFn);
             
@@ -299,9 +328,39 @@ pub fn middleware(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// Route parameter specification macro
+/// Validates that the parameter type matches what's expected from the route path
 #[proc_macro_attribute]
-pub fn param(_args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn param(args: TokenStream, input: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(input as ItemFn);
+    
+    // Parse parameter specification from args
+    let param_spec = if !args.is_empty() {
+        match syn::parse::<ParamSpec>(args) {
+            Ok(spec) => Some(spec),
+            Err(err) => {
+                return syn::Error::new(
+                    err.span(),
+                    format!("Invalid param specification: {}. Hint: Use #[param(id: int)] or #[param(name: string)]", err)
+                )
+                .to_compile_error()
+                .into();
+            }
+        }
+    } else {
+        None
+    };
+    
+    // Validate that function signature matches param specification
+    if let Some(spec) = &param_spec {
+        if let Err(msg) = validate_param_consistency(&spec, &input_fn.sig) {
+            return syn::Error::new_spanned(
+                &input_fn.sig,
+                format!("Parameter type mismatch: {}. Hint: Ensure function parameter type matches #[param] declaration.", msg)
+            )
+            .to_compile_error()
+            .into();
+        }
+    }
     
     let expanded = quote! {
         #input_fn
@@ -311,11 +370,50 @@ pub fn param(_args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// Request body specification macro
+/// Validates that the handler function can accept the specified body type
 #[proc_macro_attribute]
-pub fn body(_args: TokenStream, input: TokenStream) -> TokenStream {
-    // For now, this is just a marker - the actual body parsing happens
-    // in the handler using req.json::<T>() or similar methods
-    input
+pub fn body(args: TokenStream, input: TokenStream) -> TokenStream {
+    let input_fn = parse_macro_input!(input as ItemFn);
+    
+    // Parse body type specification from args
+    let body_type = if !args.is_empty() {
+        match syn::parse::<Type>(args) {
+            Ok(ty) => Some(ty),
+            Err(err) => {
+                return syn::Error::new(
+                    err.span(),
+                    format!("Invalid body type specification: {}. Hint: Use #[body(UserData)] where UserData is a valid type", err)
+                )
+                .to_compile_error()
+                .into();
+            }
+        }
+    } else {
+        return syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "Body type specification required. Hint: Use #[body(MyType)] to specify the expected request body type."
+        )
+        .to_compile_error()
+        .into();
+    };
+    
+    // Validate that function signature can handle the body type
+    if let Some(body_ty) = &body_type {
+        if let Err(msg) = validate_body_compatibility(body_ty, &input_fn.sig) {
+            return syn::Error::new_spanned(
+                &input_fn.sig,
+                format!("Body type compatibility issue: {}. Hint: Ensure function accepts ElifJson<{}> or similar parameter.", msg, quote! { #body_ty })
+            )
+            .to_compile_error()
+            .into();
+        }
+    }
+    
+    let expanded = quote! {
+        #input_fn
+    };
+    
+    TokenStream::from(expanded)
 }
 
 /// Route registration macro for impl blocks
@@ -345,15 +443,18 @@ pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             return syn::Error::new_spanned(
                 &input_impl.self_ty,
-                "Cannot get identifier from an empty type path",
+                "Cannot get identifier from an empty type path. Hint: Use a proper struct name like `impl MyRoutes`.",
             )
             .to_compile_error()
             .into();
         }
     } else {
-        return syn::Error::new_spanned(&input_impl.self_ty, "Expected a simple type for the impl block")
-            .to_compile_error()
-            .into();
+        return syn::Error::new_spanned(
+            &input_impl.self_ty, 
+            "Expected a simple type for the impl block. Hint: Apply #[routes] to `impl MyStruct { ... }` not complex types."
+        )
+        .to_compile_error()
+        .into();
     };
     
     let mut route_registrations = Vec::new();
@@ -464,15 +565,18 @@ pub fn group(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             return syn::Error::new_spanned(
                 &input_impl.self_ty,
-                "Cannot get identifier from an empty type path",
+                "Cannot get identifier from an empty type path. Hint: Use a proper struct name like `impl MyGroup`.",
             )
             .to_compile_error()
             .into();
         }
     } else {
-        return syn::Error::new_spanned(&input_impl.self_ty, "Expected a simple type for the impl block")
-            .to_compile_error()
-            .into();
+        return syn::Error::new_spanned(
+            &input_impl.self_ty, 
+            "Expected a simple type for the impl block. Hint: Apply #[group] to `impl MyStruct { ... }` not complex types."
+        )
+        .to_compile_error()
+        .into();
     };
     
     let prefix = group_config.prefix;
@@ -610,6 +714,62 @@ struct GroupConfig {
     middleware: Vec<String>,
 }
 
+/// Parameter specification for type validation
+#[derive(Debug, Clone)]
+struct ParamSpec {
+    name: Ident,
+    param_type: ParamType,
+}
+
+/// Supported parameter types for validation
+#[derive(Debug, Clone, PartialEq)]
+enum ParamType {
+    String,
+    Int,
+    UInt,
+    Float,
+    Bool,
+    Uuid,
+}
+
+impl std::fmt::Display for ParamType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParamType::String => write!(f, "string"),
+            ParamType::Int => write!(f, "int"),
+            ParamType::UInt => write!(f, "uint"),
+            ParamType::Float => write!(f, "float"),
+            ParamType::Bool => write!(f, "bool"),
+            ParamType::Uuid => write!(f, "uuid"),
+        }
+    }
+}
+
+impl Parse for ParamSpec {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let name: Ident = input.parse()?;
+        input.parse::<Token![:]>()?;
+        let type_ident: Ident = input.parse()?;
+        
+        let param_type = match type_ident.to_string().as_str() {
+            "string" => ParamType::String,
+            "int" => ParamType::Int,
+            "uint" => ParamType::UInt,
+            "float" => ParamType::Float,
+            "bool" => ParamType::Bool,
+            "uuid" => ParamType::Uuid,
+            _ => {
+                return Err(syn::Error::new_spanned(
+                    type_ident,
+                    format!("Unsupported parameter type. Supported types: string, int, uint, float, bool, uuid")
+                ));
+            }
+        };
+        
+        Ok(ParamSpec { name, param_type })
+    }
+}
+
 /// Parsing struct for group arguments like: "/api/v1", middleware = [cors, auth]
 struct GroupArgs {
     prefix: LitStr,
@@ -632,7 +792,7 @@ impl Parse for GroupArgs {
             if ident != "middleware" {
                 return Err(syn::Error::new_spanned(
                     ident,
-                    "Expected 'middleware' keyword"
+                    "Expected 'middleware' keyword. Hint: Use syntax like #[group(\"/api\", middleware = [auth, cors])]"
                 ));
             }
             let eq: Token![=] = input.parse()?;
@@ -693,6 +853,151 @@ fn parse_group_args_robust(args: TokenStream) -> syn::Result<GroupConfig> {
 fn parse_group_args(args: TokenStream) -> GroupConfig {
     // Use the robust parser and fall back to default on error
     parse_group_args_robust(args).unwrap_or_default()
+}
+
+/// Validate route path format and return error message if invalid
+fn validate_route_path(path: &str) -> Result<(), String> {
+    if path.is_empty() {
+        return Ok(());
+    }
+    
+    // Check for malformed parameter syntax
+    let mut chars = path.chars().peekable();
+    let mut brace_count = 0;
+    let mut in_param = false;
+    let mut param_content = String::new();
+    
+    while let Some(ch) = chars.next() {
+        match ch {
+            '{' => {
+                if in_param {
+                    return Err("nested braces are not allowed in parameters".to_string());
+                }
+                brace_count += 1;
+                in_param = true;
+                param_content.clear();
+            }
+            '}' => {
+                if !in_param {
+                    return Err("unmatched closing brace '}'".to_string());
+                }
+                if param_content.is_empty() {
+                    return Err("empty parameter name '{}'".to_string());
+                }
+                if !param_content.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    return Err(format!("invalid parameter name '{}' - use only alphanumeric characters and underscores", param_content));
+                }
+                brace_count -= 1;
+                in_param = false;
+            }
+            _ if in_param => {
+                param_content.push(ch);
+            }
+            _ => {}
+        }
+    }
+    
+    if brace_count != 0 {
+        return Err("unmatched opening brace '{'".to_string());
+    }
+    
+    // Check for double slashes
+    if path.contains("//") {
+        return Err("double slashes '//' are not allowed".to_string());
+    }
+    
+    Ok(())
+}
+
+/// Validate that parameter specification matches function signature
+fn validate_param_consistency(param_spec: &ParamSpec, sig: &Signature) -> Result<(), String> {
+    let param_name = param_spec.name.to_string();
+    
+    // Find the parameter in the function signature
+    let mut found_param = None;
+    for input in &sig.inputs {
+        if let FnArg::Typed(pat_type) = input {
+            if let Pat::Ident(PatIdent { ident, .. }) = pat_type.pat.as_ref() {
+                if ident.to_string() == param_name {
+                    found_param = Some(&*pat_type.ty);
+                    break;
+                }
+            }
+        }
+    }
+    
+    let param_type = match found_param {
+        Some(ty) => ty,
+        None => return Err(format!("Parameter '{}' not found in function signature", param_name)),
+    };
+    
+    // Validate type compatibility
+    let type_str = quote! { #param_type }.to_string().replace(" ", "");
+    let expected_types = get_compatible_rust_types(&param_spec.param_type);
+    
+    if !expected_types.iter().any(|expected| type_str.contains(expected)) {
+        return Err(format!(
+            "Parameter '{}' has type '{}' but expected one of: {}",
+            param_name,
+            type_str,
+            expected_types.join(", ")
+        ));
+    }
+    
+    Ok(())
+}
+
+/// Get compatible Rust types for a parameter type
+fn get_compatible_rust_types(param_type: &ParamType) -> Vec<&'static str> {
+    match param_type {
+        ParamType::String => vec!["String", "&str", "str"],
+        ParamType::Int => vec!["i32", "i64", "isize"],
+        ParamType::UInt => vec!["u32", "u64", "usize"],
+        ParamType::Float => vec!["f32", "f64"],
+        ParamType::Bool => vec!["bool"],
+        ParamType::Uuid => vec!["Uuid", "uuid::Uuid"],
+    }
+}
+
+/// Validate that function signature is compatible with the specified body type
+fn validate_body_compatibility(body_type: &Type, sig: &Signature) -> Result<(), String> {
+    let body_type_str = quote! { #body_type }.to_string().replace(" ", "");
+    
+    // Look for a parameter that could accept the body
+    let mut found_body_param = false;
+    for input in &sig.inputs {
+        if let FnArg::Typed(pat_type) = input {
+            let param_type_str = quote! { #pat_type.ty }.to_string().replace(" ", "");
+            
+            // Check if this parameter could accept the body type
+            if param_type_str.contains("ElifJson") ||
+               param_type_str.contains("Json") ||
+               param_type_str.contains(&body_type_str) {
+                found_body_param = true;
+                
+                // Validate that it's properly wrapped
+                if param_type_str.contains("ElifJson") {
+                    // Check if the inner type matches
+                    if !param_type_str.contains(&body_type_str) {
+                        return Err(format!(
+                            "ElifJson parameter type doesn't match expected body type '{}'",
+                            body_type_str
+                        ));
+                    }
+                }
+                break;
+            }
+        }
+    }
+    
+    if !found_body_param {
+        return Err(format!(
+            "No compatible body parameter found for type '{}'. Expected parameter like ElifJson<{}>",
+            body_type_str, body_type_str
+        ));
+    }
+    
+    Ok(())
 }
 
 /// Extract path parameters from a route path (e.g., "/users/{id}" -> ["id"])

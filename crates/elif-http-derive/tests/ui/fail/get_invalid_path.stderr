@@ -1,5 +1,7 @@
-error: expected string literal
- --> tests/ui/fail/get_invalid_path.rs:6:7
+error: Invalid path argument for GET macro. Hint: Use a string literal like #[get("/users/{id}")]
+ --> tests/ui/fail/get_invalid_path.rs:6:1
   |
 6 | #[get(invalid_path)]
-  |       ^^^^^^^^^^^^
+  | ^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `get` (in Nightly builds, run with -Z macro-backtrace for more info)
