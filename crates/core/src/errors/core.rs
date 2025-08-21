@@ -57,6 +57,21 @@ pub enum CoreError {
     #[error("Database error: {message}")]
     Database { message: String },
     
+    #[error("Circular dependency detected: {path} (cycle at: {cycle_service})")]
+    CircularDependency {
+        path: String,
+        cycle_service: String,
+    },
+    
+    #[error("Invalid service descriptor: {message}")]
+    InvalidServiceDescriptor { message: String },
+    
+    #[error("Dependency resolution failed for '{service_type}': {message}")]
+    DependencyResolutionFailed {
+        service_type: String,
+        message: String,
+    },
+    
     #[error("API error: {code} - {message}")]
     Api {
         code: String,
