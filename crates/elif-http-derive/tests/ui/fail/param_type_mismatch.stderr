@@ -1,4 +1,4 @@
-error: Parameter type mismatch: Parameter 'id' has type 'u32' but expected one of: String, &str, str. Hint: Ensure function parameter type matches #[param] declaration.
+error: Parameter type mismatch: Parameter 'id' has type 'u32' but expected one of: String, &str, str. Hint: Change the function parameter to match #[param(id: string)] or change the #[param] declaration to match the function parameter.
  --> tests/ui/fail/param_type_mismatch.rs:5:1
   |
 5 | fn get_user(id: u32) -> String {  // Function expects u32, param declares string

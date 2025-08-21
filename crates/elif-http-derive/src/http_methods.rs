@@ -67,6 +67,23 @@ pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStrea
         // Extract body parameter information
         let body_param = extract_body_param_from_attrs(&input_fn.attrs);
         
+        // Perform comprehensive validation before generation
+        if let Err(validation_error) = validate_method_consistency(
+            &route_path,
+            &path_params,
+            &param_types,
+            &input_fn.sig,
+            &body_param,
+            has_request_attr
+        ) {
+            return syn::Error::new_spanned(
+                &input_fn.sig,
+                validation_error
+            )
+            .to_compile_error()
+            .into();
+        }
+        
         // Generate wrapper method with parameter injection
         generate_injected_method(&input_fn, &path_params, &param_types, has_request_attr, body_param)
     } else {
@@ -286,10 +303,17 @@ fn generate_injected_method(
     let wrapper_asyncness = quote! { async };
     
     // Generate the appropriate method call based on original async-ness
+    // For async methods, immediately await to avoid self capture issues in generated code
     let method_call = if original_asyncness.is_some() {
-        quote! { self.#original_fn_name(#(#call_args),*).await }
+        quote! { 
+            // Call async method immediately to avoid self capture in closures
+            self.#original_fn_name(#(#call_args),*).await 
+        }
     } else {
-        quote! { self.#original_fn_name(#(#call_args),*) }
+        quote! { 
+            // Call sync method directly
+            self.#original_fn_name(#(#call_args),*) 
+        }
     };
     
     // Analyze the return type to determine how to handle the response
@@ -407,4 +431,108 @@ fn get_extraction_method(
     } else {
         quote::format_ident!("path_param_string")
     }
+}
+
+/// Comprehensive validation of method consistency between route path, parameters, and function signature
+fn validate_method_consistency(
+    route_path: &str,
+    path_params: &[String],
+    param_types: &HashMap<String, String>,
+    sig: &syn::Signature,
+    body_param: &Option<(String, BodyParamType)>,
+    has_request_attr: bool,
+) -> Result<(), String> {
+    use syn::{FnArg, Pat, PatIdent};
+    
+    // Collect function parameters (excluding self and ElifRequest)
+    let mut fn_params = HashMap::new();
+    let mut has_request_param = false;
+    
+    for input in &sig.inputs {
+        match input {
+            FnArg::Receiver(_) => {
+                // Skip self parameter
+            }
+            FnArg::Typed(pat_type) => {
+                if let Pat::Ident(PatIdent { ident, .. }) = pat_type.pat.as_ref() {
+                    let param_name = ident.to_string();
+                    let param_type_str = quote! { #pat_type.ty }.to_string();
+                    
+                    if param_type_str.contains("ElifRequest") {
+                        has_request_param = true;
+                    } else {
+                        fn_params.insert(param_name, param_type_str);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Validation 1: Route path parameters must have corresponding #[param] declarations
+    for path_param in path_params {
+        if !param_types.contains_key(path_param) {
+            return Err(format!(
+                "Route parameter '{}' in path '{}' is missing #[param] declaration. \
+                Hint: Add #[param({}: type)] above the function.",
+                path_param, route_path, path_param
+            ));
+        }
+    }
+    
+    // Validation 2: #[param] declarations must correspond to route path parameters
+    for param_name in param_types.keys() {
+        if !path_params.contains(param_name) {
+            return Err(format!(
+                "Parameter '{}' has #[param] declaration but is not present in route path '{}'. \
+                Hint: Add '{{{}}}' to the route path or remove the #[param({})] declaration.",
+                param_name, route_path, param_name, param_name
+            ));
+        }
+    }
+    
+    // Validation 3: Function parameters must match route and #[param] declarations
+    for path_param in path_params {
+        if !fn_params.contains_key(path_param) {
+            return Err(format!(
+                "Route parameter '{}' is declared but missing from function signature. \
+                Hint: Add '{}: SomeType' to the function parameters.",
+                path_param, path_param
+            ));
+        }
+    }
+    
+    // Validation 4: If #[request] is specified but ElifRequest is already in signature, warn about redundancy
+    if has_request_attr && has_request_param {
+        return Err(format!(
+            "Redundant #[request] attribute: function already has ElifRequest parameter. \
+            Hint: Remove either the #[request] attribute or the ElifRequest parameter from the function signature."
+        ));
+    }
+    
+    // Validation 5: Body parameter validation
+    if let Some((body_param_name, _)) = body_param {
+        if !fn_params.contains_key(body_param_name) {
+            return Err(format!(
+                "Body parameter '{}' specified in #[body] but missing from function signature. \
+                Hint: Add '{}: SomeType' to the function parameters.",
+                body_param_name, body_param_name
+            ));
+        }
+    }
+    
+    // Validation 6: Check for unexpected parameters
+    for (fn_param_name, _) in &fn_params {
+        let is_path_param = path_params.contains(fn_param_name);
+        let is_body_param = body_param.as_ref().map_or(false, |(name, _)| name == fn_param_name);
+        
+        if !is_path_param && !is_body_param {
+            return Err(format!(
+                "Function parameter '{}' is not handled by any route parameter, #[body], or ElifRequest. \
+                Hint: Add '{{{}}}' to the route path and #[param({}: type)], or annotate with #[body({}: Type)].",
+                fn_param_name, fn_param_name, fn_param_name, fn_param_name
+            ));
+        }
+    }
+    
+    Ok(())
 }
