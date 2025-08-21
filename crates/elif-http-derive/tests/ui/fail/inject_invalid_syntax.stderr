@@ -1,0 +1,5 @@
+error: expected `:`
+ --> tests/ui/fail/inject_invalid_syntax.rs:6:23
+  |
+6 | #[inject(user_service UserService)]
+  |                       ^^^^^^^^^^^
