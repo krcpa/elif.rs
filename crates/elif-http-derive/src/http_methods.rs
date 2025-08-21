@@ -143,18 +143,20 @@ fn generate_injected_method(
     // Build parameter extraction and call arguments in order
     let mut param_extractions = Vec::new();
     let mut call_args = Vec::new();
-    let mut needs_request_injection = has_request_attr;
+    let mut modified_inputs = Vec::new();
     let request_param_name = if has_request_attr {
         extract_request_param_name(&input_fn.attrs)
     } else {
         "req".to_string()
     };
     
-    // Process function parameters in order to preserve original signature order
+    // First, copy existing parameters and check for request parameter
+    let mut has_existing_request_param = false;
     for input in &input_fn.sig.inputs {
         match input {
             syn::FnArg::Receiver(_) => {
-                // Skip self parameter - it's implicit in method call
+                // Keep self parameter
+                modified_inputs.push(input.clone());
             }
             syn::FnArg::Typed(pat_type) => {
                 if let syn::Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
@@ -172,16 +174,15 @@ fn generate_injected_method(
                                 .map_err(|e| HttpError::bad_request(format!("Invalid parameter '{}': {:?}", #param_name, e)))?;
                         });
                         call_args.push(quote! { #param_ident });
+                        modified_inputs.push(input.clone());
                     } else if param_type_str.contains("ElifRequest") {
                         // This is the request parameter - pass it through
                         call_args.push(quote! { request });
-                        needs_request_injection = false; // Already has request parameter
+                        modified_inputs.push(input.clone());
+                        has_existing_request_param = true;
                     } else {
-                        // Check if this is a regular parameter when #[request] is present
-                        if has_request_attr {
-                            // With #[request], we allow any parameter and pass it as-is
-                            call_args.push(quote! { #pat_ident });
-                        } else {
+                        // Check if this parameter is supported
+                        if !has_request_attr {
                             // Without #[request], unsupported parameter type - generate compile-time error
                             return syn::Error::new_spanned(
                                 pat_type,
@@ -194,18 +195,23 @@ fn generate_injected_method(
                             .to_compile_error()
                             .into();
                         }
+                        // Regular parameter with #[request] - keep as-is
+                        call_args.push(quote! { #pat_ident });
+                        modified_inputs.push(input.clone());
                     }
                 }
             }
         }
     }
     
-    // If #[request] is present and method doesn't have ElifRequest parameter, inject it
-    if needs_request_injection {
+    // If #[request] is present and method doesn't have ElifRequest parameter, add it to signature
+    if has_request_attr && !has_existing_request_param {
         let req_ident = quote::format_ident!("{}", request_param_name);
-        param_extractions.push(quote! {
-            let #req_ident = request;
-        });
+        let request_param = syn::parse_quote! {
+            #req_ident: ::elif_http::ElifRequest
+        };
+        modified_inputs.push(request_param);
+        call_args.push(quote! { request });
     }
     
     // Get the original function's components
@@ -224,7 +230,6 @@ fn generate_injected_method(
     let original_block = &input_fn.block;
     let original_return = &input_fn.sig.output;
     let original_asyncness = &input_fn.sig.asyncness;
-    let original_inputs = &input_fn.sig.inputs;
     
     // Generate the wrapper method's asyncness (always async for HTTP handlers)
     let wrapper_asyncness = quote! { async };
@@ -275,9 +280,9 @@ fn generate_injected_method(
     };
     
     let expanded = quote! {
-        // Keep the original method with renamed identifier
+        // Keep the original method with modified signature (includes injected request parameter)
         #(#original_attrs)*
-        #original_vis #original_asyncness fn #original_fn_name(#original_inputs) #original_return #original_block
+        #original_vis #original_asyncness fn #original_fn_name(#(#modified_inputs),*) #original_return #original_block
         
         // Generate wrapper method that extracts parameters from request
         #original_vis #wrapper_asyncness fn #original_name(&self, request: ElifRequest) -> HttpResult<ElifResponse> {
