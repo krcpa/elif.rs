@@ -108,7 +108,7 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         });
         
         // Generate method handlers for async dispatch
-        let method_match_arms = method_handlers.iter().enumerate().map(|(_, handler)| handler);
+        let method_match_arms = method_handlers.iter();
         
         // Generate the expanded code with ElifController trait implementation
         // Using async-trait for proper async method support
