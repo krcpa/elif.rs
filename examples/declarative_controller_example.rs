@@ -17,7 +17,7 @@ use elif_http::{
 
 // Enable the derive feature for the macros
 #[cfg(feature = "derive")]
-use elif_http::{controller, get, post, put, delete, middleware, param};
+use elif_http_derive::{controller, get, post, put, delete, middleware, param};
 
 use serde::{Serialize, Deserialize};
 use std::sync::Arc;
@@ -46,10 +46,11 @@ mod declarative_controllers {
     /// Using a unit struct for simplicity in this example.
     /// In real applications, controllers typically contain service dependencies
     /// injected through dependency injection or passed as fields.
-    #[controller("/users")]
-    #[middleware("logging", "cors")]
+    #[derive(Clone)]
     pub struct UserController;
 
+    #[controller("/users")]
+    #[middleware("logging", "cors")]
     impl UserController {
         /// GET /users - List all users
         #[get("")]
@@ -135,10 +136,11 @@ mod declarative_controllers {
     }
     
     /// Posts controller demonstrating additional routes
-    #[controller("/posts")]
-    #[middleware("logging")]
+    #[derive(Clone)]
     pub struct PostController;
 
+    #[controller("/posts")]
+    #[middleware("logging")]
     impl PostController {
         /// GET /posts - List all posts
         #[get("")]
@@ -166,9 +168,10 @@ mod declarative_controllers {
     }
     
     /// API information controller
-    #[controller("/api")]
+    #[derive(Clone)]
     pub struct ApiController;
 
+    #[controller("/api")]
     impl ApiController {
         /// GET /api/info - API information
         #[get("/info")]
@@ -226,8 +229,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         use declarative_controllers::*;
         
         // Create router with declarative controllers
-        // Note: This would need to be implemented in the macro system
-        // For now, this is a demonstration of the intended API
+        // The new #[controller] macro on impl blocks generates the ElifController trait implementation
+        // which enables automatic route registration with the router.
+        
+        // NOTE: The current macro implementation has a limitation where handle_request
+        // cannot properly dispatch to instance methods due to lifetime constraints.
+        // This will be addressed in a future phase of development.
+        
         let router = ElifRouter::<()>::new()
             .controller(UserController)
             .controller(PostController)

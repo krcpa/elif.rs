@@ -1,5 +1,7 @@
-error: expected `struct`
- --> tests/ui/fail/controller_on_enum.rs:7:5
+error: controller attribute must be applied to an impl block or struct
+ --> tests/ui/fail/controller_on_enum.rs:6:1
   |
-7 | pub enum BadController {
-  |     ^^^^
+6 | #[controller("/api")]
+  | ^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `controller` (in Nightly builds, run with -Z macro-backtrace for more info)

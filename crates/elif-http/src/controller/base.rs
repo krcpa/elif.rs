@@ -11,6 +11,7 @@ use crate::{
 };
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
+use async_trait::async_trait;
 
 use elif_core::Container;
 use crate::{HttpResult, response::ApiResponse};
@@ -209,6 +210,7 @@ impl ControllerRoute {
 }
 
 /// Main trait for controllers with automatic route registration
+#[async_trait]
 pub trait ElifController: Send + Sync + 'static {
     /// Controller name for identification
     fn name(&self) -> &str;
@@ -225,11 +227,11 @@ pub trait ElifController: Send + Sync + 'static {
     }
     
     /// Handle a request by dispatching to the appropriate method
-    fn handle_request(
+    async fn handle_request(
         &self,
         method_name: String,
         request: ElifRequest,
-    ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
+    ) -> HttpResult<ElifResponse>;
 }
 
 /// Macro to help implement controller method dispatch

@@ -782,12 +782,11 @@ mod tests {
     fn test_controller_registration() {
         use crate::controller::{ElifController, ControllerRoute, RouteParam};
         use crate::routing::params::ParamType;
-        use std::pin::Pin;
-        use std::future::Future;
 
         // Create a test controller
         struct TestController;
 
+        #[async_trait::async_trait]
         impl ElifController for TestController {
             fn name(&self) -> &str { "TestController" }
             fn base_path(&self) -> &str { "/test" }
@@ -801,19 +800,17 @@ mod tests {
                 ]
             }
             
-            fn handle_request(
+            async fn handle_request(
                 &self,
                 method_name: String,
                 _request: ElifRequest,
-            ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
-                Box::pin(async move {
-                    match method_name.as_str() {
-                        "list" => Ok(ElifResponse::ok().text("List method")),
-                        "show" => Ok(ElifResponse::ok().text("Show method")),
-                        "create" => Ok(ElifResponse::ok().text("Create method")),
-                        _ => Ok(ElifResponse::not_found().text("Method not found")),
-                    }
-                })
+            ) -> HttpResult<ElifResponse> {
+                match method_name.as_str() {
+                    "list" => Ok(ElifResponse::ok().text("List method")),
+                    "show" => Ok(ElifResponse::ok().text("Show method")),
+                    "create" => Ok(ElifResponse::ok().text("Create method")),
+                    _ => Ok(ElifResponse::not_found().text("Method not found")),
+                }
             }
         }
 
@@ -857,12 +854,11 @@ mod tests {
     #[test]
     fn test_controller_with_root_base_path() {
         use crate::controller::{ElifController, ControllerRoute};
-        use std::pin::Pin;
-        use std::future::Future;
 
         // Create a controller with root base path
         struct RootController;
 
+        #[async_trait::async_trait]
         impl ElifController for RootController {
             fn name(&self) -> &str { "RootController" }
             fn base_path(&self) -> &str { "/" } // Root base path
@@ -874,18 +870,16 @@ mod tests {
                 ]
             }
             
-            fn handle_request(
+            async fn handle_request(
                 &self,
                 method_name: String,
                 _request: ElifRequest,
-            ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
-                Box::pin(async move {
-                    match method_name.as_str() {
-                        "home" => Ok(ElifResponse::ok().text("Home")),
-                        "health" => Ok(ElifResponse::ok().text("Health")),
-                        _ => Ok(ElifResponse::not_found().text("Not found")),
-                    }
-                })
+            ) -> HttpResult<ElifResponse> {
+                match method_name.as_str() {
+                    "home" => Ok(ElifResponse::ok().text("Home")),
+                    "health" => Ok(ElifResponse::ok().text("Health")),
+                    _ => Ok(ElifResponse::not_found().text("Not found")),
+                }
             }
         }
 
@@ -909,12 +903,11 @@ mod tests {
     #[test]
     fn test_controller_with_empty_base_path() {
         use crate::controller::{ElifController, ControllerRoute};
-        use std::pin::Pin;
-        use std::future::Future;
 
         // Create a controller with empty base path
         struct EmptyBaseController;
 
+        #[async_trait::async_trait]
         impl ElifController for EmptyBaseController {
             fn name(&self) -> &str { "EmptyBaseController" }
             fn base_path(&self) -> &str { "" } // Empty base path
@@ -926,18 +919,16 @@ mod tests {
                 ]
             }
             
-            fn handle_request(
+            async fn handle_request(
                 &self,
                 method_name: String,
                 _request: ElifRequest,
-            ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
-                Box::pin(async move {
-                    match method_name.as_str() {
-                        "root" => Ok(ElifResponse::ok().text("Root")),
-                        "api" => Ok(ElifResponse::ok().text("API")),
-                        _ => Ok(ElifResponse::not_found().text("Not found")),
-                    }
-                })
+            ) -> HttpResult<ElifResponse> {
+                match method_name.as_str() {
+                    "root" => Ok(ElifResponse::ok().text("Root")),
+                    "api" => Ok(ElifResponse::ok().text("API")),
+                    _ => Ok(ElifResponse::not_found().text("Not found")),
+                }
             }
         }
 
@@ -961,32 +952,32 @@ mod tests {
     #[tokio::test]
     async fn test_concurrent_router_merge_no_deadlock() {
         use crate::controller::{ElifController, ControllerRoute};
-        use std::pin::Pin;
-        use std::future::Future;
         use tokio::time::{timeout, Duration};
 
         // Create test controllers
         struct TestControllerA;
+        #[async_trait::async_trait]
         impl ElifController for TestControllerA {
             fn name(&self) -> &str { "TestControllerA" }
             fn base_path(&self) -> &str { "/a" }
             fn routes(&self) -> Vec<ControllerRoute> {
                 vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
             }
-            fn handle_request(&self, _method_name: String, _request: ElifRequest) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
-                Box::pin(async { Ok(ElifResponse::ok().text("A")) })
+            async fn handle_request(&self, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
+                Ok(ElifResponse::ok().text("A"))
             }
         }
 
         struct TestControllerB;
+        #[async_trait::async_trait]
         impl ElifController for TestControllerB {
             fn name(&self) -> &str { "TestControllerB" }
             fn base_path(&self) -> &str { "/b" }
             fn routes(&self) -> Vec<ControllerRoute> {
                 vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
             }
-            fn handle_request(&self, _method_name: String, _request: ElifRequest) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
-                Box::pin(async { Ok(ElifResponse::ok().text("B")) })
+            async fn handle_request(&self, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
+                Ok(ElifResponse::ok().text("B"))
             }
         }
 
@@ -1017,30 +1008,30 @@ mod tests {
     #[test]
     fn test_controller_merge_preserves_all_controllers() {
         use crate::controller::{ElifController, ControllerRoute};
-        use std::pin::Pin;
-        use std::future::Future;
 
         struct ControllerA;
+        #[async_trait::async_trait]
         impl ElifController for ControllerA {
             fn name(&self) -> &str { "ControllerA" }
             fn base_path(&self) -> &str { "/a" }
             fn routes(&self) -> Vec<ControllerRoute> {
                 vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
             }
-            fn handle_request(&self, _method_name: String, _request: ElifRequest) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
-                Box::pin(async { Ok(ElifResponse::ok().text("A")) })
+            async fn handle_request(&self, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
+                Ok(ElifResponse::ok().text("A"))
             }
         }
 
         struct ControllerB;
+        #[async_trait::async_trait]
         impl ElifController for ControllerB {
             fn name(&self) -> &str { "ControllerB" }
             fn base_path(&self) -> &str { "/b" }
             fn routes(&self) -> Vec<ControllerRoute> {
                 vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
             }
-            fn handle_request(&self, _method_name: String, _request: ElifRequest) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
-                Box::pin(async { Ok(ElifResponse::ok().text("B")) })
+            async fn handle_request(&self, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
+                Ok(ElifResponse::ok().text("B"))
             }
         }
 
