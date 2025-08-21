@@ -39,4 +39,7 @@ Key points
 - Groups: `#[group("/api/v1")]` prefixes all routes in the impl block.
 - Resources: `#[resource("/posts")]` expands to a conventional CRUD set.
 
+Notes
+- Ensure the `derive` feature is enabled for `elif-http` in your `Cargo.toml` or depend on `elif-http-derive` directly to use these macros.
+
 See also: the advanced patterns in `crates/elif-http-derive/examples/advanced_routing_demo.rs`.
