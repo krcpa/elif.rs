@@ -109,7 +109,7 @@ impl IocContainer {
     
     /// Create a child scope from an existing scope
     pub fn create_child_scope(&self, parent_scope_id: &ScopeId) -> Result<ScopeId, CoreError> {
-        let scopes = self.scopes.read().map_err(|_| CoreError::LockError {
+        let mut scopes = self.scopes.write().map_err(|_| CoreError::LockError {
             resource: "scopes".to_string(),
         })?;
         
@@ -119,12 +119,6 @@ impl IocContainer {
         
         let child_scope = parent_scope.create_child();
         let child_scope_id = child_scope.scope_id().clone();
-        
-        drop(scopes);
-        
-        let mut scopes = self.scopes.write().map_err(|_| CoreError::LockError {
-            resource: "scopes".to_string(),
-        })?;
         
         scopes.insert(child_scope_id.clone(), child_scope);
         Ok(child_scope_id)

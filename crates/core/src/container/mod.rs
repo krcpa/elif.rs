@@ -21,6 +21,8 @@ pub mod lifecycle;
 
 #[cfg(test)]
 pub mod simple_lifecycle_tests;
+#[cfg(test)]
+pub mod race_condition_tests;
 
 pub use container::Container;
 pub use builder::ContainerBuilder;
