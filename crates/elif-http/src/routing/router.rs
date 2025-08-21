@@ -801,7 +801,7 @@ mod tests {
             }
             
             async fn handle_request(
-                &self,
+                self: std::sync::Arc<Self>,
                 method_name: String,
                 _request: ElifRequest,
             ) -> HttpResult<ElifResponse> {
@@ -871,7 +871,7 @@ mod tests {
             }
             
             async fn handle_request(
-                &self,
+                self: std::sync::Arc<Self>,
                 method_name: String,
                 _request: ElifRequest,
             ) -> HttpResult<ElifResponse> {
@@ -920,7 +920,7 @@ mod tests {
             }
             
             async fn handle_request(
-                &self,
+                self: std::sync::Arc<Self>,
                 method_name: String,
                 _request: ElifRequest,
             ) -> HttpResult<ElifResponse> {
@@ -963,7 +963,7 @@ mod tests {
             fn routes(&self) -> Vec<ControllerRoute> {
                 vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
             }
-            async fn handle_request(&self, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
+            async fn handle_request(self: std::sync::Arc<Self>, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
                 Ok(ElifResponse::ok().text("A"))
             }
         }
@@ -976,7 +976,7 @@ mod tests {
             fn routes(&self) -> Vec<ControllerRoute> {
                 vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
             }
-            async fn handle_request(&self, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
+            async fn handle_request(self: std::sync::Arc<Self>, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
                 Ok(ElifResponse::ok().text("B"))
             }
         }
@@ -1017,7 +1017,7 @@ mod tests {
             fn routes(&self) -> Vec<ControllerRoute> {
                 vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
             }
-            async fn handle_request(&self, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
+            async fn handle_request(self: std::sync::Arc<Self>, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
                 Ok(ElifResponse::ok().text("A"))
             }
         }
@@ -1030,7 +1030,7 @@ mod tests {
             fn routes(&self) -> Vec<ControllerRoute> {
                 vec![ControllerRoute::new(HttpMethod::GET, "", "test")]
             }
-            async fn handle_request(&self, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
+            async fn handle_request(self: std::sync::Arc<Self>, _method_name: String, _request: ElifRequest) -> HttpResult<ElifResponse> {
                 Ok(ElifResponse::ok().text("B"))
             }
         }

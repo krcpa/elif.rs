@@ -227,20 +227,22 @@ pub trait ElifController: Send + Sync + 'static {
     }
     
     /// Handle a request by dispatching to the appropriate method
+    /// Uses Arc<Self> for thread-safe concurrent access to controller instance
     async fn handle_request(
-        &self,
+        self: Arc<Self>,
         method_name: String,
         request: ElifRequest,
     ) -> HttpResult<ElifResponse>;
 }
 
 /// Macro to help implement controller method dispatch
+/// Updated to work with Arc<Self> for thread-safe controller access
 #[macro_export]
 macro_rules! controller_dispatch {
     ($self:expr, $method_name:expr, $request:expr, {
         $($method:literal => $handler:expr),*
     }) => {
-        match $method_name {
+        match $method_name.as_str() {
             $($method => Box::pin($handler($self, $request)),)*
             _ => Box::pin(async move {
                 use crate::response::ElifResponse;

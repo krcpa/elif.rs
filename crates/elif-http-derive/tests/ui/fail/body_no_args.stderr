@@ -1,0 +1,13 @@
+error: Body type specification required. Hint: Use #[body(MyType)] to specify the expected request body type.
+ --> tests/ui/fail/body_no_args.rs:4:1
+  |
+4 | #[body]  // Missing body type argument
+  | ^^^^^^^
+  |
+  = note: this error originates in the attribute macro `body` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/ui/fail/body_no_args.rs:7:2
+  |
+7 | }
+  |  ^ consider adding a `main` function to `$DIR/tests/ui/fail/body_no_args.rs`
