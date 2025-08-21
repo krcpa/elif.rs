@@ -85,18 +85,16 @@ impl ServiceDef {
                             return Ok(inner_type);
                         }
                     }
+                    // It's an Option but malformed.
+                    return Err(Error::new_spanned(
+                        &self.field_type,
+                        "Failed to extract inner type from Option<T>",
+                    ));
                 }
             }
         }
-        
-        if self.is_optional() {
-            Err(Error::new_spanned(
-                &self.field_type,
-                "Failed to extract inner type from Option<T>",
-            ))
-        } else {
-            Ok(&self.field_type)
-        }
+        // Not an Option, so return the type itself.
+        Ok(&self.field_type)
     }
 }
 
