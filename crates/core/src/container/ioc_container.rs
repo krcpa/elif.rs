@@ -31,7 +31,7 @@ pub struct IocContainer {
     /// Service lifecycle manager
     lifecycle_manager: ServiceLifecycleManager,
     /// Active scopes
-    scopes: Arc<RwLock<HashMap<ScopeId, ScopedServiceManager>>>,
+    scopes: Arc<RwLock<HashMap<ScopeId, Arc<ScopedServiceManager>>>>,
     /// Whether the container is built and ready
     is_built: bool,
 }
@@ -96,7 +96,7 @@ impl IocContainer {
     
     /// Create a new service scope
     pub fn create_scope(&self) -> Result<ScopeId, CoreError> {
-        let scope_manager = ScopedServiceManager::new();
+        let scope_manager = Arc::new(ScopedServiceManager::new());
         let scope_id = scope_manager.scope_id().clone();
         
         let mut scopes = self.scopes.write().map_err(|_| CoreError::LockError {
@@ -113,11 +113,13 @@ impl IocContainer {
             resource: "scopes".to_string(),
         })?;
         
-        let parent_scope = scopes.get(parent_scope_id).ok_or_else(|| CoreError::ServiceNotFound {
-            service_type: format!("parent scope {}", parent_scope_id),
-        })?;
+        let parent_scope = scopes.get(parent_scope_id)
+            .ok_or_else(|| CoreError::ServiceNotFound {
+                service_type: format!("parent scope {}", parent_scope_id),
+            })?
+            .clone(); // Clone the Arc, not the ScopedServiceManager
         
-        let child_scope = parent_scope.create_child();
+        let child_scope = Arc::new(ScopedServiceManager::create_child(parent_scope));
         let child_scope_id = child_scope.scope_id().clone();
         
         scopes.insert(child_scope_id.clone(), child_scope);

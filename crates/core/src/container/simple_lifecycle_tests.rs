@@ -137,7 +137,7 @@ async fn test_service_scope_behavior() {
     assert_eq!(ServiceScope::Scoped.as_str(), "scoped");
     
     // Test ScopedServiceManager
-    let mut manager = ScopedServiceManager::new();
+    let manager = std::sync::Arc::new(ScopedServiceManager::new());
     let service = TestService::default();
     
     manager.add_service(service);
@@ -145,7 +145,7 @@ async fn test_service_scope_behavior() {
     assert_eq!(manager.service_count(), 1);
     
     // Test nested scopes
-    let child_manager = manager.create_child();
+    let child_manager = ScopedServiceManager::create_child(manager.clone());
     assert!(child_manager.parent().is_some());
     assert_ne!(manager.scope_id(), child_manager.scope_id());
 }
