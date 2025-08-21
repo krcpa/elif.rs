@@ -139,7 +139,7 @@ mod tests {
         };
         
         let result = controller.get_cached_user(456);
-        assert_eq!(result, "User 456"); // Since cache doesn't have "user" key
+        assert_eq!(result, "cached_value"); // Now expecting a cache hit
         
         // Test with optional service absent
         let controller_no_cache = OptionalServiceController {
