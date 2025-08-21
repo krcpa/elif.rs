@@ -60,8 +60,9 @@ impl Parse for ParamSpec {
         let name: Ident = input.parse()?;
         input.parse::<Token![:]>()?;
         let type_ident: Ident = input.parse()?;
+        let type_name = type_ident.to_string();
         
-        let param_type = match type_ident.to_string().as_str() {
+        let param_type = match type_name.as_str() {
             "string" => ParamType::String,
             "int" => ParamType::Int,
             "uint" => ParamType::UInt,
@@ -71,7 +72,13 @@ impl Parse for ParamSpec {
             _ => {
                 return Err(syn::Error::new_spanned(
                     type_ident,
-"Unsupported parameter type. Supported types: string, int, uint, float, bool, uuid".to_string()
+                    format!(
+                        "Unsupported parameter type '{}'. Supported types: string, int, uint, float, bool, uuid. \
+                        Hint: Use #[param({}: string)] for string parameters or #[param({}: int)] for integer parameters.", 
+                        type_name, 
+                        name, 
+                        name
+                    )
                 ));
             }
         };
@@ -131,7 +138,11 @@ pub fn validate_param_consistency(param_spec: &ParamSpec, sig: &Signature) -> Re
     
     let param_type = match found_param {
         Some(ty) => ty,
-        None => return Err(format!("Parameter '{}' not found in function signature", param_name)),
+        None => return Err(format!(
+            "Parameter '{}' specified in #[param] not found in function signature. \
+            Hint: Add '{}: SomeType' as a function parameter or remove the #[param({})] annotation.",
+            param_name, param_name, param_name
+        )),
     };
     
     // Validate type compatibility
@@ -140,10 +151,13 @@ pub fn validate_param_consistency(param_spec: &ParamSpec, sig: &Signature) -> Re
     
     if !expected_types.iter().any(|expected| type_str.contains(expected)) {
         return Err(format!(
-            "Parameter '{}' has type '{}' but expected one of: {}",
+            "Parameter '{}' has type '{}' but expected one of: {}. \
+            Hint: Change the function parameter to match #[param({}: {})] or change the #[param] declaration to match the function parameter.",
             param_name,
             type_str,
-            expected_types.join(", ")
+            expected_types.join(", "),
+            param_name,
+            get_recommended_param_type(&param_spec.param_type)
         ));
     }
     
@@ -159,6 +173,18 @@ pub fn get_compatible_rust_types(param_type: &ParamType) -> Vec<&'static str> {
         ParamType::Float => vec!["f32", "f64"],
         ParamType::Bool => vec!["bool"],
         ParamType::Uuid => vec!["Uuid", "uuid::Uuid"],
+    }
+}
+
+/// Get the recommended parameter type string for error messages
+pub fn get_recommended_param_type(param_type: &ParamType) -> &'static str {
+    match param_type {
+        ParamType::String => "string",
+        ParamType::Int => "int", 
+        ParamType::UInt => "uint",
+        ParamType::Float => "float",
+        ParamType::Bool => "bool",
+        ParamType::Uuid => "uuid",
     }
 }
 
@@ -291,7 +317,7 @@ pub fn param_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         if let Err(msg) = validate_param_consistency(spec, &input_fn.sig) {
             return syn::Error::new_spanned(
                 &input_fn.sig,
-                format!("Parameter type mismatch: {}. Hint: Ensure function parameter type matches #[param] declaration.", msg)
+                format!("Parameter type mismatch: {}", msg)
             )
             .to_compile_error()
             .into();

@@ -1,10 +1,12 @@
 # WebSockets
 
-Add real-time features with WebSockets. Learn connection handling, rooms/topics, broadcasting, and auth.
+Build real-time features with channels, broadcasting, and per-connection state.
 
-Topics:
-- Establishing connections
-- Message passing and broadcast
-- Authentication
-- Scaling strategies
+Example snippets (see `crates/elif-http/examples/websocket_channel_demo.rs`)
+- Sending text messages to all connections
+- Broadcasting to a specific channel/topic
+- Enforcing auth on connect and rejecting unauthorized clients
 
+Tips
+- Keep messages small and typed (JSON schemas) to simplify clients.
+- Add backpressure and rate limiting to avoid abuse.

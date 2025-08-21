@@ -61,7 +61,29 @@ pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStrea
         && has_self
         && has_param_annotations
         && has_injectable_params(&fn_params, &path_params);
+    let needs_validation = !path_params.is_empty() && has_self && has_param_annotations;
     let needs_injection = has_path_param_injection || (has_self && has_request_attr) || (has_self && has_body_attr);
+    
+    // Perform validation if we have path parameters and param annotations, even if injection is not needed
+    if needs_validation {
+        let body_param = extract_body_param_from_attrs(&input_fn.attrs);
+        
+        if let Err(validation_error) = validate_method_consistency(
+            &route_path,
+            &path_params,
+            &param_types,
+            &input_fn.sig,
+            &body_param,
+            has_request_attr
+        ) {
+            return syn::Error::new_spanned(
+                &input_fn.sig,
+                validation_error
+            )
+            .to_compile_error()
+            .into();
+        }
+    }
     
     if needs_injection {
         // Extract body parameter information
@@ -166,12 +188,20 @@ fn generate_injected_method(
                 modified_inputs.push(input.clone());
             }
             syn::FnArg::Typed(pat_type) => {
-                if let syn::Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
-                    let param_name = pat_ident.ident.to_string();
-                    let param_type = &pat_type.ty;
-                    let param_type_str = quote! { #param_type }.to_string();
-                    
-                    if path_params.contains(&param_name) {
+                let param_type = &pat_type.ty;
+                let param_type_str = quote! { #param_type }.to_string();
+                
+                match pat_type.pat.as_ref() {
+                    syn::Pat::Ident(pat_ident) => {
+                        let param_name = pat_ident.ident.to_string();
+                        
+                        // Handle underscore-prefixed parameters as intentionally unused
+                        if param_name.starts_with('_') {
+                            // Skip validation for underscore-prefixed parameters
+                            let param_ident = &pat_ident.ident;
+                            modified_inputs.push(input.clone());
+                            call_args.push(quote! { #param_ident });
+                        } else if path_params.contains(&param_name) {
                         // This is a path parameter - generate extraction code
                         let param_ident = &pat_ident.ident;
                         let extraction_method = get_extraction_method(&param_name, param_types, &param_type_str);
@@ -215,6 +245,29 @@ fn generate_injected_method(
                                 "Unsupported parameter '{}' of type '{}'. Only path parameters (specified in route), body parameters (annotated with #[body]), and ElifRequest are supported. \
                                 Hint: Remove this parameter, add it to the route path like '/users/{{{}}}' and annotate with #[param({}: type)], annotate with #[body({}: Type)], or use #[request] to enable automatic request injection.",
                                 param_name, param_type_str, param_name, param_name, param_name
+                            )
+                        )
+                        .to_compile_error()
+                        .into();
+                        }
+                    }
+                    
+                    // Wildcard patterns: `_: Type`
+                    syn::Pat::Wild(_) => {
+                        // Wildcards are acceptable - they're explicitly ignored parameters
+                        modified_inputs.push(input.clone());
+                        // Don't add to call_args since wildcards can't be referenced
+                    }
+                    
+                    // Other unsupported patterns
+                    _ => {
+                        return syn::Error::new_spanned(
+                            pat_type,
+                            format!(
+                                "Unsupported parameter pattern: '{}'. \
+                                Only simple identifiers (e.g., 'param: Type') and wildcards (e.g., '_: Type') are supported in controller methods. \
+                                Hint: Use simple parameter names without destructuring or complex patterns.",
+                                quote! { #pat_type.pat }
                             )
                         )
                         .to_compile_error()
@@ -286,10 +339,17 @@ fn generate_injected_method(
     let wrapper_asyncness = quote! { async };
     
     // Generate the appropriate method call based on original async-ness
+    // For async methods, immediately await to avoid self capture issues in generated code
     let method_call = if original_asyncness.is_some() {
-        quote! { self.#original_fn_name(#(#call_args),*).await }
+        quote! { 
+            // Call async method immediately to avoid self capture in closures
+            self.#original_fn_name(#(#call_args),*).await 
+        }
     } else {
-        quote! { self.#original_fn_name(#(#call_args),*) }
+        quote! { 
+            // Call sync method directly
+            self.#original_fn_name(#(#call_args),*) 
+        }
     };
     
     // Analyze the return type to determine how to handle the response
@@ -407,4 +467,164 @@ fn get_extraction_method(
     } else {
         quote::format_ident!("path_param_string")
     }
+}
+
+/// Comprehensive validation of method consistency between route path, parameters, and function signature
+fn validate_method_consistency(
+    route_path: &str,
+    path_params: &[String],
+    param_types: &HashMap<String, String>,
+    sig: &syn::Signature,
+    body_param: &Option<(String, BodyParamType)>,
+    has_request_attr: bool,
+) -> Result<(), String> {
+    use syn::{FnArg, Pat, PatIdent};
+    
+    // Collect function parameters (excluding self and ElifRequest)
+    let mut fn_params = HashMap::new();
+    let mut has_request_param = false;
+    
+    for input in &sig.inputs {
+        match input {
+            FnArg::Receiver(_) => {
+                // Skip self parameter
+            }
+            FnArg::Typed(pat_type) => {
+                let param_type_str = quote! { #pat_type.ty }.to_string().replace(" ", "");
+                
+                match pat_type.pat.as_ref() {
+                    // Standard identifier: `param: Type` or underscore-prefixed: `_unused: Type`
+                    Pat::Ident(PatIdent { ident, .. }) => {
+                        let param_name = ident.to_string();
+                        
+                        // Handle underscore-prefixed identifiers as intentionally unused
+                        if param_name.starts_with('_') {
+                            // These are explicitly marked as unused, treat like wildcards
+                            // Don't add to fn_params to avoid validation issues
+                        } else {
+                            // Regular parameter processing
+                            if param_type_str.contains("ElifRequest") {
+                                has_request_param = true;
+                            } else {
+                                fn_params.insert(param_name, param_type_str);
+                            }
+                        }
+                    }
+                    
+                    // Wildcard patterns: `_: Type`
+                    Pat::Wild(_) => {
+                        // Wildcards are acceptable - they're explicitly ignored parameters
+                        // Don't add to fn_params since they can't be referenced
+                    }
+                    
+                    // Tuple destructuring: `(a, b): (Type1, Type2)`
+                    Pat::Tuple(_) => {
+                        return Err(format!(
+                            "Unsupported tuple destructuring pattern in parameter. \
+                            Hint: Use individual parameters instead of tuple destructuring. \
+                            Example: Change '(a, b): (Type1, Type2)' to 'a: Type1, b: Type2'."
+                        ));
+                    }
+                    
+                    // Struct destructuring: `User { name, .. }: User`
+                    Pat::Struct(_) => {
+                        return Err(format!(
+                            "Unsupported struct destructuring pattern in parameter: '{}'. \
+                            Hint: Use the complete struct type as parameter. \
+                            Example: Change 'User {{ name, .. }}: User' to 'user: User' and access 'user.name'.",
+                            quote! { #pat_type.pat }
+                        ));
+                    }
+                    
+                    // Reference patterns: `&name: &Type`
+                    Pat::Reference(_) => {
+                        return Err(format!(
+                            "Unsupported reference pattern in parameter: '{}'. \
+                            Hint: Remove the reference pattern and use the type directly. \
+                            Example: Change '&name: &Type' to 'name: &Type'.",
+                            quote! { #pat_type.pat }
+                        ));
+                    }
+                    
+                    // Any other pattern
+                    _ => {
+                        return Err(format!(
+                            "Unsupported parameter pattern: '{}'. \
+                            Only simple identifiers (e.g., 'param: Type') and wildcards (e.g., '_: Type') are supported in controller methods. \
+                            Hint: Use simple parameter names without destructuring or complex patterns.",
+                            quote! { #pat_type.pat }
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    
+    // Validation 1: Route path parameters must have corresponding #[param] declarations
+    for path_param in path_params {
+        if !param_types.contains_key(path_param) {
+            return Err(format!(
+                "Route parameter '{}' in path '{}' is missing #[param] declaration. \
+                Hint: Add #[param({}: type)] above the function.",
+                path_param, route_path, path_param
+            ));
+        }
+    }
+    
+    // Validation 2: #[param] declarations must correspond to route path parameters
+    for param_name in param_types.keys() {
+        if !path_params.contains(param_name) {
+            return Err(format!(
+                "Parameter '{}' has #[param] declaration but is not present in route path '{}'. \
+                Hint: Add '{{{}}}' to the route path or remove the #[param({})] declaration.",
+                param_name, route_path, param_name, param_name
+            ));
+        }
+    }
+    
+    // Validation 3: Function parameters must match route and #[param] declarations
+    for path_param in path_params {
+        if !fn_params.contains_key(path_param) {
+            return Err(format!(
+                "Route parameter '{}' is declared but missing from function signature. \
+                Hint: Add '{}: SomeType' to the function parameters.",
+                path_param, path_param
+            ));
+        }
+    }
+    
+    // Validation 4: If #[request] is specified but ElifRequest is already in signature, warn about redundancy
+    if has_request_attr && has_request_param {
+        return Err(format!(
+            "Redundant #[request] attribute: function already has ElifRequest parameter. \
+            Hint: Remove either the #[request] attribute or the ElifRequest parameter from the function signature."
+        ));
+    }
+    
+    // Validation 5: Body parameter validation
+    if let Some((body_param_name, _)) = body_param {
+        if !fn_params.contains_key(body_param_name) {
+            return Err(format!(
+                "Body parameter '{}' specified in #[body] but missing from function signature. \
+                Hint: Add '{}: SomeType' to the function parameters.",
+                body_param_name, body_param_name
+            ));
+        }
+    }
+    
+    // Validation 6: Check for unexpected parameters
+    for (fn_param_name, _) in &fn_params {
+        let is_path_param = path_params.contains(fn_param_name);
+        let is_body_param = body_param.as_ref().map_or(false, |(name, _)| name == fn_param_name);
+        
+        if !is_path_param && !is_body_param {
+            return Err(format!(
+                "Function parameter '{}' is not handled by any route parameter, #[body], or ElifRequest. \
+                Hint: Add '{{{}}}' to the route path and #[param({}: type)], or annotate with #[body({}: Type)].",
+                fn_param_name, fn_param_name, fn_param_name, fn_param_name
+            ));
+        }
+    }
+    
+    Ok(())
 }
