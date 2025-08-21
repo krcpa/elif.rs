@@ -394,12 +394,28 @@ impl IocContainer {
                     resource: "service_instances".to_string(),
                 })?;
                 
-                let entry = instances.entry(service_id.clone()).or_insert_with(|| {
-                    ServiceInstance::Scoped(HashMap::new())
-                });
-                
-                if let ServiceInstance::Scoped(scoped_instances) = entry {
-                    scoped_instances.insert(scope_id.clone(), arc_instance.clone());
+                use std::collections::hash_map::Entry;
+                match instances.entry(service_id.clone()) {
+                    Entry::Occupied(mut entry) => {
+                        match entry.get_mut() {
+                            ServiceInstance::Scoped(scoped_instances) => {
+                                scoped_instances.insert(scope_id.clone(), arc_instance.clone() as Arc<dyn Any + Send + Sync>);
+                            }
+                            ServiceInstance::Singleton(_) => {
+                                return Err(CoreError::InvalidServiceDescriptor {
+                                    message: format!(
+                                        "Service {} is registered as both Singleton and Scoped. This is a configuration error.",
+                                        std::any::type_name::<T>()
+                                    ),
+                                });
+                            }
+                        }
+                    }
+                    Entry::Vacant(entry) => {
+                        let mut scoped_map = HashMap::new();
+                        scoped_map.insert(scope_id.clone(), arc_instance.clone() as Arc<dyn Any + Send + Sync>);
+                        entry.insert(ServiceInstance::Scoped(scoped_map));
+                    }
                 }
                 
                 Ok(arc_instance)
