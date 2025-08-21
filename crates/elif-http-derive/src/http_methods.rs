@@ -152,7 +152,8 @@ fn generate_injected_method(
             syn::FnArg::Typed(pat_type) => {
                 if let syn::Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
                     let param_name = pat_ident.ident.to_string();
-                    let param_type_str = quote! { #pat_type.ty }.to_string();
+                    let param_type = &pat_type.ty;
+                    let param_type_str = quote! { #param_type }.to_string();
                     
                     if path_params.contains(&param_name) {
                         // This is a path parameter - generate extraction code
@@ -168,8 +169,17 @@ fn generate_injected_method(
                         // This is the request parameter - pass it through
                         call_args.push(quote! { request });
                     } else {
-                        // This is some other parameter - for now we'll skip it
-                        // In a full implementation, you might want to handle this case
+                        // Unsupported parameter type - generate compile-time error
+                        return syn::Error::new_spanned(
+                            pat_type,
+                            format!(
+                                "Unsupported parameter '{}' of type '{}'. Only path parameters (specified in route) and ElifRequest are supported. \
+                                Hint: Remove this parameter or add it to the route path like '/users/{{{}}}' and annotate with #[param({}: type)]",
+                                param_name, param_type_str, param_name, param_name
+                            )
+                        )
+                        .to_compile_error()
+                        .into();
                     }
                 }
             }
