@@ -100,8 +100,12 @@ impl ServiceBinder for IocContainerBuilder {
         self
     }
 
-    fn bind_collection<TInterface: ?Sized + 'static>(&mut self) -> crate::container::binding::CollectionBindingBuilder<TInterface> {
-        self.bindings.bind_collection::<TInterface>()
+    fn bind_collection<TInterface: ?Sized + 'static, F>(&mut self, configure: F) -> &mut Self
+    where
+        F: FnOnce(&mut crate::container::binding::CollectionBindingBuilder<TInterface>),
+    {
+        self.bindings.bind_collection::<TInterface, F>(configure);
+        self
     }
 
     fn bind_generic<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static, TGeneric>(&mut self) -> &mut Self

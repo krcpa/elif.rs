@@ -290,15 +290,19 @@ pub fn example_collection_binding() -> Result<IocContainer, CoreError> {
     let mut container = IocContainer::new();
     
     // Register multiple cache implementations as a collection
-    let _cache_collection = container.bind_collection::<dyn Cache>()
-        .add::<RedisCache>()
-        .add::<MemoryCache>()
-        .add_named::<HybridCache>("hybrid");
+    container.bind_collection::<dyn Cache, _>(|collection| {
+        collection
+            .add::<RedisCache>()
+            .add::<MemoryCache>()
+            .add_named::<HybridCache>("hybrid");
+    });
     
     // Register multiple storage providers
-    let _storage_collection = container.bind_collection::<dyn Storage>()
-        .add::<LocalStorage>()
-        .add::<S3Storage>();
+    container.bind_collection::<dyn Storage, _>(|collection| {
+        collection
+            .add::<LocalStorage>()
+            .add::<S3Storage>();
+    });
     
     container.build()?;
     Ok(container)

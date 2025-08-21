@@ -201,8 +201,10 @@ pub trait ServiceBinder {
         T: Send + Sync + 'static,
         P: Send + Sync + 'static;
     
-    /// Bind a collection of services 
-    fn bind_collection<TInterface: ?Sized + 'static>(&mut self) -> CollectionBindingBuilder<TInterface>;
+    /// Bind a collection of services using a closure-based configuration
+    fn bind_collection<TInterface: ?Sized + 'static, F>(&mut self, configure: F) -> &mut Self
+    where
+        F: FnOnce(&mut CollectionBindingBuilder<TInterface>);
     
     /// Bind generic service
     fn bind_generic<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static, TGeneric>(&mut self) -> &mut Self
@@ -210,7 +212,7 @@ pub trait ServiceBinder {
         TGeneric: Send + Sync + 'static;
 }
 
-/// Builder for collection bindings
+/// Builder for collection bindings that works with closure-based configuration
 pub struct CollectionBindingBuilder<TInterface: ?Sized + 'static> {
     services: Vec<ServiceDescriptor>,
     _phantom: std::marker::PhantomData<*const TInterface>,
@@ -225,7 +227,7 @@ impl<TInterface: ?Sized + 'static> CollectionBindingBuilder<TInterface> {
     }
     
     /// Add a service to the collection
-    pub fn add<TImpl: Send + Sync + Default + 'static>(mut self) -> Self {
+    pub fn add<TImpl: Send + Sync + Default + 'static>(&mut self) -> &mut Self {
         let descriptor = ServiceDescriptor::bind::<TInterface, TImpl>()
             .with_lifetime(ServiceScope::Transient)
             .build();
@@ -234,7 +236,7 @@ impl<TInterface: ?Sized + 'static> CollectionBindingBuilder<TInterface> {
     }
     
     /// Add a named service to the collection
-    pub fn add_named<TImpl: Send + Sync + Default + 'static>(mut self, name: impl Into<String>) -> Self {
+    pub fn add_named<TImpl: Send + Sync + Default + 'static>(&mut self, name: impl Into<String>) -> &mut Self {
         let descriptor = ServiceDescriptor::bind_named::<TInterface, TImpl>(name)
             .with_lifetime(ServiceScope::Transient)
             .build();
@@ -242,8 +244,26 @@ impl<TInterface: ?Sized + 'static> CollectionBindingBuilder<TInterface> {
         self
     }
     
-    /// Get the collection of service descriptors
-    pub fn services(self) -> Vec<ServiceDescriptor> {
+    /// Add a service with singleton lifetime
+    pub fn add_singleton<TImpl: Send + Sync + Default + 'static>(&mut self) -> &mut Self {
+        let descriptor = ServiceDescriptor::bind::<TInterface, TImpl>()
+            .with_lifetime(ServiceScope::Singleton)
+            .build();
+        self.services.push(descriptor);
+        self
+    }
+    
+    /// Add a named singleton service
+    pub fn add_named_singleton<TImpl: Send + Sync + Default + 'static>(&mut self, name: impl Into<String>) -> &mut Self {
+        let descriptor = ServiceDescriptor::bind_named::<TInterface, TImpl>(name)
+            .with_lifetime(ServiceScope::Singleton)
+            .build();
+        self.services.push(descriptor);
+        self
+    }
+    
+    /// Get the collection of service descriptors (internal use)
+    pub(crate) fn into_services(self) -> Vec<ServiceDescriptor> {
         self.services
     }
 }
@@ -446,8 +466,17 @@ impl ServiceBinder for ServiceBindings {
         self
     }
     
-    fn bind_collection<TInterface: ?Sized + 'static>(&mut self) -> CollectionBindingBuilder<TInterface> {
-        CollectionBindingBuilder::new()
+    fn bind_collection<TInterface: ?Sized + 'static, F>(&mut self, configure: F) -> &mut Self
+    where
+        F: FnOnce(&mut CollectionBindingBuilder<TInterface>),
+    {
+        let mut builder = CollectionBindingBuilder::new();
+        configure(&mut builder);
+        let services = builder.into_services();
+        for service in services {
+            self.add_descriptor(service);
+        }
+        self
     }
     
     fn bind_generic<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static, TGeneric>(&mut self) -> &mut Self
@@ -659,16 +688,17 @@ mod tests {
     fn test_collection_binding() {
         let mut bindings = ServiceBindings::new();
         
-        let collection = bindings.bind_collection::<dyn TestService>()
-            .add::<UserService>()
-            .add_named::<UserService>("named_user_service");
+        // Use the new closure-based API that actually registers services
+        bindings.bind_collection::<dyn TestService, _>(|collection| {
+            collection
+                .add::<UserService>()
+                .add_named::<UserService>("named_user_service");
+        });
         
-        let services = collection.services();
-        assert_eq!(services.len(), 2);
-        
-        // Verify the services are correctly configured
-        assert!(services.iter().any(|s| s.service_id == ServiceId::of::<dyn TestService>()));
-        assert!(services.iter().any(|s| s.service_id == ServiceId::named::<dyn TestService>("named_user_service")));
+        // Verify that the services were actually registered in the bindings
+        assert_eq!(bindings.count(), 2);
+        assert!(bindings.contains(&ServiceId::of::<dyn TestService>()));
+        assert!(bindings.contains(&ServiceId::named::<dyn TestService>("named_user_service")));
     }
 
     #[test]

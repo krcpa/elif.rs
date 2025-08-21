@@ -377,18 +377,24 @@ mod advanced_binding_tests {
     fn test_collection_binding() {
         let mut container = IocContainer::new();
         
-        let collection = container.bind_collection::<dyn TestCache>()
-            .add::<RedisCache>()
-            .add::<MemoryCache>()
-            .add_named::<RedisCache>("special_redis");
+        // Use the new closure-based API that actually registers services
+        container.bind_collection::<dyn TestCache, _>(|collection| {
+            collection
+                .add::<RedisCache>()
+                .add::<MemoryCache>()
+                .add_named::<RedisCache>("special_redis");
+        });
         
-        let services = collection.services();
-        assert_eq!(services.len(), 3);
+        container.build().expect("Failed to build container");
         
-        // Verify service descriptors are properly configured
-        for service in &services {
-            assert_eq!(service.service_id.type_id, std::any::TypeId::of::<dyn TestCache>());
-            assert_eq!(service.lifetime, ServiceScope::Transient);
-        }
+        // Verify that the services were actually registered and can be resolved
+        assert!(container.resolve::<RedisCache>().is_ok());
+        assert!(container.resolve::<MemoryCache>().is_ok());
+        assert!(container.resolve_named::<RedisCache>("special_redis").is_ok());
+        
+        // Check statistics show the right number of services
+        let stats = container.get_statistics();
+        assert_eq!(stats.total_services, 3); // RedisCache, MemoryCache, and named RedisCache
+        assert_eq!(stats.transient_services, 3); // All are transient by default
     }
 }
