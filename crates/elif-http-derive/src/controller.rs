@@ -73,7 +73,7 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
                         "patch" => quote! { PATCH },
                         "head" => quote! { HEAD },
                         "options" => quote! { OPTIONS },
-                        _ => quote! { GET }, // Default fallback
+                        _ => unreachable!("extract_http_method_info should only return valid HTTP methods"),
                     };
                     
                     // Extract middleware from method attributes
