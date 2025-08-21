@@ -265,45 +265,27 @@ pub fn request_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         "req".to_string()
     };
     
-    // Check if the function already has a parameter with the request name or ElifRequest type
-    let mut has_existing_req_param = false;
-    let mut has_elif_request_param = false;
-    
+    // Check if the function already has a parameter that conflicts with the request name
     for input in &input_fn.sig.inputs {
         if let FnArg::Typed(pat_type) = input {
             if let Pat::Ident(PatIdent { ident, .. }) = pat_type.pat.as_ref() {
-                let param_name = ident.to_string();
-                let param_type_str = quote! { #pat_type.ty }.to_string();
-                
-                // Check if parameter name conflicts
-                if param_name == req_param_name {
-                    has_existing_req_param = true;
-                }
-                
-                // Check if there's already an ElifRequest parameter
-                if param_type_str.contains("ElifRequest") {
-                    has_elif_request_param = true;
+                if *ident == req_param_name {
+                    // A parameter with the same name exists. Check if it's a conflict.
+                    let param_type_str = quote! { #pat_type.ty }.to_string();
+                    if !param_type_str.contains("ElifRequest") {
+                        // It's a conflict if the type is not ElifRequest.
+                        return syn::Error::new_spanned(
+                            &input_fn.sig,
+                            format!("Function already has a parameter named '{}' which conflicts with #[request]. Either rename the parameter or change its type to ElifRequest.", req_param_name)
+                        )
+                        .to_compile_error()
+                        .into();
+                    }
+                    // If it is an ElifRequest, it's not a conflict. We can stop checking.
+                    break;
                 }
             }
         }
-    }
-    
-    if has_existing_req_param {
-        return syn::Error::new_spanned(
-            &input_fn.sig,
-            format!("Function already has a parameter named '{}'. Remove #[request] or use a different parameter name with #[request(other_name)].", req_param_name)
-        )
-        .to_compile_error()
-        .into();
-    }
-    
-    if has_elif_request_param {
-        return syn::Error::new_spanned(
-            &input_fn.sig,
-            "Function already has an ElifRequest parameter. Remove #[request] attribute or the existing ElifRequest parameter."
-        )
-        .to_compile_error()
-        .into();
     }
     
     // The actual signature modification will be handled by the HTTP method macros
