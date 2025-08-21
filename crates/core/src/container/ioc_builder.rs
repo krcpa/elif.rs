@@ -69,6 +69,48 @@ impl ServiceBinder for IocContainerBuilder {
         self.bindings.bind_injectable_singleton::<T>();
         self
     }
+
+    // Advanced binding methods implementation
+    
+    fn bind_with<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self) -> crate::container::binding::AdvancedBindingBuilder<TInterface> {
+        self.bindings.bind_with::<TInterface, TImpl>()
+    }
+
+    fn with_implementation<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, config: crate::container::binding::BindingConfig) -> &mut Self {
+        self.bindings.with_implementation::<TInterface, TImpl>(config);
+        self
+    }
+
+    fn bind_lazy<TInterface: ?Sized + 'static, F, T>(&mut self, factory: F) -> &mut Self
+    where
+        F: Fn() -> T + Send + Sync + 'static,
+        T: Send + Sync + 'static,
+    {
+        self.bindings.bind_lazy::<TInterface, F, T>(factory);
+        self
+    }
+
+    fn bind_parameterized_factory<TInterface: ?Sized + 'static, P, F, T>(&mut self, factory: F) -> &mut Self
+    where
+        F: Fn(P) -> Result<T, CoreError> + Send + Sync + 'static,
+        T: Send + Sync + 'static,
+        P: Send + Sync + 'static,
+    {
+        self.bindings.bind_parameterized_factory::<TInterface, P, F, T>(factory);
+        self
+    }
+
+    fn bind_collection<TInterface: ?Sized + 'static>(&mut self) -> crate::container::binding::CollectionBindingBuilder<TInterface> {
+        self.bindings.bind_collection::<TInterface>()
+    }
+
+    fn bind_generic<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static, TGeneric>(&mut self) -> &mut Self
+    where
+        TGeneric: Send + Sync + 'static,
+    {
+        self.bindings.bind_generic::<TInterface, TImpl, TGeneric>();
+        self
+    }
 }
 
 impl Default for IocContainerBuilder {

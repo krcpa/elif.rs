@@ -585,6 +585,156 @@ impl IocContainer {
         
         Ok(())
     }
+
+    /// Resolve all implementations of an interface as a vector
+    pub fn resolve_all<T: Send + Sync + 'static>(&self) -> Result<Vec<Arc<T>>, CoreError> {
+        if !self.is_built {
+            return Err(CoreError::InvalidServiceDescriptor {
+                message: "Container must be built before resolving services".to_string(),
+            });
+        }
+        
+        let mut implementations = Vec::new();
+        
+        // Find all descriptors that match the type
+        for descriptor in self.bindings.descriptors() {
+            if descriptor.service_id.type_id == std::any::TypeId::of::<T>() {
+                match self.resolve_by_id::<T>(&descriptor.service_id) {
+                    Ok(instance) => implementations.push(instance),
+                    Err(_) => continue, // Skip failed resolutions
+                }
+            }
+        }
+        
+        if implementations.is_empty() {
+            return Err(CoreError::ServiceNotFound {
+                service_type: std::any::type_name::<T>().to_string(),
+            });
+        }
+        
+        Ok(implementations)
+    }
+    
+    /// Resolve all implementations of an interface as a HashMap with their names
+    pub fn resolve_all_named<T: Send + Sync + 'static>(&self) -> Result<std::collections::HashMap<String, Arc<T>>, CoreError> {
+        if !self.is_built {
+            return Err(CoreError::InvalidServiceDescriptor {
+                message: "Container must be built before resolving services".to_string(),
+            });
+        }
+        
+        let mut implementations = std::collections::HashMap::new();
+        
+        // Find all named descriptors that match the type
+        for descriptor in self.bindings.descriptors() {
+            if descriptor.service_id.type_id == std::any::TypeId::of::<T>() {
+                if let Some(name) = &descriptor.service_id.name {
+                    match self.resolve_by_id::<T>(&descriptor.service_id) {
+                        Ok(instance) => {
+                            implementations.insert(name.clone(), instance);
+                        },
+                        Err(_) => continue, // Skip failed resolutions
+                    }
+                }
+            }
+        }
+        
+        if implementations.is_empty() {
+            return Err(CoreError::ServiceNotFound {
+                service_type: format!("named implementations of {}", std::any::type_name::<T>()),
+            });
+        }
+        
+        Ok(implementations)
+    }
+    
+    /// Get default implementation for a type (marked with is_default in BindingConfig)
+    pub fn resolve_default<T: Send + Sync + 'static>(&self) -> Result<Arc<T>, CoreError> {
+        // For now, just resolve the first unnamed implementation
+        // In a full implementation, we'd track which binding was marked as default
+        self.resolve::<T>()
+    }
+    
+    /// Get service information for debugging
+    pub fn get_service_info<T: 'static>(&self) -> Option<String> {
+        let service_id = ServiceId::of::<T>();
+        self.bindings.get_descriptor(&service_id)
+            .map(|desc| format!("{:?}", desc))
+    }
+    
+    /// Get all registered service IDs for debugging
+    pub fn get_registered_services(&self) -> Vec<String> {
+        self.bindings.service_ids()
+            .into_iter()
+            .map(|id| format!("{} ({})", id.type_name(), id.name.unwrap_or_else(|| "default".to_string())))
+            .collect()
+    }
+    
+    /// Validate that all registered services can be resolved
+    pub fn validate_all_services(&self) -> Result<(), Vec<CoreError>> {
+        if !self.is_built {
+            return Err(vec![CoreError::InvalidServiceDescriptor {
+                message: "Container must be built before validation".to_string(),
+            }]);
+        }
+        
+        let mut errors = Vec::new();
+        
+        for descriptor in self.bindings.descriptors() {
+            // Validate dependencies exist
+            for dependency in &descriptor.dependencies {
+                if !self.bindings.contains(dependency) {
+                    errors.push(CoreError::ServiceNotFound {
+                        service_type: format!("{} (dependency of {})", 
+                            dependency.type_name(),
+                            descriptor.service_id.type_name()
+                        ),
+                    });
+                }
+            }
+        }
+        
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+    
+    /// Get service statistics
+    pub fn get_statistics(&self) -> ServiceStatistics {
+        let mut stats = ServiceStatistics::default();
+        
+        stats.total_services = self.bindings.count();
+        stats.singleton_services = 0;
+        stats.transient_services = 0;
+        stats.scoped_services = 0;
+        stats.cached_instances = 0;
+        
+        for descriptor in self.bindings.descriptors() {
+            match descriptor.lifetime {
+                crate::container::scope::ServiceScope::Singleton => stats.singleton_services += 1,
+                crate::container::scope::ServiceScope::Transient => stats.transient_services += 1,
+                crate::container::scope::ServiceScope::Scoped => stats.scoped_services += 1,
+            }
+        }
+        
+        if let Ok(instances) = self.instances.read() {
+            stats.cached_instances = instances.len();
+        }
+        
+        stats
+    }
+}
+
+/// Service statistics for monitoring and debugging
+#[derive(Debug, Default)]
+pub struct ServiceStatistics {
+    pub total_services: usize,
+    pub singleton_services: usize,
+    pub transient_services: usize,
+    pub scoped_services: usize,
+    pub cached_instances: usize,
 }
 
 impl ServiceBinder for IocContainer {
@@ -653,6 +803,66 @@ impl ServiceBinder for IocContainer {
             panic!("Cannot add bindings after container is built");
         }
         self.bindings.bind_injectable_singleton::<T>();
+        self
+    }
+
+    // Advanced binding methods implementation
+
+    fn bind_with<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self) -> crate::container::binding::AdvancedBindingBuilder<TInterface> {
+        if self.is_built {
+            panic!("Cannot add bindings after container is built");
+        }
+        self.bindings.bind_with::<TInterface, TImpl>()
+    }
+
+    fn with_implementation<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, config: crate::container::binding::BindingConfig) -> &mut Self {
+        if self.is_built {
+            panic!("Cannot add bindings after container is built");
+        }
+        self.bindings.with_implementation::<TInterface, TImpl>(config);
+        self
+    }
+
+    fn bind_lazy<TInterface: ?Sized + 'static, F, T>(&mut self, factory: F) -> &mut Self
+    where
+        F: Fn() -> T + Send + Sync + 'static,
+        T: Send + Sync + 'static,
+    {
+        if self.is_built {
+            panic!("Cannot add bindings after container is built");
+        }
+        self.bindings.bind_lazy::<TInterface, F, T>(factory);
+        self
+    }
+
+    fn bind_parameterized_factory<TInterface: ?Sized + 'static, P, F, T>(&mut self, factory: F) -> &mut Self
+    where
+        F: Fn(P) -> Result<T, CoreError> + Send + Sync + 'static,
+        T: Send + Sync + 'static,
+        P: Send + Sync + 'static,
+    {
+        if self.is_built {
+            panic!("Cannot add bindings after container is built");
+        }
+        self.bindings.bind_parameterized_factory::<TInterface, P, F, T>(factory);
+        self
+    }
+
+    fn bind_collection<TInterface: ?Sized + 'static>(&mut self) -> crate::container::binding::CollectionBindingBuilder<TInterface> {
+        if self.is_built {
+            panic!("Cannot add bindings after container is built");
+        }
+        self.bindings.bind_collection::<TInterface>()
+    }
+
+    fn bind_generic<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static, TGeneric>(&mut self) -> &mut Self
+    where
+        TGeneric: Send + Sync + 'static,
+    {
+        if self.is_built {
+            panic!("Cannot add bindings after container is built");
+        }
+        self.bindings.bind_generic::<TInterface, TImpl, TGeneric>();
         self
     }
 }

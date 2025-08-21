@@ -17,6 +17,7 @@ pub mod performance_test;
 pub mod examples;
 pub mod integration_test;
 pub mod api_demo;
+pub mod advanced_binding_examples;
 pub mod lifecycle;
 
 #[cfg(test)]
@@ -27,6 +28,8 @@ pub mod race_condition_tests;
 pub mod scoped_singleton_conflict_test;
 #[cfg(test)]
 pub mod deadlock_prevention_test;
+#[cfg(test)]
+pub mod advanced_binding_test;
 
 pub use container::Container;
 pub use builder::ContainerBuilder;
@@ -34,8 +37,8 @@ pub use registry::{ServiceRegistry, ServiceEntry};
 pub use scope::{ServiceScope, ServiceLifetime, ScopedServiceManager, ScopeId};
 pub use descriptor::{ServiceDescriptor, ServiceId};
 pub use resolver::{DependencyResolver as GraphDependencyResolver, DependencyGraph, ResolutionPath};
-pub use binding::{ServiceBinder, ServiceBindings};
-pub use ioc_container::IocContainer;
+pub use binding::{ServiceBinder, ServiceBindings, BindingConfig, AdvancedBindingBuilder, CollectionBindingBuilder, ConditionFn, EnvCondition};
+pub use ioc_container::{IocContainer, ServiceStatistics};
 pub use ioc_builder::IocContainerBuilder;
 pub use autowiring::{Injectable, DependencyResolver, ConstructorParameter, ParameterInfo, ConstructorInfo};
 pub use lifecycle::{AsyncInitializable, Disposable, LifecycleManaged, ServiceState, ServiceLifecycleManager};
