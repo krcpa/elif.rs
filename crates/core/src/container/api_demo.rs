@@ -136,6 +136,8 @@ mod tests {
         match result {
             Err(CoreError::ServiceNotFound { service_type }) => {
                 assert!(service_type.contains("UserService"));
+                // Verify we're NOT getting "unknown" anymore
+                assert!(!service_type.contains("unknown"));
             }
             _ => panic!("Expected ServiceNotFound error"),
         }
@@ -143,6 +145,16 @@ mod tests {
         // Named service not found
         let result = container.resolve_named::<UserService>("nonexistent");
         assert!(result.is_err());
+        
+        match result {
+            Err(CoreError::ServiceNotFound { service_type }) => {
+                assert!(service_type.contains("UserService"));
+                assert!(service_type.contains("nonexistent"));
+                // Verify we're NOT getting "unknown" anymore
+                assert!(!service_type.contains("unknown"));
+            }
+            _ => panic!("Expected ServiceNotFound error"),
+        }
     }
 
     /// Demonstrates container validation as specified

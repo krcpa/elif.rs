@@ -6,6 +6,7 @@ use crate::errors::CoreError;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ServiceId {
     pub type_id: TypeId,
+    pub type_name: &'static str,
     pub name: Option<String>,
 }
 
@@ -14,6 +15,7 @@ impl ServiceId {
     pub fn of<T: 'static + ?Sized>() -> Self {
         Self {
             type_id: TypeId::of::<T>(),
+            type_name: std::any::type_name::<T>(),
             name: None,
         }
     }
@@ -22,15 +24,14 @@ impl ServiceId {
     pub fn named<T: 'static + ?Sized>(name: impl Into<String>) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
+            type_name: std::any::type_name::<T>(),
             name: Some(name.into()),
         }
     }
     
     /// Get the type name as a string
     pub fn type_name(&self) -> &'static str {
-        // This is a simplified implementation
-        // In practice, we'd need a type name registry
-        "unknown"
+        self.type_name
     }
 }
 
@@ -255,6 +256,24 @@ mod tests {
         assert_eq!(id2.name, Some("test".to_string()));
         
         assert_ne!(id1, id2);
+    }
+    
+    #[test]
+    fn test_type_name_capture() {
+        let id1 = ServiceId::of::<TestImpl>();
+        let id2 = ServiceId::named::<TestImpl>("test");
+        let id3 = ServiceId::of::<dyn TestTrait>();
+        let id4 = ServiceId::of::<String>();
+        
+        // Verify that type names are actually captured, not "unknown"
+        assert!(id1.type_name().contains("TestImpl"));
+        assert!(id2.type_name().contains("TestImpl"));
+        assert!(id3.type_name().contains("TestTrait"));
+        assert_eq!(id4.type_name(), "alloc::string::String");
+        
+        // Verify type_name() method returns the stored value
+        assert_eq!(id1.type_name(), id1.type_name);
+        assert_eq!(id2.type_name(), id2.type_name);
     }
 
     #[test]
