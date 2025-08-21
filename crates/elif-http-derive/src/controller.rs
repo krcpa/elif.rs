@@ -6,7 +6,10 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemStruct, ItemImpl, ImplItem, LitStr};
 
-use crate::utils::{extract_http_method_info, extract_middleware_from_attrs};
+use crate::utils::{
+    extract_http_method_info, extract_middleware_from_attrs, 
+    extract_path_parameters, extract_param_types_from_attrs
+};
 
 /// Controller macro for defining controller base path and metadata
 /// 
@@ -80,13 +83,36 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
                     let middleware = extract_middleware_from_attrs(&method.attrs);
                     let middleware_vec = quote! { vec![#(#middleware.to_string()),*] };
                     
+                    // Extract path parameters from the route path
+                    let path_params = extract_path_parameters(&path);
+                    
+                    // Extract parameter type specifications from #[param] attributes
+                    let param_types = extract_param_types_from_attrs(&method.attrs);
+                    
+                    // Build parameter metadata with proper types
+                    let mut param_tokens = Vec::new();
+                    for param_name in &path_params {
+                        // Get the type from #[param] attributes, default to String
+                        let param_type = param_types.get(param_name).cloned().unwrap_or_else(|| "String".to_string());
+                        let param_type_enum = match param_type.as_str() {
+                            "String" => quote! { ParamType::String },
+                            "Integer" => quote! { ParamType::Integer },
+                            "Uuid" => quote! { ParamType::Uuid },
+                            _ => quote! { ParamType::String }, // Default fallback
+                        };
+                        
+                        param_tokens.push(quote! {
+                            RouteParam::new(#param_name, #param_type_enum)
+                        });
+                    }
+                    
                     routes.push(quote! {
                         ControllerRoute {
                             method: HttpMethod::#http_method_variant,
                             path: #path.to_string(),
                             handler_name: #handler_name.to_string(),
                             middleware: #middleware_vec,
-                            params: vec![], // TODO: Extract params in future phases
+                            params: vec![#(#param_tokens),*],
                         }
                     });
                     

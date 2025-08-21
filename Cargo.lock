@@ -1614,6 +1614,7 @@ name = "elif-http-derive"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "elif-http 0.8.0",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
