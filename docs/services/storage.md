@@ -1,10 +1,8 @@
 # Storage
 
-Store and serve files with `elif-storage`. Work with local and cloud backends, presigned URLs, and secure downloads.
+Abstract file operations behind a storage service. Support both local and cloud (S3-like) backends, presigned URLs, and streaming.
 
-Sections:
-- Local vs cloud storage
-- Uploads and presigned URLs
-- Public vs private files
-- Streaming large files
-
+Patterns
+- Store uploads under private paths; expose via presigned URLs.
+- Stream large files to avoid memory spikes.
+- Sanitize file names and enforce content-type checks.
