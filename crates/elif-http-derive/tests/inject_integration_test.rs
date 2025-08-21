@@ -53,7 +53,7 @@ impl Clone for MockEmailService {
 struct MockCacheService;
 impl CacheService for MockCacheService {
     fn get(&self, key: &str) -> Option<String> {
-        if key == "test" {
+        if key == "user" {
             Some("cached_value".to_string())
         } else {
             None
