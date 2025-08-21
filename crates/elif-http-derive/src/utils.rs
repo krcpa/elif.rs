@@ -2,6 +2,7 @@
 
 use syn::{Attribute, Meta, Signature, FnArg, Pat, PatIdent};
 use quote::quote;
+use std::collections::HashMap;
 
 /// Extract HTTP method and path from method attributes
 pub fn extract_http_method_info(attrs: &[Attribute]) -> Option<(proc_macro2::Ident, String)> {
@@ -219,4 +220,82 @@ pub fn extract_middleware_from_attrs(attrs: &[Attribute]) -> Vec<String> {
     }
     
     middleware
+}
+
+/// Convert param type from derive crate to routing crate format
+pub fn convert_param_type_to_routing(param_type: &str) -> String {
+    match param_type {
+        "string" => "String".to_string(),
+        "int" => "Integer".to_string(),  
+        "uint" => "Integer".to_string(),
+        "uuid" => "Uuid".to_string(),
+        "float" => "String".to_string(), // Float not in routing::ParamType yet
+        "bool" => "String".to_string(),  // Bool not in routing::ParamType yet
+        _ => "String".to_string(), // Default fallback
+    }
+}
+
+/// Extract parameter type specifications from method attributes
+/// Returns a map of parameter name -> parameter type
+pub fn extract_param_types_from_attrs(attrs: &[Attribute]) -> HashMap<String, String> {
+    let mut param_types = HashMap::new();
+    
+    for attr in attrs {
+        if attr.path().is_ident("param") {
+            if let Meta::List(meta_list) = &attr.meta {
+                // Parse parameter specifications from the attribute tokens
+                let tokens = &meta_list.tokens;
+                
+                // Try to parse multiple comma-separated param specs: id: int, name: string
+                if let Ok(parsed_specs) = parse_param_specs(tokens.clone()) {
+                    for (name, type_str) in parsed_specs {
+                        let routing_type = convert_param_type_to_routing(&type_str);
+                        param_types.insert(name, routing_type);
+                    }
+                }
+            }
+        }
+    }
+    
+    param_types
+}
+
+/// Parse parameter specifications from token stream
+/// Expected format: "id: int, name: string" or just "id: int"
+fn parse_param_specs(tokens: proc_macro2::TokenStream) -> Result<Vec<(String, String)>, syn::Error> {
+    use syn::{Ident, Token};
+    use syn::parse::{Parse, ParseStream};
+    
+    struct ParamSpecs {
+        specs: Vec<(String, String)>,
+    }
+    
+    impl Parse for ParamSpecs {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            let mut specs = Vec::new();
+            
+            // Parse first param spec
+            if !input.is_empty() {
+                let name: Ident = input.parse()?;
+                input.parse::<Token![:]>()?;
+                let type_ident: Ident = input.parse()?;
+                
+                specs.push((name.to_string(), type_ident.to_string()));
+                
+                // Parse additional comma-separated specs
+                while input.parse::<Token![,]>().is_ok() {
+                    let name: Ident = input.parse()?;
+                    input.parse::<Token![:]>()?;
+                    let type_ident: Ident = input.parse()?;
+                    
+                    specs.push((name.to_string(), type_ident.to_string()));
+                }
+            }
+            
+            Ok(ParamSpecs { specs })
+        }
+    }
+    
+    let parsed: ParamSpecs = syn::parse2(tokens)?;
+    Ok(parsed.specs)
 }
