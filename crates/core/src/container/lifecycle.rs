@@ -52,6 +52,8 @@ pub struct ServiceLifecycleManager {
     disposable_services: Vec<Arc<dyn Disposable>>,
     /// Current state of the lifecycle manager
     state: ServiceState,
+    /// Optional handle for background disposal task
+    disposal_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl std::fmt::Debug for ServiceLifecycleManager {
@@ -60,6 +62,7 @@ impl std::fmt::Debug for ServiceLifecycleManager {
             .field("initializable_services_count", &self.initializable_services.len())
             .field("disposable_services_count", &self.disposable_services.len())
             .field("state", &self.state)
+            .field("has_disposal_handle", &self.disposal_handle.is_some())
             .finish()
     }
 }
@@ -71,6 +74,7 @@ impl ServiceLifecycleManager {
             initializable_services: Vec::new(),
             disposable_services: Vec::new(),
             state: ServiceState::Registered,
+            disposal_handle: None,
         }
     }
     
@@ -148,6 +152,42 @@ impl ServiceLifecycleManager {
         }
         
         self.state = ServiceState::Disposed;
+        self.disposal_handle = None; // Clear any handle
+        Ok(())
+    }
+    
+    /// Schedule disposal in the background (non-blocking)
+    /// This is useful when you can't await in the current context (like Drop)
+    pub fn schedule_disposal(&mut self) {
+        if self.is_disposed() || self.disposal_handle.is_some() {
+            return; // Already disposed or disposal scheduled
+        }
+        
+        // Take ownership of the services to dispose
+        let services = std::mem::take(&mut self.disposable_services);
+        self.state = ServiceState::Disposing;
+        
+        // Spawn a background task to handle disposal
+        let handle = tokio::spawn(async move {
+            for service in services.iter().rev() {
+                if let Err(e) = service.dispose().await {
+                    eprintln!("Error disposing service in background: {:?}", e);
+                }
+            }
+        });
+        
+        self.disposal_handle = Some(handle);
+    }
+    
+    /// Wait for any scheduled disposal to complete
+    pub async fn wait_for_disposal(&mut self) -> Result<(), CoreError> {
+        if let Some(handle) = self.disposal_handle.take() {
+            handle.await.map_err(|e| CoreError::SystemError {
+                message: format!("Disposal task failed: {}", e),
+                source: None,
+            })?;
+            self.state = ServiceState::Disposed;
+        }
         Ok(())
     }
     
@@ -185,10 +225,20 @@ impl Default for ServiceLifecycleManager {
 
 impl Drop for ServiceLifecycleManager {
     fn drop(&mut self) {
-        if !self.is_disposed() {
-            // In a real-world scenario, proper cleanup would be handled elsewhere
-            // For now, we just mark as disposed to avoid issues
-            self.state = ServiceState::Disposed;
+        if !self.is_disposed() && !self.disposable_services.is_empty() {
+            // Check if we're in a tokio runtime context
+            if let Ok(_handle) = tokio::runtime::Handle::try_current() {
+                // We're in a tokio context, schedule disposal
+                self.schedule_disposal();
+            } else {
+                // No tokio runtime available, log a warning
+                eprintln!(
+                    "Warning: ServiceLifecycleManager dropped with {} undisposed services. \
+                     No tokio runtime available for async disposal. \
+                     Call dispose_all() explicitly before dropping.",
+                    self.disposable_services.len()
+                );
+            }
         }
     }
 }
@@ -280,5 +330,45 @@ mod tests {
         ).await;
         
         assert!(result.is_err());
+    }
+    
+    #[tokio::test]
+    async fn test_background_disposal() {
+        let mut manager = ServiceLifecycleManager::new();
+        let service = Arc::new(TestService::default());
+        
+        manager.add_lifecycle_managed(service.clone());
+        manager.initialize_all().await.unwrap();
+        
+        assert!(!service.disposed.load(Ordering::SeqCst));
+        
+        // Schedule disposal in background
+        manager.schedule_disposal();
+        
+        // Wait for it to complete
+        manager.wait_for_disposal().await.unwrap();
+        
+        assert!(service.disposed.load(Ordering::SeqCst));
+        assert!(manager.is_disposed());
+    }
+    
+    #[tokio::test]
+    async fn test_drop_with_runtime() {
+        let service = Arc::new(TestService::default());
+        
+        {
+            let mut manager = ServiceLifecycleManager::new();
+            manager.add_lifecycle_managed(service.clone());
+            manager.initialize_all().await.unwrap();
+            
+            // Drop the manager without calling dispose_all()
+            // It should schedule disposal automatically
+        }
+        
+        // Give background task time to run
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        
+        // Service should be disposed by Drop
+        assert!(service.disposed.load(Ordering::SeqCst));
     }
 }

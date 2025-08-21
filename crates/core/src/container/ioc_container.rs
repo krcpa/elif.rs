@@ -172,6 +172,16 @@ impl IocContainer {
         Ok(())
     }
     
+    /// Get a reference to the lifecycle manager
+    pub fn lifecycle_manager(&self) -> &ServiceLifecycleManager {
+        &self.lifecycle_manager
+    }
+    
+    /// Get a mutable reference to the lifecycle manager
+    pub fn lifecycle_manager_mut(&mut self) -> &mut ServiceLifecycleManager {
+        &mut self.lifecycle_manager
+    }
+    
     /// Resolve a service by type
     pub fn resolve<T: Send + Sync + 'static>(&self) -> Result<Arc<T>, CoreError> {
         let service_id = ServiceId::of::<T>();
