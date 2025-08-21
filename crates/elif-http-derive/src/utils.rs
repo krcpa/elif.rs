@@ -1,0 +1,222 @@
+//! Utility functions shared across macro implementations
+
+use syn::{Attribute, Meta, Signature, FnArg, Pat, PatIdent};
+use quote::quote;
+
+/// Extract HTTP method and path from method attributes
+pub fn extract_http_method_info(attrs: &[Attribute]) -> Option<(proc_macro2::Ident, String)> {
+    for attr in attrs {
+        if let Meta::List(meta_list) = &attr.meta {
+            let path_name = meta_list.path.get_ident()?.to_string();
+            let method_ident = match path_name.as_str() {
+                "get" => Some(quote::format_ident!("get")),
+                "post" => Some(quote::format_ident!("post")),
+                "put" => Some(quote::format_ident!("put")),
+                "delete" => Some(quote::format_ident!("delete")),
+                "patch" => Some(quote::format_ident!("patch")),
+                "head" => Some(quote::format_ident!("head")),
+                "options" => Some(quote::format_ident!("options")),
+                _ => None,
+            }?;
+            
+            // Extract path from the attribute arguments using proper syn parsing
+            let path = extract_path_from_meta_list_robust(&meta_list.tokens);
+            return Some((method_ident, path));
+        } else if let Meta::Path(path) = &attr.meta {
+            let path_name = path.get_ident()?.to_string();
+            let method_ident = match path_name.as_str() {
+                "get" => Some(quote::format_ident!("get")),
+                "post" => Some(quote::format_ident!("post")),
+                "put" => Some(quote::format_ident!("put")),
+                "delete" => Some(quote::format_ident!("delete")),
+                "patch" => Some(quote::format_ident!("patch")),
+                "head" => Some(quote::format_ident!("head")),
+                "options" => Some(quote::format_ident!("options")),
+                _ => None,
+            }?;
+            
+            return Some((method_ident, "".to_string()));
+        }
+    }
+    None
+}
+
+/// Extract resource path from method attributes  
+pub fn extract_resource_info(attrs: &[Attribute]) -> Option<String> {
+    for attr in attrs {
+        if let Meta::List(meta_list) = &attr.meta {
+            if meta_list.path.is_ident("resource") {
+                // Extract path from the attribute arguments using proper syn parsing
+                return Some(extract_path_from_meta_list_robust(&meta_list.tokens));
+            }
+        }
+    }
+    None
+}
+
+/// Extract path string from token stream using proper syn parsing
+pub fn extract_path_from_meta_list_robust(tokens: &proc_macro2::TokenStream) -> String {
+    // If tokens are empty, return empty string
+    if tokens.is_empty() {
+        return String::new();
+    }
+    
+    // Try to parse as a string literal directly
+    if let Ok(lit_str) = syn::parse2::<syn::LitStr>(tokens.clone()) {
+        return lit_str.value();
+    }
+    
+    // Try to parse as a parenthesized string literal: ("path")
+    if let Ok(group) = syn::parse2::<proc_macro2::Group>(tokens.clone()) {
+        if group.delimiter() == proc_macro2::Delimiter::Parenthesis {
+            if let Ok(inner_lit) = syn::parse2::<syn::LitStr>(group.stream()) {
+                return inner_lit.value();
+            }
+        }
+    }
+    
+    // Try to manually extract from parentheses format
+    let tokens_iter = tokens.clone().into_iter().collect::<Vec<_>>();
+    if tokens_iter.len() == 1 {
+        if let proc_macro2::TokenTree::Group(group) = &tokens_iter[0] {
+            if group.delimiter() == proc_macro2::Delimiter::Parenthesis {
+                if let Ok(inner_lit) = syn::parse2::<syn::LitStr>(group.stream()) {
+                    return inner_lit.value();
+                }
+            }
+        }
+    }
+    
+    // Fall back to empty string if we can't parse properly
+    String::new()
+}
+
+/// Validate route path format and return error message if invalid
+pub fn validate_route_path(path: &str) -> Result<(), String> {
+    if path.is_empty() {
+        return Ok(());
+    }
+    
+    // Check for malformed parameter syntax
+    let mut chars = path.chars().peekable();
+    let mut brace_count = 0;
+    let mut in_param = false;
+    let mut param_content = String::new();
+    
+    while let Some(ch) = chars.next() {
+        match ch {
+            '{' => {
+                if in_param {
+                    return Err("nested braces are not allowed in parameters".to_string());
+                }
+                brace_count += 1;
+                in_param = true;
+                param_content.clear();
+            }
+            '}' => {
+                if !in_param {
+                    return Err("unmatched closing brace '}'".to_string());
+                }
+                if param_content.is_empty() {
+                    return Err("empty parameter name '{}'".to_string());
+                }
+                if !param_content.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    return Err(format!("invalid parameter name '{}' - use only alphanumeric characters and underscores", param_content));
+                }
+                brace_count -= 1;
+                in_param = false;
+            }
+            _ if in_param => {
+                param_content.push(ch);
+            }
+            _ => {}
+        }
+    }
+    
+    if brace_count != 0 {
+        return Err("unmatched opening brace '{'".to_string());
+    }
+    
+    // Check for double slashes
+    if path.contains("//") {
+        return Err("double slashes '//' are not allowed".to_string());
+    }
+    
+    Ok(())
+}
+
+/// Extract path parameters from a route path (e.g., "/users/{id}" -> ["id"])
+pub fn extract_path_parameters(path: &str) -> Vec<String> {
+    let mut params = Vec::new();
+    let mut chars = path.chars().peekable();
+    
+    while let Some(ch) = chars.next() {
+        if ch == '{' {
+            let mut param = String::new();
+            for ch in chars.by_ref() {
+                if ch == '}' {
+                    if !param.is_empty() {
+                        params.push(param);
+                    }
+                    break;
+                } else {
+                    param.push(ch);
+                }
+            }
+        }
+    }
+    
+    params
+}
+
+/// Extract function parameter names and types from a function signature
+pub fn extract_function_parameters(sig: &Signature) -> Vec<(String, String)> {
+    let mut params = Vec::new();
+    
+    for input in &sig.inputs {
+        if let FnArg::Typed(pat_type) = input {
+            if let Pat::Ident(PatIdent { ident, .. }) = pat_type.pat.as_ref() {
+                let param_name = ident.to_string();
+                let param_type = quote! { #pat_type.ty }.to_string();
+                params.push((param_name, param_type));
+            }
+        }
+    }
+    
+    params
+}
+
+/// Extract middleware names from method attributes
+pub fn extract_middleware_from_attrs(attrs: &[Attribute]) -> Vec<String> {
+    let mut middleware = Vec::new();
+    
+    for attr in attrs {
+        if attr.path().is_ident("middleware") {
+            if let Meta::List(meta_list) = &attr.meta {
+                // Parse middleware names from the attribute
+                let tokens = &meta_list.tokens;
+                let token_vec: Vec<_> = tokens.clone().into_iter().collect();
+                
+                
+                for token in token_vec {
+                    match &token {
+                        proc_macro2::TokenTree::Literal(lit) => {
+                            // Try to parse as string literal
+                            let lit_str = lit.to_string();
+                            if lit_str.starts_with('"') && lit_str.ends_with('"') {
+                                let cleaned = lit_str.trim_matches('"');
+                                middleware.push(cleaned.to_string());
+                            }
+                        }
+                        proc_macro2::TokenTree::Punct(punct) if punct.as_char() == ',' => {
+                            // Comma separator, ignore
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    
+    middleware
+}
