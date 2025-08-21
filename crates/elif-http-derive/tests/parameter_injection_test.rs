@@ -41,8 +41,9 @@ impl UserController {
     // Test single parameter injection
     #[get("/{id}")]
     #[param(id: int)]
-    pub async fn show(&self, id: i32, _req: ElifRequest) -> String {
+    pub async fn show(&self, id: i32, req: ElifRequest) -> String {
         // id should be automatically extracted from request
+        let _ = req; // Use the parameter to avoid warnings
         format!("User ID: {}", id)
     }
     
@@ -50,7 +51,8 @@ impl UserController {
     #[get("/{user_id}/posts/{post_id}")]
     #[param(user_id: int)]
     #[param(post_id: string)]
-    pub async fn get_user_post(&self, user_id: i32, post_id: String, _req: ElifRequest) -> String {
+    pub async fn get_user_post(&self, user_id: i32, post_id: String, req: ElifRequest) -> String {
+        let _ = req; // Use the parameter to avoid warnings
         format!("User: {}, Post: {}", user_id, post_id)
     }
     

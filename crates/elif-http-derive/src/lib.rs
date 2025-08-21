@@ -18,6 +18,7 @@ use proc_macro::TokenStream;
 // Module declarations
 mod controller;
 mod http_methods;
+mod inject;
 mod middleware;
 mod params;
 mod routes;
@@ -115,4 +116,10 @@ pub fn resource(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn group(args: TokenStream, input: TokenStream) -> TokenStream {
     groups::group_impl(args, input)
+}
+
+/// Service injection macro for declarative dependency injection
+#[proc_macro_attribute]
+pub fn inject(args: TokenStream, input: TokenStream) -> TokenStream {
+    inject::inject_impl(args, input)
 }

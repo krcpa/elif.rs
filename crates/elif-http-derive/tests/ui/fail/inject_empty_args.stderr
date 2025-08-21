@@ -1,0 +1,7 @@
+error: #[inject] requires at least one service definition
+ --> tests/ui/fail/inject_empty_args.rs:6:1
+  |
+6 | #[inject()]
+  | ^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `inject` (in Nightly builds, run with -Z macro-backtrace for more info)
