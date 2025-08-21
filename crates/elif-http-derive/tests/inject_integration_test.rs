@@ -161,4 +161,67 @@ mod tests {
         let _optional_method_exists = OptionalServiceController::from_container;
         let _multi_service_method_exists = MultiServiceController::from_container;
     }
+    
+    #[test]
+    fn test_from_container_runtime_behavior() {
+        // This test verifies the actual runtime behavior of from_container
+        use elif_core::container::Container;
+        
+        // Create and configure container
+        let mut container = Container::new();
+        
+        // Register services
+        container.register_singleton(MockUserService).unwrap();
+        container.register_singleton(MockEmailService).unwrap();
+        container.register_singleton(MockCacheService).unwrap();
+        
+        // Test basic controller creation
+        let controller = TestController::from_container(&container).unwrap();
+        let result = controller.handle_user_request(999);
+        assert_eq!(result, "User: User 999, Email sent: true");
+        
+        // Test optional service controller with service present
+        let optional_controller = OptionalServiceController::from_container(&container).unwrap();
+        let cached_result = optional_controller.get_cached_user(123);
+        assert_eq!(cached_result, "User 123"); // Not cached, so fetches from user service
+        
+        // Test multi-service controller
+        let multi_controller = MultiServiceController::from_container(&container).unwrap();
+        // Just verify it was created successfully
+        assert!(multi_controller.user_service.get_user(1) == "User 1");
+    }
+    
+    #[test]
+    fn test_from_container_missing_service() {
+        // Test error handling when required service is missing
+        use elif_core::container::Container;
+        
+        // Create empty container
+        let container = Container::new();
+        
+        // Try to create controller without registering services
+        let result = TestController::from_container(&container);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.contains("Failed to inject service"));
+        }
+    }
+    
+    #[test]
+    fn test_from_container_optional_service_missing() {
+        // Test that optional services can be None
+        use elif_core::container::Container;
+        
+        let mut container = Container::new();
+        // Only register required service, not optional cache
+        container.register_singleton(MockUserService).unwrap();
+        
+        // Should succeed with cache_service as None
+        let controller = OptionalServiceController::from_container(&container).unwrap();
+        assert!(controller.cache_service.is_none());
+        
+        // Should still work without cache
+        let result = controller.get_cached_user(456);
+        assert_eq!(result, "User 456");
+    }
 }
