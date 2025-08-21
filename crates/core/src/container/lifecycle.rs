@@ -146,7 +146,7 @@ impl ServiceLifecycleManager {
         // Dispose services in reverse order (LIFO)
         for service in self.disposable_services.iter().rev() {
             if let Err(e) = service.dispose().await {
-                // Log error but continue disposing other services
+                // TODO: Use a proper logging facade like tracing::error! or collect errors.
                 eprintln!("Error disposing service: {:?}", e);
             }
         }
