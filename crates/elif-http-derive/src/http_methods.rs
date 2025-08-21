@@ -6,7 +6,8 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemFn};
 
-use crate::utils::{validate_route_path, extract_path_parameters, extract_function_parameters};
+use crate::utils::{validate_route_path, extract_path_parameters, extract_function_parameters, extract_param_types_from_attrs};
+use std::collections::HashMap;
 
 /// Generate HTTP method macros with parameter extraction
 pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStream) -> TokenStream {
@@ -43,24 +44,43 @@ pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStrea
     
     // Extract path parameters from the route and function signature
     let path_params = extract_path_parameters(&route_path);
-    let _fn_params = extract_function_parameters(&input_fn.sig);
+    let fn_params = extract_function_parameters(&input_fn.sig);
+    let param_types = extract_param_types_from_attrs(&input_fn.attrs);
     
-    // Generate parameter validation comments
-    let param_docs = if !path_params.is_empty() {
-        let param_list = path_params.join(", ");
-        format!("Route parameters: {}", param_list)
+    // Check if this method needs parameter injection
+    // Only apply injection if:
+    // 1. There are path parameters in the route
+    // 2. The function has matching parameters in its signature  
+    // 3. The function has a &self parameter (is a method, not a standalone function)
+    // 4. There are explicit #[param] annotations
+    let has_self = input_fn.sig.inputs.iter().any(|arg| matches!(arg, syn::FnArg::Receiver(_)));
+    let has_param_annotations = !param_types.is_empty();
+    let needs_injection = !path_params.is_empty() 
+        && has_self
+        && has_param_annotations
+        && has_injectable_params(&fn_params, &path_params);
+    
+    if needs_injection {
+        // Generate wrapper method with parameter injection
+        generate_injected_method(&input_fn, &path_params, &param_types)
     } else {
-        "No route parameters".to_string()
-    };
-    
-    // Return the function with enhanced documentation
-    let expanded = quote! {
-        #[doc = #param_docs]
-        #[allow(dead_code)]
-        #input_fn
-    };
-    
-    TokenStream::from(expanded)
+        // Generate parameter validation comments
+        let param_docs = if !path_params.is_empty() {
+            let param_list = path_params.join(", ");
+            format!("Route parameters: {}", param_list)
+        } else {
+            "No route parameters".to_string()
+        };
+        
+        // Return the function with enhanced documentation
+        let expanded = quote! {
+            #[doc = #param_docs]
+            #[allow(dead_code)]
+            #input_fn
+        };
+        
+        TokenStream::from(expanded)
+    }
 }
 
 /// GET method routing macro
@@ -96,4 +116,216 @@ pub fn head_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 /// OPTIONS method routing macro
 pub fn options_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     http_method_macro_impl("OPTIONS", args, input)
+}
+
+/// Check if the function signature has parameters that match route parameters
+/// and can be injected (excluding 'req' parameter which is special)
+fn has_injectable_params(fn_params: &[(String, String)], path_params: &[String]) -> bool {
+    // Check if any function parameters match path parameters (excluding ElifRequest)
+    for (param_name, param_type) in fn_params {
+        if path_params.contains(param_name) && !param_type.contains("ElifRequest") {
+            return true;
+        }
+    }
+    false
+}
+
+/// Generate a wrapper method that injects path parameters into the original method
+fn generate_injected_method(
+    input_fn: &ItemFn, 
+    path_params: &[String], 
+    param_types: &HashMap<String, String>
+) -> TokenStream {
+    let original_name = &input_fn.sig.ident;
+    let original_fn_name = quote::format_ident!("{}_original", original_name);
+    
+    // Build parameter extraction and call arguments in order
+    let mut param_extractions = Vec::new();
+    let mut call_args = Vec::new();
+    
+    // Process function parameters in order to preserve original signature order
+    for input in &input_fn.sig.inputs {
+        match input {
+            syn::FnArg::Receiver(_) => {
+                // Skip self parameter - it's implicit in method call
+            }
+            syn::FnArg::Typed(pat_type) => {
+                if let syn::Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
+                    let param_name = pat_ident.ident.to_string();
+                    let param_type = &pat_type.ty;
+                    let param_type_str = quote! { #param_type }.to_string();
+                    
+                    if path_params.contains(&param_name) {
+                        // This is a path parameter - generate extraction code
+                        let param_ident = &pat_ident.ident;
+                        let extraction_method = get_extraction_method(&param_name, param_types, &param_type_str);
+                        
+                        param_extractions.push(quote! {
+                            let #param_ident = request.#extraction_method(#param_name)
+                                .map_err(|e| HttpError::bad_request(format!("Invalid parameter '{}': {:?}", #param_name, e)))?;
+                        });
+                        call_args.push(quote! { #param_ident });
+                    } else if param_type_str.contains("ElifRequest") {
+                        // This is the request parameter - pass it through
+                        call_args.push(quote! { request });
+                    } else {
+                        // Unsupported parameter type - generate compile-time error
+                        return syn::Error::new_spanned(
+                            pat_type,
+                            format!(
+                                "Unsupported parameter '{}' of type '{}'. Only path parameters (specified in route) and ElifRequest are supported. \
+                                Hint: Remove this parameter or add it to the route path like '/users/{{{}}}' and annotate with #[param({}: type)]",
+                                param_name, param_type_str, param_name, param_name
+                            )
+                        )
+                        .to_compile_error()
+                        .into();
+                    }
+                }
+            }
+        }
+    }
+    
+    // Get the original function's components
+    let original_attrs = &input_fn.attrs.iter()
+        .filter(|attr| !attr.path().is_ident("get") && 
+                       !attr.path().is_ident("post") &&
+                       !attr.path().is_ident("put") &&
+                       !attr.path().is_ident("delete") &&
+                       !attr.path().is_ident("patch") &&
+                       !attr.path().is_ident("head") &&
+                       !attr.path().is_ident("options") &&
+                       !attr.path().is_ident("param"))
+        .collect::<Vec<_>>();
+    let original_vis = &input_fn.vis;
+    let original_block = &input_fn.block;
+    let original_return = &input_fn.sig.output;
+    let original_asyncness = &input_fn.sig.asyncness;
+    let original_inputs = &input_fn.sig.inputs;
+    
+    // Generate the wrapper method's asyncness (always async for HTTP handlers)
+    let wrapper_asyncness = quote! { async };
+    
+    // Generate the appropriate method call based on original async-ness
+    let method_call = if original_asyncness.is_some() {
+        quote! { self.#original_fn_name(#(#call_args),*).await }
+    } else {
+        quote! { self.#original_fn_name(#(#call_args),*) }
+    };
+    
+    // Analyze the return type to determine how to handle the response
+    let return_category = analyze_return_type(original_return);
+    
+    // Generate appropriate response handling based on return type
+    let response_handling = match return_category {
+        ReturnTypeCategory::HttpResultElifResponse => {
+            // Already returns HttpResult<ElifResponse> - pass through directly
+            quote! { #method_call }
+        }
+        ReturnTypeCategory::ElifResponse => {
+            // Returns ElifResponse - wrap in Ok()
+            quote! { Ok(#method_call) }
+        }
+        ReturnTypeCategory::ResultType => {
+            // Returns Result<T, E> - map the Ok case to JSON, pass through errors
+            quote! { 
+                match #method_call {
+                    Ok(result) => Ok(ElifResponse::ok().json(&result)?),
+                    Err(e) => Err(HttpError::internal_server_error(format!("Handler error: {:?}", e)).into()),
+                }
+            }
+        }
+        ReturnTypeCategory::Unit => {
+            // Returns () - return empty OK response
+            quote! { 
+                #method_call;
+                Ok(ElifResponse::ok())
+            }
+        }
+        ReturnTypeCategory::SerializableType => {
+            // Returns serializable type - wrap in JSON response
+            quote! { 
+                let result = #method_call;
+                Ok(ElifResponse::ok().json(&result)?)
+            }
+        }
+    };
+    
+    let expanded = quote! {
+        // Keep the original method with renamed identifier
+        #(#original_attrs)*
+        #original_vis #original_asyncness fn #original_fn_name(#original_inputs) #original_return #original_block
+        
+        // Generate wrapper method that extracts parameters from request
+        #original_vis #wrapper_asyncness fn #original_name(&self, request: ElifRequest) -> HttpResult<ElifResponse> {
+            // Parameter extraction
+            #(#param_extractions)*
+            
+            // Handle result based on original function's return type
+            #response_handling
+        }
+    };
+    
+    TokenStream::from(expanded)
+}
+
+/// Determine how to handle the return value based on the original function's return type
+fn analyze_return_type(return_type: &syn::ReturnType) -> ReturnTypeCategory {
+    match return_type {
+        syn::ReturnType::Default => ReturnTypeCategory::Unit,
+        syn::ReturnType::Type(_, ty) => {
+            let type_str = quote! { #ty }.to_string();
+            
+            // Check for HttpResult<ElifResponse>
+            if type_str.contains("HttpResult") && type_str.contains("ElifResponse") {
+                ReturnTypeCategory::HttpResultElifResponse
+            }
+            // Check for ElifResponse
+            else if type_str.contains("ElifResponse") {
+                ReturnTypeCategory::ElifResponse
+            }
+            // Check for Result types (including HttpResult<T> where T != ElifResponse)
+            else if type_str.contains("Result") || type_str.contains("HttpResult") {
+                ReturnTypeCategory::ResultType
+            }
+            // Everything else (serializable types)
+            else {
+                ReturnTypeCategory::SerializableType
+            }
+        }
+    }
+}
+
+/// Categories of return types for response handling
+#[derive(Debug, PartialEq)]
+enum ReturnTypeCategory {
+    Unit,                      // () - return empty response
+    ElifResponse,              // ElifResponse - pass through
+    HttpResultElifResponse,    // HttpResult<ElifResponse> - pass through  
+    ResultType,                // Result<T, E> - handle error, serialize T
+    SerializableType,          // T - serialize to JSON
+}
+
+/// Get the appropriate extraction method name based on parameter type
+fn get_extraction_method(
+    param_name: &str, 
+    param_types: &HashMap<String, String>, 
+    rust_type: &str
+) -> proc_macro2::Ident {
+    // Check if we have explicit type information from #[param] attribute
+    if let Some(param_type) = param_types.get(param_name) {
+        return match param_type.as_str() {
+            "Integer" => quote::format_ident!("path_param_int"),
+            "String" => quote::format_ident!("path_param_string"),
+            "Uuid" => quote::format_ident!("path_param_uuid"), // UUID should be parsed with its specific method
+            _ => quote::format_ident!("path_param_string"), // Default to string
+        };
+    }
+    
+    // Fall back to inferring from Rust type
+    if rust_type.contains("i32") || rust_type.contains("u32") || rust_type.contains("i64") || rust_type.contains("u64") {
+        quote::format_ident!("path_param_int")
+    } else {
+        quote::format_ident!("path_param_string")
+    }
 }
