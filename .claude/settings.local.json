@@ -57,7 +57,8 @@
       "WebFetch(domain:127.0.0.1)",
       "Bash(rustc:*)",
       "Bash(touch:*)",
-      "Bash(RUSTFLAGS=\"-A unused-imports\" cargo test -p elif-http-derive ui_fail_tests)"
+      "Bash(RUSTFLAGS=\"-A unused-imports\" cargo test -p elif-http-derive ui_fail_tests)",
+      "Bash(TRYBUILD=overwrite cargo test ui_tests)"
     ],
     "deny": []
   }

@@ -1,5 +1,6 @@
 use crate::container::descriptor::{ServiceDescriptor, ServiceDescriptorFactoryBuilder, ServiceId};
 use crate::container::scope::ServiceScope;
+use crate::container::autowiring::Injectable;
 use crate::errors::CoreError;
 
 /// Binding API for the IoC container
@@ -23,7 +24,13 @@ pub trait ServiceBinder {
     fn bind_instance<TInterface: ?Sized + 'static, TImpl: Send + Sync + Clone + 'static>(&mut self, instance: TImpl) -> &mut Self;
     
     /// Bind a named service
-    fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, name: impl Into<String>) -> &mut Self;
+    fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, name: &str) -> &mut Self;
+    
+    /// Bind an Injectable service with auto-wiring
+    fn bind_injectable<T: Injectable>(&mut self) -> &mut Self;
+    
+    /// Bind an Injectable service as singleton with auto-wiring  
+    fn bind_injectable_singleton<T: Injectable>(&mut self) -> &mut Self;
 }
 
 /// Collection of service bindings
@@ -55,6 +62,11 @@ impl ServiceBindings {
         self.descriptors.iter().find(|d| d.service_id == *service_id)
     }
     
+    /// Get service descriptor by type and name without allocation
+    pub fn get_descriptor_named<T: 'static + ?Sized>(&self, name: &str) -> Option<&ServiceDescriptor> {
+        self.descriptors.iter().find(|d| d.service_id.matches_named::<T>(name))
+    }
+    
     /// Get all service IDs
     pub fn service_ids(&self) -> Vec<ServiceId> {
         self.descriptors.iter().map(|d| d.service_id.clone()).collect()
@@ -63,6 +75,11 @@ impl ServiceBindings {
     /// Check if a service is registered
     pub fn contains(&self, service_id: &ServiceId) -> bool {
         self.descriptors.iter().any(|d| d.service_id == *service_id)
+    }
+    
+    /// Check if a named service is registered without allocation
+    pub fn contains_named<T: 'static + ?Sized>(&self, name: &str) -> bool {
+        self.descriptors.iter().any(|d| d.service_id.matches_named::<T>(name))
     }
     
     /// Get the number of registered services
@@ -130,10 +147,24 @@ impl ServiceBinder for ServiceBindings {
         self
     }
     
-    fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, name: impl Into<String>) -> &mut Self {
+    fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, name: &str) -> &mut Self {
         let descriptor = ServiceDescriptor::bind_named::<TInterface, TImpl>(name)
             .with_lifetime(ServiceScope::Transient)
             .build();
+        self.add_descriptor(descriptor);
+        self
+    }
+    
+    fn bind_injectable<T: Injectable>(&mut self) -> &mut Self {
+        let dependencies = T::dependencies();
+        let descriptor = ServiceDescriptor::autowired::<T>(dependencies);
+        self.add_descriptor(descriptor);
+        self
+    }
+    
+    fn bind_injectable_singleton<T: Injectable>(&mut self) -> &mut Self {
+        let dependencies = T::dependencies();
+        let descriptor = ServiceDescriptor::autowired_singleton::<T>(dependencies);
         self.add_descriptor(descriptor);
         self
     }
