@@ -490,7 +490,7 @@ fn validate_method_consistency(
                 // Skip self parameter
             }
             FnArg::Typed(pat_type) => {
-                let param_type_str = quote! { #pat_type.ty }.to_string();
+                let param_type_str = quote! { #pat_type.ty }.to_string().replace(" ", "");
                 
                 match pat_type.pat.as_ref() {
                     // Standard identifier: `param: Type` or underscore-prefixed: `_unused: Type`
