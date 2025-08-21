@@ -1,5 +1,6 @@
 use crate::container::descriptor::{ServiceDescriptor, ServiceDescriptorFactoryBuilder, ServiceId};
 use crate::container::scope::ServiceScope;
+use crate::container::autowiring::Injectable;
 use crate::errors::CoreError;
 
 /// Binding API for the IoC container
@@ -24,6 +25,12 @@ pub trait ServiceBinder {
     
     /// Bind a named service
     fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, name: impl Into<String>) -> &mut Self;
+    
+    /// Bind an Injectable service with auto-wiring
+    fn bind_injectable<T: Injectable>(&mut self) -> &mut Self;
+    
+    /// Bind an Injectable service as singleton with auto-wiring  
+    fn bind_injectable_singleton<T: Injectable>(&mut self) -> &mut Self;
 }
 
 /// Collection of service bindings
@@ -134,6 +141,56 @@ impl ServiceBinder for ServiceBindings {
         let descriptor = ServiceDescriptor::bind_named::<TInterface, TImpl>(name)
             .with_lifetime(ServiceScope::Transient)
             .build();
+        self.add_descriptor(descriptor);
+        self
+    }
+    
+    fn bind_injectable<T: Injectable>(&mut self) -> &mut Self {
+        use std::any::Any;
+        
+        let service_id = ServiceId::of::<T>();
+        let dependencies = T::dependencies();
+        
+        let factory = Box::new(move || -> Result<Box<dyn Any + Send + Sync>, CoreError> {
+            // This is a placeholder - in a real implementation, we'd need access to the container
+            Err(CoreError::InvalidServiceDescriptor {
+                message: "Injectable services need special handling during resolution".to_string(),
+            })
+        });
+        
+        let descriptor = ServiceDescriptor {
+            service_id,
+            implementation_id: std::any::TypeId::of::<T>(),
+            lifetime: ServiceScope::Transient,
+            factory,
+            dependencies,
+        };
+        
+        self.add_descriptor(descriptor);
+        self
+    }
+    
+    fn bind_injectable_singleton<T: Injectable>(&mut self) -> &mut Self {
+        use std::any::Any;
+        
+        let service_id = ServiceId::of::<T>();
+        let dependencies = T::dependencies();
+        
+        let factory = Box::new(move || -> Result<Box<dyn Any + Send + Sync>, CoreError> {
+            // This is a placeholder - in a real implementation, we'd need access to the container
+            Err(CoreError::InvalidServiceDescriptor {
+                message: "Injectable services need special handling during resolution".to_string(),
+            })
+        });
+        
+        let descriptor = ServiceDescriptor {
+            service_id,
+            implementation_id: std::any::TypeId::of::<T>(),
+            lifetime: ServiceScope::Singleton,
+            factory,
+            dependencies,
+        };
+        
         self.add_descriptor(descriptor);
         self
     }

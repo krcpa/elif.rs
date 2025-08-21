@@ -4,7 +4,8 @@ use std::sync::{Arc, RwLock};
 
 use crate::container::binding::{ServiceBinder, ServiceBindings};
 use crate::container::descriptor::ServiceId;
-use crate::container::resolver::DependencyResolver;
+use crate::container::resolver::DependencyResolver as GraphDependencyResolver;
+use crate::container::autowiring::{DependencyResolver, Injectable};
 use crate::container::scope::ServiceScope;
 use crate::errors::CoreError;
 
@@ -21,7 +22,7 @@ pub struct IocContainer {
     /// Service bindings and descriptors
     bindings: ServiceBindings,
     /// Dependency resolver
-    resolver: Option<DependencyResolver>,
+    resolver: Option<GraphDependencyResolver>,
     /// Instantiated services
     instances: Arc<RwLock<HashMap<ServiceId, ServiceInstance>>>,
     /// Whether the container is built and ready
@@ -56,7 +57,7 @@ impl IocContainer {
         }
         
         // Build dependency resolver
-        let resolver = DependencyResolver::new(self.bindings.descriptors())?;
+        let resolver = GraphDependencyResolver::new(self.bindings.descriptors())?;
         self.resolver = Some(resolver);
         
         // Validate dependencies
@@ -167,6 +168,57 @@ impl IocContainer {
         self.resolve_named::<T>(name).ok()
     }
     
+    /// Resolve a service using the Injectable trait (auto-wiring)
+    pub fn resolve_injectable<T: Injectable>(&self) -> Result<Arc<T>, CoreError> {
+        if !self.is_built {
+            return Err(CoreError::InvalidServiceDescriptor {
+                message: "Container must be built before resolving services".to_string(),
+            });
+        }
+        
+        let service_id = ServiceId::of::<T>();
+        
+        // Check if we have a cached instance
+        {
+            let instances = self.instances.read().map_err(|_| CoreError::LockError {
+                resource: "service_instances".to_string(),
+            })?;
+            
+            if let Some(ServiceInstance::Singleton(instance)) = instances.get(&service_id) {
+                return instance.clone().downcast::<T>()
+                    .map_err(|_| CoreError::ServiceNotFound {
+                        service_type: std::any::type_name::<T>().to_string(),
+                    });
+            }
+        }
+        
+        // Create the service using Injectable
+        let service_instance = T::create(self)?;
+        let arc_instance = Arc::new(service_instance);
+        
+        // Cache if singleton (we need to check the descriptor for this)
+        if let Some(descriptor) = self.bindings.get_descriptor(&service_id) {
+            if descriptor.lifetime == ServiceScope::Singleton {
+                let mut instances = self.instances.write().map_err(|_| CoreError::LockError {
+                    resource: "service_instances".to_string(),
+                })?;
+                instances.insert(service_id, ServiceInstance::Singleton(arc_instance.clone()));
+            }
+        }
+        
+        Ok(arc_instance)
+    }
+    
+    /// Resolve a trait object by downcasting from a concrete implementation
+    pub fn resolve_trait<T: ?Sized + Send + Sync + 'static>(&self) -> Result<Arc<T>, CoreError> {
+        // For trait objects, we need special handling
+        // This is a placeholder - in a real implementation, we'd need metadata about
+        // which concrete type implements which trait
+        Err(CoreError::ServiceNotFound {
+            service_type: std::any::type_name::<T>().to_string(),
+        })
+    }
+    
     /// Check if a service is registered
     pub fn contains<T: 'static>(&self) -> bool {
         let service_id = ServiceId::of::<T>();
@@ -259,11 +311,45 @@ impl ServiceBinder for IocContainer {
         self.bindings.bind_named::<TInterface, TImpl>(name);
         self
     }
+    
+    fn bind_injectable<T: Injectable>(&mut self) -> &mut Self {
+        if self.is_built {
+            panic!("Cannot add bindings after container is built");
+        }
+        self.bindings.bind_injectable::<T>();
+        self
+    }
+    
+    fn bind_injectable_singleton<T: Injectable>(&mut self) -> &mut Self {
+        if self.is_built {
+            panic!("Cannot add bindings after container is built");
+        }
+        self.bindings.bind_injectable_singleton::<T>();
+        self
+    }
 }
 
 impl Default for IocContainer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl DependencyResolver for IocContainer {
+    fn resolve<T: Send + Sync + 'static>(&self) -> Result<Arc<T>, CoreError> {
+        self.resolve::<T>()
+    }
+    
+    fn resolve_named<T: Send + Sync + 'static>(&self, name: &str) -> Result<Arc<T>, CoreError> {
+        self.resolve_named::<T>(name.to_string())
+    }
+    
+    fn try_resolve<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
+        self.try_resolve::<T>()
+    }
+    
+    fn try_resolve_named<T: Send + Sync + 'static>(&self, name: &str) -> Option<Arc<T>> {
+        self.try_resolve_named::<T>(name.to_string())
     }
 }
 

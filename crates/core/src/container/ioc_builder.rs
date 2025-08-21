@@ -1,5 +1,6 @@
 use crate::container::binding::{ServiceBinder, ServiceBindings};
 use crate::container::ioc_container::IocContainer;
+use crate::container::autowiring::Injectable;
 use crate::errors::CoreError;
 
 /// Builder for IoC container with fluent API
@@ -56,6 +57,16 @@ impl ServiceBinder for IocContainerBuilder {
     
     fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, name: impl Into<String>) -> &mut Self {
         self.bindings.bind_named::<TInterface, TImpl>(name);
+        self
+    }
+    
+    fn bind_injectable<T: Injectable>(&mut self) -> &mut Self {
+        self.bindings.bind_injectable::<T>();
+        self
+    }
+    
+    fn bind_injectable_singleton<T: Injectable>(&mut self) -> &mut Self {
+        self.bindings.bind_injectable_singleton::<T>();
         self
     }
 }
