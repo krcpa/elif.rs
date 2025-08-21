@@ -1,6 +1,6 @@
 //! Test parameter injection functionality
 
-use elif_http_derive::{get, param, controller};
+use elif_http_derive::{get, controller};
 
 // Mock types for testing
 pub struct ElifRequest;

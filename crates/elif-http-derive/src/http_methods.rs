@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemFn};
 
-use crate::utils::{validate_route_path, extract_path_parameters, extract_function_parameters, extract_param_types_from_attrs};
+use crate::utils::{validate_route_path, extract_path_parameters, extract_function_parameters, extract_param_types_from_attrs, has_request_attribute, extract_request_param_name};
 use std::collections::HashMap;
 
 /// Generate HTTP method macros with parameter extraction
@@ -48,21 +48,21 @@ pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStrea
     let param_types = extract_param_types_from_attrs(&input_fn.attrs);
     
     // Check if this method needs parameter injection
-    // Only apply injection if:
-    // 1. There are path parameters in the route
-    // 2. The function has matching parameters in its signature  
-    // 3. The function has a &self parameter (is a method, not a standalone function)
-    // 4. There are explicit #[param] annotations
+    // Apply injection if:
+    // 1. Traditional: There are path parameters + #[param] annotations
+    // 2. New: #[request] attribute is present (automatic ElifRequest injection)
     let has_self = input_fn.sig.inputs.iter().any(|arg| matches!(arg, syn::FnArg::Receiver(_)));
     let has_param_annotations = !param_types.is_empty();
-    let needs_injection = !path_params.is_empty() 
+    let has_request_attr = has_request_attribute(&input_fn.attrs);
+    let has_path_param_injection = !path_params.is_empty() 
         && has_self
         && has_param_annotations
         && has_injectable_params(&fn_params, &path_params);
+    let needs_injection = has_path_param_injection || (has_self && has_request_attr);
     
     if needs_injection {
         // Generate wrapper method with parameter injection
-        generate_injected_method(&input_fn, &path_params, &param_types)
+        generate_injected_method(&input_fn, &path_params, &param_types, has_request_attr)
     } else {
         // Generate parameter validation comments
         let param_docs = if !path_params.is_empty() {
@@ -130,11 +130,12 @@ fn has_injectable_params(fn_params: &[(String, String)], path_params: &[String])
     false
 }
 
-/// Generate a wrapper method that injects path parameters into the original method
+/// Generate a wrapper method that injects path parameters and/or request into the original method
 fn generate_injected_method(
     input_fn: &ItemFn, 
     path_params: &[String], 
-    param_types: &HashMap<String, String>
+    param_types: &HashMap<String, String>,
+    has_request_attr: bool
 ) -> TokenStream {
     let original_name = &input_fn.sig.ident;
     let original_fn_name = quote::format_ident!("{}_original", original_name);
@@ -142,6 +143,12 @@ fn generate_injected_method(
     // Build parameter extraction and call arguments in order
     let mut param_extractions = Vec::new();
     let mut call_args = Vec::new();
+    let mut needs_request_injection = has_request_attr;
+    let request_param_name = if has_request_attr {
+        extract_request_param_name(&input_fn.attrs)
+    } else {
+        "req".to_string()
+    };
     
     // Process function parameters in order to preserve original signature order
     for input in &input_fn.sig.inputs {
@@ -168,22 +175,37 @@ fn generate_injected_method(
                     } else if param_type_str.contains("ElifRequest") {
                         // This is the request parameter - pass it through
                         call_args.push(quote! { request });
+                        needs_request_injection = false; // Already has request parameter
                     } else {
-                        // Unsupported parameter type - generate compile-time error
-                        return syn::Error::new_spanned(
-                            pat_type,
-                            format!(
-                                "Unsupported parameter '{}' of type '{}'. Only path parameters (specified in route) and ElifRequest are supported. \
-                                Hint: Remove this parameter or add it to the route path like '/users/{{{}}}' and annotate with #[param({}: type)]",
-                                param_name, param_type_str, param_name, param_name
+                        // Check if this is a regular parameter when #[request] is present
+                        if has_request_attr {
+                            // With #[request], we allow any parameter and pass it as-is
+                            call_args.push(quote! { #pat_ident });
+                        } else {
+                            // Without #[request], unsupported parameter type - generate compile-time error
+                            return syn::Error::new_spanned(
+                                pat_type,
+                                format!(
+                                    "Unsupported parameter '{}' of type '{}'. Only path parameters (specified in route) and ElifRequest are supported. \
+                                    Hint: Remove this parameter, add it to the route path like '/users/{{{}}}' and annotate with #[param({}: type)], or use #[request] to enable automatic request injection.",
+                                    param_name, param_type_str, param_name, param_name
+                                )
                             )
-                        )
-                        .to_compile_error()
-                        .into();
+                            .to_compile_error()
+                            .into();
+                        }
                     }
                 }
             }
         }
+    }
+    
+    // If #[request] is present and method doesn't have ElifRequest parameter, inject it
+    if needs_request_injection {
+        let req_ident = quote::format_ident!("{}", request_param_name);
+        param_extractions.push(quote! {
+            let #req_ident = request;
+        });
     }
     
     // Get the original function's components
@@ -195,7 +217,8 @@ fn generate_injected_method(
                        !attr.path().is_ident("patch") &&
                        !attr.path().is_ident("head") &&
                        !attr.path().is_ident("options") &&
-                       !attr.path().is_ident("param"))
+                       !attr.path().is_ident("param") &&
+                       !attr.path().is_ident("request"))
         .collect::<Vec<_>>();
     let original_vis = &input_fn.vis;
     let original_block = &input_fn.block;

@@ -99,12 +99,12 @@ pub fn validate_route_path(path: &str) -> Result<(), String> {
     }
     
     // Check for malformed parameter syntax
-    let mut chars = path.chars().peekable();
+    let chars = path.chars();
     let mut brace_count = 0;
     let mut in_param = false;
     let mut param_content = String::new();
     
-    while let Some(ch) = chars.next() {
+    for ch in chars {
         match ch {
             '{' => {
                 if in_param {
@@ -149,7 +149,7 @@ pub fn validate_route_path(path: &str) -> Result<(), String> {
 /// Extract path parameters from a route path (e.g., "/users/{id}" -> ["id"])
 pub fn extract_path_parameters(path: &str) -> Vec<String> {
     let mut params = Vec::new();
-    let mut chars = path.chars().peekable();
+    let mut chars = path.chars();
     
     while let Some(ch) = chars.next() {
         if ch == '{' {
@@ -298,4 +298,27 @@ fn parse_param_specs(tokens: proc_macro2::TokenStream) -> Result<Vec<(String, St
     
     let parsed: ParamSpecs = syn::parse2(tokens)?;
     Ok(parsed.specs)
+}
+
+/// Check if method has #[request] attribute for automatic ElifRequest injection
+pub fn has_request_attribute(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| attr.path().is_ident("request"))
+}
+
+/// Extract request parameter name from #[request] attribute
+/// Returns "req" by default or custom name if specified
+pub fn extract_request_param_name(attrs: &[Attribute]) -> String {
+    for attr in attrs {
+        if attr.path().is_ident("request") {
+            if let Meta::List(meta_list) = &attr.meta {
+                // Try to parse custom parameter name from tokens
+                if let Ok(ident) = syn::parse2::<syn::Ident>(meta_list.tokens.clone()) {
+                    return ident.to_string();
+                }
+            }
+            // Default name when no custom name specified
+            return "req".to_string();
+        }
+    }
+    "req".to_string()
 }

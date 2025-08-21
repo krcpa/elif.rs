@@ -1,6 +1,6 @@
 //! Debug macro test
 
-use elif_http_derive::{get, param};
+use elif_http_derive::{get};
 
 // Mock the required types
 pub struct ElifRequest;
