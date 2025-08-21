@@ -29,6 +29,12 @@ impl ServiceId {
         }
     }
     
+    /// Check if this ServiceId matches a type and name without allocating
+    pub fn matches_named<T: 'static + ?Sized>(&self, name: &str) -> bool {
+        self.type_id == TypeId::of::<T>() && 
+        self.name.as_deref() == Some(name)
+    }
+    
     /// Get the type name as a string
     pub fn type_name(&self) -> &'static str {
         self.type_name

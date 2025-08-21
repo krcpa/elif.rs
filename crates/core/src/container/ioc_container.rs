@@ -77,9 +77,81 @@ impl IocContainer {
     }
     
     /// Resolve a named service
-    pub fn resolve_named<T: Send + Sync + 'static>(&self, name: impl Into<String>) -> Result<Arc<T>, CoreError> {
-        let service_id = ServiceId::named::<T>(name);
-        self.resolve_by_id(&service_id)
+    pub fn resolve_named<T: Send + Sync + 'static>(&self, name: &str) -> Result<Arc<T>, CoreError> {
+        self.resolve_named_by_str::<T>(name)
+    }
+    
+    /// Resolve a named service efficiently without allocating ServiceId
+    fn resolve_named_by_str<T: Send + Sync + 'static>(&self, name: &str) -> Result<Arc<T>, CoreError> {
+        if !self.is_built {
+            return Err(CoreError::InvalidServiceDescriptor {
+                message: "Container must be built before resolving services".to_string(),
+            });
+        }
+        
+        // Check if we have a cached instance - we need to create ServiceId for lookup in instances
+        let service_id = ServiceId::named::<T>(name.to_string());
+        {
+            let instances = self.instances.read().map_err(|_| CoreError::LockError {
+                resource: "service_instances".to_string(),
+            })?;
+            
+            if let Some(ServiceInstance::Singleton(instance)) = instances.get(&service_id) {
+                return instance.clone().downcast::<T>()
+                    .map_err(|_| CoreError::ServiceNotFound {
+                        service_type: format!("{}({})", 
+                            std::any::type_name::<T>(),
+                            name
+                        ),
+                    });
+            }
+        }
+        
+        // Get service descriptor efficiently without allocating ServiceId
+        let descriptor = self.bindings.get_descriptor_named::<T>(name)
+            .ok_or_else(|| CoreError::ServiceNotFound {
+                service_type: format!("{}({})", 
+                    std::any::type_name::<T>(),
+                    name
+                ),
+            })?;
+        
+        // Resolve dependencies first
+        self.resolve_dependencies(&descriptor.dependencies)?;
+        
+        // Create the service instance based on activation strategy
+        let arc_instance = match &descriptor.activation_strategy {
+            crate::container::descriptor::ServiceActivationStrategy::Factory(factory) => {
+                let instance = factory()?;
+                let typed_instance = instance.downcast::<T>()
+                    .map_err(|_| CoreError::ServiceNotFound {
+                        service_type: format!("{}({})", 
+                            std::any::type_name::<T>(),
+                            name
+                        ),
+                    })?;
+                Arc::new(*typed_instance)
+            },
+            crate::container::descriptor::ServiceActivationStrategy::AutoWired => {
+                return Err(CoreError::InvalidServiceDescriptor {
+                    message: format!(
+                        "Service {}({}) is marked as auto-wired but resolve_named was called instead of resolve_injectable. Use resolve_injectable() for auto-wired services.",
+                        std::any::type_name::<T>(),
+                        name
+                    ),
+                });
+            }
+        };
+        
+        // Cache if singleton (we already have the ServiceId)
+        if descriptor.lifetime == ServiceScope::Singleton {
+            let mut instances = self.instances.write().map_err(|_| CoreError::LockError {
+                resource: "service_instances".to_string(),
+            })?;
+            instances.insert(service_id, ServiceInstance::Singleton(arc_instance.clone()));
+        }
+        
+        Ok(arc_instance)
     }
     
     /// Resolve a service by service ID
@@ -175,7 +247,7 @@ impl IocContainer {
     }
     
     /// Try to resolve a named service, returning None if not found
-    pub fn try_resolve_named<T: Send + Sync + 'static>(&self, name: impl Into<String>) -> Option<Arc<T>> {
+    pub fn try_resolve_named<T: Send + Sync + 'static>(&self, name: &str) -> Option<Arc<T>> {
         self.resolve_named::<T>(name).ok()
     }
     
@@ -253,9 +325,8 @@ impl IocContainer {
     }
     
     /// Check if a named service is registered
-    pub fn contains_named<T: 'static>(&self, name: impl Into<String>) -> bool {
-        let service_id = ServiceId::named::<T>(name);
-        self.bindings.contains(&service_id)
+    pub fn contains_named<T: 'static>(&self, name: &str) -> bool {
+        self.bindings.contains_named::<T>(name)
     }
     
     /// Get the number of registered services
@@ -331,7 +402,7 @@ impl ServiceBinder for IocContainer {
         self
     }
     
-    fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, name: impl Into<String>) -> &mut Self {
+    fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, name: &str) -> &mut Self {
         if self.is_built {
             panic!("Cannot add bindings after container is built");
         }
@@ -368,7 +439,7 @@ impl DependencyResolver for IocContainer {
     }
     
     fn resolve_named<T: Send + Sync + 'static>(&self, name: &str) -> Result<Arc<T>, CoreError> {
-        self.resolve_named::<T>(name.to_string())
+        self.resolve_named::<T>(name)
     }
     
     fn try_resolve<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
@@ -376,7 +447,7 @@ impl DependencyResolver for IocContainer {
     }
     
     fn try_resolve_named<T: Send + Sync + 'static>(&self, name: &str) -> Option<Arc<T>> {
-        self.try_resolve_named::<T>(name.to_string())
+        self.try_resolve_named::<T>(name)
     }
 }
 

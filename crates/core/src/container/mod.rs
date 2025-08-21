@@ -11,6 +11,7 @@ pub mod ioc_builder;
 pub mod autowiring;
 pub mod autowiring_example;
 pub mod activation_strategy_test;
+pub mod performance_test;
 pub mod examples;
 pub mod integration_test;
 pub mod api_demo;

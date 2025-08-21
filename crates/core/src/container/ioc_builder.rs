@@ -55,7 +55,7 @@ impl ServiceBinder for IocContainerBuilder {
         self
     }
     
-    fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, name: impl Into<String>) -> &mut Self {
+    fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, name: &str) -> &mut Self {
         self.bindings.bind_named::<TInterface, TImpl>(name);
         self
     }
