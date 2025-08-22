@@ -244,7 +244,8 @@ impl ModuleRegistry {
             }
         }
         
-        order.reverse(); // Reverse to get correct dependency order
+        // Note: DFS topological sort naturally produces correct dependency order
+        // Dependencies are visited first, then the dependents are added to order
         self.load_order = order.clone();
         
         // Update load order in module info

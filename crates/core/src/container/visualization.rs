@@ -144,7 +144,8 @@ impl DependencyVisualizer {
         // Add service nodes
         for descriptor in &self.descriptors {
             if let Some(ref filter) = style.filter_types {
-                if !filter.iter().any(|f| descriptor.service_id.type_name().contains(f)) {
+                let service_name = self.format_service_name(&descriptor.service_id, &style);
+                if !filter.iter().any(|f| service_name.contains(f)) {
                     continue;
                 }
             }
@@ -170,7 +171,7 @@ impl DependencyVisualizer {
             }
             
             writeln!(dot, "    \"{}\" [{}];", 
-                descriptor.service_id.type_name(),
+                self.format_service_name(&descriptor.service_id, &style),
                 node_attrs.join(", ")
             ).unwrap();
         }
@@ -180,15 +181,16 @@ impl DependencyVisualizer {
         // Add dependency edges
         for (service_id, dependencies) in &self.dependency_graph {
             if let Some(ref filter) = style.filter_types {
-                if !filter.iter().any(|f| service_id.type_name().contains(f)) {
+                let service_name = self.format_service_name(service_id, &style);
+                if !filter.iter().any(|f| service_name.contains(f)) {
                     continue;
                 }
             }
             
             for dependency in dependencies {
                 writeln!(dot, "    \"{}\" -> \"{}\";", 
-                    service_id.type_name(),
-                    dependency.type_name()
+                    self.format_service_name(service_id, &style),
+                    self.format_service_name(dependency, &style)
                 ).unwrap();
             }
         }
@@ -205,7 +207,8 @@ impl DependencyVisualizer {
         // Add service nodes with lifetimes
         for descriptor in &self.descriptors {
             if let Some(ref filter) = style.filter_types {
-                if !filter.iter().any(|f| descriptor.service_id.type_name().contains(f)) {
+                let service_name = self.format_service_name(&descriptor.service_id, &style);
+                if !filter.iter().any(|f| service_name.contains(f)) {
                     continue;
                 }
             }
@@ -242,7 +245,8 @@ impl DependencyVisualizer {
         // Add dependency relationships
         for (service_id, dependencies) in &self.dependency_graph {
             if let Some(ref filter) = style.filter_types {
-                if !filter.iter().any(|f| service_id.type_name().contains(f)) {
+                let service_name = self.format_service_name(service_id, &style);
+                if !filter.iter().any(|f| service_name.contains(f)) {
                     continue;
                 }
             }
@@ -388,13 +392,14 @@ impl DependencyVisualizer {
         let mut services = Vec::new();
         for descriptor in &self.descriptors {
             if let Some(ref filter) = style.filter_types {
-                if !filter.iter().any(|f| descriptor.service_id.type_name().contains(f)) {
+                let service_name = self.format_service_name(&descriptor.service_id, &style);
+                if !filter.iter().any(|f| service_name.contains(f)) {
                     continue;
                 }
             }
             
             let mut service_data = BTreeMap::new();
-            service_data.insert("id".to_string(), serde_json::Value::String(descriptor.service_id.type_name().to_string()));
+            service_data.insert("id".to_string(), serde_json::Value::String(self.format_service_name(&descriptor.service_id, &style)));
             
             if style.show_names {
                 service_data.insert("name".to_string(), serde_json::Value::String(
@@ -427,15 +432,16 @@ impl DependencyVisualizer {
         let mut edges = Vec::new();
         for (service_id, dependencies) in &self.dependency_graph {
             if let Some(ref filter) = style.filter_types {
-                if !filter.iter().any(|f| service_id.type_name().contains(f)) {
+                let service_name = self.format_service_name(service_id, &style);
+                if !filter.iter().any(|f| service_name.contains(f)) {
                     continue;
                 }
             }
             
             for dependency in dependencies {
                 let mut edge = BTreeMap::new();
-                edge.insert("from".to_string(), serde_json::Value::String(service_id.type_name().to_string()));
-                edge.insert("to".to_string(), serde_json::Value::String(dependency.type_name().to_string()));
+                edge.insert("from".to_string(), serde_json::Value::String(self.format_service_name(service_id, &style)));
+                edge.insert("to".to_string(), serde_json::Value::String(self.format_service_name(dependency, &style)));
                 
                 edges.push(serde_json::Value::Object(
                     edge.into_iter().collect()
@@ -655,13 +661,13 @@ mod tests {
     fn create_test_descriptor(type_name: &str, lifetime: ServiceScope, deps: Vec<&str>) -> ServiceDescriptor {
         let service_id = ServiceId {
             type_id: TypeId::of::<()>(),
-            type_name: "test_service",
+            type_name: "TestService",
             name: Some(type_name.to_string()),
         };
         
         let dependencies: Vec<ServiceId> = deps.iter().map(|dep| ServiceId {
             type_id: TypeId::of::<()>(),
-            type_name: "test_dependency",
+            type_name: "TestService",
             name: Some(dep.to_string()),
         }).collect();
         
@@ -687,6 +693,8 @@ mod tests {
         let style = VisualizationStyle::default();
         
         let dot = visualizer.generate_dot(style).unwrap();
+        
+        println!("Generated DOT:\n{}", dot);
         
         assert!(dot.contains("digraph ServiceDependencies"));
         assert!(dot.contains("ServiceA"));
@@ -759,12 +767,12 @@ mod tests {
         
         let service_a = ServiceId {
             type_id: TypeId::of::<()>(),
-            type_name: "test_service",
+            type_name: "TestService",
             name: Some("ServiceA".to_string()),
         };
         let service_c = ServiceId {
             type_id: TypeId::of::<()>(),
-            type_name: "test_service",
+            type_name: "TestService",
             name: Some("ServiceC".to_string()),
         };
         
