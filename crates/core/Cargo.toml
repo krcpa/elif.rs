@@ -29,3 +29,4 @@ tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal", "t
 lazy_static = "1.4"
 async-trait = "0.1"
 serial_test = "3.0"
+trybuild = "1.0"

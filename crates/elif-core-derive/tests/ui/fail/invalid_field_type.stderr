@@ -1,0 +1,5 @@
+error: Dependency injection fields must be Arc<T> or Option<Arc<T>>
+ --> tests/ui/fail/invalid_field_type.rs:5:20
+  |
+5 |     invalid_field: String, // Should be Arc<T> or Option<Arc<T>>
+  |                    ^^^^^^
