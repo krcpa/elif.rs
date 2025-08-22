@@ -12,6 +12,8 @@
 //! - `#[routes]`: Generate route registration code from impl blocks
 //! - `#[resource]`: Automatic RESTful resource registration
 //! - `#[group]`: Route grouping with shared attributes
+//! - `#[module]`: Module definition for dependency injection
+//! - `app!`: Application composition macro
 
 use proc_macro::TokenStream;
 
@@ -23,6 +25,7 @@ mod middleware;
 mod params;
 mod routes;
 mod groups;
+mod module;
 mod utils;
 
 #[cfg(test)]
@@ -122,4 +125,16 @@ pub fn group(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn inject(args: TokenStream, input: TokenStream) -> TokenStream {
     inject::inject_impl(args, input)
+}
+
+/// Module definition macro for dependency injection modules
+#[proc_macro_attribute]
+pub fn module(args: TokenStream, input: TokenStream) -> TokenStream {
+    module::module_impl(args, input)
+}
+
+/// Application composition macro for organizing modules
+#[proc_macro]
+pub fn app(input: TokenStream) -> TokenStream {
+    module::module_composition_impl(input)
 }

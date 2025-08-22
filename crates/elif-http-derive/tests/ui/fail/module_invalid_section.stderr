@@ -1,0 +1,5 @@
+error: Unknown module section 'invalid_section'. Valid sections are: providers, controllers, imports, exports
+  --> tests/ui/fail/module_invalid_section.rs:10:5
+   |
+10 |     invalid_section: [UserService],
+   |     ^^^^^^^^^^^^^^^

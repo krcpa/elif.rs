@@ -1,0 +1,5 @@
+error: Trait providers must specify implementation type: dyn Trait => Implementation
+  --> tests/ui/fail/module_trait_no_impl.rs:10:21
+   |
+10 |     providers: [dyn UserService],
+   |                     ^^^^^^^^^^^
