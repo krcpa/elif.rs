@@ -1,13 +1,13 @@
 //! Health check endpoint implementation
 
 use crate::config::HttpConfig;
-use elif_core::Container;
+use elif_core::container::IocContainer;
 use std::sync::Arc;
 use serde_json::json;
 
 /// Default health check handler
 pub async fn health_check_handler(
-    _container: Arc<Container>,
+    _container: Arc<IocContainer>,
     _config: HttpConfig,
 ) -> axum::response::Json<serde_json::Value> {
     let response = json!({

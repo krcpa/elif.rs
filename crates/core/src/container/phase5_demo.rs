@@ -4,7 +4,6 @@
 //! - Enhanced #[inject] macro with IoC container support
 //! - Controller factory with dependency injection 
 //! - Middleware dependency injection
-//! - Migration utilities for backward compatibility
 
 use std::sync::Arc;
 use crate::container::{IocContainer, ServiceBinder};
@@ -74,7 +73,7 @@ impl DemoMiddleware {
 }
 
 /// Demonstrate the complete Phase 5 integration
-pub fn demonstrate_phase5_integration() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn demonstrate_phase5_integration() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== IOC Phase 5 Integration Demo ===");
     
     // 1. Setup IoC Container with services
@@ -120,7 +119,7 @@ pub fn demonstrate_phase5_integration() -> Result<(), Box<dyn std::error::Error>
     let mut named_container = IocContainer::new();
     
     let primary_service = DemoService::new("Primary");
-    let secondary_service = DemoService::new("Secondary");
+    let _secondary_service = DemoService::new("Secondary");
     
     named_container.bind_instance::<DemoService, DemoService>(primary_service);
     // Would bind named services like this (simplified for demo):
@@ -143,42 +142,6 @@ pub fn demonstrate_phase5_integration() -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-/// Demonstrate migration utilities
-pub fn demonstrate_migration_utilities() -> Result<(), Box<dyn std::error::Error>> {
-    use crate::container::{Container, LegacyContainerAdapter, MigrationAnalyzer};
-    
-    println!("\n=== Migration Utilities Demo ===");
-    
-    // 1. Setup legacy container
-    let old_container = Container::new();
-    println!("   ✓ Legacy container created");
-    
-    // 2. Setup new IoC container
-    let mut new_container = IocContainer::new();
-    new_container.bind::<DemoService, DemoService>();
-    new_container.build()?;
-    println!("   ✓ New IoC container created");
-    
-    // 3. Create compatibility adapter
-    let adapter = LegacyContainerAdapter::new(new_container);
-    println!("   ✓ Compatibility adapter created");
-    
-    // 4. Generate migration suggestions
-    let suggestions = MigrationAnalyzer::generate_migration_suggestions(&old_container);
-    println!("   ✓ Generated {} migration suggestions", suggestions.len());
-    
-    for suggestion in suggestions {
-        println!("     - {}: {}", 
-            format!("{:?}", suggestion.suggestion_type),
-            suggestion.description
-        );
-    }
-    
-    println!("=== Migration Demo Complete ===");
-    
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,13 +149,8 @@ mod tests {
     #[tokio::test]
     async fn test_phase5_integration_demo() {
         demonstrate_phase5_integration()
+            .await
             .expect("Phase 5 integration demo should succeed");
-    }
-
-    #[test]
-    fn test_migration_utilities_demo() {
-        demonstrate_migration_utilities()
-            .expect("Migration utilities demo should succeed");
     }
 
     #[test]

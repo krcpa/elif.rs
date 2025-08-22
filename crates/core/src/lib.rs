@@ -9,7 +9,13 @@ pub mod specs;
 // Re-export key types for convenience (specific exports to avoid ambiguity)
 pub use foundation::{FrameworkComponent, Initializable, Finalizable, LifecycleManager, LifecycleState};
 pub use errors::{CoreError, ErrorDefinition, ApiError, ApiErrorResponse};
-pub use container::{Container, ContainerBuilder, ServiceRegistry, ServiceScope};
+// New IoC container exports (recommended for new projects)
+pub use container::{IocContainer, IocContainerBuilder, ServiceBinder, ServiceStatistics};
+// Legacy exports (deprecated - use IocContainer instead)
+#[deprecated(since = "0.6.0", note = "Use IocContainer instead")]
+pub use container::{Container, ContainerBuilder};
+// Still active exports
+pub use container::{ServiceRegistry, ServiceScope};
 pub use modules::{Module, ModuleRegistry, ModuleLoader, BaseModule, ModuleError};
 pub use config::{AppConfigTrait, Environment, AppConfig, ConfigSource};
 pub use config::validation::ConfigError;

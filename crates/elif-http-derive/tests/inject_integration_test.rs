@@ -152,55 +152,57 @@ mod tests {
     }
     
     #[test]
-    fn test_generated_from_container_method_exists() {
-        // This test just verifies that the from_container method is generated
+    fn test_generated_from_ioc_container_method_exists() {
+        // This test just verifies that the from_ioc_container method is generated
         // In a real test, we'd set up a proper container and call it
         
         // Verify the method exists (this will compile-fail if it doesn't)
-        let _method_exists = TestController::from_container;
-        let _optional_method_exists = OptionalServiceController::from_container;
-        let _multi_service_method_exists = MultiServiceController::from_container;
+        let _method_exists = TestController::from_ioc_container;
+        let _optional_method_exists = OptionalServiceController::from_ioc_container;
+        let _multi_service_method_exists = MultiServiceController::from_ioc_container;
     }
     
     #[test]
-    fn test_from_container_runtime_behavior() {
-        // This test verifies the actual runtime behavior of from_container
-        use elif_core::container::Container;
+    fn test_from_ioc_container_runtime_behavior() {
+        // This test verifies the actual runtime behavior of from_ioc_container
+        use elif_core::container::{IocContainer, ServiceBinder};
         
-        // Create and configure container
-        let mut container = Container::new();
+        // Create and configure IoC container
+        let mut container = IocContainer::new();
         
         // Register services
-        container.register_singleton(MockUserService).unwrap();
-        container.register_singleton(MockEmailService).unwrap();
-        container.register_singleton(MockCacheService).unwrap();
+        container.bind_instance::<MockUserService, MockUserService>(MockUserService);
+        container.bind_instance::<MockEmailService, MockEmailService>(MockEmailService);
+        container.bind_instance::<MockCacheService, MockCacheService>(MockCacheService);
+        container.build().unwrap();
         
         // Test basic controller creation
-        let controller = TestController::from_container(&container).unwrap();
+        let controller = TestController::from_ioc_container(&container, None).unwrap();
         let result = controller.handle_user_request(999);
         assert_eq!(result, "User: User 999, Email sent: true");
         
         // Test optional service controller with service present
-        let optional_controller = OptionalServiceController::from_container(&container).unwrap();
+        let optional_controller = OptionalServiceController::from_ioc_container(&container, None).unwrap();
         let cached_result = optional_controller.get_cached_user(123);
-        assert_eq!(cached_result, "User 123"); // Not cached, so fetches from user service
+        assert_eq!(cached_result, "cached_value"); // Cache is present and returns cached value
         
         // Test multi-service controller
-        let multi_controller = MultiServiceController::from_container(&container).unwrap();
+        let multi_controller = MultiServiceController::from_ioc_container(&container, None).unwrap();
         // Just verify it was created successfully
         assert!(multi_controller.user_service.get_user(1) == "User 1");
     }
     
     #[test]
-    fn test_from_container_missing_service() {
+    fn test_from_ioc_container_missing_service() {
         // Test error handling when required service is missing
-        use elif_core::container::Container;
+        use elif_core::container::IocContainer;
         
         // Create empty container
-        let container = Container::new();
+        let mut container = IocContainer::new();
+        container.build().unwrap();
         
         // Try to create controller without registering services
-        let result = TestController::from_container(&container);
+        let result = TestController::from_ioc_container(&container, None);
         assert!(result.is_err());
         if let Err(e) = result {
             assert!(e.contains("Failed to inject service"));
@@ -208,16 +210,17 @@ mod tests {
     }
     
     #[test]
-    fn test_from_container_optional_service_missing() {
+    fn test_from_ioc_container_optional_service_missing() {
         // Test that optional services can be None
-        use elif_core::container::Container;
+        use elif_core::container::{IocContainer, ServiceBinder};
         
-        let mut container = Container::new();
+        let mut container = IocContainer::new();
         // Only register required service, not optional cache
-        container.register_singleton(MockUserService).unwrap();
+        container.bind_instance::<MockUserService, MockUserService>(MockUserService);
+        container.build().unwrap();
         
         // Should succeed with cache_service as None
-        let controller = OptionalServiceController::from_container(&container).unwrap();
+        let controller = OptionalServiceController::from_ioc_container(&container, None).unwrap();
         assert!(controller.cache_service.is_none());
         
         // Should still work without cache

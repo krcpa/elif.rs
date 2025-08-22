@@ -9,7 +9,7 @@ use async_trait::async_trait;
 
 use crate::controller::base::ElifController;
 use crate::request::ElifRequest;
-use crate::errors::{HttpError, HttpResult};
+use crate::errors::HttpError;
 use elif_core::container::{IocContainer, ScopeId};
 
 /// Trait for creating controller instances from the IoC container
@@ -124,7 +124,7 @@ impl ControllerRegistry {
     pub async fn create_scoped_registry(
         &self,
         request: &ElifRequest,
-    ) -> Result<ScopedControllerRegistry, HttpError> {
+    ) -> Result<ScopedControllerRegistry<'_>, HttpError> {
         let scope_id = self.container.create_scope()
             .map_err(|e| HttpError::InternalError {
                 message: format!("Failed to create request scope: {}", e),
@@ -147,6 +147,7 @@ impl ControllerRegistry {
 pub struct ScopedControllerRegistry<'a> {
     registry: &'a ControllerRegistry,
     scope_id: ScopeId,
+    #[allow(dead_code)]
     request_context: RequestContext,
 }
 
@@ -311,8 +312,8 @@ mod tests {
             self: Arc<Self>,
             _method_name: String,
             _request: ElifRequest,
-        ) -> HttpResult<ElifResponse> {
-            Ok(ElifResponse::ok().text("test"))
+        ) -> crate::errors::HttpResult<crate::response::ElifResponse> {
+            Ok(crate::response::ElifResponse::ok().text("test"))
         }
     }
 

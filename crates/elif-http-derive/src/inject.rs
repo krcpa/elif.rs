@@ -2,9 +2,7 @@
 //! 
 //! Provides the `#[inject]` attribute macro for declarative dependency injection.
 //! Applied to struct definitions to automatically generate service fields and
-//! a `from_container()` constructor method.
-//!
-//! Supports both old Container and new IoC Container APIs for backward compatibility.
+//! a `from_ioc_container()` constructor method for use with the IoC container.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
@@ -220,8 +218,8 @@ fn process_inject_attribute(
         }
     }
     
-    // Generate the from_container method
-    let from_container_impl = generate_from_container_method(
+    // Generate the from_ioc_container method
+    let from_ioc_container_impl = generate_from_ioc_container_method(
         &item_struct.ident,
         &inject_args.services,
     )?;
@@ -230,7 +228,7 @@ fn process_inject_attribute(
     Ok(quote! {
         #item_struct
         
-        #from_container_impl
+        #from_ioc_container_impl
     })
 }
 
@@ -274,8 +272,8 @@ fn generate_service_fields(
     Ok(fields)
 }
 
-/// Generate the from_container implementation supporting both old and new containers
-fn generate_from_container_method(
+/// Generate the from_ioc_container implementation for the IoC container
+fn generate_from_ioc_container_method(
     struct_name: &Ident,
     services: &Punctuated<ServiceDef, Comma>,
 ) -> Result<proc_macro2::TokenStream> {
@@ -332,18 +330,9 @@ fn generate_from_container_method(
         field_initializers.push(initializer);
     }
     
-    // Generate both legacy and IoC container implementations
+    // Generate IoC container implementation only
     Ok(quote! {
         impl #struct_name {
-            /// Create a new instance with services resolved from the DI container (legacy API)
-            pub fn from_container(
-                container: &elif_core::container::Container
-            ) -> Result<Self, String> {
-                Ok(Self {
-                    #(#field_initializers),*
-                })
-            }
-            
             /// Create a new instance with services resolved from the IoC container
             pub fn from_ioc_container(
                 container: &elif_core::container::IocContainer,

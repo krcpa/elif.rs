@@ -19,7 +19,6 @@ pub mod integration_test;
 pub mod api_demo;
 pub mod advanced_binding_examples;
 pub mod lifecycle;
-pub mod migration;
 pub mod phase5_demo;
 
 #[cfg(test)]
@@ -35,7 +34,10 @@ pub mod advanced_binding_test;
 #[cfg(test)]
 pub mod ioc_integration_tests;
 
+// Legacy container exports (deprecated in favor of IoC container)
+#[deprecated(since = "0.6.0", note = "Use IocContainer instead")]
 pub use container::Container;
+#[deprecated(since = "0.6.0", note = "Use IocContainerBuilder instead")]
 pub use builder::ContainerBuilder;
 pub use registry::{ServiceRegistry, ServiceEntry};
 pub use scope::{ServiceScope, ServiceLifetime, ScopedServiceManager, ScopeId};
@@ -46,8 +48,3 @@ pub use ioc_container::{IocContainer, ServiceStatistics};
 pub use ioc_builder::IocContainerBuilder;
 pub use autowiring::{Injectable, DependencyResolver, ConstructorParameter, ParameterInfo, ConstructorInfo};
 pub use lifecycle::{AsyncInitializable, Disposable, LifecycleManaged, ServiceState, ServiceLifecycleManager};
-pub use migration::{
-    LegacyContainerAdapter, MigrationAnalyzer, CompatibilityReport, MigrationSuggestion, 
-    SuggestionType, MigrationPriority, ProgressiveMigrator, MigrationValidator, 
-    ValidationResult, ValidationSummary, MigrationExtensions
-};

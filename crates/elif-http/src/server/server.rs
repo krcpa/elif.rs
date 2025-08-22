@@ -10,7 +10,7 @@ use crate::{
     middleware::v2::{MiddlewarePipelineV2, Middleware},
 };
 use super::lifecycle::{build_internal_router, start_server};
-use elif_core::Container;
+use elif_core::container::IocContainer;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tracing::info;
@@ -21,19 +21,20 @@ use tracing::info;
 /// 
 /// ```rust,no_run
 /// use elif_http::{Server, HttpConfig};
-/// use elif_core::Container;
+/// use elif_core::container::{IocContainer, ServiceBinder};
 /// use std::sync::Arc;
 /// 
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let container = Container::new();
+///     let mut container = IocContainer::new();
+///     container.build().unwrap();
 ///     let server = Server::new(container, HttpConfig::default())?;
 ///     server.listen("0.0.0.0:3000").await?;
 ///     Ok(())
 /// }
 /// ```
 pub struct Server {
-    container: Arc<Container>,
+    container: Arc<IocContainer>,
     config: HttpConfig,
     router: Option<ElifRouter>,
     middleware: MiddlewarePipelineV2,
@@ -41,7 +42,7 @@ pub struct Server {
 
 impl Server {
     /// Create a new server instance
-    pub fn new(container: Container, config: HttpConfig) -> HttpResult<Self> {
+    pub fn new(container: IocContainer, config: HttpConfig) -> HttpResult<Self> {
         Ok(Self {
             container: Arc::new(container),
             config,
@@ -50,8 +51,8 @@ impl Server {
         })
     }
 
-    /// Create a new server with existing Arc<Container>
-    pub fn with_container(container: Arc<Container>, config: HttpConfig) -> HttpResult<Self> {
+    /// Create a new server with existing Arc<IocContainer>
+    pub fn with_container(container: Arc<IocContainer>, config: HttpConfig) -> HttpResult<Self> {
         Ok(Self {
             container,
             config,
@@ -66,14 +67,15 @@ impl Server {
     /// 
     /// ```rust,no_run
     /// use elif_http::{Server, ElifRouter, HttpConfig, ElifRequest, HttpResult};
-    /// use elif_core::Container;
+    /// use elif_core::container::{IocContainer, ServiceBinder};
     /// use std::sync::Arc;
     /// 
     /// # async fn get_users(_req: ElifRequest) -> HttpResult<&'static str> { Ok("users") }
     /// # async fn create_user(_req: ElifRequest) -> HttpResult<&'static str> { Ok("created") }
     /// 
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let container = Container::new();
+    /// let mut container = IocContainer::new();
+    /// container.build().unwrap();
     /// let mut server = Server::new(container, HttpConfig::default())?;
     /// 
     /// let router = ElifRouter::new()
@@ -95,7 +97,7 @@ impl Server {
     /// 
     /// ```rust,no_run
     /// use elif_http::{Server, HttpConfig};
-    /// use elif_core::Container;
+    /// use elif_core::container::{IocContainer, ServiceBinder};
     /// use std::sync::Arc;
     /// 
     /// # #[derive(Debug)]
@@ -110,7 +112,8 @@ impl Server {
     /// # }
     /// 
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let container = Container::new();
+    /// let mut container = IocContainer::new();
+    /// container.build().unwrap();
     /// let mut server = Server::new(container, HttpConfig::default())?;
     /// server.use_middleware(LoggingMiddleware::default());
     /// # Ok(())
@@ -130,10 +133,11 @@ impl Server {
     /// 
     /// ```rust,no_run
     /// use elif_http::{Server, HttpConfig};
-    /// use elif_core::Container;
+    /// use elif_core::container::{IocContainer, ServiceBinder};
     /// 
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let container = Container::new();
+    /// let mut container = IocContainer::new();
+    /// container.build().unwrap();
     /// let mut server = Server::new(container, HttpConfig::default())?;
     /// server.debug_middleware(true);
     /// # Ok(())
@@ -157,10 +161,11 @@ impl Server {
     /// 
     /// ```rust,no_run
     /// use elif_http::{Server, HttpConfig};
-    /// use elif_core::Container;
+    /// use elif_core::container::{IocContainer, ServiceBinder};
     /// 
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let container = Container::new();
+    /// let mut container = IocContainer::new();
+    /// container.build().unwrap();
     /// let server = Server::new(container, HttpConfig::default())?;
     /// server.inspect_middleware();
     /// # Ok(())
@@ -191,10 +196,11 @@ impl Server {
     /// 
     /// ```rust,no_run
     /// use elif_http::{Server, HttpConfig};
-    /// use elif_core::Container;
+    /// use elif_core::container::{IocContainer, ServiceBinder};
     /// 
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let container = Container::new();
+    /// let mut container = IocContainer::new();
+    /// container.build().unwrap();
     /// let mut server = Server::new(container, HttpConfig::default())?;
     /// server.use_profiler();
     /// # Ok(())
@@ -218,7 +224,8 @@ impl Server {
     /// # 
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// #     let container = Container::new();
+    /// #     let mut container = IocContainer::new();
+    /// #     container.build().unwrap();
     /// #     let server = Server::new(container, HttpConfig::default())?;
     /// server.listen("0.0.0.0:3000").await?;
     /// #     Ok(())
@@ -248,7 +255,7 @@ impl Server {
     }
 
     // Getter methods for testing and inspection
-    pub fn container(&self) -> &Arc<Container> {
+    pub fn container(&self) -> &Arc<IocContainer> {
         &self.container
     }
 
