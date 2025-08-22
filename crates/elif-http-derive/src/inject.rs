@@ -242,19 +242,14 @@ fn generate_service_fields(
         let field_name = &service.field_name;
         let service_type = service.get_service_type()?;
         
-        // Generate field type based on injection type
-        let wrapped_type = match &service.injection_type {
-            InjectionType::Optional => {
-                // For Optional services, we want Option<Arc<T>>
-                quote! { Option<std::sync::Arc<#service_type>> }
-            },
-            InjectionType::Regular 
-            | InjectionType::Named(_) 
-            | InjectionType::Scoped 
-            | InjectionType::Factory => {
-                // For all other services, we want Arc<T>
-                quote! { std::sync::Arc<#service_type> }
-            }
+        // Always wrap in Arc first
+        let field_core_type = quote! { std::sync::Arc<#service_type> };
+        
+        // Then wrap in Option if the service is optional (regardless of injection type)
+        let wrapped_type = if service.is_optional() {
+            quote! { Option<#field_core_type> }
+        } else {
+            field_core_type
         };
         
         let field = syn::Field {
@@ -283,42 +278,80 @@ fn generate_from_ioc_container_method(
         let field_name = &service.field_name;
         let service_type = service.get_service_type()?;
         
-        let initializer = match &service.injection_type {
-            InjectionType::Regular => {
-                quote! {
-                    #field_name: container.resolve::<#service_type>()
-                        .map_err(|e| format!("Failed to inject service {}: {}", stringify!(#service_type), e))?
-                }
-            },
-            InjectionType::Optional => {
-                quote! {
-                    #field_name: container.try_resolve::<#service_type>()
-                }
-            },
-            InjectionType::Named(name) => {
-                quote! {
-                    #field_name: container.resolve_named::<#service_type>(#name)
-                        .map_err(|e| format!("Failed to inject named service {}({}): {}", stringify!(#service_type), #name, e))?
-                }
-            },
-            InjectionType::Scoped => {
-                quote! {
-                    #field_name: container.resolve_scoped::<#service_type>(&scope_id)
-                        .map_err(|e| format!("Failed to inject scoped service {}: {}", stringify!(#service_type), e))?
-                }
-            },
-            InjectionType::Factory => {
-                if let Some(factory_expr) = &service.factory_expr {
+        let initializer = if service.is_optional() {
+            // Handle optional services (can be combined with any injection type)
+            match &service.injection_type {
+                InjectionType::Regular | InjectionType::Optional => {
                     quote! {
-                        #field_name: {
-                            let factory = #factory_expr;
-                            Arc::new(factory(container)?)
+                        #field_name: container.try_resolve::<#service_type>()
+                    }
+                },
+                InjectionType::Named(name) => {
+                    quote! {
+                        #field_name: container.try_resolve_named::<#service_type>(#name)
+                    }
+                },
+                InjectionType::Scoped => {
+                    quote! {
+                        #field_name: container.try_resolve_scoped::<#service_type>(&scope_id)
+                    }
+                },
+                InjectionType::Factory => {
+                    if let Some(factory_expr) = &service.factory_expr {
+                        quote! {
+                            #field_name: {
+                                let factory = #factory_expr;
+                                Some(Arc::new(factory(container)?))
+                            }
+                        }
+                    } else {
+                        quote! {
+                            #field_name: container.try_resolve::<#service_type>()
                         }
                     }
-                } else {
+                }
+            }
+        } else {
+            // Handle required services
+            match &service.injection_type {
+                InjectionType::Regular => {
                     quote! {
                         #field_name: container.resolve::<#service_type>()
-                            .map_err(|e| format!("Failed to inject factory service {}: {}", stringify!(#service_type), e))?
+                            .map_err(|e| format!("Failed to inject service {}: {}", stringify!(#service_type), e))?
+                    }
+                },
+                InjectionType::Named(name) => {
+                    quote! {
+                        #field_name: container.resolve_named::<#service_type>(#name)
+                            .map_err(|e| format!("Failed to inject named service {}({}): {}", stringify!(#service_type), #name, e))?
+                    }
+                },
+                InjectionType::Scoped => {
+                    quote! {
+                        #field_name: container.resolve_scoped::<#service_type>(&scope_id)
+                            .map_err(|e| format!("Failed to inject scoped service {}: {}", stringify!(#service_type), e))?
+                    }
+                },
+                InjectionType::Factory => {
+                    if let Some(factory_expr) = &service.factory_expr {
+                        quote! {
+                            #field_name: {
+                                let factory = #factory_expr;
+                                Arc::new(factory(container)?)
+                            }
+                        }
+                    } else {
+                        quote! {
+                            #field_name: container.resolve::<#service_type>()
+                                .map_err(|e| format!("Failed to inject factory service {}: {}", stringify!(#service_type), e))?
+                        }
+                    }
+                },
+                InjectionType::Optional => {
+                    // This shouldn't happen for non-optional services
+                    quote! {
+                        #field_name: container.resolve::<#service_type>()
+                            .map_err(|e| format!("Failed to inject service {}: {}", stringify!(#service_type), e))?
                     }
                 }
             }

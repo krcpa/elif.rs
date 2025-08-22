@@ -12,11 +12,9 @@ struct MockEmailService;
 #[inject(user_service: MockUserService, email_service: MockEmailService)]
 pub struct BasicController;
 
-// Test service injection on struct with existing fields
-#[inject(user_service: MockUserService)]
-pub struct ControllerWithFields {
-    pub name: String,
-}
+// Test named service injection
+#[inject(user_service: MockUserService = "primary_user_service")]
+pub struct NamedServiceController;
 
 // Mock cache service
 struct MockCacheService;
