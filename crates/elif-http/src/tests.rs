@@ -5,14 +5,16 @@ mod tests {
     use super::*;
     use crate::{HttpConfig, Server};
     use elif_core::{
-        Container,
+        container::IocContainer,
         app_config::{AppConfigTrait},
     };
     use std::sync::Arc;
 
-    fn create_test_container() -> Arc<Container> {
+    fn create_test_container() -> Arc<IocContainer> {
         // TODO: Implement proper test container setup after refactor
-        Arc::new(Container::new())
+        let mut container = IocContainer::new();
+        container.build().expect("Test container build failed");
+        Arc::new(container)
     }
 
     #[test]

@@ -136,6 +136,30 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         // Generate method handlers for async dispatch
         let method_match_arms = method_handlers.iter();
         
+        // Check if struct has #[inject] to generate IocControllable trait
+        let has_inject_trait = input_impl.items.iter().any(|item| {
+            if let syn::ImplItem::Fn(method) = item {
+                method.sig.ident == "from_ioc_container"
+            } else {
+                false
+            }
+        });
+
+        let ioc_controllable_impl = if has_inject_trait {
+            quote! {
+                impl IocControllable for #self_ty {
+                    fn from_ioc_container(
+                        container: &elif_core::container::IocContainer,
+                        scope: Option<&elif_core::container::ScopeId>,
+                    ) -> Result<Self, String> {
+                        Self::from_ioc_container(container, scope)
+                    }
+                }
+            }
+        } else {
+            quote! {}
+        };
+
         // Generate the expanded code with ElifController trait implementation
         // Using async-trait for proper async method support
         let expanded = quote! {
@@ -171,6 +195,8 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 }
             }
+            
+            #ioc_controllable_impl
         };
         
         TokenStream::from(expanded)

@@ -58,7 +58,8 @@
       "Bash(rustc:*)",
       "Bash(touch:*)",
       "Bash(RUSTFLAGS=\"-A unused-imports\" cargo test -p elif-http-derive ui_fail_tests)",
-      "Bash(TRYBUILD=overwrite cargo test ui_tests)"
+      "Bash(TRYBUILD=overwrite cargo test ui_tests)",
+      "Bash(RUST_BACKTRACE=1 cargo test -p elif-core container::binding::tests::test_profile_conditions)"
     ],
     "deny": []
   }

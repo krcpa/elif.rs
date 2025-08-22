@@ -13,8 +13,8 @@ use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use async_trait::async_trait;
 
-use elif_core::Container;
 use crate::{HttpResult, response::ApiResponse};
+use elif_core::container::IocContainer;
 
 /// Query parameters for pagination and filtering
 #[derive(Debug, Serialize, Deserialize)]
@@ -107,28 +107,28 @@ pub trait Controller: Send + Sync {
     /// List resources with pagination
     fn index(
         &self,
-        container: ElifState<Arc<Container>>,
+        container: ElifState<Arc<IocContainer>>,
         params: ElifQuery<QueryParams>,
     ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
 
     /// Get single resource by ID
     fn show(
         &self,
-        container: ElifState<Arc<Container>>,
+        container: ElifState<Arc<IocContainer>>,
         id: ElifPath<String>,
     ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
 
     /// Create new resource
     fn create(
         &self,
-        container: ElifState<Arc<Container>>,
+        container: ElifState<Arc<IocContainer>>,
         data: ElifJson<Value>,
     ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
 
     /// Update existing resource
     fn update(
         &self,
-        container: ElifState<Arc<Container>>,
+        container: ElifState<Arc<IocContainer>>,
         id: ElifPath<String>,
         data: ElifJson<Value>,
     ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
@@ -136,7 +136,7 @@ pub trait Controller: Send + Sync {
     /// Delete resource
     fn destroy(
         &self,
-        container: ElifState<Arc<Container>>,
+        container: ElifState<Arc<IocContainer>>,
         id: ElifPath<String>,
     ) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>;
 }

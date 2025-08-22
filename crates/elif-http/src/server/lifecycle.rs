@@ -7,7 +7,7 @@ use crate::{
     server::health::health_check_handler,
     middleware::v2::MiddlewarePipelineV2,
 };
-use elif_core::Container;
+use elif_core::container::IocContainer;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::signal;
@@ -15,7 +15,7 @@ use tracing::{info, warn};
 
 /// Build the internal Axum router (hidden from users)
 pub async fn build_internal_router(
-    container: Arc<Container>,
+    container: Arc<IocContainer>,
     config: HttpConfig,
     user_router: Option<ElifRouter>,
     middleware: MiddlewarePipelineV2,

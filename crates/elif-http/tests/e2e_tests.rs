@@ -4,7 +4,7 @@
 //! to verify the complete functionality works in practice.
 
 use elif_http::*;
-use elif_core::{Container};
+use elif_core::container::IocContainer;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -184,7 +184,9 @@ fn create_test_router() -> ElifRouter<()> {
 }
 
 async fn create_test_server() -> Result<(String, tokio::task::JoinHandle<()>), Box<dyn std::error::Error>> {
-    let container = Arc::new(Container::new());
+    let mut container = IocContainer::new();
+    container.build().expect("Failed to build container");
+    let container = Arc::new(container);
     let config = HttpConfig {
         // host and port fields don't exist in HttpConfig
         request_timeout_secs: 30,
@@ -412,7 +414,9 @@ async fn test_e2e_health_check() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn test_framework_server_configuration() {
     // Test that server can be properly configured with framework abstractions
-    let container = Arc::new(Container::new());
+    let mut container = IocContainer::new();
+    container.build().expect("Failed to build container");
+    let container = Arc::new(container);
     let config = HttpConfig {
         // host and port fields don't exist in HttpConfig
         request_timeout_secs: 60,
