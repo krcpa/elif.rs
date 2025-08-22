@@ -1,0 +1,24 @@
+[package]
+name = "elif-core-derive"
+version = "0.1.0"
+edition = "2021"
+description = "Derive macros for elif-core dependency injection system"
+license = "MIT"
+repository = "https://github.com/krcpa/elif.rs"
+homepage = "https://github.com/krcpa/elif.rs"
+documentation = "https://docs.rs/elif-core-derive"
+keywords = ["web", "dependency-injection", "macro", "derive"]
+categories = ["web-programming", "development-tools"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+
+[dev-dependencies]
+trybuild = "1.0"
+elif-core = { path = "../core" }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }

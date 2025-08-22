@@ -1,0 +1,8 @@
+error: #[injectable] can only be applied to structs
+ --> tests/ui/fail/injectable_on_enum.rs:4:1
+  |
+4 | / pub enum UserService {
+5 | |     Active,
+6 | |     Inactive,
+7 | | }
+  | |_^

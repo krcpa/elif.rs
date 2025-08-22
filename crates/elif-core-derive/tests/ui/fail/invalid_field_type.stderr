@@ -1,0 +1,7 @@
+error: Injectable structs must have at least one dependency field (Arc<T> or Option<Arc<T>>)
+ --> tests/ui/fail/invalid_field_type.rs:4:1
+  |
+4 | / pub struct UserService {
+5 | |     invalid_field: String, // Should be Arc<T> or Option<Arc<T>>
+6 | | }
+  | |_^
