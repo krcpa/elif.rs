@@ -405,7 +405,18 @@ The IoC container system in elif.rs provides a powerful, type-safe, and performa
 
 ## Further Reading
 
+### Core Topics
 - [Basic Dependency Injection](../basics/dependency-injection.md) - Getting started guide
 - [Service Modules](service-modules.md) - Organizing services into modules  
 - [Container Validation](container-validation.md) - Validating dependency graphs
+
+### Advanced Topics
+- [Performance Optimization](performance-optimization.md) - Optimizing container performance
+- [Thread Safety & Concurrency](thread-safety-concurrency.md) - Multi-threaded applications
+- [Debugging & Introspection](debugging-introspection.md) - Debugging and monitoring tools
+- [Convention-Based Registration](conventions.md) - Automatic service registration
+- [Lifecycle Management](lifecycle-management.md) - Service initialization and cleanup
+- [Troubleshooting](troubleshooting.md) - Common issues and solutions
+
+### Integration Guides
 - [HTTP Integration](../http/ioc-integration.md) - Using IoC with HTTP controllers

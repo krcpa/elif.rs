@@ -404,6 +404,17 @@ The IoC container in elif.rs provides enterprise-grade dependency injection with
 
 ## Next Steps
 
+### Core Advanced Topics
 - [Service Modules](../advanced/service-modules.md) - Organize services into modules
 - [Container Validation](../advanced/container-validation.md) - Validate dependency graphs
+- [Performance Optimization](../advanced/performance-optimization.md) - Optimize container performance
+
+### Specialized Topics
+- [Thread Safety & Concurrency](../advanced/thread-safety-concurrency.md) - Multi-threaded applications
+- [Debugging & Introspection](../advanced/debugging-introspection.md) - Debug and monitor your container
+- [Convention-Based Registration](../advanced/conventions.md) - Automatic service registration
+- [Lifecycle Management](../advanced/lifecycle-management.md) - Service initialization and cleanup
+- [Troubleshooting](../advanced/troubleshooting.md) - Solve common issues
+
+### Integration
 - [HTTP Integration](../http/ioc-integration.md) - Deep dive into HTTP layer integration

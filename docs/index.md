@@ -152,11 +152,19 @@ async fn create_post(&self, post_data: CreatePostRequest) -> HttpResult<ElifResp
 
 ### Advanced Topics
 
-#### Architecture & Patterns
+#### IoC Container & Dependency Injection
 - **[Dependency Injection](basics/dependency-injection.md)** - Manage dependencies cleanly with IoC container
 - **[IoC Container Overview](advanced/ioc-overview.md)** - Comprehensive dependency injection system
 - **[Service Modules](advanced/service-modules.md)** - Organize services into logical modules
 - **[Container Validation](advanced/container-validation.md)** - Validate dependency graphs at build time
+- **[Performance Optimization](advanced/performance-optimization.md)** - Optimize container performance
+- **[Thread Safety & Concurrency](advanced/thread-safety-concurrency.md)** - Multi-threaded applications
+- **[Debugging & Introspection](advanced/debugging-introspection.md)** - Debug and monitor your container
+- **[Convention-Based Registration](advanced/conventions.md)** - Automatic service registration
+- **[Lifecycle Management](advanced/lifecycle-management.md)** - Service initialization and cleanup
+- **[Troubleshooting](advanced/troubleshooting.md)** - Solve common IoC issues
+
+#### Architecture & Patterns  
 - **[Error Handling](basics/error-handling.md)** - Robust error management
 - **[Testing](testing/introduction.md)** - Test your applications thoroughly
 
