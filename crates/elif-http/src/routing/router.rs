@@ -245,28 +245,33 @@ where
     {
         let container = self.ioc_container.as_ref()
             .expect("IoC container must be set before registering IoC controllers. Use .with_ioc_container() first");
-        let container_arc = Arc::clone(container);
 
-        // Create a temporary controller instance to get its metadata
-        let temp_controller = match C::from_ioc_container(container, None) {
-            Ok(controller) => controller,
+        // Resolve the singleton controller instance once during startup
+        let controller_arc = match C::from_ioc_container(container, None) {
+            Ok(controller) => Arc::new(controller),
             Err(err) => {
-                eprintln!("Warning: Failed to create controller for route registration: {}", err);
+                eprintln!("Warning: Failed to create singleton controller instance: {}", err);
                 return self;
             }
         };
 
-        let base_path = temp_controller.base_path().to_string();
-        let controller_name = temp_controller.name().to_string();
+        let base_path = controller_arc.base_path().to_string();
+        let controller_name = controller_arc.name().to_string();
 
-        // Register all controller routes with IoC-resolved handlers
+        // Register all controller routes with the single controller instance
         let mut router = self;
-        for route in temp_controller.routes() {
+        for route in controller_arc.routes() {
             let full_path = router.combine_paths(&base_path, &route.path);
-            let handler = ioc_controller_handler::<C>(
-                Arc::clone(&container_arc),
-                route.handler_name.clone(),
-            );
+            let handler_controller_arc = Arc::clone(&controller_arc);
+            let method_name = route.handler_name.clone();
+
+            let handler = move |request: ElifRequest| {
+                let controller = Arc::clone(&handler_controller_arc);
+                let method_name = method_name.clone();
+                Box::pin(async move {
+                    controller.handle_request(method_name, request).await
+                })
+            };
             
             router = match route.method {
                 HttpMethod::GET => router.get(&full_path, handler),
@@ -283,9 +288,8 @@ where
             // TODO: Apply route-specific middleware
         }
         
-        // Store controller type info for introspection (using a dummy instance)
+        // Store the actual controller instance for introspection
         if let Ok(mut registry) = router.controller_registry.lock() {
-            let controller_arc = Arc::new(temp_controller);
             registry.register(controller_name, controller_arc as Arc<dyn ElifController>);
         }
         
@@ -2025,31 +2029,6 @@ impl ControllerRegistry {
     
     pub fn controller_names(&self) -> Vec<&String> {
         self.controllers.keys().collect()
-    }
-}
-
-/// Create an IoC controller handler function that resolves controllers from the container
-pub fn ioc_controller_handler<C>(
-    container: Arc<IocContainer>, 
-    method_name: String,
-) -> impl Fn(ElifRequest) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> + Clone + Send + Sync + 'static
-where
-    C: ElifController + IocControllable + 'static,
-{
-    move |request: ElifRequest| {
-        let container = Arc::clone(&container);
-        let method_name = method_name.clone();
-        
-        Box::pin(async move {
-            // Resolve controller from IoC container
-            let controller = C::from_ioc_container(&container, None)
-                .map_err(|e| crate::errors::HttpError::InternalError {
-                    message: format!("Failed to resolve controller: {}", e),
-                })?;
-            
-            let controller_arc = Arc::new(controller);
-            controller_arc.handle_request(method_name, request).await
-        })
     }
 }
 
