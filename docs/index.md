@@ -143,6 +143,7 @@ async fn create_post(&self, post_data: CreatePostRequest) -> HttpResult<ElifResp
 - **[Requests](basics/requests.md)** - Working with incoming requests and parameter injection
 - **[Responses](basics/responses.md)** - Crafting responses
 - **[Validation](basics/validation.md)** - Input validation and sanitization
+- **[HTTP IoC Integration](http/ioc-integration.md)** - Dependency injection for controllers and middleware
 
 #### Database & Persistence
 - **[Database Setup](database/introduction.md)** - Connect to your database
@@ -152,7 +153,10 @@ async fn create_post(&self, post_data: CreatePostRequest) -> HttpResult<ElifResp
 ### Advanced Topics
 
 #### Architecture & Patterns
-- **[Dependency Injection](basics/dependency-injection.md)** - Manage dependencies cleanly
+- **[Dependency Injection](basics/dependency-injection.md)** - Manage dependencies cleanly with IoC container
+- **[IoC Container Overview](advanced/ioc-overview.md)** - Comprehensive dependency injection system
+- **[Service Modules](advanced/service-modules.md)** - Organize services into logical modules
+- **[Container Validation](advanced/container-validation.md)** - Validate dependency graphs at build time
 - **[Error Handling](basics/error-handling.md)** - Robust error management
 - **[Testing](testing/introduction.md)** - Test your applications thoroughly
 
