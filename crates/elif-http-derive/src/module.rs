@@ -312,6 +312,7 @@ fn generate_module_descriptor_method(
 }
 
 /// Generate provider registration code  
+#[allow(unused_variables)] // Variables are used via quote! macro interpolation
 fn generate_providers_registration(providers: &[ProviderDef]) -> Result<proc_macro2::TokenStream> {
     if providers.is_empty() {
         return Ok(quote! {
@@ -323,9 +324,9 @@ fn generate_providers_registration(providers: &[ProviderDef]) -> Result<proc_mac
     
     for provider in providers {
         let comment = match &provider.service_type {
-            ProviderType::Concrete(_service_type) => {
+            ProviderType::Concrete(service_type) => {
                 match &provider.name {
-                    Some(_name) => {
+                    Some(name) => {
                         quote! {
                             // Provider: #service_type (named: #name)
                         }
@@ -339,9 +340,9 @@ fn generate_providers_registration(providers: &[ProviderDef]) -> Result<proc_mac
             },
             ProviderType::Trait(trait_type) => {
                 match &provider.implementation {
-                    Some(_impl_type) => {
+                    Some(impl_type) => {
                         match &provider.name {
-                            Some(_name) => {
+                            Some(name) => {
                                 quote! {
                                     // Provider: dyn #trait_type => #impl_type (named: #name)
                                 }
@@ -372,6 +373,7 @@ fn generate_providers_registration(providers: &[ProviderDef]) -> Result<proc_mac
 }
 
 /// Generate controller registration code
+#[allow(unused_variables)] // Variables are used via quote! macro interpolation
 fn generate_controllers_registration(controllers: &[Type]) -> Result<proc_macro2::TokenStream> {
     if controllers.is_empty() {
         return Ok(quote! {
@@ -379,7 +381,7 @@ fn generate_controllers_registration(controllers: &[Type]) -> Result<proc_macro2
         });
     }
     
-    let comments: Vec<_> = controllers.iter().map(|_controller| {
+    let comments: Vec<_> = controllers.iter().map(|controller| {
         quote! {
             // Controller: #controller
         }
@@ -391,6 +393,7 @@ fn generate_controllers_registration(controllers: &[Type]) -> Result<proc_macro2
 }
 
 /// Generate imports registration code  
+#[allow(unused_variables)] // Variables are used via quote! macro interpolation
 fn generate_imports_registration(imports: &[Type]) -> Result<proc_macro2::TokenStream> {
     if imports.is_empty() {
         return Ok(quote! {
@@ -398,7 +401,7 @@ fn generate_imports_registration(imports: &[Type]) -> Result<proc_macro2::TokenS
         });
     }
     
-    let comments: Vec<_> = imports.iter().map(|_import| {
+    let comments: Vec<_> = imports.iter().map(|import| {
         quote! {
             // Import: #import
         }
@@ -410,6 +413,7 @@ fn generate_imports_registration(imports: &[Type]) -> Result<proc_macro2::TokenS
 }
 
 /// Generate exports registration code
+#[allow(unused_variables)] // Variables are used via quote! macro interpolation
 fn generate_exports_registration(exports: &[Type]) -> Result<proc_macro2::TokenStream> {
     if exports.is_empty() {
         return Ok(quote! {
@@ -417,7 +421,7 @@ fn generate_exports_registration(exports: &[Type]) -> Result<proc_macro2::TokenS
         });
     }
     
-    let comments: Vec<_> = exports.iter().map(|_export| {
+    let comments: Vec<_> = exports.iter().map(|export| {
         quote! {
             // Export: #export
         }
@@ -450,8 +454,9 @@ fn generate_application_composition(
 }
 
 /// Generate modules registration for application composition
+#[allow(unused_variables)] // Variables are used via quote! macro interpolation
 fn generate_modules_registration(modules: &[Type]) -> Result<proc_macro2::TokenStream> {
-    let comments: Vec<_> = modules.iter().map(|_module| {
+    let comments: Vec<_> = modules.iter().map(|module| {
         quote! {
             // Module: #module
         }
@@ -463,6 +468,7 @@ fn generate_modules_registration(modules: &[Type]) -> Result<proc_macro2::TokenS
 }
 
 /// Generate overrides registration for application composition
+#[allow(unused_variables)] // Variables are used via quote! macro interpolation
 fn generate_overrides_registration(overrides: &[ProviderDef]) -> Result<proc_macro2::TokenStream> {
     if overrides.is_empty() {
         return Ok(quote! {
@@ -474,9 +480,9 @@ fn generate_overrides_registration(overrides: &[ProviderDef]) -> Result<proc_mac
     
     for override_def in overrides {
         let comment = match &override_def.service_type {
-            ProviderType::Concrete(_service_type) => {
+            ProviderType::Concrete(service_type) => {
                 match &override_def.name {
-                    Some(_name) => {
+                    Some(name) => {
                         quote! {
                             // Override: #service_type (named: #name)
                         }
@@ -490,9 +496,9 @@ fn generate_overrides_registration(overrides: &[ProviderDef]) -> Result<proc_mac
             },
             ProviderType::Trait(trait_type) => {
                 match &override_def.implementation {
-                    Some(_impl_type) => {
+                    Some(impl_type) => {
                         match &override_def.name {
-                            Some(_name) => {
+                            Some(name) => {
                                 quote! {
                                     // Override: dyn #trait_type => #impl_type (named: #name)
                                 }
