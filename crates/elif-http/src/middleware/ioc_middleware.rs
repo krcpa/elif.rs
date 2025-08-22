@@ -5,8 +5,11 @@
 use std::sync::Arc;
 use std::collections::HashMap;
 
+use serde_json;
+
 use crate::middleware::v2::{Middleware, Next, NextFuture};
 use crate::request::ElifRequest;
+use crate::response::ElifResponse;
 use crate::errors::HttpError;
 use elif_core::container::{IocContainer, ScopeId};
 
@@ -258,9 +261,25 @@ impl Middleware for LazyIocMiddleware {
                     
                     result
                 }
-                Err(_) => {
-                    // If middleware creation fails, continue to next middleware
-                    next.run(request).await
+                Err(e) => {
+                    // CRITICAL: Middleware instantiation failure - do NOT continue processing
+                    eprintln!("CRITICAL: Failed to instantiate middleware '{}': {:?}", middleware_name, e);
+                    
+                    // Clean up scope if it was created
+                    if let Some(scope_id) = scope {
+                        let _ = registry.container.dispose_scope(&scope_id).await;
+                    }
+                    
+                    // Return an error response immediately
+                    ElifResponse::internal_server_error()
+                        .json(&serde_json::json!({
+                            "error": {
+                                "code": "MIDDLEWARE_INIT_FAILED",
+                                "message": "Internal server error",
+                                "hint": "A required middleware component failed to initialize"
+                            }
+                        }))
+                        .unwrap_or_else(|_| ElifResponse::internal_server_error())
                 }
             }
         })
@@ -359,7 +378,7 @@ mod tests {
     use elif_core::container::{IocContainer, ServiceBinder};
 
     // Test service for middleware injection
-    #[derive(Default, Clone)]
+    #[derive(Default, Clone, Debug)]
     pub struct TestLoggerService {
         pub name: String,
     }
@@ -387,9 +406,11 @@ mod tests {
 
     impl Middleware for TestIocMiddleware {
         fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+            // Clone the logger name to avoid lifetime issues
+            let logger_name = self.logger.name.clone();
             Box::pin(async move {
                 // Use the injected logger service
-                println!("TestIocMiddleware: Using logger: {}", self.logger.name);
+                println!("TestIocMiddleware: Using logger: {}", logger_name);
                 next.run(request).await
             })
         }
@@ -467,7 +488,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_lazy_ioc_middleware() {
-        use crate::request::method::HttpMethod;
+        use crate::request::method::ElifMethod as HttpMethod;
         use crate::response::headers::ElifHeaderMap;
 
         let mut container = IocContainer::new();
@@ -501,8 +522,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_lazy_ioc_middleware_instantiation_failure() {
+        use crate::request::method::ElifMethod as HttpMethod;
+        use crate::response::headers::ElifHeaderMap;
+
+        // Create container without the required service - this will cause middleware instantiation to fail
+        let container = IocContainer::new();
+        // Note: We're NOT binding TestLoggerService, so TestIocMiddleware will fail to instantiate
+
+        let registry = Arc::new(
+            MiddlewareRegistryBuilder::new()
+                .container(Arc::new(container))
+                .register::<TestIocMiddleware>("failing_middleware")
+                .build()
+                .expect("Failed to build middleware registry")
+        );
+
+        let lazy_middleware = LazyIocMiddleware::new("failing_middleware".to_string(), registry);
+
+        let request = ElifRequest::new(
+            HttpMethod::GET,
+            "/test".parse().unwrap(),
+            ElifHeaderMap::new(),
+        );
+
+        let next = Next::new(|_req| {
+            Box::pin(async {
+                // This should never be called if middleware instantiation fails
+                panic!("Next middleware should not be called when middleware instantiation fails!");
+            })
+        });
+
+        let response = lazy_middleware.handle(request, next).await;
+        
+        // Verify we get an internal server error response
+        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::INTERNAL_SERVER_ERROR);
+        
+        // The key test is that the next middleware was NOT called (it would panic)
+        // and we got a 500 error response instead
+    }
+
+    #[tokio::test]
     async fn test_middleware_context_from_request() {
-        use crate::request::method::HttpMethod;
+        use crate::request::method::ElifMethod as HttpMethod;
         use crate::response::headers::{ElifHeaderMap, ElifHeaderName, ElifHeaderValue};
 
         let mut headers = ElifHeaderMap::new();

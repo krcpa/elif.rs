@@ -219,7 +219,7 @@ impl Server {
     /// 
     /// ```rust,no_run
     /// # use elif_http::{Server, HttpConfig};
-    /// # use elif_core::Container;
+    /// # use elif_core::container::IocContainer;
     /// # use std::sync::Arc;
     /// # 
     /// # #[tokio::main]

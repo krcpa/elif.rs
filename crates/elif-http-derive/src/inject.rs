@@ -303,10 +303,7 @@ fn generate_from_ioc_container_method(
             },
             InjectionType::Scoped => {
                 quote! {
-                    #field_name: scope
-                        .as_ref()
-                        .ok_or_else(|| "Scoped service injection requires a scope".to_string())?
-                        .resolve_scoped::<#service_type>(&scope_id)
+                    #field_name: container.resolve_scoped::<#service_type>(&scope_id)
                         .map_err(|e| format!("Failed to inject scoped service {}: {}", stringify!(#service_type), e))?
                 }
             },
@@ -338,11 +335,11 @@ fn generate_from_ioc_container_method(
                 container: &elif_core::container::IocContainer,
                 scope: Option<&elif_core::container::ScopeId>
             ) -> Result<Self, String> {
-                let scope_id = scope.map(|s| s.clone()).unwrap_or_else(|| {
-                    container.create_scope()
-                        .map_err(|e| format!("Failed to create scope: {}", e))
-                        .unwrap_or_default()
-                });
+                let scope_id = match scope {
+                    Some(s) => s.clone(),
+                    None => container.create_scope()
+                        .map_err(|e| format!("Failed to create scope: {}", e))?
+                };
                 
                 Ok(Self {
                     #(#field_initializers),*

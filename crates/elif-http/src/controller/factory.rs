@@ -286,11 +286,12 @@ impl ControllerScanner {
 mod tests {
     use super::*;
     use crate::controller::base::{ElifController, ControllerRoute};
-    use crate::request::method::HttpMethod;
+    use elif_core::ServiceBinder;
     use async_trait::async_trait;
 
     // Test controller for factory tests
     pub struct TestController {
+        #[allow(dead_code)]
         pub service: Arc<TestService>,
     }
 
@@ -332,6 +333,7 @@ mod tests {
     // Test service
     #[derive(Default)]
     pub struct TestService {
+        #[allow(dead_code)]
         pub name: String,
     }
 
