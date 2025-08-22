@@ -39,6 +39,24 @@ impl ServiceId {
     pub fn type_name(&self) -> &'static str {
         self.type_name
     }
+    
+    /// Create a service ID directly from type IDs and names
+    pub fn by_ids(type_id: TypeId, type_name: &'static str) -> Self {
+        Self {
+            type_id,
+            type_name,
+            name: None,
+        }
+    }
+    
+    /// Create a named service ID directly from type IDs and names
+    pub fn named_by_ids(type_id: TypeId, type_name: &'static str, name: String) -> Self {
+        Self {
+            type_id,
+            type_name,
+            name: Some(name),
+        }
+    }
 }
 
 /// Factory function for creating service instances

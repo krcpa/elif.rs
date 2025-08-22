@@ -71,6 +71,8 @@ enum InjectionType {
     Scoped,
     /// Factory-created service with custom logic
     Factory,
+    /// Token-based service resolution (&TokenType)
+    Token,
 }
 
 impl Parse for ServiceDef {
@@ -116,9 +118,13 @@ impl Parse for ServiceDef {
             }
         }
         
-        // Detect if field type is Option<T> for optional services
-        if is_option_type(&field_type) && injection_type == InjectionType::Regular {
-            injection_type = InjectionType::Optional;
+        // Detect special field types
+        if injection_type == InjectionType::Regular {
+            if is_option_type(&field_type) {
+                injection_type = InjectionType::Optional;
+            } else if is_token_reference(&field_type) {
+                injection_type = InjectionType::Token;
+            }
         }
         
         Ok(ServiceDef {
@@ -140,6 +146,28 @@ fn is_option_type(ty: &Type) -> bool {
         }
     }
     false
+}
+
+/// Helper function to check if a type is a reference to a token (&TokenType)
+fn is_token_reference(ty: &Type) -> bool {
+    if let Type::Reference(type_ref) = ty {
+        // Check if it's a simple reference to a type (not a complex path)
+        if let Type::Path(_type_path) = type_ref.elem.as_ref() {
+            // For now, we assume any reference type is a token reference
+            // In a more sophisticated implementation, we would check if the type
+            // implements the ServiceToken trait, but that's not available at compile time
+            return true;
+        }
+    }
+    false
+}
+
+/// Extract the token type from a reference type (&TokenType -> TokenType)
+fn extract_token_type(ty: &Type) -> Result<&Type> {
+    if let Type::Reference(type_ref) = ty {
+        return Ok(type_ref.elem.as_ref());
+    }
+    Err(Error::new_spanned(ty, "Expected reference type (&TokenType)"))
 }
 
 impl ServiceDef {
@@ -177,6 +205,18 @@ impl ServiceDef {
             self.get_inner_type()
         } else {
             Ok(&self.field_type)
+        }
+    }
+    
+    /// Get the token type for token-based services (&TokenType -> TokenType)
+    fn get_token_type(&self) -> Result<&Type> {
+        if matches!(self.injection_type, InjectionType::Token) {
+            extract_token_type(&self.field_type)
+        } else {
+            Err(Error::new_spanned(
+                &self.field_type,
+                "Not a token-based service definition",
+            ))
         }
     }
 }
@@ -240,10 +280,21 @@ fn generate_service_fields(
     
     for service in services {
         let field_name = &service.field_name;
-        let service_type = service.get_service_type()?;
         
-        // Always wrap in Arc first
-        let field_core_type = quote! { std::sync::Arc<#service_type> };
+        // Determine the actual field type based on injection type
+        let field_core_type = match service.injection_type {
+            InjectionType::Token => {
+                // For token-based services, the field should store Arc<Token::Service>
+                // We need to get the service type that the token resolves to
+                let token_type = service.get_token_type()?;
+                quote! { std::sync::Arc<<#token_type as elif_core::container::ServiceToken>::Service> }
+            },
+            _ => {
+                // For regular services, wrap the service type in Arc
+                let service_type = service.get_service_type()?;
+                quote! { std::sync::Arc<#service_type> }
+            }
+        };
         
         // Then wrap in Option if the service is optional (regardless of injection type)
         let wrapped_type = if service.is_optional() {
@@ -309,6 +360,12 @@ fn generate_from_ioc_container_method(
                             #field_name: container.try_resolve::<#service_type>()
                         }
                     }
+                },
+                InjectionType::Token => {
+                    let token_type = service.get_token_type()?;
+                    quote! {
+                        #field_name: container.try_resolve_by_token::<#token_type>()
+                    }
                 }
             }
         } else {
@@ -352,6 +409,13 @@ fn generate_from_ioc_container_method(
                     quote! {
                         #field_name: container.resolve::<#service_type>()
                             .map_err(|e| format!("Failed to inject service {}: {}", stringify!(#service_type), e))?
+                    }
+                },
+                InjectionType::Token => {
+                    let token_type = service.get_token_type()?;
+                    quote! {
+                        #field_name: container.resolve_by_token::<#token_type>()
+                            .map_err(|e| format!("Failed to inject token service {}: {}", stringify!(#token_type), e))?
                     }
                 }
             }
