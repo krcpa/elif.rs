@@ -6,7 +6,7 @@ use crate::request::ElifRequest;
 use crate::response::{IntoElifResponse, ElifResponse};
 use crate::errors::HttpResult;
 use crate::middleware::v2::{Middleware, MiddlewarePipelineV2};
-use crate::controller::ElifController;
+use crate::controller::{ElifController, factory::IocControllable};
 use std::pin::Pin;
 use axum::{
     Router as AxumRouter,
@@ -15,6 +15,7 @@ use axum::{
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::future::Future;
+use elif_core::container::IocContainer;
 
 /// Main router for the elif.rs framework
 #[derive(Debug)]
@@ -29,6 +30,7 @@ where
     middleware_groups: HashMap<String, MiddlewarePipelineV2>,
     route_middleware: HashMap<String, Vec<String>>, // route_id -> middleware group names
     controller_registry: Arc<Mutex<ControllerRegistry>>,
+    ioc_container: Option<Arc<IocContainer>>,
 }
 
 impl<S> Router<S>
@@ -45,6 +47,7 @@ where
             middleware_groups: HashMap::new(),
             route_middleware: HashMap::new(),
             controller_registry: Arc::new(Mutex::new(ControllerRegistry::new())),
+            ioc_container: None,
         }
     }
 
@@ -58,6 +61,7 @@ where
             middleware_groups: HashMap::new(),
             route_middleware: HashMap::new(),
             controller_registry: Arc::new(Mutex::new(ControllerRegistry::new())),
+            ioc_container: None,
         }
     }
 
@@ -226,6 +230,123 @@ where
         
         self
     }
+
+    /// Set the IoC container for controller dependency injection
+    pub fn with_ioc_container(mut self, container: Arc<IocContainer>) -> Self {
+        self.ioc_container = Some(container);
+        self
+    }
+
+    /// Register a controller type that will be resolved from the IoC container
+    /// The controller type must implement both ElifController and IocControllable
+    pub fn controller_from_container<C>(self) -> Self
+    where
+        C: ElifController + IocControllable + 'static,
+    {
+        let container = self.ioc_container.as_ref()
+            .expect("IoC container must be set before registering IoC controllers. Use .with_ioc_container() first");
+
+        // Resolve the singleton controller instance once during startup
+        let controller_arc = match C::from_ioc_container(container, None) {
+            Ok(controller) => Arc::new(controller),
+            Err(err) => {
+                eprintln!("Warning: Failed to create singleton controller instance: {}", err);
+                return self;
+            }
+        };
+
+        let base_path = controller_arc.base_path().to_string();
+        let controller_name = controller_arc.name().to_string();
+
+        // Register all controller routes with the single controller instance
+        let mut router = self;
+        for route in controller_arc.routes() {
+            let full_path = router.combine_paths(&base_path, &route.path);
+            let handler_controller_arc = Arc::clone(&controller_arc);
+            let method_name = route.handler_name.clone();
+
+            let handler = move |request: ElifRequest| {
+                let controller = Arc::clone(&handler_controller_arc);
+                let method_name = method_name.clone();
+                Box::pin(async move {
+                    controller.handle_request(method_name, request).await
+                })
+            };
+            
+            router = match route.method {
+                HttpMethod::GET => router.get(&full_path, handler),
+                HttpMethod::POST => router.post(&full_path, handler),
+                HttpMethod::PUT => router.put(&full_path, handler),
+                HttpMethod::DELETE => router.delete(&full_path, handler),
+                HttpMethod::PATCH => router.patch(&full_path, handler),
+                _ => {
+                    // For unsupported HTTP methods, we'll skip for now
+                    continue;
+                }
+            };
+            
+            // TODO: Apply route-specific middleware
+        }
+        
+        // Store the actual controller instance for introspection
+        if let Ok(mut registry) = router.controller_registry.lock() {
+            registry.register(controller_name, controller_arc as Arc<dyn ElifController>);
+        }
+        
+        router
+    }
+
+    /// Register a controller type with request-scoped dependency injection
+    /// This creates controllers per request with scoped dependencies
+    pub fn scoped_controller_from_container<C>(self) -> Self
+    where
+        C: ElifController + IocControllable + 'static,
+    {
+        let container = self.ioc_container.as_ref()
+            .expect("IoC container must be set before registering IoC controllers. Use .with_ioc_container() first");
+        let container_arc = Arc::clone(container);
+
+        // Create a temporary controller instance to get its metadata
+        let temp_controller = match C::from_ioc_container(container, None) {
+            Ok(controller) => controller,
+            Err(err) => {
+                eprintln!("Warning: Failed to create controller for route registration: {}", err);
+                return self;
+            }
+        };
+
+        let base_path = temp_controller.base_path().to_string();
+        let controller_name = temp_controller.name().to_string();
+
+        // Register all controller routes with scoped IoC-resolved handlers
+        let mut router = self;
+        for route in temp_controller.routes() {
+            let full_path = router.combine_paths(&base_path, &route.path);
+            let handler = scoped_ioc_controller_handler::<C>(
+                Arc::clone(&container_arc),
+                route.handler_name.clone(),
+            );
+            
+            router = match route.method {
+                HttpMethod::GET => router.get(&full_path, handler),
+                HttpMethod::POST => router.post(&full_path, handler),
+                HttpMethod::PUT => router.put(&full_path, handler),
+                HttpMethod::DELETE => router.delete(&full_path, handler),
+                HttpMethod::PATCH => router.patch(&full_path, handler),
+                _ => {
+                    continue;
+                }
+            };
+        }
+        
+        // Store controller type info
+        if let Ok(mut registry) = router.controller_registry.lock() {
+            let controller_arc = Arc::new(temp_controller);
+            registry.register(controller_name, controller_arc as Arc<dyn ElifController>);
+        }
+        
+        router
+    }
     
     /// Helper method to combine base path and route path
     fn combine_paths(&self, base: &str, route: &str) -> String {
@@ -279,6 +400,11 @@ where
                     self_controller_registry.register(name, controller);
                 }
             }
+        }
+        
+        // Merge IoC containers (prefer self's container if both exist)
+        if self.ioc_container.is_none() && other.ioc_container.is_some() {
+            self.ioc_container = other.ioc_container;
         }
         
         // Merge global middleware stacks. The middleware from `self` will run first.
@@ -400,6 +526,11 @@ where
     /// Get the controller registry for introspection
     pub fn controller_registry(&self) -> Arc<Mutex<ControllerRegistry>> {
         Arc::clone(&self.controller_registry)
+    }
+
+    /// Get the IoC container if set
+    pub fn ioc_container(&self) -> Option<&Arc<IocContainer>> {
+        self.ioc_container.as_ref()
     }
 
     /// Add a raw Axum route while preserving router state (for internal use)
@@ -1166,6 +1297,252 @@ mod tests {
     }
 
     #[test]
+    fn test_ioc_controller_registration() {
+        use crate::controller::{ElifController, ControllerRoute, factory::IocControllable};
+        use elif_core::container::IocContainer;
+        use elif_core::ServiceBinder;
+        use std::sync::Arc;
+
+        // Test service for dependency injection
+        #[derive(Default)]
+        struct TestService {
+            #[allow(dead_code)]
+            name: String,
+        }
+
+        unsafe impl Send for TestService {}
+        unsafe impl Sync for TestService {}
+
+        // Test controller with dependency injection
+        struct IocTestController {
+            #[allow(dead_code)]
+            service: Arc<TestService>,
+        }
+
+        #[async_trait::async_trait]
+        impl ElifController for IocTestController {
+            fn name(&self) -> &str { "IocTestController" }
+            fn base_path(&self) -> &str { "/ioc-test" }
+            
+            fn routes(&self) -> Vec<ControllerRoute> {
+                vec![
+                    ControllerRoute::new(HttpMethod::GET, "", "list"),
+                    ControllerRoute::new(HttpMethod::GET, "/{id}", "show"),
+                ]
+            }
+            
+            async fn handle_request(
+                self: Arc<Self>,
+                method_name: String,
+                _request: ElifRequest,
+            ) -> HttpResult<ElifResponse> {
+                match method_name.as_str() {
+                    "list" => Ok(ElifResponse::ok().text("IoC List")),
+                    "show" => Ok(ElifResponse::ok().text("IoC Show")),
+                    _ => Ok(ElifResponse::not_found().text("Method not found")),
+                }
+            }
+        }
+
+        impl IocControllable for IocTestController {
+            fn from_ioc_container(
+                container: &IocContainer,
+                _scope: Option<&elif_core::container::ScopeId>,
+            ) -> Result<Self, String> {
+                let service = container.resolve::<TestService>()
+                    .map_err(|e| format!("Failed to resolve TestService: {}", e))?;
+                
+                Ok(Self { service })
+            }
+        }
+
+        // Set up IoC container
+        let mut container = IocContainer::new();
+        container.bind::<TestService, TestService>();
+        container.build().expect("Container build failed");
+
+        let container_arc = Arc::new(container);
+
+        // Create router with IoC container and register controller
+        let router = Router::<()>::new()
+            .with_ioc_container(Arc::clone(&container_arc))
+            .controller_from_container::<IocTestController>();
+
+        // Verify routes were registered
+        let registry = router.registry();
+        let reg = registry.lock().unwrap();
+        assert_eq!(reg.all_routes().len(), 2);
+
+        // Verify controller was registered in controller registry
+        let controller_registry = router.controller_registry();
+        let ctrl_reg = controller_registry.lock().unwrap();
+        assert!(ctrl_reg.get_controller("IocTestController").is_some());
+    }
+
+    #[test]
+    #[should_panic(expected = "IoC container must be set before registering IoC controllers")]
+    fn test_ioc_controller_without_container() {
+        use crate::controller::{ElifController, ControllerRoute, factory::IocControllable};
+        use elif_core::container::IocContainer;
+
+        struct TestController;
+
+        #[async_trait::async_trait]
+        impl ElifController for TestController {
+            fn name(&self) -> &str { "TestController" }
+            fn base_path(&self) -> &str { "/test" }
+            fn routes(&self) -> Vec<ControllerRoute> { vec![] }
+            
+            async fn handle_request(
+                self: std::sync::Arc<Self>,
+                _method_name: String,
+                _request: ElifRequest,
+            ) -> HttpResult<ElifResponse> {
+                Ok(ElifResponse::ok().text("test"))
+            }
+        }
+
+        impl IocControllable for TestController {
+            fn from_ioc_container(
+                _container: &IocContainer,
+                _scope: Option<&elif_core::container::ScopeId>,
+            ) -> Result<Self, String> {
+                Ok(Self)
+            }
+        }
+
+        // This should panic because no IoC container is set
+        Router::<()>::new().controller_from_container::<TestController>();
+    }
+
+    #[test]
+    fn test_router_with_ioc_container() {
+        use elif_core::container::IocContainer;
+        use std::sync::Arc;
+
+        let container = Arc::new(IocContainer::new());
+        let router = Router::<()>::new()
+            .with_ioc_container(Arc::clone(&container));
+
+        assert!(router.ioc_container().is_some());
+        assert!(Arc::ptr_eq(router.ioc_container().unwrap(), &container));
+    }
+
+    #[test]
+    fn test_merge_preserves_ioc_container() {
+        use elif_core::container::IocContainer;
+        use std::sync::Arc;
+
+        let container = Arc::new(IocContainer::new());
+        
+        let router1 = Router::<()>::new()
+            .with_ioc_container(Arc::clone(&container));
+        
+        let router2 = Router::<()>::new();
+        
+        let merged = router1.merge(router2);
+        
+        // Should preserve router1's container
+        assert!(merged.ioc_container().is_some());
+        assert!(Arc::ptr_eq(merged.ioc_container().unwrap(), &container));
+    }
+
+    #[test]
+    fn test_merge_prefers_first_container() {
+        use elif_core::container::IocContainer;
+        use std::sync::Arc;
+
+        let container1 = Arc::new(IocContainer::new());
+        let container2 = Arc::new(IocContainer::new());
+        
+        let router1 = Router::<()>::new()
+            .with_ioc_container(Arc::clone(&container1));
+        
+        let router2 = Router::<()>::new()
+            .with_ioc_container(Arc::clone(&container2));
+        
+        let merged = router1.merge(router2);
+        
+        // Should prefer router1's container
+        assert!(merged.ioc_container().is_some());
+        assert!(Arc::ptr_eq(merged.ioc_container().unwrap(), &container1));
+    }
+
+    #[test]
+    fn test_scoped_controller_registration() {
+        use crate::controller::{ElifController, ControllerRoute, factory::IocControllable};
+        use elif_core::container::IocContainer;
+        use elif_core::ServiceBinder;
+        use std::sync::Arc;
+
+        #[derive(Default)]
+        struct ScopedService {
+            #[allow(dead_code)]
+            id: String,
+        }
+
+        unsafe impl Send for ScopedService {}
+        unsafe impl Sync for ScopedService {}
+
+        struct ScopedController {
+            #[allow(dead_code)]
+            service: Arc<ScopedService>,
+        }
+
+        #[async_trait::async_trait]
+        impl ElifController for ScopedController {
+            fn name(&self) -> &str { "ScopedController" }
+            fn base_path(&self) -> &str { "/scoped" }
+            
+            fn routes(&self) -> Vec<ControllerRoute> {
+                vec![ControllerRoute::new(HttpMethod::GET, "/test", "test")]
+            }
+            
+            async fn handle_request(
+                self: Arc<Self>,
+                _method_name: String,
+                _request: ElifRequest,
+            ) -> HttpResult<ElifResponse> {
+                Ok(ElifResponse::ok().text("Scoped"))
+            }
+        }
+
+        impl IocControllable for ScopedController {
+            fn from_ioc_container(
+                container: &IocContainer,
+                _scope: Option<&elif_core::container::ScopeId>,
+            ) -> Result<Self, String> {
+                let service = container.resolve::<ScopedService>()
+                    .map_err(|e| format!("Failed to resolve ScopedService: {}", e))?;
+                
+                Ok(Self { service })
+            }
+        }
+
+        // Set up IoC container
+        let mut container = IocContainer::new();
+        container.bind::<ScopedService, ScopedService>();
+        container.build().expect("Container build failed");
+
+        let container_arc = Arc::new(container);
+
+        // Create router with scoped controller
+        let router = Router::<()>::new()
+            .with_ioc_container(Arc::clone(&container_arc))
+            .scoped_controller_from_container::<ScopedController>();
+
+        // Verify routes were registered
+        let registry = router.registry();
+        let reg = registry.lock().unwrap();
+        assert_eq!(reg.all_routes().len(), 1);
+
+        // Verify controller was registered
+        let controller_registry = router.controller_registry();
+        let ctrl_reg = controller_registry.lock().unwrap();
+        assert!(ctrl_reg.get_controller("ScopedController").is_some());
+    }
+
+    #[test]
     fn test_route_without_middleware_groups() {
         let router = Router::<()>::new()
             .route("/simple")
@@ -1652,5 +2029,46 @@ impl ControllerRegistry {
     
     pub fn controller_names(&self) -> Vec<&String> {
         self.controllers.keys().collect()
+    }
+}
+
+/// Create a scoped IoC controller handler that creates a new scope per request
+pub fn scoped_ioc_controller_handler<C>(
+    container: Arc<IocContainer>, 
+    method_name: String,
+) -> impl Fn(ElifRequest) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> + Clone + Send + Sync + 'static
+where
+    C: ElifController + IocControllable + 'static,
+{
+    move |request: ElifRequest| {
+        let container = Arc::clone(&container);
+        let method_name = method_name.clone();
+        
+        Box::pin(async move {
+            // Create a new scope for this request
+            let scope_id = container.create_scope()
+                .map_err(|e| crate::errors::HttpError::InternalError {
+                    message: format!("Failed to create request scope: {}", e),
+                })?;
+            
+            // Resolve controller with scoped dependencies
+            let controller = C::from_ioc_container(&container, Some(&scope_id))
+                .map_err(|e| crate::errors::HttpError::InternalError {
+                    message: format!("Failed to resolve scoped controller: {}", e),
+                })?;
+            
+            let controller_arc = Arc::new(controller);
+            let result = controller_arc.handle_request(method_name, request).await;
+            
+            // Clean up the scope (fire and forget - don't block response)
+            let container_clone = Arc::clone(&container);
+            tokio::spawn(async move {
+                if let Err(e) = container_clone.dispose_scope(&scope_id).await {
+                    eprintln!("Failed to dispose request scope: {}", e);
+                }
+            });
+            
+            result
+        })
     }
 }
