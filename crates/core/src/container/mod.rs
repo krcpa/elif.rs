@@ -20,6 +20,12 @@ pub mod api_demo;
 pub mod advanced_binding_examples;
 pub mod lifecycle;
 pub mod phase5_demo;
+pub mod conventions;
+pub mod module;
+pub mod validation;
+pub mod visualization;
+pub mod debug;
+pub mod phase6_demo;
 
 #[cfg(test)]
 pub mod simple_lifecycle_tests;
@@ -48,3 +54,8 @@ pub use ioc_container::{IocContainer, ServiceStatistics};
 pub use ioc_builder::IocContainerBuilder;
 pub use autowiring::{Injectable, DependencyResolver, ConstructorParameter, ParameterInfo, ConstructorInfo};
 pub use lifecycle::{AsyncInitializable, Disposable, LifecycleManaged, ServiceState, ServiceLifecycleManager};
+pub use conventions::{ServiceConventions, ServiceMetadata, ServiceRegistry as ConventionServiceRegistry, AutoDiscoverable, ServiceAttribute, ConventionRule};
+pub use module::{ServiceModule, ModuleId, ModuleRegistry, ModuleMetadata, ModuleConfig, ModularContainerBuilder, LoadedModule, ModuleState};
+pub use validation::{DependencyValidator, ContainerValidator, ValidationError, ValidationReport, ValidationWarning};
+pub use visualization::{DependencyVisualizer, ServiceExplorer, VisualizationFormat, VisualizationStyle};
+pub use debug::{ContainerInspector, ResolutionTracer, PerformanceProfiler, ContainerHealthChecker, HealthCheck, HealthStatus, HealthReport};
