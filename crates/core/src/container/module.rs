@@ -680,6 +680,7 @@ mod tests {
         
         #[derive(Default)]
         struct TestService {
+            #[allow(dead_code)]
             pub name: String,
         }
         

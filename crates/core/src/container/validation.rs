@@ -375,7 +375,7 @@ impl ContainerValidator {
         &self,
         descriptors: &[ServiceDescriptor]
     ) -> Result<ValidationReport, Vec<ValidationError>> {
-        let validator = DependencyValidator::new(descriptors);
+        let validator = DependencyValidator::new(&descriptors);
         
         match validator.validate() {
             Ok(()) => {
@@ -404,7 +404,7 @@ impl ContainerValidator {
         &self,
         descriptors: &[ServiceDescriptor]
     ) -> ValidationReport {
-        let validator = DependencyValidator::new(descriptors);
+        let validator = DependencyValidator::new(&descriptors);
         let mut warnings = Vec::new();
         
         match validator.validate() {
@@ -559,8 +559,7 @@ impl ValidationReport {
 mod tests {
     use super::*;
     use crate::container::descriptor::{ServiceDescriptor, ServiceActivationStrategy};
-    use std::sync::Arc;
-    use std::any::Any;
+    use std::any::{Any, TypeId};
 
     fn create_test_descriptor(
         type_name: &str, 
@@ -569,20 +568,23 @@ mod tests {
     ) -> ServiceDescriptor {
         let service_id = ServiceId {
             type_id: TypeId::of::<()>(),
+            type_name: "test_service",
             name: Some(type_name.to_string()),
         };
         
         let dependencies: Vec<ServiceId> = deps.iter().map(|dep| ServiceId {
             type_id: TypeId::of::<()>(),
+            type_name: "test_dependency",
             name: Some(dep.to_string()),
         }).collect();
         
         ServiceDescriptor {
             service_id,
+            implementation_id: TypeId::of::<()>(),
             lifetime,
             dependencies,
             activation_strategy: ServiceActivationStrategy::Factory(
-                Arc::new(|| Ok(Box::new(()) as Box<dyn Any + Send + Sync>))
+                Box::new(|| Ok(Box::new(()) as Box<dyn Any + Send + Sync>))
             ),
         }
     }
@@ -595,7 +597,7 @@ mod tests {
             create_test_descriptor("ServiceC", ServiceScope::Transient, vec!["ServiceA", "ServiceB"]),
         ];
         
-        let validator = DependencyValidator::new(descriptors);
+        let validator = DependencyValidator::new(&descriptors);
         let result = validator.validate();
         
         assert!(result.is_ok());
@@ -607,7 +609,7 @@ mod tests {
             create_test_descriptor("ServiceA", ServiceScope::Singleton, vec!["MissingService"]),
         ];
         
-        let validator = DependencyValidator::new(descriptors);
+        let validator = DependencyValidator::new(&descriptors);
         let result = validator.validate();
         
         assert!(result.is_err());
@@ -623,7 +625,7 @@ mod tests {
             create_test_descriptor("ServiceB", ServiceScope::Singleton, vec!["ServiceA"]),
         ];
         
-        let validator = DependencyValidator::new(descriptors);
+        let validator = DependencyValidator::new(&descriptors);
         let result = validator.validate();
         
         assert!(result.is_err());
@@ -639,7 +641,7 @@ mod tests {
             create_test_descriptor("ScopedService", ServiceScope::Scoped, vec!["TransientService"]),
         ];
         
-        let validator = DependencyValidator::new(descriptors);
+        let validator = DependencyValidator::new(&descriptors);
         let result = validator.validate();
         
         assert!(result.is_err());
@@ -656,7 +658,7 @@ mod tests {
             create_test_descriptor("ServiceA", ServiceScope::Singleton, vec![]),
         ];
         
-        let validator = DependencyValidator::new(descriptors);
+        let validator = DependencyValidator::new(&descriptors);
         let topo_order = validator.topological_sort().unwrap();
         
         // ServiceA should come first (no dependencies)
