@@ -206,10 +206,6 @@ pub trait ServiceBinder {
     where
         F: FnOnce(&mut CollectionBindingBuilder<TInterface>);
     
-    /// Bind generic service
-    fn bind_generic<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static, TGeneric>(&mut self) -> &mut Self
-    where
-        TGeneric: Send + Sync + 'static;
 }
 
 /// Builder for collection bindings that works with closure-based configuration
@@ -479,22 +475,12 @@ impl ServiceBinder for ServiceBindings {
         self
     }
     
-    fn bind_generic<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static, TGeneric>(&mut self) -> &mut Self
-    where
-        TGeneric: Send + Sync + 'static,
-    {
-        // Generic binding implementation - would need type parameter support in descriptors
-        let descriptor = ServiceDescriptor::bind::<TInterface, TImpl>()
-            .with_lifetime(ServiceScope::Transient)
-            .build();
-        self.add_descriptor(descriptor);
-        self
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[allow(dead_code)]
     trait TestRepository: Send + Sync {
@@ -563,6 +549,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_advanced_binding_with_environment_conditions() {
         let mut bindings = ServiceBindings::new();
         
@@ -601,6 +588,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_feature_flag_conditions() {
         let mut bindings = ServiceBindings::new();
         
@@ -619,7 +607,8 @@ mod tests {
         std::env::remove_var("FEATURE_ADVANCED_CACHE");
     }
 
-    #[test] 
+    #[test]
+    #[serial]
     fn test_profile_conditions() {
         let mut bindings = ServiceBindings::new();
         
@@ -702,6 +691,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_multiple_conditions() {
         let mut bindings = ServiceBindings::new();
         
@@ -730,13 +720,4 @@ mod tests {
         std::env::remove_var("PROFILE");
     }
 
-    #[test]
-    fn test_generic_binding() {
-        let mut bindings = ServiceBindings::new();
-        
-        bindings.bind_generic::<dyn TestRepository, PostgresRepository, String>();
-        
-        assert_eq!(bindings.count(), 1);
-        assert!(bindings.contains(&ServiceId::of::<dyn TestRepository>()));
-    }
 }

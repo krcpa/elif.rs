@@ -569,6 +569,11 @@ impl IocContainer {
         self.bindings.service_ids()
     }
     
+    /// Check if the container is built and ready
+    pub fn is_built(&self) -> bool {
+        self.is_built
+    }
+
     /// Validate the container configuration
     pub fn validate(&self) -> Result<(), CoreError> {
         if !self.is_built {
@@ -859,16 +864,6 @@ impl ServiceBinder for IocContainer {
         self
     }
 
-    fn bind_generic<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static, TGeneric>(&mut self) -> &mut Self
-    where
-        TGeneric: Send + Sync + 'static,
-    {
-        if self.is_built {
-            panic!("Cannot add bindings after container is built");
-        }
-        self.bindings.bind_generic::<TInterface, TImpl, TGeneric>();
-        self
-    }
 }
 
 impl Default for IocContainer {

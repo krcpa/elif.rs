@@ -19,6 +19,8 @@ pub mod integration_test;
 pub mod api_demo;
 pub mod advanced_binding_examples;
 pub mod lifecycle;
+pub mod migration;
+pub mod phase5_demo;
 
 #[cfg(test)]
 pub mod simple_lifecycle_tests;
@@ -30,6 +32,8 @@ pub mod scoped_singleton_conflict_test;
 pub mod deadlock_prevention_test;
 #[cfg(test)]
 pub mod advanced_binding_test;
+#[cfg(test)]
+pub mod ioc_integration_tests;
 
 pub use container::Container;
 pub use builder::ContainerBuilder;
@@ -42,3 +46,8 @@ pub use ioc_container::{IocContainer, ServiceStatistics};
 pub use ioc_builder::IocContainerBuilder;
 pub use autowiring::{Injectable, DependencyResolver, ConstructorParameter, ParameterInfo, ConstructorInfo};
 pub use lifecycle::{AsyncInitializable, Disposable, LifecycleManaged, ServiceState, ServiceLifecycleManager};
+pub use migration::{
+    LegacyContainerAdapter, MigrationAnalyzer, CompatibilityReport, MigrationSuggestion, 
+    SuggestionType, MigrationPriority, ProgressiveMigrator, MigrationValidator, 
+    ValidationResult, ValidationSummary, MigrationExtensions
+};

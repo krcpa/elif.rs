@@ -402,8 +402,10 @@ pub fn demonstrate_advanced_binding_features() -> Result<(), CoreError> {
 #[cfg(test)]
 mod example_tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_environment_based_example() {
         std::env::set_var("CACHE_PROVIDER", "memory");
         let result = example_environment_based_binding();
@@ -418,6 +420,7 @@ mod example_tests {
     }
 
     #[test]
+    #[serial]
     fn test_profile_based_example() {
         std::env::set_var("PROFILE", "development");
         let result = example_profile_based_binding();
@@ -432,6 +435,7 @@ mod example_tests {
     }
 
     #[test]
+    #[serial]
     fn test_demonstration() {
         let result = demonstrate_advanced_binding_features();
         assert!(result.is_ok());

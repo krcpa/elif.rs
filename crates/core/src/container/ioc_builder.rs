@@ -108,13 +108,6 @@ impl ServiceBinder for IocContainerBuilder {
         self
     }
 
-    fn bind_generic<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static, TGeneric>(&mut self) -> &mut Self
-    where
-        TGeneric: Send + Sync + 'static,
-    {
-        self.bindings.bind_generic::<TInterface, TImpl, TGeneric>();
-        self
-    }
 }
 
 impl Default for IocContainerBuilder {

@@ -4,6 +4,7 @@ mod advanced_binding_tests {
         IocContainer, ServiceBinder, AdvancedBindingBuilder,
         ServiceScope
     };
+    use serial_test::serial;
 
     // Test concrete implementations - avoiding trait objects for now
     #[derive(Default, Clone)]
@@ -80,6 +81,7 @@ mod advanced_binding_tests {
     }
 
     #[test]
+    #[serial]
     fn test_environment_conditional_binding() {
         let mut container = IocContainer::new();
         
@@ -111,6 +113,7 @@ mod advanced_binding_tests {
     }
 
     #[test]
+    #[serial]
     fn test_feature_flag_conditional_binding() {
         let mut container = IocContainer::new();
         
@@ -140,6 +143,7 @@ mod advanced_binding_tests {
     }
 
     #[test]
+    #[serial]
     fn test_profile_based_conditional_binding() {
         let mut container = IocContainer::new();
         
@@ -212,6 +216,7 @@ mod advanced_binding_tests {
     }
 
     #[test]
+    #[serial]
     fn test_multiple_conditions_binding() {
         let mut container = IocContainer::new();
         
@@ -309,6 +314,7 @@ mod advanced_binding_tests {
     }
 
     #[test]
+    #[serial]
     fn test_condition_evaluation_edge_cases() {
         // Test when environment variable doesn't exist
         let config = AdvancedBindingBuilder::<RedisCache>::new()
