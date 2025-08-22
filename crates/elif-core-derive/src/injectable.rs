@@ -26,8 +26,8 @@ pub fn injectable_impl(_args: TokenStream, input: TokenStream) -> TokenStream {
 /// Process the injectable attribute on different item types
 fn process_injectable_item(item: Item) -> Result<proc_macro2::TokenStream> {
     match item {
-        Item::Struct(mut item_struct) => {
-            process_injectable_struct(&mut item_struct)
+        Item::Struct(item_struct) => {
+            process_injectable_struct(&item_struct)
         }
         _ => Err(Error::new_spanned(
             item,
@@ -37,14 +37,22 @@ fn process_injectable_item(item: Item) -> Result<proc_macro2::TokenStream> {
 }
 
 /// Process a struct marked with #[injectable]
-fn process_injectable_struct(item_struct: &mut ItemStruct) -> Result<proc_macro2::TokenStream> {
+fn process_injectable_struct(item_struct: &ItemStruct) -> Result<proc_macro2::TokenStream> {
     let struct_name = &item_struct.ident;
+    let (impl_generics, ty_generics, where_clause) = item_struct.generics.split_for_impl();
     
     // Find the constructor method (look for 'new' method in impl blocks)
     // For now, we'll analyze the struct fields directly
-    let dependencies = extract_dependencies_from_struct(item_struct)?;
+    let (dependencies, non_dependency_fields) = extract_dependencies_from_struct(item_struct)?;
     
-    let injectable_impl = generate_injectable_impl(struct_name, &dependencies)?;
+    let injectable_impl = generate_injectable_impl(
+        struct_name,
+        &dependencies,
+        &non_dependency_fields,
+        impl_generics,
+        ty_generics,
+        where_clause,
+    )?;
     
     Ok(quote! {
         #item_struct
@@ -65,15 +73,21 @@ struct DependencyInfo {
 }
 
 /// Extract dependency information from struct fields
-fn extract_dependencies_from_struct(item_struct: &ItemStruct) -> Result<Vec<DependencyInfo>> {
+fn extract_dependencies_from_struct(item_struct: &ItemStruct) -> Result<(Vec<DependencyInfo>, Vec<proc_macro2::TokenStream>)> {
     let mut dependencies = Vec::new();
+    let mut non_dependency_fields = Vec::new();
     
     match &item_struct.fields {
         syn::Fields::Named(fields) => {
             for field in &fields.named {
                 if let Some(field_name) = &field.ident {
-                    let dep_info = analyze_field_type(&field.ty, field_name.clone())?;
-                    dependencies.push(dep_info);
+                    // Try to analyze the field type - skip non-dependency fields
+                    if let Ok(dep_info) = analyze_field_type(&field.ty, field_name.clone()) {
+                        dependencies.push(dep_info);
+                    } else {
+                        // Handle non-dependency fields (like PhantomData, primitive types, etc.)
+                        non_dependency_fields.push(generate_non_dependency_field_initializer(field_name, &field.ty));
+                    }
                 }
             }
         }
@@ -85,7 +99,33 @@ fn extract_dependencies_from_struct(item_struct: &ItemStruct) -> Result<Vec<Depe
         }
     }
     
-    Ok(dependencies)
+    if dependencies.is_empty() {
+        return Err(Error::new_spanned(
+            item_struct,
+            "Injectable structs must have at least one dependency field (Arc<T> or Option<Arc<T>>)",
+        ));
+    }
+    
+    Ok((dependencies, non_dependency_fields))
+}
+
+/// Generate initializer for non-dependency fields
+fn generate_non_dependency_field_initializer(field_name: &Ident, field_type: &Type) -> proc_macro2::TokenStream {
+    // Check if it's PhantomData
+    if let Type::Path(type_path) = field_type {
+        if let Some(segment) = type_path.path.segments.last() {
+            if segment.ident == "PhantomData" {
+                return quote! {
+                    #field_name: std::marker::PhantomData
+                };
+            }
+        }
+    }
+    
+    // For other types, try Default::default()
+    quote! {
+        #field_name: Default::default()
+    }
 }
 
 /// Analyze a field type to extract dependency information
@@ -174,6 +214,10 @@ fn extract_arc_inner_type(ty: &Type) -> Result<Type> {
 fn generate_injectable_impl(
     struct_name: &Ident,
     dependencies: &[DependencyInfo],
+    non_dependency_fields: &[proc_macro2::TokenStream],
+    impl_generics: syn::ImplGenerics,
+    ty_generics: syn::TypeGenerics,
+    where_clause: Option<&syn::WhereClause>,
 ) -> Result<proc_macro2::TokenStream> {
     // Generate the dependencies list
     let dependency_service_ids: Vec<proc_macro2::TokenStream> = dependencies
@@ -206,7 +250,7 @@ fn generate_injectable_impl(
         .collect();
     
     Ok(quote! {
-        impl elif_core::container::Injectable for #struct_name {
+        impl #impl_generics elif_core::container::Injectable for #struct_name #ty_generics #where_clause {
             fn dependencies() -> Vec<elif_core::container::ServiceId> {
                 vec![#(#dependency_service_ids),*]
             }
@@ -216,7 +260,8 @@ fn generate_injectable_impl(
                 Self: Sized,
             {
                 Ok(Self {
-                    #(#field_initializers),*
+                    #(#field_initializers,)*
+                    #(#non_dependency_fields,)*
                 })
             }
         }
