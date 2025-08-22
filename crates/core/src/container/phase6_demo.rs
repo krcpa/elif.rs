@@ -10,7 +10,7 @@ use crate::container::module::{ServiceModule, ModuleRegistry};
 use crate::container::debug::ContainerInspector;
 use crate::container::visualization::{DependencyVisualizer, VisualizationFormat, VisualizationStyle};
 use crate::container::ioc_container::IocContainer;
-// Removed unused import
+use crate::container::binding::ServiceBinder;
 use crate::container::scope::ServiceScope;
 use crate::errors::CoreError;
 use std::sync::Arc;
@@ -61,8 +61,10 @@ impl ServiceModule for UserModule {
         Some("1.0.0")
     }
     
-    fn configure_services(&self) -> Vec<String> {
-        vec!["UserService".to_string(), "UserRepository".to_string()]
+    fn configure(&self, services: &mut crate::container::binding::ServiceBindings) {
+        // Example of registering services for this module
+        services.bind::<UserService, UserService>();
+        services.bind::<UserRepository, UserRepository>();
     }
     
     fn depends_on(&self) -> Vec<crate::container::module::ModuleId> {
@@ -82,8 +84,11 @@ impl ServiceModule for CoreModule {
         Some("Core application services")
     }
     
-    fn configure_services(&self) -> Vec<String> {
-        vec!["Logger".to_string(), "DatabaseConnection".to_string()]
+    fn configure(&self, services: &mut crate::container::binding::ServiceBindings) {
+        // Example of registering services for this module
+        services.bind::<AppLogger, AppLogger>();
+        // Note: DatabaseConnection would need to be defined to actually bind it
+        // services.bind::<DatabaseConnection, DatabaseConnection>();
     }
 }
 

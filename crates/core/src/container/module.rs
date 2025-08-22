@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::any::TypeId;
 
-use crate::container::binding::ServiceBinder;
+use crate::container::binding::{ServiceBinder, ServiceBindings};
 use crate::container::ioc_container::IocContainer;
 use crate::errors::CoreError;
 
@@ -57,11 +57,11 @@ pub trait ServiceModule: Send + Sync where Self: 'static {
         None
     }
     
-    /// Configure services for this module
-    /// Note: This is a simplified version - a full implementation would
-    /// need a more sophisticated approach to avoid dyn compatibility issues
-    fn configure_services(&self) -> Vec<String> {
-        vec![] // Return service names that would be registered
+    /// Configure services for this module using ServiceBindings
+    fn configure(&self, services: &mut ServiceBindings) {
+        // Default implementation does nothing
+        // Modules should override this to register their services
+        let _ = services;
     }
     
     /// Get module dependencies (other modules this module depends on)
@@ -298,26 +298,35 @@ impl ModuleRegistry {
     }
     
     /// Configure all registered modules
-    pub fn configure_all<T: ServiceBinder>(&mut self, _container: &mut T) -> Result<(), CoreError> {
+    pub fn configure_all<T: ServiceBinder>(&mut self, container: &mut T) -> Result<(), CoreError> {
         let order = if self.load_order.is_empty() {
             self.calculate_load_order()?
         } else {
             self.load_order.clone()
         };
         
-        for module_id in order {
-            let module = self.modules.get(&module_id)
+        // Collect all service bindings from all modules first
+        let mut bindings = ServiceBindings::new();
+        
+        for module_id in &order {
+            let module = self.modules.get(module_id)
                 .ok_or_else(|| CoreError::ServiceNotFound {
                     service_type: format!("Module {}", module_id.name()),
                 })?
                 .clone();
             
-            let _service_names = module.configure_services(); // In full implementation, would register these
+            // Let module configure its services into bindings
+            module.configure(&mut bindings);
             
             // Update state
-            if let Some(loaded_module) = self.loaded_modules.get_mut(&module_id) {
+            if let Some(loaded_module) = self.loaded_modules.get_mut(module_id) {
                 loaded_module.state = ModuleState::Configured;
             }
+        }
+        
+        // Now register all collected bindings with the container using the new add_service_descriptor method
+        for descriptor in bindings.into_descriptors() {
+            container.add_service_descriptor(descriptor)?;
         }
         
         Ok(())
@@ -527,8 +536,8 @@ mod tests {
             Some("Core application services")
         }
         
-        fn configure(&self, services: &mut dyn ServiceBinder) {
-            let _ = services; // No services to configure in test
+        fn configure(&self, _services: &mut ServiceBindings) {
+            // No services to configure in test
         }
     }
 
@@ -543,8 +552,8 @@ mod tests {
             vec![ModuleId::of::<CoreModule>()]
         }
         
-        fn configure(&self, services: &mut dyn ServiceBinder) {
-            let _ = services; // No services to configure in test
+        fn configure(&self, _services: &mut ServiceBindings) {
+            // No services to configure in test
         }
     }
 
@@ -559,8 +568,8 @@ mod tests {
             vec![ModuleId::of::<AuthModule>(), ModuleId::of::<CoreModule>()]
         }
         
-        fn configure(&self, services: &mut dyn ServiceBinder) {
-            let _ = services; // No services to configure in test
+        fn configure(&self, _services: &mut ServiceBindings) {
+            // No services to configure in test
         }
     }
 
@@ -606,7 +615,7 @@ mod tests {
                 vec![ModuleId::of::<Module2>()]
             }
             
-            fn configure(&self, _: &mut dyn ServiceBinder) {}
+            fn configure(&self, _services: &mut ServiceBindings) {}
         }
         
         impl ServiceModule for Module2 {
@@ -614,7 +623,7 @@ mod tests {
                 vec![ModuleId::of::<Module1>()] // Circular dependency
             }
             
-            fn configure(&self, _: &mut dyn ServiceBinder) {}
+            fn configure(&self, _services: &mut ServiceBindings) {}
         }
         
         let mut registry = ModuleRegistry::new();
@@ -634,7 +643,7 @@ mod tests {
                 vec![ModuleId::named("NonExistentModule")]
             }
             
-            fn configure(&self, _: &mut dyn ServiceBinder) {}
+            fn configure(&self, _services: &mut ServiceBindings) {}
         }
         
         let mut registry = ModuleRegistry::new();
@@ -656,9 +665,44 @@ mod tests {
             .build();
         
         assert!(result.is_ok());
-        let (mut _container, mut registry) = result.unwrap();
+        let (_container, registry) = result.unwrap();
         
         // Verify load order was calculated
         assert_eq!(registry.get_load_order().len(), 3);
+    }
+    
+    #[test]
+    fn test_module_service_configuration() {
+        use crate::container::ioc_builder::IocContainerBuilder;
+        
+        // Test module that actually registers services
+        struct TestModule;
+        
+        #[derive(Default)]
+        struct TestService {
+            #[allow(dead_code)]
+            pub name: String,
+        }
+        
+        impl ServiceModule for TestModule {
+            fn configure(&self, services: &mut ServiceBindings) {
+                services.bind::<TestService, TestService>();
+            }
+        }
+        
+        let mut registry = ModuleRegistry::new();
+        registry.register_module(TestModule, None).unwrap();
+        
+        let mut container_builder = IocContainerBuilder::new();
+        
+        // Configure modules with the builder
+        registry.configure_all(&mut container_builder).unwrap();
+        
+        // Build the container
+        let container = container_builder.build().unwrap();
+        
+        // Verify the service was registered and can be resolved
+        let service = container.resolve::<TestService>();
+        assert!(service.is_ok());
     }
 }

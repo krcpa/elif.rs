@@ -5,6 +5,7 @@ pub mod modules;
 pub mod config;
 pub mod providers;
 pub mod specs;
+pub mod examples;
 
 // Re-export key types for convenience (specific exports to avoid ambiguity)
 pub use foundation::{FrameworkComponent, Initializable, Finalizable, LifecycleManager, LifecycleState};

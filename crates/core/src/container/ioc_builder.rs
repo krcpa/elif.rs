@@ -26,6 +26,11 @@ impl IocContainerBuilder {
 }
 
 impl ServiceBinder for IocContainerBuilder {
+    fn add_service_descriptor(&mut self, descriptor: crate::container::descriptor::ServiceDescriptor) -> Result<&mut Self, crate::errors::CoreError> {
+        self.bindings.add_descriptor(descriptor);
+        Ok(self)
+    }
+    
     fn bind<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self) -> &mut Self {
         self.bindings.bind::<TInterface, TImpl>();
         self

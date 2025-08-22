@@ -743,6 +743,16 @@ pub struct ServiceStatistics {
 }
 
 impl ServiceBinder for IocContainer {
+    fn add_service_descriptor(&mut self, descriptor: crate::container::descriptor::ServiceDescriptor) -> Result<&mut Self, CoreError> {
+        if self.is_built {
+            return Err(CoreError::InvalidServiceDescriptor { 
+                message: "Cannot add service descriptors after container is built".to_string() 
+            });
+        }
+        self.bindings.add_descriptor(descriptor);
+        Ok(self)
+    }
+    
     fn bind<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self) -> &mut Self {
         if self.is_built {
             panic!("Cannot add bindings after container is built");
