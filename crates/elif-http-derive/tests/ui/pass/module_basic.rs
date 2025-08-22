@@ -35,30 +35,30 @@ impl EmailService for SmtpEmailService {
 )]
 pub struct BasicModule;
 
-// Module with trait mappings
+// Module with trait mappings (simplified syntax)
 #[module(
     providers: [
         MockUserService,
-        dyn EmailService => SmtpEmailService
+        EmailService => SmtpEmailService
     ],
     controllers: [UserController, PostController]
 )]
 pub struct TraitMappingModule;
 
-// Module with named trait mappings
+// Module with named trait mappings (simplified syntax)
 #[module(
     providers: [
-        dyn EmailService => SmtpEmailService @ "smtp"
+        EmailService => SmtpEmailService @ "smtp"
     ],
     controllers: [UserController]
 )]
 pub struct NamedMappingModule;
 
-// Module with imports and exports
+// Module with imports and exports (simplified syntax)
 #[module(
     imports: [BasicModule],
-    providers: [dyn EmailService => SmtpEmailService],
-    exports: [dyn EmailService]
+    providers: [EmailService => SmtpEmailService],
+    exports: [EmailService]
 )]
 pub struct ImportExportModule;
 

@@ -13,7 +13,7 @@
 //! - `#[resource]`: Automatic RESTful resource registration
 //! - `#[group]`: Route grouping with shared attributes
 //! - `#[module]`: Module definition for dependency injection
-//! - `module_composition!`: Application composition macro
+//! - `app!`: Application composition macro
 
 use proc_macro::TokenStream;
 
@@ -135,6 +135,6 @@ pub fn module(args: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Application composition macro for organizing modules
 #[proc_macro]
-pub fn module_composition(input: TokenStream) -> TokenStream {
+pub fn app(input: TokenStream) -> TokenStream {
     module::module_composition_impl(input)
 }

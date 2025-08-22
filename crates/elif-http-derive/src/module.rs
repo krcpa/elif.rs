@@ -4,10 +4,10 @@
 //! for defining dependency injection modules and application composition.
 //!
 //! Features:
-//! - Provider definitions with trait mappings: `dyn Trait => Impl @ "name"`
+//! - Provider definitions with trait mappings: `EmailService => SmtpEmailService @ "smtp"`
 //! - Controller registration: `controllers: [Controller1, Controller2]`
 //! - Module imports/exports: `imports: [Module], exports: [Service]`
-//! - Application composition: `module! { modules: [Module1, Module2] }`
+//! - Application composition: `app! { modules: [Module1, Module2] }`
 
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
@@ -111,9 +111,10 @@ impl Parse for ModuleArgs {
 
 /// Definition of a provider in the module
 /// Supports various patterns:
-/// - `UserService` (basic service)
-/// - `dyn EmailService => SmtpEmailService` (trait mapping)
-/// - `dyn EmailService => SmtpEmailService @ "smtp"` (named trait mapping)
+/// - `UserService` (concrete service)
+/// - `EmailService => SmtpEmailService` (trait mapping)
+/// - `EmailService => SmtpEmailService @ "smtp"` (named trait mapping)
+/// - `dyn EmailService => SmtpEmailService` (explicit dyn syntax still supported)
 #[derive(Debug, Clone)]
 pub struct ProviderDef {
     pub service_type: ProviderType,
@@ -131,14 +132,23 @@ pub enum ProviderType {
 
 impl Parse for ProviderDef {
     fn parse(input: ParseStream) -> Result<Self> {
-        // Parse the service type (may be dyn Trait or concrete type)
+        // Parse the service type (may be dyn Trait, bare Trait, or concrete type)
         let service_type = if input.peek(Token![dyn]) {
+            // Explicit dyn Trait syntax
             let _dyn: Token![dyn] = input.parse()?;
             let trait_type: Type = input.parse()?;
             ProviderType::Trait(trait_type)
         } else {
-            let concrete_type: Type = input.parse()?;
-            ProviderType::Concrete(concrete_type)
+            let parsed_type: Type = input.parse()?;
+            
+            // Check if this will be followed by => (trait mapping)
+            if input.peek(FatArrow) {
+                // If there's a =>, it's a trait mapping, so treat as trait
+                ProviderType::Trait(parsed_type)
+            } else {
+                // No =>, so it's a concrete service
+                ProviderType::Concrete(parsed_type)
+            }
         };
         
         let mut implementation = None;

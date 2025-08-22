@@ -1,4 +1,4 @@
-//! Integration tests for the #[module] and module_composition! macros
+//! Integration tests for the #[module] and app! macros
 //! These tests verify that the generated code compiles and works correctly.
 
 #![allow(dead_code)]
@@ -6,7 +6,7 @@
 use elif_http_derive::module;
 
 // Note: We only test the #[module] attribute macro in integration tests
-// The module_composition! macro will be tested once elif-core supports it
+// The app! macro will be tested once elif-core supports it
 
 // Mock services for testing
 pub trait UserService: Send + Sync {
@@ -82,10 +82,11 @@ mod basic_module_tests {
     
     #[test]
     fn test_trait_mapping_module_compilation() {
+        // Test simplified syntax (without dyn)
         #[module(
             providers: [
                 MockUserService,
-                dyn EmailService => SmtpEmailService
+                EmailService => SmtpEmailService
             ],
             controllers: [UserController, PostController]
         )]
@@ -93,6 +94,22 @@ mod basic_module_tests {
         
         let descriptor = TraitMappingModule::module_descriptor();
         assert_eq!(descriptor.name(), "TraitMappingModule");
+    }
+    
+    #[test]
+    fn test_explicit_dyn_syntax_still_works() {
+        // Test that explicit dyn syntax is still supported
+        #[module(
+            providers: [
+                MockUserService,
+                dyn EmailService => SmtpEmailService
+            ],
+            controllers: [UserController]
+        )]
+        pub struct ExplicitDynModule;
+        
+        let descriptor = ExplicitDynModule::module_descriptor();
+        assert_eq!(descriptor.name(), "ExplicitDynModule");
     }
     
     #[test]
