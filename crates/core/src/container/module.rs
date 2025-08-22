@@ -244,7 +244,7 @@ impl ModuleRegistry {
             }
         }
         
-        order.reverse(); // Reverse to get correct dependency order
+        // order.reverse(); // Keep original order for dependency resolution
         self.load_order = order.clone();
         
         // Update load order in module info
@@ -527,8 +527,8 @@ mod tests {
             Some("Core application services")
         }
         
-        fn configure(&self, services: &mut dyn ServiceBinder) {
-            let _ = services; // No services to configure in test
+        fn configure_services(&self) -> Vec<String> {
+            vec!["CoreService".to_string()]
         }
     }
 
@@ -543,8 +543,8 @@ mod tests {
             vec![ModuleId::of::<CoreModule>()]
         }
         
-        fn configure(&self, services: &mut dyn ServiceBinder) {
-            let _ = services; // No services to configure in test
+        fn configure_services(&self) -> Vec<String> {
+            vec!["AuthService".to_string()]
         }
     }
 
@@ -559,8 +559,8 @@ mod tests {
             vec![ModuleId::of::<AuthModule>(), ModuleId::of::<CoreModule>()]
         }
         
-        fn configure(&self, services: &mut dyn ServiceBinder) {
-            let _ = services; // No services to configure in test
+        fn configure_services(&self) -> Vec<String> {
+            vec!["ApiService".to_string()]
         }
     }
 
@@ -588,12 +588,23 @@ mod tests {
             .map(|id| id.name().to_string())
             .collect();
         
+        // Debug the actual order
+        println!("Actual module order: {:?}", order_names);
+        
         // CoreModule should be first (no dependencies)
         // AuthModule should be second (depends on Core)
         // ApiModule should be last (depends on both)
-        assert_eq!(order_names[0], std::any::type_name::<CoreModule>());
-        assert_eq!(order_names[1], std::any::type_name::<AuthModule>());
-        assert_eq!(order_names[2], std::any::type_name::<ApiModule>());
+        let core_name = std::any::type_name::<CoreModule>();
+        let auth_name = std::any::type_name::<AuthModule>();
+        let api_name = std::any::type_name::<ApiModule>();
+        
+        let core_pos = order_names.iter().position(|n| n == core_name).unwrap();
+        let auth_pos = order_names.iter().position(|n| n == auth_name).unwrap();
+        let api_pos = order_names.iter().position(|n| n == api_name).unwrap();
+        
+        assert!(core_pos < auth_pos, "Core should come before Auth");
+        assert!(core_pos < api_pos, "Core should come before Api");
+        assert!(auth_pos < api_pos, "Auth should come before Api");
     }
 
     #[test]
@@ -606,7 +617,7 @@ mod tests {
                 vec![ModuleId::of::<Module2>()]
             }
             
-            fn configure(&self, _: &mut dyn ServiceBinder) {}
+            fn configure_services(&self) -> Vec<String> { vec![] }
         }
         
         impl ServiceModule for Module2 {
@@ -614,7 +625,7 @@ mod tests {
                 vec![ModuleId::of::<Module1>()] // Circular dependency
             }
             
-            fn configure(&self, _: &mut dyn ServiceBinder) {}
+            fn configure_services(&self) -> Vec<String> { vec![] }
         }
         
         let mut registry = ModuleRegistry::new();
@@ -634,7 +645,7 @@ mod tests {
                 vec![ModuleId::named("NonExistentModule")]
             }
             
-            fn configure(&self, _: &mut dyn ServiceBinder) {}
+            fn configure_services(&self) -> Vec<String> { vec![] }
         }
         
         let mut registry = ModuleRegistry::new();
@@ -656,7 +667,7 @@ mod tests {
             .build();
         
         assert!(result.is_ok());
-        let (mut _container, mut registry) = result.unwrap();
+        let (_container, registry) = result.unwrap();
         
         // Verify load order was calculated
         assert_eq!(registry.get_load_order().len(), 3);

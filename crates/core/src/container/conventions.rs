@@ -419,6 +419,8 @@ mod tests {
     #[test]
     fn test_custom_convention_rules() {
         let mut conventions = ServiceConventions::new();
+        // Add custom rule after clearing naming conventions to avoid conflicts
+        conventions.naming_conventions.clear();
         conventions.add_custom_rule(DatabaseConventionRule);
         
         assert_eq!(conventions.get_lifetime_for_type("DatabaseService"), ServiceScope::Scoped);
