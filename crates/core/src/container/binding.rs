@@ -153,6 +153,9 @@ impl<TInterface: ?Sized + 'static> AdvancedBindingBuilder<TInterface> {
 
 /// Binding API for the IoC container
 pub trait ServiceBinder {
+    /// Add a pre-built service descriptor
+    fn add_service_descriptor(&mut self, descriptor: crate::container::descriptor::ServiceDescriptor) -> Result<&mut Self, crate::errors::CoreError>;
+    
     /// Bind an interface to an implementation
     fn bind<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self) -> &mut Self;
     
@@ -317,6 +320,11 @@ impl ServiceBindings {
     pub fn count(&self) -> usize {
         self.descriptors.len()
     }
+    
+    /// Consume self and return all descriptors
+    pub fn into_descriptors(self) -> Vec<ServiceDescriptor> {
+        self.descriptors
+    }
 }
 
 impl Default for ServiceBindings {
@@ -326,6 +334,11 @@ impl Default for ServiceBindings {
 }
 
 impl ServiceBinder for ServiceBindings {
+    fn add_service_descriptor(&mut self, descriptor: crate::container::descriptor::ServiceDescriptor) -> Result<&mut Self, crate::errors::CoreError> {
+        self.add_descriptor(descriptor);
+        Ok(self)
+    }
+    
     fn bind<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self) -> &mut Self {
         let descriptor = ServiceDescriptor::bind::<TInterface, TImpl>()
             .with_lifetime(ServiceScope::Transient)
