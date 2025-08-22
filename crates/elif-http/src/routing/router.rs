@@ -2063,7 +2063,9 @@ where
             // Clean up the scope (fire and forget - don't block response)
             let container_clone = Arc::clone(&container);
             tokio::spawn(async move {
-                let _ = container_clone.dispose_scope(&scope_id).await;
+                if let Err(e) = container_clone.dispose_scope(&scope_id).await {
+                    eprintln!("Failed to dispose request scope: {}", e);
+                }
             });
             
             result
