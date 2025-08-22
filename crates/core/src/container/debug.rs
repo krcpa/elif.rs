@@ -101,7 +101,7 @@ impl ContainerInspector {
         writeln!(report, "Container Debug Report").unwrap();
         writeln!(report, "====================").unwrap();
         writeln!(report, "Generated at: {:?}", std::time::SystemTime::now()).unwrap();
-        writeln!(report, "").unwrap();
+        writeln!(report).unwrap();
         
         // Container info
         let info = self.get_container_info();
@@ -113,7 +113,7 @@ impl ContainerInspector {
         writeln!(report, "  - Scoped: {}", info.scoped_count).unwrap();
         writeln!(report, "  - Transient: {}", info.transient_count).unwrap();
         writeln!(report, "Cached Instances: {}", info.cached_instances).unwrap();
-        writeln!(report, "").unwrap();
+        writeln!(report).unwrap();
         
         // Resolution statistics
         let stats = self.get_resolution_stats();
@@ -131,7 +131,7 @@ impl ContainerInspector {
                     stat.average_duration_ms
                 ).unwrap();
             }
-            writeln!(report, "").unwrap();
+            writeln!(report).unwrap();
         }
         
         // Performance metrics
@@ -145,7 +145,7 @@ impl ContainerInspector {
             metrics.slowest_service.as_deref().unwrap_or("Unknown")
         ).unwrap();
         writeln!(report, "Memory Usage (estimated): {} bytes", metrics.estimated_memory_usage).unwrap();
-        writeln!(report, "").unwrap();
+        writeln!(report).unwrap();
         
         // Registered services
         writeln!(report, "Registered Services:").unwrap();
@@ -618,16 +618,13 @@ pub struct HealthReport {
     pub timestamp: std::time::SystemTime,
 }
 
-impl HealthReport {
-    /// Generate a human-readable health report
-    pub fn to_string(&self) -> String {
-        let mut report = String::new();
-        
-        writeln!(report, "Container Health Report").unwrap();
-        writeln!(report, "======================").unwrap();
-        writeln!(report, "Timestamp: {:?}", self.timestamp).unwrap();
-        writeln!(report, "Overall Status: {:?}", self.overall_status).unwrap();
-        writeln!(report, "").unwrap();
+impl std::fmt::Display for HealthReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Container Health Report")?;
+        writeln!(f, "======================")?;
+        writeln!(f, "Timestamp: {:?}", self.timestamp)?;
+        writeln!(f, "Overall Status: {:?}", self.overall_status)?;
+        writeln!(f)?;
         
         let status_symbol = match self.overall_status {
             HealthStatus::Healthy => "✅",
@@ -635,11 +632,11 @@ impl HealthReport {
             HealthStatus::Unhealthy => "❌",
         };
         
-        writeln!(report, "{} Container is {:?}", status_symbol, self.overall_status).unwrap();
-        writeln!(report, "").unwrap();
+        writeln!(f, "{} Container is {:?}", status_symbol, self.overall_status)?;
+        writeln!(f)?;
         
-        writeln!(report, "Individual Checks:").unwrap();
-        writeln!(report, "------------------").unwrap();
+        writeln!(f, "Individual Checks:")?;
+        writeln!(f, "------------------")?;
         
         for check in &self.checks {
             let symbol = match check.status {
@@ -648,15 +645,15 @@ impl HealthReport {
                 HealthStatus::Unhealthy => "❌",
             };
             
-            writeln!(report, "{} {}: {}", symbol, check.name, check.message).unwrap();
+            writeln!(f, "{} {}: {}", symbol, check.name, check.message)?;
             if let Some(details) = &check.details {
-                writeln!(report, "   Details: {}", details).unwrap();
+                writeln!(f, "   Details: {}", details)?;
             }
-            writeln!(report, "   Duration: {:.2}ms", check.duration.as_secs_f64() * 1000.0).unwrap();
-            writeln!(report, "").unwrap();
+            writeln!(f, "   Duration: {:.2}ms", check.duration.as_secs_f64() * 1000.0)?;
+            writeln!(f)?;
         }
         
-        report
+        Ok(())
     }
 }
 

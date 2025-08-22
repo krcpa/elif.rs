@@ -227,7 +227,7 @@ where
 
 /// Attribute macro support structures
 /// These would be used by proc macros to store metadata
-
+///
 /// Service metadata extracted from attributes
 #[derive(Debug, Clone)]
 pub struct ServiceMetadata {

@@ -235,7 +235,7 @@ mod tests {
         
         let valid_spec = BodySpec {
             name: parse_quote!(user_data),
-            body_type: BodyParamType::Custom(parse_quote!(CreateUserRequest)),
+            body_type: BodyParamType::Custom(Box::new(parse_quote!(CreateUserRequest))),
         };
         
         let validation_result = validate_body_param_consistency(&valid_spec, &valid_fn.sig);
@@ -244,7 +244,7 @@ mod tests {
         // Test invalid parameter name
         let invalid_name_spec = BodySpec {
             name: parse_quote!(wrong_name),
-            body_type: BodyParamType::Custom(parse_quote!(CreateUserRequest)),
+            body_type: BodyParamType::Custom(Box::new(parse_quote!(CreateUserRequest))),
         };
         
         let name_validation_result = validate_body_param_consistency(&invalid_name_spec, &valid_fn.sig);

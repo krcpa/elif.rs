@@ -603,14 +603,14 @@ impl ServiceExplorer {
         
         writeln!(report, "Service Dependency Analysis Report").unwrap();
         writeln!(report, "===================================").unwrap();
-        writeln!(report, "").unwrap();
+        writeln!(report).unwrap();
         
         writeln!(report, "Summary:").unwrap();
         writeln!(report, "--------").unwrap();
         writeln!(report, "Total services: {}", self.visualizer.descriptors.len()).unwrap();
         writeln!(report, "Total dependencies: {}", 
             self.visualizer.dependency_graph.values().map(|deps| deps.len()).sum::<usize>()).unwrap();
-        writeln!(report, "").unwrap();
+        writeln!(report).unwrap();
         
         // Services with most dependencies
         let mut services_by_deps: Vec<_> = self.visualizer.descriptors.iter()
@@ -623,7 +623,7 @@ impl ServiceExplorer {
         for (desc, count) in services_by_deps.iter().take(10) {
             writeln!(report, "{}: {} dependencies", desc.service_id.type_name(), count).unwrap();
         }
-        writeln!(report, "").unwrap();
+        writeln!(report).unwrap();
         
         // Services with most dependents
         let mut dependents_count: HashMap<&ServiceId, usize> = HashMap::new();

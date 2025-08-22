@@ -37,9 +37,9 @@ pub enum ParamType {
 /// Supported body parameter types for injection
 #[derive(Debug, Clone, PartialEq)]
 pub enum BodyParamType {
-    Custom(Type),  // Custom deserializable type
-    Form,          // HashMap<String, String> from form data
-    Bytes,         // Vec<u8> for raw bytes
+    Custom(Box<Type>),  // Custom deserializable type (boxed to reduce enum size)
+    Form,               // HashMap<String, String> from form data
+    Bytes,              // Vec<u8> for raw bytes
 }
 
 impl std::fmt::Display for ParamType {
@@ -114,7 +114,7 @@ impl Parse for BodySpec {
         let custom_type: Type = input.parse()?;
         Ok(BodySpec { 
             name, 
-            body_type: BodyParamType::Custom(custom_type) 
+            body_type: BodyParamType::Custom(Box::new(custom_type)) 
         })
     }
 }
