@@ -12,7 +12,7 @@ keywords = ["introspection", "analysis", "web", "framework", "ai"]
 categories = ["web-programming", "development-tools"]
 
 [dependencies]
-elif-core = { version = "0.5.0", path = "../core" }
+elif-core = { version = "0.6.0", path = "../core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }

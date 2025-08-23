@@ -1,6 +1,6 @@
 [package]
 name = "elif"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2021"
 description = "Modern Rust web framework designed for exceptional developer experience"
 license = "MIT"
@@ -13,8 +13,8 @@ categories = ["web-programming::http-server"]
 
 [dependencies]
 # Re-export sub-packages (umbrella package depends on all others)
-elif-core = { version = "0.5.0", path = "../core" }
-elif-http = { version = "0.8.0", path = "../elif-http" }
+elif-core = { version = "0.6.0", path = "../core" }
+elif-http = { version = "0.8.1", path = "../elif-http" }
 elif-orm = { version = "0.7.0", path = "../orm" }
 elif-auth = { version = "0.4.0", path = "../elif-auth" }
 elif-cache = { version = "0.3.0", path = "../elif-cache" }
