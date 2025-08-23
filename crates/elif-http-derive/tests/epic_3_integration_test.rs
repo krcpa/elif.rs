@@ -163,7 +163,8 @@ mod tests {
             .with_imports(vec!["ModuleA".to_string()]) // Creates A -> B -> A cycle
             .with_exports(vec!["ServiceB".to_string()]);
         
-        let validator = ModuleDependencyValidator::new(vec![module_a, module_b]);
+        let modules = vec![module_a, module_b];
+        let validator = ModuleDependencyValidator::new(&modules);
         let result = validator.validate();
         
         // Should detect the circular dependency
@@ -181,7 +182,8 @@ mod tests {
         let importing_module = ModuleDescriptor::new("ImportingModule")
             .with_imports(vec!["NonExistentModule".to_string()]);
         
-        let validator = ModuleDependencyValidator::new(vec![importing_module]);
+        let modules = vec![importing_module];
+        let validator = ModuleDependencyValidator::new(&modules);
         let result = validator.validate();
         
         // Should detect missing export
@@ -202,7 +204,7 @@ mod tests {
             DatabaseModule::module_descriptor(), // No dependencies
         ];
         
-        let validator = ModuleDependencyValidator::new(modules);
+        let validator = ModuleDependencyValidator::new(&modules);
         let sorted = validator.topological_sort().unwrap();
         
         // DatabaseModule should come before BusinessModule since BusinessModule imports it
@@ -250,7 +252,8 @@ mod tests {
         let self_importing_module = ModuleDescriptor::new("SelfModule")
             .with_imports(vec!["SelfModule".to_string()]);
         
-        let validator = ModuleDependencyValidator::new(vec![self_importing_module]);
+        let modules = vec![self_importing_module];
+        let validator = ModuleDependencyValidator::new(&modules);
         let result = validator.validate();
         
         assert!(result.is_err(), "Should detect self-import");
@@ -271,7 +274,8 @@ mod tests {
                 "Service1".to_string(), // Duplicate
             ]);
         
-        let validator = ModuleDependencyValidator::new(vec![duplicate_export_module]);
+        let modules = vec![duplicate_export_module];
+        let validator = ModuleDependencyValidator::new(&modules);
         let result = validator.validate();
         
         assert!(result.is_err(), "Should detect duplicate exports");
@@ -294,7 +298,8 @@ mod tests {
         assert!(empty_descriptor.exports.is_empty());
         
         // Should validate successfully
-        let validator = ModuleDependencyValidator::new(vec![empty_descriptor]);
+        let modules = vec![empty_descriptor];
+        let validator = ModuleDependencyValidator::new(&modules);
         assert!(validator.validate().is_ok());
     }
 }
