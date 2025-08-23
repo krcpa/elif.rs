@@ -439,7 +439,7 @@ impl TokenRegistry {
         if let Some(bindings) = self.bindings.get(&token_type_id) {
             // Check for multiple default bindings (shouldn't happen but good to check)
             let default_count = self.defaults.contains_key(&token_type_id) as usize;
-            if default_count == 0 && bindings.len() > 0 {
+            if default_count == 0 && !bindings.is_empty() {
                 conflicts.push(format!(
                     "Token {} has bindings but no default binding",
                     Token::token_type_name()

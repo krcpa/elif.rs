@@ -130,7 +130,7 @@ impl DependencyVisualizer {
         writeln!(dot, "digraph ServiceDependencies {{").unwrap();
         writeln!(dot, "    rankdir=TB;").unwrap();
         writeln!(dot, "    node [shape=rectangle];").unwrap();
-        writeln!(dot, "").unwrap();
+        writeln!(dot).unwrap();
         
         // Define lifetime colors
         if style.color_by_lifetime {
@@ -138,7 +138,7 @@ impl DependencyVisualizer {
             writeln!(dot, "    // Singleton: lightblue").unwrap();
             writeln!(dot, "    // Scoped: lightgreen").unwrap();
             writeln!(dot, "    // Transient: lightyellow").unwrap();
-            writeln!(dot, "").unwrap();
+            writeln!(dot).unwrap();
         }
         
         // Add service nodes
@@ -175,7 +175,7 @@ impl DependencyVisualizer {
             ).unwrap();
         }
         
-        writeln!(dot, "").unwrap();
+        writeln!(dot).unwrap();
         
         // Add dependency edges
         for (service_id, dependencies) in &self.dependency_graph {
@@ -211,7 +211,7 @@ impl DependencyVisualizer {
             }
             
             let service_name = self.format_service_name(&descriptor.service_id, &style);
-            let node_id = self.sanitize_id(&descriptor.service_id.type_name());
+            let node_id = self.sanitize_id(descriptor.service_id.type_name());
             
             let lifetime_indicator = if style.show_lifetimes {
                 match descriptor.lifetime {
@@ -237,7 +237,7 @@ impl DependencyVisualizer {
             }
         }
         
-        writeln!(mermaid, "").unwrap();
+        writeln!(mermaid).unwrap();
         
         // Add dependency relationships
         for (service_id, dependencies) in &self.dependency_graph {
@@ -247,16 +247,16 @@ impl DependencyVisualizer {
                 }
             }
             
-            let service_node_id = self.sanitize_id(&service_id.type_name());
+            let service_node_id = self.sanitize_id(service_id.type_name());
             for dependency in dependencies {
-                let dep_node_id = self.sanitize_id(&dependency.type_name());
+                let dep_node_id = self.sanitize_id(dependency.type_name());
                 writeln!(mermaid, "    {} --> {}", service_node_id, dep_node_id).unwrap();
             }
         }
         
         // Add style classes
         if style.color_by_lifetime {
-            writeln!(mermaid, "").unwrap();
+            writeln!(mermaid).unwrap();
             writeln!(mermaid, "    classDef singleton fill:#add8e6").unwrap();
             writeln!(mermaid, "    classDef scoped fill:#90ee90").unwrap();
             writeln!(mermaid, "    classDef transient fill:#ffffe0").unwrap();
@@ -270,7 +270,7 @@ impl DependencyVisualizer {
         let mut ascii = String::new();
         writeln!(ascii, "Service Dependency Tree").unwrap();
         writeln!(ascii, "=======================").unwrap();
-        writeln!(ascii, "").unwrap();
+        writeln!(ascii).unwrap();
         
         // Find root services (services with no dependents or explicitly marked as root)
         let mut roots = Vec::new();
@@ -296,7 +296,7 @@ impl DependencyVisualizer {
         }
         
         if style.include_stats {
-            writeln!(ascii, "").unwrap();
+            writeln!(ascii).unwrap();
             writeln!(ascii, "Statistics:").unwrap();
             writeln!(ascii, "-----------").unwrap();
             writeln!(ascii, "Total services: {}", self.descriptors.len()).unwrap();
@@ -415,9 +415,7 @@ impl DependencyVisualizer {
             service_data.insert("dependencies".to_string(), serde_json::Value::Array(deps));
             
             services.push(serde_json::Value::Object(
-                service_data.into_iter()
-                    .map(|(k, v)| (k, v))
-                    .collect()
+                service_data.into_iter().collect()
             ));
         }
         

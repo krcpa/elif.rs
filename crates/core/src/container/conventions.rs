@@ -135,8 +135,7 @@ impl ServiceConventions {
         }
         
         // Remove 'Trait' suffix if present
-        if interface_name.ends_with("Trait") {
-            let impl_name = &interface_name[..interface_name.len() - 5];
+        if let Some(impl_name) = interface_name.strip_suffix("Trait") {
             return Some(format!("{}Impl", impl_name));
         }
         
@@ -154,13 +153,11 @@ impl ServiceConventions {
             return text.contains(middle);
         }
         
-        if pattern.starts_with('*') {
-            let suffix = &pattern[1..];
+        if let Some(suffix) = pattern.strip_prefix('*') {
             return text.ends_with(suffix);
         }
         
-        if pattern.ends_with('*') {
-            let prefix = &pattern[..pattern.len()-1];
+        if let Some(prefix) = pattern.strip_suffix('*') {
             return text.starts_with(prefix);
         }
         

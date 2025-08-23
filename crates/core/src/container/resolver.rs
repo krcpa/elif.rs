@@ -8,6 +8,12 @@ pub struct ResolutionPath {
     pub services: Vec<ServiceId>,
 }
 
+impl Default for ResolutionPath {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ResolutionPath {
     /// Create a new resolution path
     pub fn new() -> Self {

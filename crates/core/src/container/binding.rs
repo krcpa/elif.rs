@@ -27,6 +27,12 @@ pub struct BindingConfig {
     pub profile_conditions: Vec<String>,
 }
 
+impl Default for BindingConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BindingConfig {
     pub fn new() -> Self {
         Self {
@@ -55,7 +61,7 @@ impl BindingConfig {
         
         // Check feature conditions
         for (feature, expected) in &self.feature_conditions {
-            let feature_enabled = std::env::var(&format!("FEATURE_{}", feature.to_uppercase())).is_ok();
+            let feature_enabled = std::env::var(format!("FEATURE_{}", feature.to_uppercase())).is_ok();
             if feature_enabled != *expected {
                 return false;
             }
@@ -84,6 +90,12 @@ impl BindingConfig {
 pub struct AdvancedBindingBuilder<TInterface: ?Sized + 'static> {
     config: BindingConfig,
     _phantom: std::marker::PhantomData<*const TInterface>,
+}
+
+impl<TInterface: ?Sized + 'static> Default for AdvancedBindingBuilder<TInterface> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<TInterface: ?Sized + 'static> AdvancedBindingBuilder<TInterface> {
@@ -215,6 +227,12 @@ pub trait ServiceBinder {
 pub struct CollectionBindingBuilder<TInterface: ?Sized + 'static> {
     services: Vec<ServiceDescriptor>,
     _phantom: std::marker::PhantomData<*const TInterface>,
+}
+
+impl<TInterface: ?Sized + 'static> Default for CollectionBindingBuilder<TInterface> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<TInterface: ?Sized + 'static> CollectionBindingBuilder<TInterface> {

@@ -159,6 +159,12 @@ pub struct ServiceDescriptorBuilder<TInterface: ?Sized, TImpl> {
     _phantom: std::marker::PhantomData<(*const TInterface, TImpl)>,
 }
 
+impl<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static> Default for ServiceDescriptorBuilder<TInterface, TImpl> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static> ServiceDescriptorBuilder<TInterface, TImpl>
 {
     /// Create a new service descriptor builder
@@ -225,6 +231,12 @@ pub struct ServiceDescriptorFactoryBuilder<TInterface: ?Sized> {
     dependencies: Vec<ServiceId>,
     factory: Option<ServiceFactory>,
     _phantom: std::marker::PhantomData<*const TInterface>,
+}
+
+impl<TInterface: ?Sized + 'static> Default for ServiceDescriptorFactoryBuilder<TInterface> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<TInterface: ?Sized + 'static> ServiceDescriptorFactoryBuilder<TInterface> {

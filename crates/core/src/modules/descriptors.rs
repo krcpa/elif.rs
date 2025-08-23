@@ -312,7 +312,7 @@ impl ModuleComposition {
     /// Apply composition and resolve conflicts
     pub fn compose(mut self) -> Result<ModuleDescriptor, ModuleError> {
         // First validate modules for circular imports and missing exports
-        let validator = ModuleDependencyValidator::new(self.modules.clone());
+        let validator = ModuleDependencyValidator::new(&self.modules);
         if let Err(validation_errors) = validator.validate() {
             return Err(ModuleError::ConfigurationFailed {
                 message: format!(
@@ -334,9 +334,14 @@ impl ModuleComposition {
         // Merge all modules into final descriptor in dependency order
         let mut final_descriptor = ModuleDescriptor::new("ComposedApplication");
         
-        // Process modules in topological order
+        // Create a HashMap for O(1) module lookups instead of O(N) linear search
+        let module_map: std::collections::HashMap<_, _> = self.modules.iter()
+            .map(|m| (&m.name, m))
+            .collect();
+        
+        // Process modules in topological order - now O(N) instead of O(N^2)
         for module_name in &loading_order {
-            if let Some(module) = self.modules.iter().find(|m| m.name == *module_name) {
+            if let Some(module) = module_map.get(module_name) {
                 final_descriptor.providers.extend(module.providers.clone());
                 final_descriptor.controllers.extend(module.controllers.clone());
                 final_descriptor.imports.extend(module.imports.clone());
@@ -344,17 +349,21 @@ impl ModuleComposition {
             }
         }
         
-        // Apply overrides (replace matching services)
-        for override_service in &self.overrides {
-            // Remove existing service with same name/type
-            final_descriptor.providers.retain(|p| {
-                p.service_type != override_service.service_type || 
-                p.name != override_service.name
-            });
-            
-            // Add override
-            final_descriptor.providers.push(override_service.clone());
-        }
+        // Apply overrides (replace matching services) - O(M+N) instead of O(M*N)
+        // Overrides match on (service_type, name) - same TypeId and same named binding
+        use std::collections::HashMap;
+        let override_map: HashMap<_, _> = self.overrides.iter()
+            .map(|s| ((s.service_type, s.name.clone()), s.clone()))
+            .collect();
+
+        // Remove original providers that have overrides
+        final_descriptor.providers.retain(|p| {
+            let key = (p.service_type, p.name.clone());
+            !override_map.contains_key(&key)
+        });
+        
+        // Add all overrides (both replacements and new services)
+        final_descriptor.providers.extend(override_map.into_values());
         
         self.merged_descriptor = final_descriptor.clone();
         Ok(final_descriptor)
@@ -434,25 +443,21 @@ impl std::error::Error for ModuleValidationError {}
 
 /// Module dependency validator for detecting circular imports and missing exports
 #[derive(Debug)]
-pub struct ModuleDependencyValidator {
+pub struct ModuleDependencyValidator<'a> {
     /// Modules being validated
-    modules: Vec<ModuleDescriptor>,
+    modules: &'a [ModuleDescriptor],
 }
 
-impl ModuleDependencyValidator {
+impl<'a> ModuleDependencyValidator<'a> {
     /// Create a new validator
-    pub fn new(modules: Vec<ModuleDescriptor>) -> Self {
+    pub fn new(modules: &'a [ModuleDescriptor]) -> Self {
         Self { modules }
     }
     
-    /// Validate all modules for circular imports and missing exports
+    /// Validate all modules for structural issues
+    /// Note: Circular import detection is handled by topological_sort() for efficiency
     pub fn validate(&self) -> Result<(), Vec<ModuleValidationError>> {
         let mut errors = Vec::new();
-        
-        // Check for circular imports
-        if let Err(circular_errors) = self.validate_circular_imports() {
-            errors.extend(circular_errors);
-        }
         
         // Check for missing exports
         if let Err(export_errors) = self.validate_missing_exports() {
@@ -469,33 +474,9 @@ impl ModuleDependencyValidator {
             errors.extend(duplicate_errors);
         }
         
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors)
-        }
-    }
-    
-    /// Validate circular imports using depth-first search
-    fn validate_circular_imports(&self) -> Result<(), Vec<ModuleValidationError>> {
-        let mut errors = Vec::new();
-        let mut visited = std::collections::HashSet::new();
-        let mut recursion_stack = std::collections::HashSet::new();
-        
-        for module in &self.modules {
-            if !visited.contains(&module.name) {
-                if let Err(cycle) = self.dfs_circular_check(
-                    &module.name,
-                    &mut visited,
-                    &mut recursion_stack,
-                    &mut Vec::new(),
-                ) {
-                    errors.push(ModuleValidationError::CircularImport {
-                        module: module.name.clone(),
-                        cycle,
-                    });
-                }
-            }
+        // Check for circular imports via topological sort (efficient single-pass)
+        if let Err(circular_error) = self.topological_sort() {
+            errors.push(circular_error);
         }
         
         if errors.is_empty() {
@@ -505,41 +486,6 @@ impl ModuleDependencyValidator {
         }
     }
     
-    /// Depth-first search for circular dependencies
-    fn dfs_circular_check(
-        &self,
-        module_name: &str,
-        visited: &mut std::collections::HashSet<String>,
-        recursion_stack: &mut std::collections::HashSet<String>,
-        path: &mut Vec<String>,
-    ) -> Result<(), Vec<String>> {
-        visited.insert(module_name.to_string());
-        recursion_stack.insert(module_name.to_string());
-        path.push(module_name.to_string());
-        
-        // Find the module
-        if let Some(module) = self.modules.iter().find(|m| m.name == module_name) {
-            // Check all imports
-            for import in &module.imports {
-                if recursion_stack.contains(import) {
-                    // Found a cycle - return the path
-                    // If import is in recursion_stack, it must be in the current path
-                    let cycle_start = path.iter().position(|m| m == import).unwrap();
-                    let mut cycle = path[cycle_start..].to_vec();
-                    cycle.push(import.clone()); // Complete the cycle
-                    return Err(cycle);
-                }
-                
-                if !visited.contains(import) {
-                    self.dfs_circular_check(import, visited, recursion_stack, path)?;
-                }
-            }
-        }
-        
-        recursion_stack.remove(module_name);
-        path.pop();
-        Ok(())
-    }
     
     /// Validate that all imports have corresponding exports
     fn validate_missing_exports(&self) -> Result<(), Vec<ModuleValidationError>> {
@@ -549,7 +495,7 @@ impl ModuleDependencyValidator {
         let mut export_map: std::collections::HashMap<String, std::collections::HashSet<String>> =
             std::collections::HashMap::new();
         
-        for module in &self.modules {
+        for module in self.modules {
             export_map.insert(
                 module.name.clone(),
                 module.exports.iter().cloned().collect(),
@@ -557,10 +503,10 @@ impl ModuleDependencyValidator {
         }
         
         // Check each module's imports
-        for module in &self.modules {
+        for module in self.modules {
             for import_module in &module.imports {
                 // Check if the imported module exists
-                if let Some(exported_services) = export_map.get(import_module) {
+                if let Some(exported_services) = export_map.get(import_module.as_str()) {
                     // For now, we assume modules import all exported services
                     // In a more sophisticated system, we could track specific service imports
                     if exported_services.is_empty() {
@@ -591,7 +537,7 @@ impl ModuleDependencyValidator {
     fn validate_self_imports(&self) -> Result<(), Vec<ModuleValidationError>> {
         let mut errors = Vec::new();
         
-        for module in &self.modules {
+        for module in self.modules {
             if module.imports.contains(&module.name) {
                 errors.push(ModuleValidationError::SelfImport {
                     module: module.name.clone(),
@@ -610,7 +556,7 @@ impl ModuleDependencyValidator {
     fn validate_duplicate_exports(&self) -> Result<(), Vec<ModuleValidationError>> {
         let mut errors = Vec::new();
         
-        for module in &self.modules {
+        for module in self.modules {
             let mut seen_exports = std::collections::HashSet::new();
             
             for export in &module.exports {
@@ -636,7 +582,7 @@ impl ModuleDependencyValidator {
         let mut temp_visited = std::collections::HashSet::new();
         let mut result = Vec::new();
         
-        for module in &self.modules {
+        for module in self.modules {
             if !visited.contains(&module.name) {
                 if let Err(cycle) = self.topological_visit(
                     &module.name,
@@ -803,7 +749,8 @@ mod tests {
         let module_c = ModuleDescriptor::new("ModuleC")
             .with_imports(vec!["ModuleA".to_string()]); // Creates cycle A -> B -> C -> A
         
-        let validator = ModuleDependencyValidator::new(vec![module_a, module_b, module_c]);
+        let modules = vec![module_a, module_b, module_c];
+        let validator = ModuleDependencyValidator::new(&modules);
         let result = validator.validate();
         
         assert!(result.is_err());
@@ -824,7 +771,8 @@ mod tests {
         let module = ModuleDescriptor::new("SelfModule")
             .with_imports(vec!["SelfModule".to_string()]);
         
-        let validator = ModuleDependencyValidator::new(vec![module]);
+        let modules = vec![module];
+        let validator = ModuleDependencyValidator::new(&modules);
         let result = validator.validate();
         
         assert!(result.is_err());
@@ -845,7 +793,8 @@ mod tests {
         let module_a = ModuleDescriptor::new("ModuleA")
             .with_imports(vec!["NonExistentModule".to_string()]);
         
-        let validator = ModuleDependencyValidator::new(vec![module_a]);
+        let modules = vec![module_a];
+        let validator = ModuleDependencyValidator::new(&modules);
         let result = validator.validate();
         
         assert!(result.is_err());
@@ -866,7 +815,8 @@ mod tests {
         let module = ModuleDescriptor::new("TestModule")
             .with_exports(vec!["Service1".to_string(), "Service1".to_string()]);
         
-        let validator = ModuleDependencyValidator::new(vec![module]);
+        let modules = vec![module];
+        let validator = ModuleDependencyValidator::new(&modules);
         let result = validator.validate();
         
         assert!(result.is_err());
@@ -891,7 +841,8 @@ mod tests {
             .with_imports(vec!["ModuleA".to_string()])
             .with_exports(vec!["ServiceB".to_string()]);
         
-        let validator = ModuleDependencyValidator::new(vec![module_a, module_b]);
+        let modules = vec![module_a, module_b];
+        let validator = ModuleDependencyValidator::new(&modules);
         let result = validator.validate();
         
         assert!(result.is_ok());
@@ -907,7 +858,8 @@ mod tests {
         let module_c = ModuleDescriptor::new("ModuleC")
             .with_imports(vec!["ModuleB".to_string()]); // Depends on B
         
-        let validator = ModuleDependencyValidator::new(vec![module_c, module_a, module_b]);
+        let modules = vec![module_c, module_a, module_b];
+        let validator = ModuleDependencyValidator::new(&modules);
         let sorted = validator.topological_sort().unwrap();
         
         // Should be sorted in dependency order: A, B, C
