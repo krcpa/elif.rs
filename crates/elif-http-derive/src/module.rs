@@ -11,7 +11,7 @@
 
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::{
     parse::{Parse, ParseStream, Result},
     parse_macro_input,
@@ -267,73 +267,75 @@ fn generate_module_descriptor_method(
     struct_name: &Ident,
     module_args: &ModuleArgs,
 ) -> Result<proc_macro2::TokenStream> {
-    let providers_code = generate_providers_registration(&module_args.providers)?;
-    let controllers_code = generate_controllers_registration(&module_args.controllers)?;
-    let imports_code = generate_imports_registration(&module_args.imports)?;
-    let exports_code = generate_exports_registration(&module_args.exports)?;
-    
-    let descriptor_name = quote::format_ident!("{}ModuleDescriptor", struct_name);
+    let providers_code = generate_providers_descriptors(&module_args.providers)?;
+    let controllers_code = generate_controllers_descriptors(&module_args.controllers)?;
+    let imports_list = generate_imports_list(&module_args.imports)?;
+    let exports_list = generate_exports_list(&module_args.exports)?;
+    let auto_configure_code = generate_auto_configure_function(struct_name, module_args)?;
     
     Ok(quote! {
         impl #struct_name {
             /// Get the module descriptor for this module
-            /// Note: This is a stub implementation for Epic 1 (Parser Foundation)
-            /// Full integration with elif-core will be implemented in Epic 4 (Runtime Integration)
-            pub fn module_descriptor() -> #descriptor_name {
-                let mut descriptor = #descriptor_name::new(stringify!(#struct_name));
+            pub fn module_descriptor() -> elif_core::modules::ModuleDescriptor {
+                use elif_core::modules::{ModuleDescriptor, ServiceDescriptor, ControllerDescriptor, ServiceLifecycle};
+                use std::any::TypeId;
                 
+                let mut descriptor = ModuleDescriptor::new(stringify!(#struct_name));
+                
+                // Add providers
                 #providers_code
+                
+                // Add controllers  
                 #controllers_code
-                #imports_code
-                #exports_code
+                
+                // Set imports and exports
+                descriptor = descriptor
+                    .with_imports(#imports_list)
+                    .with_exports(#exports_list);
                 
                 descriptor
             }
         }
         
-        /// Stub implementation for module descriptor - will be replaced with real elif-core types in Epic 4
-        #[derive(Debug, Clone)]
-        pub struct #descriptor_name {
-            name: String,
-        }
-        
-        impl #descriptor_name {
-            pub fn new(name: &str) -> Self {
-                Self {
-                    name: name.to_string(),
-                }
+        impl elif_core::modules::ModuleAutoConfiguration for #struct_name {
+            fn module_descriptor() -> elif_core::modules::ModuleDescriptor {
+                Self::module_descriptor()
             }
             
-            pub fn name(&self) -> &str {
-                &self.name
+            fn auto_configure(container: &mut elif_core::container::IocContainer) -> Result<(), elif_core::modules::ModuleError> {
+                #auto_configure_code
             }
         }
     })
 }
 
-/// Generate provider registration code  
-#[allow(unused_variables)] // Variables are used via quote! macro interpolation
-fn generate_providers_registration(providers: &[ProviderDef]) -> Result<proc_macro2::TokenStream> {
+/// Generate provider descriptors for module descriptor creation
+fn generate_providers_descriptors(providers: &[ProviderDef]) -> Result<proc_macro2::TokenStream> {
     if providers.is_empty() {
         return Ok(quote! {
             // No providers specified
         });
     }
     
-    let mut comments = Vec::new();
+    let mut descriptor_calls = Vec::new();
     
     for provider in providers {
-        let comment = match &provider.service_type {
+        let descriptor_call = match &provider.service_type {
             ProviderType::Concrete(service_type) => {
                 match &provider.name {
                     Some(name) => {
                         quote! {
-                            // Provider: #service_type (named: #name)
+                            descriptor = descriptor.with_provider(
+                                ServiceDescriptor::new::<#service_type>(stringify!(#service_type), ServiceLifecycle::default())
+                                    .with_name(#name)
+                            );
                         }
                     },
                     None => {
                         quote! {
-                            // Provider: #service_type
+                            descriptor = descriptor.with_provider(
+                                ServiceDescriptor::new::<#service_type>(stringify!(#service_type), ServiceLifecycle::default())
+                            );
                         }
                     }
                 }
@@ -344,12 +346,20 @@ fn generate_providers_registration(providers: &[ProviderDef]) -> Result<proc_mac
                         match &provider.name {
                             Some(name) => {
                                 quote! {
-                                    // Provider: dyn #trait_type => #impl_type (named: #name)
+                                    descriptor = descriptor.with_provider(
+                                        ServiceDescriptor::trait_mapping::<#trait_type, #impl_type>(
+                                            stringify!(#trait_type), stringify!(#impl_type), ServiceLifecycle::default()
+                                        ).with_name(#name)
+                                    );
                                 }
                             },
                             None => {
                                 quote! {
-                                    // Provider: dyn #trait_type => #impl_type
+                                    descriptor = descriptor.with_provider(
+                                        ServiceDescriptor::trait_mapping::<#trait_type, #impl_type>(
+                                            stringify!(#trait_type), stringify!(#impl_type), ServiceLifecycle::default()
+                                        )
+                                    );
                                 }
                             }
                         }
@@ -364,71 +374,164 @@ fn generate_providers_registration(providers: &[ProviderDef]) -> Result<proc_mac
             }
         };
         
-        comments.push(comment);
+        descriptor_calls.push(descriptor_call);
     }
     
     Ok(quote! {
-        #(#comments)*
+        #(#descriptor_calls)*
     })
 }
 
-/// Generate controller registration code
-#[allow(unused_variables)] // Variables are used via quote! macro interpolation
-fn generate_controllers_registration(controllers: &[Type]) -> Result<proc_macro2::TokenStream> {
+/// Generate controller descriptors for module descriptor creation
+fn generate_controllers_descriptors(controllers: &[Type]) -> Result<proc_macro2::TokenStream> {
     if controllers.is_empty() {
         return Ok(quote! {
             // No controllers specified
         });
     }
     
-    let comments: Vec<_> = controllers.iter().map(|controller| {
+    let descriptor_calls: Vec<_> = controllers.iter().map(|controller| {
         quote! {
-            // Controller: #controller
+            descriptor = descriptor.with_controller(
+                ControllerDescriptor::new::<#controller>(stringify!(#controller))
+            );
         }
     }).collect();
     
     Ok(quote! {
-        #(#comments)*
+        #(#descriptor_calls)*
     })
 }
 
-/// Generate imports registration code  
-#[allow(unused_variables)] // Variables are used via quote! macro interpolation
-fn generate_imports_registration(imports: &[Type]) -> Result<proc_macro2::TokenStream> {
+/// Generate imports list for module descriptor
+fn generate_imports_list(imports: &[Type]) -> Result<proc_macro2::TokenStream> {
     if imports.is_empty() {
-        return Ok(quote! {
-            // No imports specified
-        });
+        return Ok(quote! { vec![] });
     }
     
-    let comments: Vec<_> = imports.iter().map(|import| {
-        quote! {
-            // Import: #import
-        }
+    let import_strings: Vec<_> = imports.iter().map(|import| {
+        quote! { stringify!(#import).to_string() }
     }).collect();
     
     Ok(quote! {
-        #(#comments)*
+        vec![#(#import_strings),*]
     })
 }
 
-/// Generate exports registration code
-#[allow(unused_variables)] // Variables are used via quote! macro interpolation
-fn generate_exports_registration(exports: &[Type]) -> Result<proc_macro2::TokenStream> {
+/// Generate exports list for module descriptor
+fn generate_exports_list(exports: &[Type]) -> Result<proc_macro2::TokenStream> {
     if exports.is_empty() {
-        return Ok(quote! {
-            // No exports specified
-        });
+        return Ok(quote! { vec![] });
     }
     
-    let comments: Vec<_> = exports.iter().map(|export| {
-        quote! {
-            // Export: #export
-        }
+    let export_strings: Vec<_> = exports.iter().map(|export| {
+        quote! { stringify!(#export).to_string() }
     }).collect();
     
     Ok(quote! {
-        #(#comments)*
+        vec![#(#export_strings),*]
+    })
+}
+
+/// Generate auto-configure function for IoC container integration
+fn generate_auto_configure_function(
+    _struct_name: &Ident,
+    module_args: &ModuleArgs,
+) -> Result<proc_macro2::TokenStream> {
+    let mut configure_calls = Vec::new();
+    
+    // First, configure imported modules (dependencies must be resolved first)
+    for import in &module_args.imports {
+        configure_calls.push(quote! {
+            <#import as elif_core::modules::ModuleAutoConfiguration>::auto_configure(container)?;
+        });
+    }
+    
+    // Configure providers with lifecycle and dependency metadata
+    for provider in &module_args.providers {
+        let configure_call = match &provider.service_type {
+            ProviderType::Concrete(service_type) => {
+                match &provider.name {
+                    Some(name) => {
+                        quote! {
+                            // Bind named concrete service with singleton scope by default
+                            container.bind_named::<#service_type, #service_type>(#name);
+                        }
+                    },
+                    None => {
+                        quote! {
+                            // Bind concrete service with singleton scope by default
+                            container.bind::<#service_type, #service_type>();
+                        }
+                    }
+                }
+            },
+            ProviderType::Trait(trait_type) => {
+                if let Some(impl_type) = &provider.implementation {
+                    match &provider.name {
+                        Some(name) => {
+                            // Generate a token type based on trait name
+                            let _token_name = quote::format_ident!("{}Token", 
+                                trait_type.to_token_stream().to_string().replace(" ", ""));
+                            quote! {
+                                // Bind trait implementation with token-based resolution (named)
+                                // For now, we'll use direct concrete binding until token system is fully integrated
+                                container.bind_named::<#impl_type, #impl_type>(#name);
+                                
+                                // TODO: Once token system is integrated:
+                                // struct #_token_name;
+                                // impl ServiceToken for #_token_name { type Service = dyn #trait_type; }
+                                // container.bind_token_named::<#_token_name, #impl_type>(#name)?;
+                            }
+                        },
+                        None => {
+                            let _token_name = quote::format_ident!("{}Token", 
+                                trait_type.to_token_stream().to_string().replace(" ", ""));
+                            quote! {
+                                // Bind trait implementation with token-based resolution
+                                // For now, we'll use direct concrete binding until token system is fully integrated
+                                container.bind::<#impl_type, #impl_type>();
+                                
+                                // TODO: Once token system is integrated:
+                                // struct #_token_name;
+                                // impl ServiceToken for #_token_name { type Service = dyn #trait_type; }
+                                // container.bind_token::<#_token_name, #impl_type>()?;
+                            }
+                        }
+                    }
+                } else {
+                    return Err(Error::new_spanned(
+                        trait_type,
+                        "Trait providers must specify implementation type: dyn Trait => Implementation"
+                    ));
+                }
+            }
+        };
+        
+        configure_calls.push(configure_call);
+    }
+    
+    // Configure controllers with dependency injection
+    for controller in &module_args.controllers {
+        configure_calls.push(quote! {
+            // Bind controller as singleton for injection
+            container.bind::<#controller, #controller>();
+        });
+    }
+    
+    Ok(quote! {
+        use elif_core::modules::{ModuleError, ModuleAutoConfiguration};
+        use elif_core::container::ServiceBinder; // Import the binding trait
+        
+        // Build container if not already built to enable binding
+        if !container.is_built() {
+            // We need to defer building until all modules are configured
+            // The container will be built by the application after all modules are registered
+        }
+        
+        #(#configure_calls)*
+        
+        Ok(())
     })
 }
 
@@ -436,94 +539,112 @@ fn generate_exports_registration(exports: &[Type]) -> Result<proc_macro2::TokenS
 fn generate_application_composition(
     composition_args: ModuleCompositionArgs,
 ) -> Result<proc_macro2::TokenStream> {
-    let modules_registration = generate_modules_registration(&composition_args.modules)?;
-    let overrides_registration = generate_overrides_registration(&composition_args.overrides)?;
+    let modules_descriptors = generate_modules_descriptors(&composition_args.modules)?;
+    let overrides_descriptors = generate_composition_overrides(&composition_args.overrides)?;
     
     Ok(quote! {
         {
-            // Stub implementation for Epic 1 (Parser Foundation)
-            // Full runtime integration will be implemented in Epic 4
+            use elif_core::modules::{ModuleComposition, ModuleDescriptor, ServiceDescriptor};
             
-            #modules_registration
-            #overrides_registration
+            let mut composition = ModuleComposition::new();
             
-            // Return placeholder
-            ()
+            // Add modules to composition
+            #modules_descriptors
+            
+            // Add overrides
+            #overrides_descriptors
+            
+            // Compose and return the final descriptor
+            composition.compose().unwrap()
         }
     })
 }
 
-/// Generate modules registration for application composition
-#[allow(unused_variables)] // Variables are used via quote! macro interpolation
-fn generate_modules_registration(modules: &[Type]) -> Result<proc_macro2::TokenStream> {
-    let comments: Vec<_> = modules.iter().map(|module| {
+/// Generate module descriptors for application composition
+fn generate_modules_descriptors(modules: &[Type]) -> Result<proc_macro2::TokenStream> {
+    if modules.is_empty() {
+        return Ok(quote! {
+            // No modules specified
+        });
+    }
+    
+    let descriptor_calls: Vec<_> = modules.iter().map(|module| {
         quote! {
-            // Module: #module
+            composition = composition.with_module(#module::module_descriptor());
         }
     }).collect();
     
     Ok(quote! {
-        #(#comments)*
+        #(#descriptor_calls)*
     })
 }
 
-/// Generate overrides registration for application composition
-#[allow(unused_variables)] // Variables are used via quote! macro interpolation
-fn generate_overrides_registration(overrides: &[ProviderDef]) -> Result<proc_macro2::TokenStream> {
+/// Generate override descriptors for application composition
+fn generate_composition_overrides(overrides: &[ProviderDef]) -> Result<proc_macro2::TokenStream> {
     if overrides.is_empty() {
         return Ok(quote! {
             // No overrides specified
         });
     }
     
-    let mut comments = Vec::new();
+    let mut override_descriptors = Vec::new();
     
     for override_def in overrides {
-        let comment = match &override_def.service_type {
+        let override_descriptor = match &override_def.service_type {
             ProviderType::Concrete(service_type) => {
+                let service_name = quote! { stringify!(#service_type) }.to_string();
                 match &override_def.name {
                     Some(name) => {
                         quote! {
-                            // Override: #service_type (named: #name)
+                            ServiceDescriptor::new::<#service_type>(#service_name, ServiceLifecycle::default())
+                                .with_name(#name)
                         }
                     },
                     None => {
                         quote! {
-                            // Override: #service_type
+                            ServiceDescriptor::new::<#service_type>(#service_name, ServiceLifecycle::default())
                         }
                     }
                 }
             },
             ProviderType::Trait(trait_type) => {
-                match &override_def.implementation {
-                    Some(impl_type) => {
-                        match &override_def.name {
-                            Some(name) => {
-                                quote! {
-                                    // Override: dyn #trait_type => #impl_type (named: #name)
-                                }
-                            },
-                            None => {
-                                quote! {
-                                    // Override: dyn #trait_type => #impl_type
-                                }
+                if let Some(impl_type) = &override_def.implementation {
+                    let service_name = quote! { stringify!(#trait_type) }.to_string();
+                    let impl_name = quote! { stringify!(#impl_type) }.to_string();
+                    match &override_def.name {
+                        Some(name) => {
+                            quote! {
+                                ServiceDescriptor::trait_mapping::<#trait_type, #impl_type>(
+                                    #service_name, #impl_name, ServiceLifecycle::default()
+                                ).with_name(#name)
+                            }
+                        },
+                        None => {
+                            quote! {
+                                ServiceDescriptor::trait_mapping::<#trait_type, #impl_type>(
+                                    #service_name, #impl_name, ServiceLifecycle::default()
+                                )
                             }
                         }
-                    },
-                    None => {
-                        return Err(Error::new_spanned(
-                            trait_type,
-                            "Trait overrides must specify implementation type: dyn Trait => Implementation"
-                        ));
                     }
+                } else {
+                    return Err(Error::new_spanned(
+                        trait_type,
+                        "Trait overrides must specify implementation type: dyn Trait => Implementation"
+                    ));
                 }
             }
         };
         
-        comments.push(comment);
+        override_descriptors.push(override_descriptor);
     }
     
     Ok(quote! {
-        #(#comments)*
+        use elif_core::modules::ServiceLifecycle;
+        
+        let overrides = vec![
+            #(#override_descriptors),*
+        ];
+        composition = composition.with_overrides(overrides);
     })
 }
