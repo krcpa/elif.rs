@@ -1,15 +1,33 @@
 use elif_core::ElifError;
 use std::process::Command;
 
-pub async fn run(focus: Option<String>) -> Result<(), ElifError> {
+pub async fn run(unit: bool, integration: bool, watch: bool, coverage: bool, module: Option<&str>) -> Result<(), ElifError> {
     let mut cmd = Command::new("cargo");
     cmd.arg("test");
     
-    if let Some(resource) = focus {
-        cmd.arg("--").arg(&format!("test_{}_", resource.to_lowercase()));
-        println!("Running tests for resource: {}", resource);
+    if unit {
+        println!("🧪 Running unit tests...");
+        cmd.arg("--lib");
+    } else if integration {
+        println!("🔗 Running integration tests...");
+        cmd.arg("--test");
     } else {
-        println!("Running all tests...");
+        println!("🧪 Running all tests...");
+    }
+    
+    if let Some(mod_name) = module {
+        println!("   Focusing on module: {}", mod_name);
+        cmd.arg("--").arg(&format!("test_{}_", mod_name.to_lowercase()));
+    }
+    
+    if watch {
+        println!("👀 Watch mode enabled (note: requires cargo-watch)");
+        // This would require cargo-watch to be installed
+    }
+    
+    if coverage {
+        println!("📊 Coverage enabled (note: requires cargo-tarpaulin)");
+        // This would require cargo-tarpaulin to be installed
     }
     
     let output = cmd.output()

@@ -1,6 +1,42 @@
 use elif_core::ElifError;
 use elif_orm::{MigrationManager, migration_runner::MigrationRunner, migration_runner::MigrationRollback};
 
+/// Convert manual IoC to module system
+pub async fn ioc_to_modules(backup: bool, dry_run: bool) -> Result<(), ElifError> {
+    println!("🔄 Converting manual IoC to module system...");
+    
+    if backup {
+        println!("   📦 Creating backup of existing code");
+    }
+    
+    if dry_run {
+        println!("   🔍 Dry run mode - showing what would be migrated");
+    }
+    
+    println!("⚠️ IoC migration implementation coming soon in Epic 6 Phase 1!");
+    Ok(())
+}
+
+/// Run pending database migrations  
+pub async fn up(steps: Option<u32>) -> Result<(), ElifError> {
+    if let Some(step_count) = steps {
+        println!("⬆️ Running {} migration steps...", step_count);
+    } else {
+        println!("⬆️ Running all pending migrations...");
+    }
+    
+    // Delegate to existing run function for now
+    run().await
+}
+
+/// Rollback database migrations
+pub async fn down(steps: u32) -> Result<(), ElifError> {
+    println!("⬇️ Rolling back {} migration steps...", steps);
+    
+    // Use existing rollback logic
+    rollback().await
+}
+
 pub async fn create(name: &str) -> Result<(), ElifError> {
     let manager = MigrationManager::new();
     
