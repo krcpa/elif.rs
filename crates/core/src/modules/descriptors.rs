@@ -523,7 +523,8 @@ impl ModuleDependencyValidator {
             for import in &module.imports {
                 if recursion_stack.contains(import) {
                     // Found a cycle - return the path
-                    let cycle_start = path.iter().position(|m| m == import).unwrap_or(0);
+                    // If import is in recursion_stack, it must be in the current path
+                    let cycle_start = path.iter().position(|m| m == import).unwrap();
                     let mut cycle = path[cycle_start..].to_vec();
                     cycle.push(import.clone()); // Complete the cycle
                     return Err(cycle);
