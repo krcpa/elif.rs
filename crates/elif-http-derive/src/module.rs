@@ -1,13 +1,47 @@
 //! Module system macro implementation
 //! 
-//! Provides the `#[module(...)]` attribute macro and `module! { ... }` function-like macro
-//! for defining dependency injection modules and application composition.
+//! Provides comprehensive macros for defining dependency injection modules:
 //!
-//! Features:
-//! - Provider definitions with trait mappings: `EmailService => SmtpEmailService @ "smtp"`
-//! - Controller registration: `controllers: [Controller1, Controller2]`
-//! - Module imports/exports: `imports: [Module], exports: [Service]`
-//! - Application composition: `app! { modules: [Module1, Module2] }`
+//! ## Macros
+//! 
+//! - `#[module(...)]`: Define modules with providers, controllers, imports, exports
+//! - `module_composition!`: Compose multiple modules into applications  
+//! - `demo_module!`: Laravel-style simplified syntax for rapid development
+//!
+//! ## Features
+//! 
+//! - **Provider definitions**: Concrete services and trait mappings
+//! - **Controller registration**: Automatic dependency injection for controllers
+//! - **Module composition**: Import/export system for module dependencies
+//! - **Compile-time validation**: Type-safe dependency resolution
+//! - **IDE support**: Full rust-analyzer integration with autocompletion
+//!
+//! ## Examples
+//!
+//! ```rust
+//! use elif_http_derive::{module, demo_module, module_composition};
+//!
+//! // Full syntax
+//! #[module(
+//!     providers: [UserService, dyn EmailService => SmtpEmailService @ "smtp"],
+//!     controllers: [UserController],
+//!     exports: [UserService, dyn EmailService]
+//! )]
+//! pub struct UserModule;
+//!
+//! // Demo DSL syntax  
+//! let simple_module = demo_module! {
+//!     services: [UserService, EmailService],
+//!     controllers: [UserController],
+//!     middleware: ["cors", "auth"]
+//! };
+//!
+//! // Application composition
+//! let app = module_composition! {
+//!     modules: [UserModule, AuthModule],
+//!     overrides: [dyn EmailService => MockEmailService @ "test"]
+//! };
+//! ```
 
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
@@ -43,6 +77,27 @@ pub fn module_composition_impl(input: TokenStream) -> TokenStream {
     };
     
     match generate_application_composition(composition_args) {
+        Ok(result) => result.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Demo DSL sugar syntax implementation
+/// Supports Laravel-style simplified syntax for common cases:
+/// ```
+/// module! {
+///     services: [UserService, EmailService],
+///     controllers: [UserController, PostController],
+///     middleware: ["cors", "logging"]
+/// }
+/// ```
+pub fn demo_dsl_impl(input: TokenStream) -> TokenStream {
+    let demo_args = match syn::parse::<DemoDslArgs>(input) {
+        Ok(args) => args,
+        Err(err) => return err.to_compile_error().into(),
+    };
+    
+    match generate_demo_dsl_expansion(demo_args) {
         Ok(result) => result.into(),
         Err(err) => err.to_compile_error().into(),
     }
@@ -87,7 +142,16 @@ impl Parse for ModuleArgs {
                     return Err(Error::new_spanned(
                         key,
                         format!(
-                            "Unknown module section '{}'. Valid sections are: providers, controllers, imports, exports",
+                            "Unknown module section '{}'. Valid sections are: providers, controllers, imports, exports.\n\
+                            \n\
+                            💡 Suggestions:\n\
+                            • Use 'providers: [ServiceType]' for concrete services\n\
+                            • Use 'providers: [dyn Trait => Implementation]' for trait mappings\n\
+                            • Use 'controllers: [ControllerType]' for HTTP controllers\n\
+                            • Use 'imports: [ModuleType]' for module dependencies\n\
+                            • Use 'exports: [ServiceType]' for services available to other modules\n\
+                            \n\
+                            📖 See: https://docs.elif.rs/modules/module-definition",
                             key_str
                         )
                     ));
@@ -191,11 +255,28 @@ fn parse_type_list(input: ParseStream) -> Result<Vec<Type>> {
     Ok(types.into_iter().collect())
 }
 
+/// Parse a list of strings: ["string1", "string2", ...]
+fn parse_string_list(input: ParseStream) -> Result<Vec<String>> {
+    let content;
+    let _bracket = syn::bracketed!(content in input);
+    let strings: Punctuated<LitStr, Comma> = content.parse_terminated(|input| input.parse::<LitStr>(), Comma)?;
+    Ok(strings.into_iter().map(|s| s.value()).collect())
+}
+
 /// Arguments for module composition macro: module! { ... }
 #[derive(Debug, Clone)]
 pub struct ModuleCompositionArgs {
     pub modules: Vec<Type>,
     pub overrides: Vec<ProviderDef>,
+}
+
+/// Arguments for demo DSL sugar syntax: module! { ... }
+/// Supports Laravel-style simplified syntax
+#[derive(Debug, Clone, Default)]
+pub struct DemoDslArgs {
+    pub services: Vec<Type>,
+    pub controllers: Vec<Type>, 
+    pub middleware: Vec<String>,
 }
 
 impl Parse for ModuleCompositionArgs {
@@ -219,7 +300,19 @@ impl Parse for ModuleCompositionArgs {
                     return Err(Error::new_spanned(
                         key,
                         format!(
-                            "Unknown composition section '{}'. Valid sections are: modules, overrides",
+                            "Unknown composition section '{}'. Valid sections are: modules, overrides.\n\
+                            \n\
+                            💡 Suggestions:\n\
+                            • Use 'modules: [ModuleType1, ModuleType2]' to compose multiple modules\n\
+                            • Use 'overrides: [Service => Implementation]' to override module bindings\n\
+                            \n\
+                            📖 Example:\n\
+                            module_composition! {{\n\
+                                modules: [UserModule, AuthModule],\n\
+                                overrides: [dyn EmailService => MockEmailService @ \"test\"]\n\
+                            }}\n\
+                            \n\
+                            📖 See: https://docs.elif.rs/modules/application-composition",
                             key_str
                         )
                     ));
@@ -241,6 +334,68 @@ impl Parse for ModuleCompositionArgs {
         Ok(ModuleCompositionArgs {
             modules,
             overrides,
+        })
+    }
+}
+
+impl Parse for DemoDslArgs {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let mut services = Vec::new();
+        let mut controllers = Vec::new(); 
+        let mut middleware = Vec::new();
+        
+        while !input.is_empty() {
+            let key: Ident = input.parse()?;
+            let _colon: Token![:] = input.parse()?;
+            
+            let key_str = key.to_string();
+            match key_str.as_str() {
+                "services" => {
+                    services = parse_type_list(input)?;
+                },
+                "controllers" => {
+                    controllers = parse_type_list(input)?;
+                },
+                "middleware" => {
+                    middleware = parse_string_list(input)?;
+                },
+                _ => {
+                    return Err(Error::new_spanned(
+                        key,
+                        format!(
+                            "Unknown demo DSL section '{}'. Valid sections are: services, controllers, middleware.\n\
+                            \n\
+                            💡 Demo DSL Suggestions:\n\
+                            • Use 'services: [ServiceType1, ServiceType2]' for concrete services\n\
+                            • Use 'controllers: [ControllerType1, ControllerType2]' for HTTP controllers\n\
+                            • Use 'middleware: [\"cors\", \"auth\", \"logging\"]' for middleware stack\n\
+                            \n\
+                            📖 Example:\n\
+                            demo_module! {{\n\
+                                services: [UserService, EmailService],\n\
+                                controllers: [UserController],\n\
+                                middleware: [\"cors\", \"auth\"]\n\
+                            }}\n\
+                            \n\
+                            ⚠️ Note: Demo DSL is simplified syntax. For trait mappings and imports/exports,\n\
+                            use the full #[module(...)] attribute syntax instead.\n\
+                            \n\
+                            📖 See: https://docs.elif.rs/modules/demo-dsl-guide",
+                            key_str
+                        )
+                    ));
+                }
+            }
+            
+            if !input.is_empty() {
+                let _comma: Option<Comma> = input.parse().ok();
+            }
+        }
+        
+        Ok(DemoDslArgs {
+            services,
+            controllers,
+            middleware,
         })
     }
 }
@@ -367,7 +522,23 @@ fn generate_providers_descriptors(providers: &[ProviderDef]) -> Result<proc_macr
                     None => {
                         return Err(Error::new_spanned(
                             trait_type,
-                            "Trait providers must specify implementation type: dyn Trait => Implementation"
+                            "Trait providers must specify implementation type: dyn Trait => Implementation.\n\
+                            \n\
+                            💡 Suggestions:\n\
+                            • Use 'dyn EmailService => SmtpEmailService' for trait mapping\n\
+                            • Use 'dyn EmailService => SmtpEmailService @ \"smtp\"' for named mapping\n\
+                            • Use 'EmailService => SmtpEmailService' (dyn is optional in simplified syntax)\n\
+                            \n\
+                            📖 Examples:\n\
+                            #[module(\n\
+                                providers: [\n\
+                                    UserService,  // Concrete service\n\
+                                    dyn EmailService => SmtpEmailService,  // Trait mapping\n\
+                                    dyn EmailService => MockEmailService @ \"test\"  // Named mapping\n\
+                                ]\n\
+                            )]\n\
+                            \n\
+                            📖 See: https://docs.elif.rs/modules/dependency-injection"
                         ));
                     }
                 }
@@ -646,5 +817,61 @@ fn generate_composition_overrides(overrides: &[ProviderDef]) -> Result<proc_macr
             #(#override_descriptors),*
         ];
         composition = composition.with_overrides(overrides);
+    })
+}
+
+/// Generate expanded code for demo DSL sugar syntax
+/// Converts simplified syntax to full #[module(...)] form
+fn generate_demo_dsl_expansion(demo_args: DemoDslArgs) -> Result<proc_macro2::TokenStream> {
+    // Convert services to providers (concrete services)
+    let providers: Vec<ProviderDef> = demo_args.services.into_iter().map(|service| {
+        ProviderDef {
+            service_type: ProviderType::Concrete(service),
+            implementation: None,
+            name: None,
+        }
+    }).collect();
+    
+    // Create a module descriptor with the expanded providers
+    let module_args = ModuleArgs {
+        providers,
+        controllers: demo_args.controllers,
+        imports: Vec::new(), // Demo DSL doesn't support imports yet
+        exports: Vec::new(), // Demo DSL doesn't support exports yet
+    };
+    
+    // Generate a temporary struct name for the module
+    let struct_name = Ident::new("DemoDslModule", Span::call_site());
+    
+    let module_descriptor_impl = generate_module_descriptor_method(&struct_name, &module_args)?;
+    
+    // Generate middleware application code (simplified for demo)
+    let middleware_code = if demo_args.middleware.is_empty() {
+        quote! { /* No middleware specified */ }
+    } else {
+        let middleware_names = &demo_args.middleware;
+        quote! {
+            // Demo DSL middleware (simplified - would integrate with elif-http middleware system)
+            let middleware_stack = vec![#(#middleware_names.to_string()),*];
+            println!("Demo DSL: Would apply middleware: {:?}", middleware_stack);
+        }
+    };
+    
+    Ok(quote! {
+        {
+            // Generate a temporary module struct for the demo DSL
+            struct #struct_name;
+            
+            #module_descriptor_impl
+            
+            // Create the module descriptor
+            let descriptor = #struct_name::module_descriptor();
+            
+            // Apply middleware (demo implementation)
+            #middleware_code
+            
+            // Return the descriptor for use in applications
+            descriptor
+        }
     })
 }
