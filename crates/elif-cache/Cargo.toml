@@ -39,7 +39,7 @@ futures = "0.3"
 redis = { version = "0.23", features = ["tokio-comp", "connection-manager"], optional = true }
 
 # Configuration
-elif-core = { version = "0.5.0", path = "../core" }
+elif-core = { version = "0.6.0", path = "../core" }
 service-builder = "0.3.0"
 
 # HTTP integration (temporarily disabled for initial publishing)

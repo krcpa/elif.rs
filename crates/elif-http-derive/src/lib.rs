@@ -13,9 +13,13 @@
 //! - `#[resource]`: Automatic RESTful resource registration
 //! - `#[group]`: Route grouping with shared attributes
 //! - `#[module]`: Module definition for dependency injection
-//! - `app!`: Application composition macro
+//! - `module_composition!`: Module composition macro
+//! - `demo_module!`: Laravel-style simplified module syntax
 
 use proc_macro::TokenStream;
+
+// Re-export quote for debug tools
+use quote;
 
 // Module declarations
 mod controller;
@@ -26,6 +30,7 @@ mod params;
 mod routes;
 mod groups;
 mod module;
+mod debug;
 mod utils;
 
 #[cfg(test)]
@@ -137,4 +142,30 @@ pub fn module(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn app(input: TokenStream) -> TokenStream {
     module::module_composition_impl(input)
+}
+
+/// Module composition macro for building applications from modules
+#[proc_macro]
+pub fn module_composition(input: TokenStream) -> TokenStream {
+    module::module_composition_impl(input)
+}
+
+/// Demo DSL sugar syntax for simplified module definition
+#[proc_macro]
+pub fn demo_module(input: TokenStream) -> TokenStream {
+    module::demo_dsl_impl(input)
+}
+
+/// Module debug and visualization tools
+#[proc_macro]
+pub fn debug_modules(_input: TokenStream) -> TokenStream {
+    let debug_utils = debug::generate_analysis_macros();
+    let health_check = debug::generate_health_check_utils();
+    let visualization = debug::generate_dependency_graph_visualization();
+    
+    quote::quote! {
+        #debug_utils
+        #health_check
+        #visualization
+    }.into()
 }
