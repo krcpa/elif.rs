@@ -1,0 +1,29 @@
+error[E0277]: the trait bound `EmailServiceToken: ServiceToken` is not satisfied
+  --> tests/ui/fail/inject_tokens.rs:16:1
+   |
+16 | / #[inject(
+17 | |     // Regular service injection
+18 | |     user_service: UserService,
+19 | |     
+20 | |     // Token-based injection (should be detected by "Token" suffix)
+21 | |     email_service: &EmailServiceToken,
+22 | |     notifications: &NotificationToken
+23 | | )]
+   | |__^ the trait `ServiceToken` is not implemented for `EmailServiceToken`
+   |
+   = note: this error originates in the attribute macro `inject` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `NotificationToken: ServiceToken` is not satisfied
+  --> tests/ui/fail/inject_tokens.rs:16:1
+   |
+16 | / #[inject(
+17 | |     // Regular service injection
+18 | |     user_service: UserService,
+19 | |     
+20 | |     // Token-based injection (should be detected by "Token" suffix)
+21 | |     email_service: &EmailServiceToken,
+22 | |     notifications: &NotificationToken
+23 | | )]
+   | |__^ the trait `ServiceToken` is not implemented for `NotificationToken`
+   |
+   = note: this error originates in the attribute macro `inject` (in Nightly builds, run with -Z macro-backtrace for more info)

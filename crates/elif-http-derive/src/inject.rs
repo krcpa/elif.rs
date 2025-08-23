@@ -149,14 +149,26 @@ fn is_option_type(ty: &Type) -> bool {
 }
 
 /// Helper function to check if a type is a reference to a token (&TokenType)
+/// 
+/// Uses a convention-based approach: the referenced type name must end with "Token"
+/// to be considered a service token. This prevents normal reference fields from being
+/// incorrectly treated as token references.
+/// 
+/// ## Examples
+/// - `&EmailNotificationToken` → `true` (ends with "Token")
+/// - `&DatabaseToken` → `true` (ends with "Token")  
+/// - `&Config` → `false` (doesn't end with "Token")
+/// - `&str` → `false` (doesn't end with "Token")
+/// - `Config` → `false` (not a reference)
 fn is_token_reference(ty: &Type) -> bool {
     if let Type::Reference(type_ref) = ty {
-        // Check if it's a simple reference to a type (not a complex path)
-        if let Type::Path(_type_path) = type_ref.elem.as_ref() {
-            // For now, we assume any reference type is a token reference
-            // In a more sophisticated implementation, we would check if the type
-            // implements the ServiceToken trait, but that's not available at compile time
-            return true;
+        if let Type::Path(type_path) = type_ref.elem.as_ref() {
+            // Get the last segment of the path (the actual type name)
+            if let Some(segment) = type_path.path.segments.last() {
+                let type_name = segment.ident.to_string();
+                // Convention: service tokens must end with "Token"
+                return type_name.ends_with("Token");
+            }
         }
     }
     false
@@ -448,3 +460,64 @@ fn generate_from_ioc_container_method(
 
 // Generate error type as part of the generated code rather than defining it here
 // This allows each generated controller to have its own error handling
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn test_is_token_reference_with_token_suffix() {
+        // Valid token references (end with "Token")
+        let email_token: Type = parse_quote!(&EmailNotificationToken);
+        assert!(is_token_reference(&email_token));
+        
+        let db_token: Type = parse_quote!(&DatabaseToken);
+        assert!(is_token_reference(&db_token));
+        
+        let user_token: Type = parse_quote!(&UserServiceToken);
+        assert!(is_token_reference(&user_token));
+    }
+    
+    #[test]
+    fn test_is_token_reference_without_token_suffix() {
+        // Invalid token references (don't end with "Token")
+        let config: Type = parse_quote!(&Config);
+        assert!(!is_token_reference(&config));
+        
+        let connection: Type = parse_quote!(&DatabaseConnection);
+        assert!(!is_token_reference(&connection));
+        
+        let str_ref: Type = parse_quote!(&str);
+        assert!(!is_token_reference(&str_ref));
+        
+        let service: Type = parse_quote!(&UserService);
+        assert!(!is_token_reference(&service));
+    }
+    
+    #[test] 
+    fn test_is_token_reference_non_references() {
+        // Non-reference types should never be considered tokens
+        let owned_token: Type = parse_quote!(EmailNotificationToken);
+        assert!(!is_token_reference(&owned_token));
+        
+        let owned_service: Type = parse_quote!(UserService);
+        assert!(!is_token_reference(&owned_service));
+        
+        let arc_service: Type = parse_quote!(Arc<UserService>);
+        assert!(!is_token_reference(&arc_service));
+    }
+    
+    #[test]
+    fn test_is_token_reference_with_paths() {
+        // Test with module paths
+        let module_token: Type = parse_quote!(&crate::tokens::EmailNotificationToken);
+        assert!(is_token_reference(&module_token));
+        
+        let module_non_token: Type = parse_quote!(&crate::config::DatabaseConfig);
+        assert!(!is_token_reference(&module_non_token));
+        
+        let std_ref: Type = parse_quote!(&std::collections::HashMap<String, String>);
+        assert!(!is_token_reference(&std_ref));
+    }
+}

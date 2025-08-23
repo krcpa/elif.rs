@@ -9,6 +9,13 @@
 //! represent specific services or traits, enabling dependency inversion through
 //! token-based resolution rather than concrete type dependencies.
 //!
+//! ## Naming Convention
+//!
+//! **Important**: Service tokens should follow the naming convention of ending with "Token"
+//! (e.g., `EmailServiceToken`, `DatabaseToken`). This convention is used by the `#[inject]` 
+//! macro to automatically detect token references (`&TokenType`) and differentiate them from 
+//! regular reference fields, preventing incorrect macro expansion and compiler errors.
+//!
 //! ## Usage
 //!
 //! ```rust
