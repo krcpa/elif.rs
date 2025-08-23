@@ -519,11 +519,9 @@ fn validate_method_consistency(
                     
                     // Tuple destructuring: `(a, b): (Type1, Type2)`
                     Pat::Tuple(_) => {
-                        return Err(format!(
-                            "Unsupported tuple destructuring pattern in parameter. \
+                        return Err("Unsupported tuple destructuring pattern in parameter. \
                             Hint: Use individual parameters instead of tuple destructuring. \
-                            Example: Change '(a, b): (Type1, Type2)' to 'a: Type1, b: Type2'."
-                        ));
+                            Example: Change '(a, b): (Type1, Type2)' to 'a: Type1, b: Type2'.".to_string());
                     }
                     
                     // Struct destructuring: `User { name, .. }: User`
@@ -595,10 +593,8 @@ fn validate_method_consistency(
     
     // Validation 4: If #[request] is specified but ElifRequest is already in signature, warn about redundancy
     if has_request_attr && has_request_param {
-        return Err(format!(
-            "Redundant #[request] attribute: function already has ElifRequest parameter. \
-            Hint: Remove either the #[request] attribute or the ElifRequest parameter from the function signature."
-        ));
+        return Err("Redundant #[request] attribute: function already has ElifRequest parameter. \
+            Hint: Remove either the #[request] attribute or the ElifRequest parameter from the function signature.".to_string());
     }
     
     // Validation 5: Body parameter validation
@@ -613,9 +609,9 @@ fn validate_method_consistency(
     }
     
     // Validation 6: Check for unexpected parameters
-    for (fn_param_name, _) in &fn_params {
+    for fn_param_name in fn_params.keys() {
         let is_path_param = path_params.contains(fn_param_name);
-        let is_body_param = body_param.as_ref().map_or(false, |(name, _)| name == fn_param_name);
+        let is_body_param = body_param.as_ref().is_some_and(|(name, _)| name == fn_param_name);
         
         if !is_path_param && !is_body_param {
             return Err(format!(

@@ -71,6 +71,8 @@ enum InjectionType {
     Scoped,
     /// Factory-created service with custom logic
     Factory,
+    /// Token-based service resolution (&TokenType)
+    Token,
 }
 
 impl Parse for ServiceDef {
@@ -116,9 +118,13 @@ impl Parse for ServiceDef {
             }
         }
         
-        // Detect if field type is Option<T> for optional services
-        if is_option_type(&field_type) && injection_type == InjectionType::Regular {
-            injection_type = InjectionType::Optional;
+        // Detect special field types
+        if injection_type == InjectionType::Regular {
+            if is_option_type(&field_type) {
+                injection_type = InjectionType::Optional;
+            } else if is_token_reference(&field_type) {
+                injection_type = InjectionType::Token;
+            }
         }
         
         Ok(ServiceDef {
@@ -140,6 +146,40 @@ fn is_option_type(ty: &Type) -> bool {
         }
     }
     false
+}
+
+/// Helper function to check if a type is a reference to a token (&TokenType)
+/// 
+/// Uses a convention-based approach: the referenced type name must end with "Token"
+/// to be considered a service token. This prevents normal reference fields from being
+/// incorrectly treated as token references.
+/// 
+/// ## Examples
+/// - `&EmailNotificationToken` → `true` (ends with "Token")
+/// - `&DatabaseToken` → `true` (ends with "Token")  
+/// - `&Config` → `false` (doesn't end with "Token")
+/// - `&str` → `false` (doesn't end with "Token")
+/// - `Config` → `false` (not a reference)
+fn is_token_reference(ty: &Type) -> bool {
+    if let Type::Reference(type_ref) = ty {
+        if let Type::Path(type_path) = type_ref.elem.as_ref() {
+            // Get the last segment of the path (the actual type name)
+            if let Some(segment) = type_path.path.segments.last() {
+                let type_name = segment.ident.to_string();
+                // Convention: service tokens must end with "Token"
+                return type_name.ends_with("Token");
+            }
+        }
+    }
+    false
+}
+
+/// Extract the token type from a reference type (&TokenType -> TokenType)
+fn extract_token_type(ty: &Type) -> Result<&Type> {
+    if let Type::Reference(type_ref) = ty {
+        return Ok(type_ref.elem.as_ref());
+    }
+    Err(Error::new_spanned(ty, "Expected reference type (&TokenType)"))
 }
 
 impl ServiceDef {
@@ -177,6 +217,18 @@ impl ServiceDef {
             self.get_inner_type()
         } else {
             Ok(&self.field_type)
+        }
+    }
+    
+    /// Get the token type for token-based services (&TokenType -> TokenType)
+    fn get_token_type(&self) -> Result<&Type> {
+        if matches!(self.injection_type, InjectionType::Token) {
+            extract_token_type(&self.field_type)
+        } else {
+            Err(Error::new_spanned(
+                &self.field_type,
+                "Not a token-based service definition",
+            ))
         }
     }
 }
@@ -240,10 +292,21 @@ fn generate_service_fields(
     
     for service in services {
         let field_name = &service.field_name;
-        let service_type = service.get_service_type()?;
         
-        // Always wrap in Arc first
-        let field_core_type = quote! { std::sync::Arc<#service_type> };
+        // Determine the actual field type based on injection type
+        let field_core_type = match service.injection_type {
+            InjectionType::Token => {
+                // For token-based services, the field should store Arc<Token::Service>
+                // We need to get the service type that the token resolves to
+                let token_type = service.get_token_type()?;
+                quote! { std::sync::Arc<<#token_type as elif_core::container::ServiceToken>::Service> }
+            },
+            _ => {
+                // For regular services, wrap the service type in Arc
+                let service_type = service.get_service_type()?;
+                quote! { std::sync::Arc<#service_type> }
+            }
+        };
         
         // Then wrap in Option if the service is optional (regardless of injection type)
         let wrapped_type = if service.is_optional() {
@@ -309,6 +372,12 @@ fn generate_from_ioc_container_method(
                             #field_name: container.try_resolve::<#service_type>()
                         }
                     }
+                },
+                InjectionType::Token => {
+                    let token_type = service.get_token_type()?;
+                    quote! {
+                        #field_name: container.try_resolve_by_token::<#token_type>()
+                    }
                 }
             }
         } else {
@@ -353,6 +422,13 @@ fn generate_from_ioc_container_method(
                         #field_name: container.resolve::<#service_type>()
                             .map_err(|e| format!("Failed to inject service {}: {}", stringify!(#service_type), e))?
                     }
+                },
+                InjectionType::Token => {
+                    let token_type = service.get_token_type()?;
+                    quote! {
+                        #field_name: container.resolve_by_token::<#token_type>()
+                            .map_err(|e| format!("Failed to inject token service {}: {}", stringify!(#token_type), e))?
+                    }
                 }
             }
         };
@@ -384,3 +460,64 @@ fn generate_from_ioc_container_method(
 
 // Generate error type as part of the generated code rather than defining it here
 // This allows each generated controller to have its own error handling
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn test_is_token_reference_with_token_suffix() {
+        // Valid token references (end with "Token")
+        let email_token: Type = parse_quote!(&EmailNotificationToken);
+        assert!(is_token_reference(&email_token));
+        
+        let db_token: Type = parse_quote!(&DatabaseToken);
+        assert!(is_token_reference(&db_token));
+        
+        let user_token: Type = parse_quote!(&UserServiceToken);
+        assert!(is_token_reference(&user_token));
+    }
+    
+    #[test]
+    fn test_is_token_reference_without_token_suffix() {
+        // Invalid token references (don't end with "Token")
+        let config: Type = parse_quote!(&Config);
+        assert!(!is_token_reference(&config));
+        
+        let connection: Type = parse_quote!(&DatabaseConnection);
+        assert!(!is_token_reference(&connection));
+        
+        let str_ref: Type = parse_quote!(&str);
+        assert!(!is_token_reference(&str_ref));
+        
+        let service: Type = parse_quote!(&UserService);
+        assert!(!is_token_reference(&service));
+    }
+    
+    #[test] 
+    fn test_is_token_reference_non_references() {
+        // Non-reference types should never be considered tokens
+        let owned_token: Type = parse_quote!(EmailNotificationToken);
+        assert!(!is_token_reference(&owned_token));
+        
+        let owned_service: Type = parse_quote!(UserService);
+        assert!(!is_token_reference(&owned_service));
+        
+        let arc_service: Type = parse_quote!(Arc<UserService>);
+        assert!(!is_token_reference(&arc_service));
+    }
+    
+    #[test]
+    fn test_is_token_reference_with_paths() {
+        // Test with module paths
+        let module_token: Type = parse_quote!(&crate::tokens::EmailNotificationToken);
+        assert!(is_token_reference(&module_token));
+        
+        let module_non_token: Type = parse_quote!(&crate::config::DatabaseConfig);
+        assert!(!is_token_reference(&module_non_token));
+        
+        let std_ref: Type = parse_quote!(&std::collections::HashMap<String, String>);
+        assert!(!is_token_reference(&std_ref));
+    }
+}
