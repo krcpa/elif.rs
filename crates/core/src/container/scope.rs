@@ -181,7 +181,7 @@ impl ScopedServiceManager {
         }
         
         // Check parent scopes
-        self.parent.as_ref().map_or(false, |p| p.has_service::<T>())
+        self.parent.as_ref().is_some_and(|p| p.has_service::<T>())
     }
     
     /// Check if a service exists in this specific scope (not parent scopes)

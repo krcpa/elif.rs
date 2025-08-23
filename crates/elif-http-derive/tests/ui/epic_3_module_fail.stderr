@@ -1,0 +1,5 @@
+error: Trait providers must specify implementation type: dyn Trait => Implementation
+  --> tests/ui/epic_3_module_fail.rs:12:9
+   |
+12 |         EmailService // Missing => Implementation  
+   |         ^^^^^^^^^^^^
