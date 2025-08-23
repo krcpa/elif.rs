@@ -1511,6 +1511,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "elif-core"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aee98976dc8816bbe711f2ba2b871a8d17599d0a1b84d140ed6448b1363af452"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "num_cpus",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "service-builder",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "elif-core-derive"
 version = "0.1.0"
 dependencies = [
@@ -1597,7 +1616,7 @@ dependencies = [
  "chrono",
  "elif-auth",
  "elif-core 0.6.0",
- "elif-http-derive",
+ "elif-http-derive 0.2.0",
  "elif-testing 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-util",
  "html-escape",
@@ -1625,6 +1644,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "elif-http"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a253615a2a019b2a7062a8b6995d0aa81c0b7443615afba232d57d368efc3a96"
+dependencies = [
+ "argon2",
+ "async-trait",
+ "axum",
+ "axum-extra",
+ "chrono",
+ "elif-core 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "elif-http-derive 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-util",
+ "html-escape",
+ "http-body-util",
+ "hyper 1.7.0",
+ "log",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "service-builder",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-tungstenite 0.23.1",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "tungstenite 0.21.0",
+ "uuid",
+]
+
+[[package]]
 name = "elif-http-derive"
 version = "0.2.0"
 dependencies = [
@@ -1635,6 +1689,18 @@ dependencies = [
  "quote",
  "syn 2.0.106",
  "trybuild",
+]
+
+[[package]]
+name = "elif-http-derive"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e41214472e3a3d6bc53460443aa3c37865fc010bce15f2b62b09be4d46f1c3f"
+dependencies = [
+ "async-trait",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
 ]
 
 [[package]]
@@ -5143,6 +5209,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "test-published"
+version = "0.1.0"
+dependencies = [
+ "elif-core 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "elif-http 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "elif-http-derive 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tokio",
 ]
 
 [[package]]
