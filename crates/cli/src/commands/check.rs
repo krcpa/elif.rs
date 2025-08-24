@@ -1,8 +1,16 @@
 use elif_core::ElifError;
 use std::process::Command;
 
-pub async fn run() -> Result<(), ElifError> {
-    println!("Running project checks...");
+pub async fn run(comprehensive: bool, module: Option<&str>) -> Result<(), ElifError> {
+    if comprehensive {
+        println!("🔍 Running comprehensive project checks...");
+    } else {
+        println!("🔍 Running basic project checks...");
+    }
+    
+    if let Some(mod_name) = module {
+        println!("   Focusing on module: {}", mod_name);
+    }
     
     // Run cargo fmt check
     let fmt_output = Command::new("cargo")

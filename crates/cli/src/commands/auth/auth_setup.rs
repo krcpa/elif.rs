@@ -2,7 +2,12 @@ use elif_core::ElifError;
 use std::path::Path;
 use tokio::fs;
 
-use crate::AuthProvider;
+#[derive(Debug, Clone)]
+pub enum AuthProvider {
+    Jwt,
+    Session,
+    Both,
+}
 
 pub async fn setup(provider: AuthProvider, mfa: bool, rbac: bool) -> Result<(), ElifError> {
     println!("🔐 Setting up authentication configuration...");

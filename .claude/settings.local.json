@@ -61,7 +61,14 @@
       "Bash(TRYBUILD=overwrite cargo test ui_tests)",
       "Bash(RUST_BACKTRACE=1 cargo test -p elif-core container::binding::tests::test_profile_conditions)",
       "Bash(TRYBUILD=overwrite cargo test ui_fail_tests -p elif-http-derive)",
-      "Bash(TRYBUILD=overwrite cargo test -p elif-http-derive --test ui_tests)"
+      "Bash(TRYBUILD=overwrite cargo test -p elif-http-derive --test ui_tests)",
+      "Bash(gh pr edit:*)",
+      "Bash(RUSTFLAGS=\"-A unused-imports -A unused-variables\" cargo build --package elifrs)",
+      "Bash(RUSTFLAGS=\"-A warnings\" cargo run -- --help)",
+      "Bash(RUSTFLAGS=\"-A warnings\" cargo run -- create --help)",
+      "Bash(RUSTFLAGS=\"-A warnings\" cargo run --package elifrs -- add --help)",
+      "Bash(RUSTFLAGS=\"-A warnings\" cargo run --package elifrs -- inspect --help)",
+      "Bash(RUSTFLAGS=\"-A warnings\" cargo build --package elifrs)"
     ],
     "deny": []
   }
