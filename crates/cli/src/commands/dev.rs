@@ -2,9 +2,9 @@ use elif_core::ElifError;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     path::{Path, PathBuf},
-    process::{Child, Command},
     time::{Duration, Instant},
 };
+use tokio::process::{Child, Command};
 use crossbeam_channel::{select, tick, unbounded, Receiver};
 use tokio::time::sleep;
 
@@ -64,6 +64,7 @@ async fn run_preflight_checks() -> Result<(), ElifError> {
     let output = Command::new("cargo")
         .args(["check", "--quiet"])
         .output()
+        .await
         .map_err(|e| ElifError::system_error(format!("Failed to run cargo check: {}", e)))?;
     
     if !output.status.success() {
@@ -227,8 +228,8 @@ impl DevelopmentServer {
     async fn restart_server(&mut self) -> Result<(), ElifError> {
         // Kill existing process
         if let Some(mut child) = self.current_process.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+            let _ = child.kill().await;
+            let _ = child.wait().await;
         }
         
         // Build the project first
@@ -236,6 +237,7 @@ impl DevelopmentServer {
         let build_result = Command::new("cargo")
             .args(["build", "--quiet"])
             .status()
+            .await
             .map_err(|e| ElifError::system_error(format!("Failed to run cargo build: {}", e)))?;
         
         if !build_result.success() {
@@ -271,8 +273,9 @@ impl DevelopmentServer {
 impl Drop for DevelopmentServer {
     fn drop(&mut self) {
         if let Some(mut child) = self.current_process.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+            // Note: In Drop we have to use the synchronous kill() method
+            // since Drop cannot be async. This is acceptable for cleanup.
+            let _ = child.start_kill();
         }
     }
 }
