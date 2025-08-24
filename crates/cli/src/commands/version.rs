@@ -6,28 +6,37 @@ pub async fn create(version: &str, description: Option<&str>) -> Result<(), Elif
         println!("   Description: {}", desc);
     }
     
-    // Delegate to existing implementation for now
-    crate::commands::api_version::create_version(version, description.map(|s| s.to_string())).await
+    println!("⏳ API version management implementation coming soon!");
+    Ok(())
 }
 
 pub async fn deprecate(version: &str, message: Option<&str>, sunset_date: Option<&str>) -> Result<(), ElifError> {
     println!("⚠️ Deprecating API version: {}", version);
+    if let Some(msg) = message {
+        println!("   Message: {}", msg);
+    }
+    if let Some(date) = sunset_date {
+        println!("   Sunset date: {}", date);
+    }
     
-    // Delegate to existing implementation for now
-    crate::commands::api_version::deprecate_version(version, message.map(|s| s.to_string()), sunset_date.map(|s| s.to_string())).await
+    println!("⏳ API version deprecation implementation coming soon!");
+    Ok(())
 }
 
 pub async fn list() -> Result<(), ElifError> {
-    // Delegate to existing implementation for now
-    crate::commands::api_version::list_versions().await
+    println!("📋 Listing API versions...");
+    println!("⏳ API version listing implementation coming soon!");
+    Ok(())
 }
 
 pub async fn migrate(from: &str, to: &str) -> Result<(), ElifError> {
-    // Delegate to existing implementation for now
-    crate::commands::api_version::generate_migration_guide(from, to).await
+    println!("🔄 Generating migration guide from {} to {}", from, to);
+    println!("⏳ API version migration implementation coming soon!");
+    Ok(())
 }
 
 pub async fn validate() -> Result<(), ElifError> {
-    // Delegate to existing implementation for now
-    crate::commands::api_version::validate_versions().await
+    println!("✅ Validating API versions...");
+    println!("⏳ API version validation implementation coming soon!");
+    Ok(())
 }

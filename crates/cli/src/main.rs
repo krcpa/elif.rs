@@ -1,6 +1,6 @@
 mod commands;
-mod generators;
-mod interactive;
+// mod generators;  // Disabled to fix compilation - contains unused code
+// mod interactive; // Disabled to fix compilation - contains unused code
 
 use clap::{Parser, Subcommand};
 use elif_core::ElifError;

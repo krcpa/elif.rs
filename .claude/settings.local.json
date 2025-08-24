@@ -67,7 +67,8 @@
       "Bash(RUSTFLAGS=\"-A warnings\" cargo run -- --help)",
       "Bash(RUSTFLAGS=\"-A warnings\" cargo run -- create --help)",
       "Bash(RUSTFLAGS=\"-A warnings\" cargo run --package elifrs -- add --help)",
-      "Bash(RUSTFLAGS=\"-A warnings\" cargo run --package elifrs -- inspect --help)"
+      "Bash(RUSTFLAGS=\"-A warnings\" cargo run --package elifrs -- inspect --help)",
+      "Bash(RUSTFLAGS=\"-A warnings\" cargo build --package elifrs)"
     ],
     "deny": []
   }
