@@ -15,7 +15,8 @@ pub async fn ioc_to_modules(backup: bool, dry_run: bool) -> Result<(), ElifError
         println!("   🔍 Dry run mode - showing what would be migrated");
     }
 
-    println!("⚠️ IoC migration implementation coming soon in Epic 6 Phase 1!");
+    println!("⚠️ This migration is not needed - everyone will start fresh with the module system!");
+    println!("💡 Use 'elifrs create app <name> --modules' to create a new project with modules enabled.");
     Ok(())
 }
 
