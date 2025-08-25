@@ -374,17 +374,18 @@ async fn calculate_project_stats() -> Result<ProjectStats, ElifError> {
     Ok(stats)
 }
 
-async fn count_lines_recursive(dir: &str) -> Result<(u32, u32), ElifError> {
-    let mut total_lines = 0;
-    let mut total_files = 0;
-    
-    let mut entries = tokio::fs::read_dir(dir).await.map_err(|e| ElifError::Io(e))?;
-    
-    while let Some(entry) = entries.next_entry().await.map_err(|e| ElifError::Io(e))? {
-        let path = entry.path();
+fn count_lines_recursive(dir: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(u32, u32), ElifError>> + Send + '_>> {
+    Box::pin(async move {
+        let mut total_lines = 0;
+        let mut total_files = 0;
         
-        if path.is_dir() {
-            let (sub_lines, sub_files) = count_lines_recursive(&path.to_string_lossy()).await?;
+        let mut entries = tokio::fs::read_dir(dir).await.map_err(|e| ElifError::Io(e))?;
+        
+        while let Some(entry) = entries.next_entry().await.map_err(|e| ElifError::Io(e))? {
+            let path = entry.path();
+            
+            if path.is_dir() {
+                let (sub_lines, sub_files) = count_lines_recursive(&path.to_string_lossy()).await?;
             total_lines += sub_lines;
             total_files += sub_files;
         } else if path.extension() == Some(std::ffi::OsStr::new("rs")) {
@@ -393,9 +394,10 @@ async fn count_lines_recursive(dir: &str) -> Result<(u32, u32), ElifError> {
                 total_files += 1;
             }
         }
-    }
-    
-    Ok((total_lines, total_files))
+        }
+        
+        Ok((total_lines, total_files))
+    })
 }
 
 async fn get_build_time() -> Result<Option<String>, ElifError> {

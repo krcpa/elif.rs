@@ -750,6 +750,7 @@ async fn save_status_report(status: &SystemStatus) -> Result<(), ElifError> {
     let report_json = serde_json::to_string_pretty(status)
         .map_err(|e| ElifError::SystemError {
             message: format!("Failed to serialize status report: {}", e),
+            source: None,
         })?;
 
     tokio::fs::write("status-report.json", report_json)

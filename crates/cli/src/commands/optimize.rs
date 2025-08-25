@@ -1,6 +1,5 @@
 use elif_core::ElifError;
 use std::path::Path;
-use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -142,16 +141,17 @@ async fn discover_routes() -> Result<Vec<String>, ElifError> {
     Ok(routes)
 }
 
-async fn scan_routes_in_directory(dir: &str) -> Result<Vec<String>, ElifError> {
-    let mut routes = Vec::new();
-    
-    let mut entries = tokio::fs::read_dir(dir).await.map_err(|e| ElifError::Io(e))?;
-    
-    while let Some(entry) = entries.next_entry().await.map_err(|e| ElifError::Io(e))? {
-        let path = entry.path();
+fn scan_routes_in_directory(dir: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<String>, ElifError>> + Send + '_>> {
+    Box::pin(async move {
+        let mut routes = Vec::new();
         
-        if path.is_dir() {
-            routes.extend(scan_routes_in_directory(&path.to_string_lossy()).await?);
+        let mut entries = tokio::fs::read_dir(dir).await.map_err(|e| ElifError::Io(e))?;
+        
+        while let Some(entry) = entries.next_entry().await.map_err(|e| ElifError::Io(e))? {
+            let path = entry.path();
+            
+            if path.is_dir() {
+                routes.extend(scan_routes_in_directory(&path.to_string_lossy()).await?);
         } else if path.extension() == Some(std::ffi::OsStr::new("rs")) {
             if let Ok(content) = tokio::fs::read_to_string(&path).await {
                 // Look for route definitions
@@ -167,10 +167,11 @@ async fn scan_routes_in_directory(dir: &str) -> Result<Vec<String>, ElifError> {
                     }
                 }
             }
+            }
         }
-    }
-    
-    Ok(routes)
+        
+        Ok(routes)
+    })
 }
 
 fn extract_route_path(line: &str) -> Option<String> {
@@ -264,42 +265,44 @@ async fn optimize_assets() -> Result<AssetOptimization, ElifError> {
     Ok(optimization)
 }
 
-async fn optimize_assets_in_directory(dir: &str) -> Result<(u32, u64, u64), ElifError> {
-    let mut count = 0;
-    let mut total_before = 0;
-    let mut total_after = 0;
-    
-    let mut entries = tokio::fs::read_dir(dir).await.map_err(|e| ElifError::Io(e))?;
-    
-    while let Some(entry) = entries.next_entry().await.map_err(|e| ElifError::Io(e))? {
-        let path = entry.path();
+fn optimize_assets_in_directory(dir: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(u32, u64, u64), ElifError>> + Send + '_>> {
+    Box::pin(async move {
+        let mut count = 0;
+        let mut total_before = 0;
+        let mut total_after = 0;
         
-        if path.is_file() {
-            if let Ok(metadata) = path.metadata() {
-                let size = metadata.len();
-                total_before += size;
-                
-                // Simulate optimization based on file type
-                let optimized_size = match path.extension().and_then(|ext| ext.to_str()) {
-                    Some("js") => (size as f64 * 0.7) as u64,  // 30% reduction
-                    Some("css") => (size as f64 * 0.6) as u64, // 40% reduction
-                    Some("png") => (size as f64 * 0.8) as u64, // 20% reduction
-                    Some("jpg") | Some("jpeg") => (size as f64 * 0.9) as u64, // 10% reduction
-                    _ => size,
-                };
-                
-                total_after += optimized_size;
-                count += 1;
-            }
-        } else if path.is_dir() {
-            let (sub_count, sub_before, sub_after) = optimize_assets_in_directory(&path.to_string_lossy()).await?;
+        let mut entries = tokio::fs::read_dir(dir).await.map_err(|e| ElifError::Io(e))?;
+        
+        while let Some(entry) = entries.next_entry().await.map_err(|e| ElifError::Io(e))? {
+            let path = entry.path();
+            
+            if path.is_file() {
+                if let Ok(metadata) = path.metadata() {
+                    let size = metadata.len();
+                    total_before += size;
+                    
+                    // Simulate optimization based on file type
+                    let optimized_size = match path.extension().and_then(|ext| ext.to_str()) {
+                        Some("js") => (size as f64 * 0.7) as u64,  // 30% reduction
+                        Some("css") => (size as f64 * 0.6) as u64, // 40% reduction
+                        Some("png") => (size as f64 * 0.8) as u64, // 20% reduction
+                        Some("jpg") | Some("jpeg") => (size as f64 * 0.9) as u64, // 10% reduction
+                        _ => size,
+                    };
+                    
+                    total_after += optimized_size;
+                    count += 1;
+                }
+            } else if path.is_dir() {
+                let (sub_count, sub_before, sub_after) = optimize_assets_in_directory(&path.to_string_lossy()).await?;
             count += sub_count;
             total_before += sub_before;
             total_after += sub_after;
+            }
         }
-    }
-    
-    Ok((count, total_before, total_after))
+        
+        Ok((count, total_before, total_after))
+    })
 }
 
 async fn create_asset_manifest() -> Result<(), ElifError> {
@@ -610,6 +613,7 @@ async fn save_optimization_report(report: &OptimizationReport) -> Result<(), Eli
     let report_json = serde_json::to_string_pretty(report)
         .map_err(|e| ElifError::SystemError {
             message: format!("Failed to serialize optimization report: {}", e),
+            source: None,
         })?;
 
     tokio::fs::write("optimization-report.json", report_json)
