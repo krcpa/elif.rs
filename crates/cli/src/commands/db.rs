@@ -203,8 +203,9 @@ pub async fn status(env: Option<&str>, verbose: bool) -> Result<(), ElifError> {
             message: format!("Failed to create migration runner: {}", e),
         })?;
 
-    match migration_runner.get_migration_status().await {
-        Ok(status_list) => {
+    let migration_status_result = migration_runner.get_migration_status().await;
+    match migration_status_result {
+        Ok(ref status_list) => {
             let applied_count = status_list.iter().filter(|(_, applied)| *applied).count();
             let pending_count = status_list.len() - applied_count;
             
@@ -225,7 +226,7 @@ pub async fn status(env: Option<&str>, verbose: bool) -> Result<(), ElifError> {
     if verbose {
         println!();
         println!("💡 Recommendations:");
-        if let Ok(status_list) = migration_runner.get_migration_status().await {
+        if let Ok(status_list) = migration_status_result {
             let pending_count = status_list.len() - status_list.iter().filter(|(_, applied)| *applied).count();
             if pending_count > 0 {
                 println!("   • Run: elifrs migrate up");
