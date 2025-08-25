@@ -4,6 +4,7 @@ use std::process::Command;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
+use sysinfo::{System, Disks};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SystemStatus {
@@ -461,53 +462,60 @@ async fn check_security_configuration() -> (String, String) {
 }
 
 async fn get_system_metrics() -> Result<SystemMetrics, ElifError> {
-    // This is a simplified implementation - in production you'd use system monitoring libraries
+    let mut system = System::new_all();
+    system.refresh_all();
+    
     Ok(SystemMetrics {
-        cpu_usage: get_cpu_usage().await,
-        memory_usage: get_memory_usage().await,
+        cpu_usage: get_cpu_usage(&mut system),
+        memory_usage: get_memory_usage(&system),
         disk_usage: get_disk_usage().await,
-        load_average: get_load_average().await,
+        load_average: get_load_average(&system),
         open_files: None,
     })
 }
 
-async fn get_cpu_usage() -> Option<f32> {
-    // Simplified CPU usage check using system commands
-    if let Ok(output) = Command::new("top").args(&["-l", "1", "-n", "0"]).output() {
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        for line in output_str.lines() {
-            if line.contains("CPU usage") {
-                // Parse CPU usage from top command output
-                // This is system-specific and simplified
-                return Some(15.5); // Mock value
-            }
-        }
-    }
-    None
+fn get_cpu_usage(system: &mut System) -> Option<f32> {
+    // Refresh CPU usage and get global CPU usage
+    system.refresh_cpu_usage();
+    
+    // Wait a bit for CPU usage to be calculated (required by sysinfo)
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    system.refresh_cpu_usage();
+    
+    Some(system.global_cpu_usage())
 }
 
-async fn get_memory_usage() -> Option<u64> {
-    // Mock implementation - in production you'd use proper system monitoring
-    Some(2048) // 2GB in MB
+fn get_memory_usage(system: &System) -> Option<u64> {
+    // Get used memory in MB
+    let used_memory = system.used_memory();
+    Some(used_memory / 1024 / 1024) // Convert bytes to MB
 }
 
 async fn get_disk_usage() -> Option<u64> {
-    // Check current directory disk usage
-    if let Ok(output) = Command::new("du").args(&["-s", "."]).output() {
-        if let Ok(output_str) = String::from_utf8(output.stdout) {
-            if let Some(size_str) = output_str.split_whitespace().next() {
-                if let Ok(size) = size_str.parse::<u64>() {
-                    return Some(size); // Size in KB
-                }
+    // Get disk usage for current directory using cross-platform approach
+    let disks = Disks::new_with_refreshed_list();
+    
+    if let Ok(current_dir) = std::env::current_dir() {
+        // Find the disk that contains the current directory
+        for disk in &disks {
+            let mount_point = disk.mount_point();
+            if current_dir.starts_with(mount_point) {
+                // Calculate used space from disk capacity and available space
+                let total_space = disk.total_space();
+                let available_space = disk.available_space();
+                let used_space = total_space - available_space;
+                return Some(used_space / 1024 / 1024); // Convert bytes to MB
             }
         }
     }
+    
     None
 }
 
-async fn get_load_average() -> Option<f32> {
-    // Mock implementation
-    Some(1.2)
+fn get_load_average(_system: &System) -> Option<f32> {
+    // Get load average (1-minute load average on supported systems)
+    let load_avg = System::load_average();
+    Some(load_avg.one as f32)
 }
 
 async fn display_component_status(status: &SystemStatus, component: &str) -> Result<(), ElifError> {
@@ -681,7 +689,7 @@ async fn display_system_metrics(metrics: &SystemMetrics) -> Result<(), ElifError
     }
     
     if let Some(disk) = metrics.disk_usage {
-        println!("   💿 Disk Usage: {}KB", disk);
+        println!("   💿 Disk Usage: {}MB", disk);
     }
     
     if let Some(load) = metrics.load_average {

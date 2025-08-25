@@ -1,0 +1,83 @@
+{
+  "project_status": {
+    "name": "elifrs",
+    "version": "0.9.0",
+    "build_status": "success",
+    "last_built": null,
+    "compilation_errors": 0,
+    "test_status": "ready"
+  },
+  "service_status": {
+    "redis": {
+      "name": "Redis",
+      "status": "stopped",
+      "uptime": null,
+      "cpu_usage": null,
+      "memory_usage": null,
+      "port": 6379,
+      "last_health_check": "2025-08-25 10:19:15 UTC"
+    },
+    "application": {
+      "name": "Application",
+      "status": "stopped",
+      "uptime": null,
+      "cpu_usage": null,
+      "memory_usage": null,
+      "port": null,
+      "last_health_check": "2025-08-25 10:19:15 UTC"
+    },
+    "database": {
+      "name": "PostgreSQL",
+      "status": "stopped",
+      "uptime": null,
+      "cpu_usage": null,
+      "memory_usage": null,
+      "port": 5432,
+      "last_health_check": "2025-08-25 10:19:15 UTC"
+    }
+  },
+  "database_status": null,
+  "health_checks": [
+    {
+      "name": "Project Compilation",
+      "status": "pass",
+      "message": "Project compiles successfully",
+      "timestamp": "2025-08-25 10:19:15 UTC",
+      "response_time_ms": 187
+    },
+    {
+      "name": "Dependencies",
+      "status": "warn",
+      "message": "Cargo.lock not found - run 'cargo build' to generate",
+      "timestamp": "2025-08-25 10:19:15 UTC",
+      "response_time_ms": null
+    },
+    {
+      "name": "Configuration",
+      "status": "warn",
+      "message": "Missing configuration: Missing DATABASE_URL, Missing SECRET_KEY",
+      "timestamp": "2025-08-25 10:19:15 UTC",
+      "response_time_ms": null
+    },
+    {
+      "name": "Security Configuration",
+      "status": "pass",
+      "message": "Security configuration looks good",
+      "timestamp": "2025-08-25 10:19:15 UTC",
+      "response_time_ms": null
+    }
+  ],
+  "system_metrics": {
+    "cpu_usage": 8.522727,
+    "memory_usage": 32958,
+    "disk_usage": 721080,
+    "load_average": 4.5219727,
+    "open_files": null
+  },
+  "recommendations": [
+    "Start the application service",
+    "Start the database service",
+    "Address warning in: Dependencies",
+    "Address warning in: Configuration"
+  ]
+}
