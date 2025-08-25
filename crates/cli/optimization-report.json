@@ -1,0 +1,16 @@
+{
+  "routes": {
+    "total_routes": 9,
+    "optimized_routes": 4,
+    "cached_routes": 0,
+    "precompiled_routes": 4,
+    "time_saved_ms": 60
+  },
+  "assets": null,
+  "config": null,
+  "recommendations": [
+    "Consider adding route caching for static endpoints",
+    "Run 'elifrs build --release --optimizations lto,strip' for production",
+    "Use 'elifrs deploy prepare --target docker --env production' for deployment"
+  ]
+}

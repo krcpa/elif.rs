@@ -141,6 +141,10 @@ enum Commands {
         /// Optimize configuration (caching, validation)
         #[arg(long)]
         config: bool,
+
+        /// Force overwrite existing files without confirmation
+        #[arg(long)]
+        force: bool,
     },
 
     /// Deployment preparation and tools
@@ -730,8 +734,9 @@ async fn main() -> Result<(), ElifError> {
             routes,
             assets,
             config,
+            force,
         } => {
-            commands::optimize::run(routes, assets, config).await?;
+            commands::optimize::run(routes, assets, config, force).await?;
         }
 
         Commands::Deploy { deploy_command } => match deploy_command {

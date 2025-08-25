@@ -1,6 +1,8 @@
 use elif_core::ElifError;
 use std::path::Path;
 use serde::{Serialize, Deserialize};
+use std::io::{self, Write};
+use regex::Regex;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct OptimizationReport {
@@ -36,7 +38,7 @@ struct ConfigOptimization {
     env_vars_optimized: u32,
 }
 
-pub async fn run(routes: bool, assets: bool, config: bool) -> Result<(), ElifError> {
+pub async fn run(routes: bool, assets: bool, config: bool, force: bool) -> Result<(), ElifError> {
     println!("⚡ Running elif.rs optimizations...");
     
     // If no specific optimization is requested, run all
@@ -61,17 +63,53 @@ pub async fn run(routes: bool, assets: bool, config: bool) -> Result<(), ElifErr
 
     if should_optimize_routes {
         println!("🛣️  Optimizing routes...");
-        report.routes = Some(optimize_routes().await?);
+        
+        // Check if files will be overwritten and ask for confirmation
+        if !force && Path::new("src/route_cache.rs").exists() {
+            if !ask_confirmation("Route cache file 'src/route_cache.rs' exists. Overwrite?")? {
+                println!("   ⏭️  Skipping route optimization");
+                report.routes = None;
+            } else {
+                report.routes = Some(optimize_routes().await?);
+            }
+        } else {
+            report.routes = Some(optimize_routes().await?);
+        }
     }
 
     if should_optimize_assets {
         println!("📦 Optimizing assets...");
-        report.assets = Some(optimize_assets().await?);
+        
+        // Check if asset manifest will be overwritten
+        if !force && Path::new("assets/manifest.json").exists() {
+            if !ask_confirmation("Asset manifest 'assets/manifest.json' exists. Overwrite?")? {
+                println!("   ⏭️  Skipping asset optimization");
+                report.assets = None;
+            } else {
+                report.assets = Some(optimize_assets().await?);
+            }
+        } else {
+            report.assets = Some(optimize_assets().await?);
+        }
     }
 
     if should_optimize_config {
         println!("⚙️  Optimizing configuration...");
-        report.config = Some(optimize_config().await?);
+        
+        // Check if config files will be overwritten
+        let config_files_exist = Path::new("src/optimized_config.rs").exists() || 
+                                Path::new(".env.template").exists();
+        
+        if !force && config_files_exist {
+            if !ask_confirmation("Configuration files exist. Overwrite?")? {
+                println!("   ⏭️  Skipping configuration optimization");
+                report.config = None;
+            } else {
+                report.config = Some(optimize_config().await?);
+            }
+        } else {
+            report.config = Some(optimize_config().await?);
+        }
     }
 
     // Generate recommendations
@@ -175,12 +213,20 @@ fn scan_routes_in_directory(dir: &str) -> std::pin::Pin<Box<dyn std::future::Fut
 }
 
 fn extract_route_path(line: &str) -> Option<String> {
-    // Simple extraction of route paths from common patterns
-    if let Some(start) = line.find('"') {
-        if let Some(end) = line[start + 1..].find('"') {
-            return Some(line[start + 1..start + 1 + end].to_string());
-        }
+    // Use regex to properly match route attribute syntax
+    let route_regex = Regex::new(r#"#\[(get|post|put|delete|patch|head|options)\("([^"]+)"\)"#).ok()?;
+    
+    if let Some(captures) = route_regex.captures(line) {
+        return captures.get(2).map(|m| m.as_str().to_string());
     }
+    
+    // Also match function-style route definitions like .route("/path", get(handler))
+    let func_route_regex = Regex::new(r#"\.route\("([^"]+)",\s*(get|post|put|delete|patch|head|options)\("#).ok()?;
+    
+    if let Some(captures) = func_route_regex.captures(line) {
+        return captures.get(1).map(|m| m.as_str().to_string());
+    }
+    
     None
 }
 
@@ -622,4 +668,16 @@ async fn save_optimization_report(report: &OptimizationReport) -> Result<(), Eli
 
     println!("📄 Optimization report saved to optimization-report.json");
     Ok(())
+}
+
+/// Ask user for confirmation before performing potentially destructive operations
+fn ask_confirmation(message: &str) -> Result<bool, ElifError> {
+    print!("⚠️  {message} [y/N]: ");
+    io::stdout().flush().map_err(|e| ElifError::Io(e))?;
+    
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).map_err(|e| ElifError::Io(e))?;
+    
+    let response = input.trim().to_lowercase();
+    Ok(response == "y" || response == "yes")
 }
