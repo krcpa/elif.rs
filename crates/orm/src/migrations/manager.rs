@@ -242,7 +242,7 @@ impl MigrationManager {
     pub fn record_migration_sql(&self, migration_id: &str, batch: i32) -> (String, Vec<String>) {
         (
             format!(
-                "INSERT INTO {} (id, applied_at, batch) VALUES ($1, $2, $3)",
+                "INSERT INTO {} (id, applied_at, batch) VALUES ($1, $2::timestamp, $3::integer)",
                 self.config.migrations_table
             ),
             vec![
