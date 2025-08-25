@@ -40,3 +40,4 @@ test-app/
 EOF < /dev/null
 
 .claude
+CLAUDE.md
