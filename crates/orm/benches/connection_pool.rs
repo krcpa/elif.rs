@@ -2,10 +2,10 @@
 //!
 //! Tests connection acquisition, release, and pool management performance
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use elif_orm::database::{DatabasePool, PoolConfig};
-use tokio::runtime::Runtime;
 use std::time::Duration;
+use tokio::runtime::Runtime;
 
 async fn bench_pool_acquisition(pool: &DatabasePool, operations: usize) {
     for _ in 0..operations {
@@ -17,11 +17,10 @@ async fn bench_pool_acquisition(pool: &DatabasePool, operations: usize) {
     }
 }
 
-
 fn bench_pool_creation(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("pool_creation");
-    
+
     // Different pool sizes
     for &max_connections in &[5, 10, 20, 50] {
         group.bench_with_input(
@@ -35,7 +34,7 @@ fn bench_pool_creation(c: &mut Criterion) {
                             .min_connections(black_box(1))
                             .connection_timeout(Duration::from_secs(30))
                             .build_with_defaults();
-                        
+
                         // Note: In a real benchmark, we'd create actual pools
                         // For now, just benchmark the config creation
                         black_box(config)
@@ -44,23 +43,23 @@ fn bench_pool_creation(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_pool_config_builder(c: &mut Criterion) {
     let mut group = c.benchmark_group("pool_config_builder");
-    
+
     group.bench_function("simple_config", |b| {
         b.iter(|| {
             let config = PoolConfig::builder()
                 .max_connections(black_box(20))
                 .build_with_defaults();
-            
+
             black_box(config)
         })
     });
-    
+
     group.bench_function("complex_config", |b| {
         b.iter(|| {
             let config = PoolConfig::builder()
@@ -71,11 +70,11 @@ fn bench_pool_config_builder(c: &mut Criterion) {
                 .max_lifetime(Duration::from_secs(black_box(3600)))
                 .test_before_acquire(black_box(true))
                 .build_with_defaults();
-            
+
             black_box(config)
         })
     });
-    
+
     group.finish();
 }
 
@@ -93,22 +92,20 @@ impl MockPool {
             current_connections: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         }
     }
-    
+
     async fn acquire(&self) -> Result<MockConnection, String> {
         use std::sync::atomic::Ordering;
-        
+
         let current = self.current_connections.fetch_add(1, Ordering::SeqCst);
         if current >= self.max_connections {
             self.current_connections.fetch_sub(1, Ordering::SeqCst);
             return Err("Pool exhausted".to_string());
         }
-        
+
         // Simulate connection acquisition delay
         tokio::time::sleep(Duration::from_micros(100)).await;
-        
-        Ok(MockConnection {
-            pool: self.clone(),
-        })
+
+        Ok(MockConnection { pool: self.clone() })
     }
 }
 
@@ -118,14 +115,16 @@ struct MockConnection {
 
 impl Drop for MockConnection {
     fn drop(&mut self) {
-        self.pool.current_connections.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        self.pool
+            .current_connections
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
     }
 }
 
 fn bench_mock_pool_operations(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("mock_pool_operations");
-    
+
     // Sequential acquisition
     for &pool_size in &[5, 10, 20] {
         group.bench_with_input(
@@ -136,14 +135,14 @@ fn bench_mock_pool_operations(c: &mut Criterion) {
                 b.iter(|| {
                     rt.block_on(async {
                         let mut connections = Vec::new();
-                        
+
                         // Acquire connections up to pool limit
                         for _ in 0..pool_size {
                             if let Ok(conn) = pool.acquire().await {
                                 connections.push(conn);
                             }
                         }
-                        
+
                         black_box(connections)
                         // Connections are dropped here, returning to pool
                     })
@@ -151,7 +150,7 @@ fn bench_mock_pool_operations(c: &mut Criterion) {
             },
         );
     }
-    
+
     // Concurrent acquisition
     for &concurrency in &[2, 5, 10] {
         group.bench_with_input(
@@ -161,20 +160,22 @@ fn bench_mock_pool_operations(c: &mut Criterion) {
                 let pool = MockPool::new(20);
                 b.iter(|| {
                     rt.block_on(async {
-                        let handles: Vec<_> = (0..concurrency).map(|_| {
-                            let pool = pool.clone();
-                            tokio::spawn(async move {
-                                let mut connections = Vec::new();
-                                for _ in 0..5 {
-                                    if let Ok(conn) = pool.acquire().await {
-                                        connections.push(conn);
+                        let handles: Vec<_> = (0..concurrency)
+                            .map(|_| {
+                                let pool = pool.clone();
+                                tokio::spawn(async move {
+                                    let mut connections = Vec::new();
+                                    for _ in 0..5 {
+                                        if let Ok(conn) = pool.acquire().await {
+                                            connections.push(conn);
+                                        }
+                                        tokio::time::sleep(Duration::from_micros(10)).await;
                                     }
-                                    tokio::time::sleep(Duration::from_micros(10)).await;
-                                }
-                                black_box(connections)
+                                    black_box(connections)
+                                })
                             })
-                        }).collect();
-                        
+                            .collect();
+
                         for handle in handles {
                             handle.await.unwrap();
                         }
@@ -183,14 +184,14 @@ fn bench_mock_pool_operations(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_pool_stress_patterns(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("pool_stress_patterns");
-    
+
     group.bench_function("rapid_acquire_release", |b| {
         let pool = MockPool::new(10);
         b.iter(|| {
@@ -205,13 +206,13 @@ fn bench_pool_stress_patterns(c: &mut Criterion) {
             })
         })
     });
-    
+
     group.bench_function("mixed_hold_times", |b| {
         let pool = MockPool::new(15);
         b.iter(|| {
             rt.block_on(async {
                 let mut long_lived = Vec::new();
-                
+
                 // Some connections held for longer
                 for i in 0..5 {
                     if let Ok(conn) = pool.acquire().await {
@@ -221,19 +222,19 @@ fn bench_pool_stress_patterns(c: &mut Criterion) {
                         // else: short-lived connection dropped immediately
                     }
                 }
-                
+
                 // Additional short-lived connections
                 for _ in 0..20 {
                     if let Ok(conn) = pool.acquire().await {
                         let _ = black_box(conn);
                     }
                 }
-                
+
                 black_box(long_lived)
             })
         })
     });
-    
+
     group.finish();
 }
 

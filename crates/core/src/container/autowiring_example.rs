@@ -1,14 +1,14 @@
 // Example demonstrating IoC Phase 2: Constructor Injection & Auto-wiring
 
-use crate::container::autowiring::{Injectable, DependencyResolver};
+use crate::container::autowiring::{DependencyResolver, Injectable};
+use crate::container::binding::ServiceBinder;
 use crate::container::descriptor::ServiceId;
 use crate::container::ioc_container::IocContainer;
-use crate::container::binding::ServiceBinder;
 use crate::errors::CoreError;
 use std::sync::Arc;
 
 /// Example: E-commerce Order Processing Service
-/// 
+///
 /// This demonstrates how the new autowiring system works with:
 /// - Constructor injection
 /// - Automatic dependency resolution  
@@ -23,11 +23,14 @@ pub struct SqliteUserRepository {
 
 impl SqliteUserRepository {
     pub fn find_user(&self, id: u32) -> Option<User> {
-        println!("Finding user {} from SQLite at {}", id, self.connection_string);
-        Some(User { 
-            id, 
-            name: format!("User {}", id), 
-            email: format!("user{}@example.com", id) 
+        println!(
+            "Finding user {} from SQLite at {}",
+            id, self.connection_string
+        );
+        Some(User {
+            id,
+            name: format!("User {}", id),
+            email: format!("user{}@example.com", id),
         })
     }
 }
@@ -38,10 +41,10 @@ pub struct PostgresProductRepository;
 impl PostgresProductRepository {
     pub fn find_product(&self, id: u32) -> Option<Product> {
         println!("Finding product {} from Postgres", id);
-        Some(Product { 
-            id, 
-            name: format!("Product {}", id), 
-            price: 29.99 
+        Some(Product {
+            id,
+            name: format!("Product {}", id),
+            price: 29.99,
         })
     }
 }
@@ -53,7 +56,10 @@ pub struct SmtpEmailService {
 
 impl SmtpEmailService {
     pub fn send_email(&self, to: &str, subject: &str, body: &str) -> Result<(), String> {
-        println!("Sending email via {} to {}: {} - {}", self.smtp_server, to, subject, body);
+        println!(
+            "Sending email via {} to {}: {} - {}",
+            self.smtp_server, to, subject, body
+        );
         Ok(())
     }
 }
@@ -133,10 +139,11 @@ impl OrderService {
         }
 
         // Resolve dependencies and create order
-        let user = self.user_repo.find_user(user_id)
-            .ok_or("User not found")?;
-        
-        let product = self.product_repo.find_product(product_id)
+        let user = self.user_repo.find_user(user_id).ok_or("User not found")?;
+
+        let product = self
+            .product_repo
+            .find_product(product_id)
             .ok_or("Product not found")?;
 
         // Process payment
@@ -193,7 +200,7 @@ pub fn run_autowiring_example() -> Result<(), CoreError> {
 
     // Create and configure the IoC container
     let mut container = IocContainer::new();
-    
+
     // Register all services
     container
         .bind::<SqliteUserRepository, SqliteUserRepository>()
@@ -206,27 +213,34 @@ pub fn run_autowiring_example() -> Result<(), CoreError> {
     // Build the container (validates dependencies)
     container.build()?;
 
-    println!("\n📦 Container built successfully with {} services", container.service_count());
+    println!(
+        "\n📦 Container built successfully with {} services",
+        container.service_count()
+    );
 
     // Resolve the order service - all dependencies automatically injected!
     let order_service = container.resolve_injectable::<OrderService>()?;
-    
+
     println!("\n🎯 OrderService resolved with auto-wiring!");
     println!("   Dependencies automatically injected:");
     println!("   - SqliteUserRepository");
-    println!("   - PostgresProductRepository"); 
+    println!("   - PostgresProductRepository");
     println!("   - SmtpEmailService");
     println!("   - PaymentProcessor");
     println!("   - MetricsCollector (optional)");
 
     // Use the service
     println!("\n📋 Creating order...");
-    let order = order_service.create_order(1, 101)
+    let order = order_service
+        .create_order(1, 101)
         .map_err(|e| CoreError::InvalidServiceDescriptor { message: e })?;
-    
+
     println!("\n✅ Order created successfully!");
     println!("   User: {} ({})", order.user.name, order.user.email);
-    println!("   Product: {} - ${:.2}", order.product.name, order.product.price);
+    println!(
+        "   Product: {} - ${:.2}",
+        order.product.name, order.product.price
+    );
     println!("   Payment ID: {}", order.payment_id);
 
     // Demonstrate optional dependency handling
@@ -237,11 +251,11 @@ pub fn run_autowiring_example() -> Result<(), CoreError> {
         .bind::<PostgresProductRepository, PostgresProductRepository>()
         .bind::<SmtpEmailService, SmtpEmailService>()
         .bind::<PaymentProcessor, PaymentProcessor>();
-        // Note: No MetricsCollector registered
-        // Note: Not using bind_injectable for now due to dependency resolution issues
+    // Note: No MetricsCollector registered
+    // Note: Not using bind_injectable for now due to dependency resolution issues
 
     container_minimal.build()?;
-    
+
     // Manually create OrderService to test optional dependency
     let user_repo = container_minimal.resolve::<SqliteUserRepository>()?;
     let product_repo = container_minimal.resolve::<PostgresProductRepository>()?;
@@ -249,10 +263,17 @@ pub fn run_autowiring_example() -> Result<(), CoreError> {
     let payment_processor = container_minimal.resolve::<PaymentProcessor>()?;
     let metrics = container_minimal.try_resolve::<MetricsCollector>();
 
-    let order_service_minimal = OrderService::new(user_repo, product_repo, email_service, payment_processor, metrics);
+    let order_service_minimal = OrderService::new(
+        user_repo,
+        product_repo,
+        email_service,
+        payment_processor,
+        metrics,
+    );
     println!("✅ OrderService created even without optional MetricsCollector!");
-    
-    let _order2 = order_service_minimal.create_order(2, 102)
+
+    let _order2 = order_service_minimal
+        .create_order(2, 102)
         .map_err(|e| CoreError::InvalidServiceDescriptor { message: e })?;
     println!("✅ Order processing works without metrics service");
 
@@ -282,7 +303,7 @@ mod tests {
     #[test]
     fn test_optional_dependency_handling() {
         let mut container = IocContainer::new();
-        
+
         // Register only required dependencies
         container
             .bind::<SqliteUserRepository, SqliteUserRepository>()
@@ -291,19 +312,28 @@ mod tests {
             .bind::<PaymentProcessor, PaymentProcessor>();
 
         container.build().unwrap();
-        
+
         // Manually resolve dependencies and create service to test optional handling
         let user_repo = container.resolve::<SqliteUserRepository>().unwrap();
         let product_repo = container.resolve::<PostgresProductRepository>().unwrap();
         let email_service = container.resolve::<SmtpEmailService>().unwrap();
         let payment_processor = container.resolve::<PaymentProcessor>().unwrap();
         let metrics = container.try_resolve::<MetricsCollector>(); // Should be None
-        
-        assert!(metrics.is_none(), "MetricsCollector should not be available");
-        
-        let order_service = OrderService::new(user_repo, product_repo, email_service, payment_processor, metrics);
+
+        assert!(
+            metrics.is_none(),
+            "MetricsCollector should not be available"
+        );
+
+        let order_service = OrderService::new(
+            user_repo,
+            product_repo,
+            email_service,
+            payment_processor,
+            metrics,
+        );
         let order = order_service.create_order(1, 101).unwrap();
-        
+
         assert_eq!(order.user.id, 1);
         assert_eq!(order.product.id, 101);
         assert!(!order.payment_id.is_empty());
@@ -312,7 +342,7 @@ mod tests {
     #[test]
     fn test_complex_dependency_graph() {
         let mut container = IocContainer::new();
-        
+
         // Register all dependencies including optional ones
         container
             .bind::<SqliteUserRepository, SqliteUserRepository>()
@@ -323,7 +353,7 @@ mod tests {
             .bind_injectable::<OrderService>();
 
         container.build().unwrap();
-        
+
         // Validate that all services can be resolved
         assert!(container.resolve::<SqliteUserRepository>().is_ok());
         assert!(container.resolve::<PostgresProductRepository>().is_ok());

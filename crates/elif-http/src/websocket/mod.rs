@@ -3,23 +3,23 @@
 //! This module provides WebSocket server capabilities integrated with the HTTP server,
 //! including connection management, lifecycle handling, and message routing.
 
+pub mod channel;
 pub mod connection;
+pub mod handler;
 pub mod registry;
 pub mod server;
 pub mod types;
-pub mod handler;
-pub mod channel;
 
 // Re-export main types
+pub use channel::{
+    Channel, ChannelEvent, ChannelId, ChannelManager, ChannelManagerStats, ChannelMember,
+    ChannelMessage, ChannelMetadata, ChannelPermissions, ChannelStats, ChannelType,
+};
 pub use connection::WebSocketConnection;
-pub use registry::{ConnectionRegistry, ConnectionEvent};
+pub use handler::{SimpleWebSocketHandler, WebSocketHandler, WebSocketUpgrade};
+pub use registry::{ConnectionEvent, ConnectionRegistry};
 pub use server::WebSocketServer;
 pub use types::{
-    WebSocketMessage, WebSocketError, WebSocketResult, MessageType, WebSocketConfig,
-    ConnectionId, ConnectionState,
-};
-pub use handler::{WebSocketHandler, WebSocketUpgrade, SimpleWebSocketHandler};
-pub use channel::{
-    Channel, ChannelId, ChannelManager, ChannelType, ChannelPermissions, ChannelMetadata,
-    ChannelMessage, ChannelMember, ChannelEvent, ChannelStats, ChannelManagerStats,
+    ConnectionId, ConnectionState, MessageType, WebSocketConfig, WebSocketError, WebSocketMessage,
+    WebSocketResult,
 };

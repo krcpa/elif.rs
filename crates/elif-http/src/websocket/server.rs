@@ -1,13 +1,10 @@
 //! WebSocket server integration with elif HTTP server
 
+use super::connection::WebSocketConnection;
 use super::registry::{ConnectionRegistry, RegistryStats};
 use super::types::{ConnectionId, WebSocketConfig, WebSocketMessage, WebSocketResult};
-use super::connection::WebSocketConnection;
 use crate::routing::ElifRouter;
-use axum::{
-    extract::ws::WebSocketUpgrade as AxumWebSocketUpgrade,
-    routing::get,
-};
+use axum::{extract::ws::WebSocketUpgrade as AxumWebSocketUpgrade, routing::get};
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
 use tracing::{debug, info};
@@ -65,7 +62,7 @@ impl WebSocketServer {
     {
         // For the foundation, we'll add a simple WebSocket endpoint
         // Full message handling will be added in later iterations
-        
+
         // Create a placeholder WebSocket handler
         let ws_handler = move |ws: AxumWebSocketUpgrade| async move {
             ws.on_upgrade(|mut socket| async move {
@@ -73,7 +70,10 @@ impl WebSocketServer {
                 // For now, just keep the connection alive
                 while let Some(_msg) = socket.recv().await {
                     // Echo back for testing
-                    if let Ok(_) = socket.send(axum::extract::ws::Message::Text("pong".to_string())).await {
+                    if let Ok(_) = socket
+                        .send(axum::extract::ws::Message::Text("pong".to_string()))
+                        .await
+                    {
                         continue;
                     }
                     break;
@@ -81,18 +81,13 @@ impl WebSocketServer {
                 tracing::info!("WebSocket connection closed");
             })
         };
-        
+
         // FIXED: Use the new add_axum_route method to preserve all router state
         router.add_axum_route(path, get(ws_handler))
     }
 
     /// Add a simple WebSocket handler function (alias for add_websocket_route)
-    pub fn add_handler<F, Fut>(
-        &self,
-        router: ElifRouter,
-        path: &str,
-        handler: F,
-    ) -> ElifRouter
+    pub fn add_handler<F, Fut>(&self, router: ElifRouter, path: &str, handler: F) -> ElifRouter
     where
         F: Fn(ConnectionId, Arc<WebSocketConnection>) -> Fut + Send + Sync + Clone + 'static,
         Fut: std::future::Future<Output = ()> + Send + 'static,
@@ -106,12 +101,18 @@ impl WebSocketServer {
     }
 
     /// Broadcast text to all connections
-    pub async fn broadcast_text<T: Into<String>>(&self, text: T) -> super::registry::BroadcastResult {
+    pub async fn broadcast_text<T: Into<String>>(
+        &self,
+        text: T,
+    ) -> super::registry::BroadcastResult {
         self.registry.broadcast_text(text).await
     }
 
     /// Broadcast binary data to all connections
-    pub async fn broadcast_binary<T: Into<Vec<u8>>>(&self, data: T) -> super::registry::BroadcastResult {
+    pub async fn broadcast_binary<T: Into<Vec<u8>>>(
+        &self,
+        data: T,
+    ) -> super::registry::BroadcastResult {
         self.registry.broadcast_binary(data).await
     }
 
@@ -172,7 +173,7 @@ impl WebSocketServer {
         let registry = self.registry.clone();
         let handle = tokio::spawn(async move {
             let mut cleanup_interval = interval(Duration::from_secs(interval_seconds));
-            
+
             loop {
                 cleanup_interval.tick().await;
                 let cleaned = registry.cleanup_inactive_connections().await;
@@ -183,7 +184,10 @@ impl WebSocketServer {
         });
 
         self.cleanup_handle = Some(handle);
-        info!("Started WebSocket cleanup task with {}s interval", interval_seconds);
+        info!(
+            "Started WebSocket cleanup task with {}s interval",
+            interval_seconds
+        );
     }
 
     /// Stop the cleanup task
@@ -268,11 +272,11 @@ impl WebSocketServerBuilder {
     /// Build the WebSocket server
     pub fn build(self) -> WebSocketServer {
         let mut server = WebSocketServer::with_config(self._config);
-        
+
         if let Some(interval) = self.cleanup_interval {
             server.start_cleanup_task(interval);
         }
-        
+
         server
     }
 }

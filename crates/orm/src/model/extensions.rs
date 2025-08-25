@@ -66,24 +66,24 @@ pub trait ModelExtensions: Model + CrudOperations {
     {
         let mut cloned = self.clone();
         cloned.set_primary_key(Self::PrimaryKey::default());
-        
+
         // Reset timestamps for new record
         if Self::uses_timestamps() {
             cloned.set_created_at(chrono::Utc::now());
             cloned.set_updated_at(chrono::Utc::now());
         }
-        
+
         // Reset soft delete status
         if Self::uses_soft_deletes() {
             cloned.set_deleted_at(None);
         }
-        
+
         cloned
     }
 
     // <<<ELIF:BEGIN agent-editable:transaction_methods>>>
     // Transaction-scoped operations (placeholders for future implementation)
-    
+
     /// Placeholder for transaction-scoped model operations
     /// Will be fully implemented when derive macros are available
     fn supports_transactions() -> bool

@@ -1,14 +1,14 @@
 //! JSON handling utilities for requests and responses
 
+use crate::errors::HttpResult;
+use crate::response::{ElifResponse, ElifStatusCode, IntoElifResponse};
 use axum::{
     extract::{FromRequest, Request},
     response::{IntoResponse, Response},
     Json,
 };
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
-use crate::errors::HttpResult;
-use crate::response::{ElifResponse, IntoElifResponse, ElifStatusCode};
 
 /// Enhanced JSON extractor with better error handling
 #[derive(Debug)]
@@ -93,7 +93,8 @@ where
             }
             Err(err) => {
                 tracing::error!("JSON serialization failed: {}", err);
-                let mut response = Response::new("Internal server error: JSON serialization failed".into());
+                let mut response =
+                    Response::new("Internal server error: JSON serialization failed".into());
                 *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
                 response.headers_mut().insert(
                     axum::http::header::CONTENT_TYPE,
@@ -133,43 +134,35 @@ impl JsonError {
     }
 
     /// Create from Axum JSON rejection (internal use only)
-    pub(crate) fn from_axum_json_rejection(rejection: axum::extract::rejection::JsonRejection) -> Self {
+    pub(crate) fn from_axum_json_rejection(
+        rejection: axum::extract::rejection::JsonRejection,
+    ) -> Self {
         use axum::extract::rejection::JsonRejection::*;
-        
+
         match rejection {
-            JsonDataError(err) => {
-                Self::with_details(
-                    ElifStatusCode::BAD_REQUEST,
-                    "Invalid JSON data".to_string(),
-                    err.to_string(),
-                )
-            }
-            JsonSyntaxError(err) => {
-                Self::with_details(
-                    ElifStatusCode::BAD_REQUEST,
-                    "JSON syntax error".to_string(),
-                    err.to_string(),
-                )
-            }
-            MissingJsonContentType(_) => {
-                Self::new(
-                    ElifStatusCode::BAD_REQUEST,
-                    "Missing 'Content-Type: application/json' header".to_string(),
-                )
-            }
-            BytesRejection(err) => {
-                Self::with_details(
-                    ElifStatusCode::BAD_REQUEST,
-                    "Failed to read request body".to_string(),
-                    err.to_string(),
-                )
-            }
-            _ => {
-                Self::new(
-                    ElifStatusCode::BAD_REQUEST,
-                    "Invalid JSON request".to_string(),
-                )
-            }
+            JsonDataError(err) => Self::with_details(
+                ElifStatusCode::BAD_REQUEST,
+                "Invalid JSON data".to_string(),
+                err.to_string(),
+            ),
+            JsonSyntaxError(err) => Self::with_details(
+                ElifStatusCode::BAD_REQUEST,
+                "JSON syntax error".to_string(),
+                err.to_string(),
+            ),
+            MissingJsonContentType(_) => Self::new(
+                ElifStatusCode::BAD_REQUEST,
+                "Missing 'Content-Type: application/json' header".to_string(),
+            ),
+            BytesRejection(err) => Self::with_details(
+                ElifStatusCode::BAD_REQUEST,
+                "Failed to read request body".to_string(),
+                err.to_string(),
+            ),
+            _ => Self::new(
+                ElifStatusCode::BAD_REQUEST,
+                "Invalid JSON request".to_string(),
+            ),
         }
     }
 }
@@ -239,7 +232,7 @@ impl JsonResponse {
         total: u64,
     ) -> HttpResult<Response> {
         let total_pages = (total as f64 / per_page as f64).ceil() as u32;
-        
+
         let response_data = serde_json::json!({
             "data": data,
             "pagination": {
@@ -302,12 +295,12 @@ impl ValidationErrors {
 
     /// Add error for a field
     pub fn add_error(&mut self, field: String, error: String) {
-        self.errors.entry(field).or_insert_with(Vec::new).push(error);
+        self.errors.entry(field).or_default().push(error);
     }
 
     /// Add multiple errors for a field
     pub fn add_errors(&mut self, field: String, errors: Vec<String>) {
-        self.errors.entry(field).or_insert_with(Vec::new).extend(errors);
+        self.errors.entry(field).or_default().extend(errors);
     }
 
     /// Check if there are any errors
@@ -400,7 +393,11 @@ impl<T: Serialize> IntoResponse for ApiResponse<T> {
             Ok(response) => response,
             Err(e) => {
                 tracing::error!("Failed to create API response: {}", e);
-                (ElifStatusCode::INTERNAL_SERVER_ERROR.to_axum(), "Internal server error").into_response()
+                (
+                    ElifStatusCode::INTERNAL_SERVER_ERROR.to_axum(),
+                    "Internal server error",
+                )
+                    .into_response()
             }
         }
     }

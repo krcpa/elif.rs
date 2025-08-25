@@ -38,40 +38,43 @@ impl MapGenerator {
     pub fn new(project_root: PathBuf) -> Self {
         Self { project_root }
     }
-    
+
     pub fn generate(&self) -> Result<ProjectMap, ElifError> {
         let mut routes = Vec::new();
         let mut models = Vec::new();
         let mut specs = Vec::new();
-        
+
         // Collect resource specifications
         let resources_dir = self.project_root.join("resources");
         if resources_dir.exists() {
             for entry in std::fs::read_dir(&resources_dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                
-                if path.extension().map_or(false, |ext| ext == "yaml") &&
-                   path.file_stem().and_then(|s| s.to_str())
-                       .map_or(false, |s| s.ends_with(".resource")) {
-                    
+
+                if path.extension().is_some_and(|ext| ext == "yaml")
+                    && path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .is_some_and(|s| s.ends_with(".resource"))
+                {
                     let content = std::fs::read_to_string(&path)?;
                     let spec = ResourceSpec::from_yaml(&content)?;
-                    
+
                     // Add spec info
                     specs.push(SpecInfo {
                         name: spec.name.clone(),
                         file: path.to_string_lossy().to_string(),
                     });
-                    
+
                     // Add model info
                     models.push(ModelInfo {
                         name: spec.name.clone(),
                         file: format!("crates/orm/src/models/{}.rs", spec.name.to_lowercase()),
                     });
-                    
+
                     // Add route info for each operation
-                    let handler_file = format!("apps/api/src/routes/{}.rs", spec.name.to_lowercase());
+                    let handler_file =
+                        format!("apps/api/src/routes/{}.rs", spec.name.to_lowercase());
                     for op in &spec.api.operations {
                         routes.push(RouteInfo {
                             op_id: format!("{}.{}", spec.name, op.op),
@@ -84,7 +87,7 @@ impl MapGenerator {
                 }
             }
         }
-        
+
         Ok(ProjectMap {
             routes,
             models,

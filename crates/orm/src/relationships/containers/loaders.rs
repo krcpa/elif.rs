@@ -23,20 +23,16 @@ where
         parent: &Parent,
         pool: &Pool<Postgres>,
     ) -> ModelResult<Related>;
-    
+
     /// Load relationship for multiple parents (eager loading)
     async fn load_for_instances(
         &self,
         parents: &mut [Parent],
         pool: &Pool<Postgres>,
     ) -> ModelResult<Vec<Related>>;
-    
+
     /// Load with specific type conversion
-    async fn load_typed<T>(
-        &self,
-        parent: &Parent,
-        pool: &Pool<Postgres>,
-    ) -> ModelResult<T>
+    async fn load_typed<T>(&self, parent: &Parent, pool: &Pool<Postgres>) -> ModelResult<T>
     where
         T: DeserializeOwned + Send + Sync;
 }

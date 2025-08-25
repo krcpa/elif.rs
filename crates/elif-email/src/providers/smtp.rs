@@ -4,10 +4,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use lettre::{
-    message::{
-        header::ContentType,
-        Attachment as LettreAttachment, MultiPart, SinglePart,
-    },
+    message::{header::ContentType, Attachment as LettreAttachment, MultiPart, SinglePart},
     transport::smtp::{
         authentication::{Credentials, Mechanism},
         client::{Tls, TlsParameters},
@@ -59,7 +56,9 @@ impl SmtpProvider {
                 .map_err(|e| EmailError::configuration(format!("TLS parameter error: {}", e)))?;
 
             let tls = match tls_config {
-                SmtpTlsConfig::Tls | SmtpTlsConfig::StartTlsRequired => Tls::Required(tls_parameters),
+                SmtpTlsConfig::Tls | SmtpTlsConfig::StartTlsRequired => {
+                    Tls::Required(tls_parameters)
+                }
                 SmtpTlsConfig::StartTls => Tls::Opportunistic(tls_parameters),
                 SmtpTlsConfig::None => unreachable!(), // Already handled by the if-condition
             };
@@ -80,8 +79,8 @@ impl SmtpProvider {
 
         let transport = transport_builder.build();
 
-        Ok(Self { 
-            config, 
+        Ok(Self {
+            config,
             transport,
             connection_semaphore,
         })
@@ -90,56 +89,51 @@ impl SmtpProvider {
     /// Convert elif Email to lettre Message
     fn convert_email(&self, email: &Email) -> Result<Message, EmailError> {
         let mut message_builder = Message::builder()
-            .from(
-                email
-                    .from
-                    .parse()
-                    .map_err(|e| EmailError::validation("from", format!("Invalid from address: {}", e)))?,
-            )
+            .from(email.from.parse().map_err(|e| {
+                EmailError::validation("from", format!("Invalid from address: {}", e))
+            })?)
             .subject(&email.subject);
 
         // Add recipients
         for to in &email.to {
-            message_builder = message_builder.to(
-                to.parse()
-                    .map_err(|e| EmailError::validation("to", format!("Invalid to address: {}", e)))?,
-            );
+            message_builder = message_builder.to(to
+                .parse()
+                .map_err(|e| EmailError::validation("to", format!("Invalid to address: {}", e)))?);
         }
 
         // Add CC recipients
         if let Some(cc_list) = &email.cc {
             for cc in cc_list {
-                message_builder = message_builder.cc(
-                    cc.parse()
-                        .map_err(|e| EmailError::validation("cc", format!("Invalid cc address: {}", e)))?,
-                );
+                message_builder = message_builder.cc(cc.parse().map_err(|e| {
+                    EmailError::validation("cc", format!("Invalid cc address: {}", e))
+                })?);
             }
         }
 
         // Add BCC recipients
         if let Some(bcc_list) = &email.bcc {
             for bcc in bcc_list {
-                message_builder = message_builder.bcc(
-                    bcc.parse()
-                        .map_err(|e| EmailError::validation("bcc", format!("Invalid bcc address: {}", e)))?,
-                );
+                message_builder = message_builder.bcc(bcc.parse().map_err(|e| {
+                    EmailError::validation("bcc", format!("Invalid bcc address: {}", e))
+                })?);
             }
         }
 
         // Add reply-to
         if let Some(reply_to) = &email.reply_to {
-            message_builder = message_builder.reply_to(
-                reply_to
-                    .parse()
-                    .map_err(|e| EmailError::validation("reply_to", format!("Invalid reply-to address: {}", e)))?,
-            );
+            message_builder = message_builder.reply_to(reply_to.parse().map_err(|e| {
+                EmailError::validation("reply_to", format!("Invalid reply-to address: {}", e))
+            })?);
         }
 
         // Add custom headers
         // Note: lettre 0.11 has limited custom header support
         // For now, skip custom headers - this is a known limitation
         if !email.headers.is_empty() {
-            debug!("Custom headers provided but not fully supported in lettre 0.11: {:?}", email.headers);
+            debug!(
+                "Custom headers provided but not fully supported in lettre 0.11: {:?}",
+                email.headers
+            );
         }
 
         // Build message body with proper multipart structure
@@ -155,7 +149,11 @@ impl SmtpProvider {
     }
 
     /// Build simple message without attachments
-    fn build_simple_message(&self, message_builder: lettre::message::MessageBuilder, email: &Email) -> Result<Message, EmailError> {
+    fn build_simple_message(
+        &self,
+        message_builder: lettre::message::MessageBuilder,
+        email: &Email,
+    ) -> Result<Message, EmailError> {
         match (&email.html_body, &email.text_body) {
             (Some(html), Some(text)) => {
                 let multipart = MultiPart::alternative()
@@ -163,29 +161,49 @@ impl SmtpProvider {
                     .singlepart(SinglePart::html(html.clone()));
                 Ok(message_builder.multipart(multipart)?)
             }
-            (Some(html), None) => Ok(message_builder.header(ContentType::TEXT_HTML).body(html.clone())?),
-            (None, Some(text)) => Ok(message_builder.header(ContentType::TEXT_PLAIN).body(text.clone())?),
-            (None, None) => {
-                Err(EmailError::validation("body", "Email must have either HTML or text body"))
-            }
+            (Some(html), None) => Ok(message_builder
+                .header(ContentType::TEXT_HTML)
+                .body(html.clone())?),
+            (None, Some(text)) => Ok(message_builder
+                .header(ContentType::TEXT_PLAIN)
+                .body(text.clone())?),
+            (None, None) => Err(EmailError::validation(
+                "body",
+                "Email must have either HTML or text body",
+            )),
         }
     }
 
     /// Build complex message with attachments and inline content
-    fn build_complex_message(&self, message_builder: lettre::message::MessageBuilder, email: &Email) -> Result<Message, EmailError> {
+    fn build_complex_message(
+        &self,
+        message_builder: lettre::message::MessageBuilder,
+        email: &Email,
+    ) -> Result<Message, EmailError> {
         let inline_attachments = email.inline_attachments();
         let regular_attachments = email.regular_attachments();
 
         // If we have inline attachments, we need a different structure
         if !inline_attachments.is_empty() {
-            self.build_message_with_inline_attachments(message_builder, email, &inline_attachments, &regular_attachments)
+            self.build_message_with_inline_attachments(
+                message_builder,
+                email,
+                &inline_attachments,
+                &regular_attachments,
+            )
         } else {
             self.build_message_with_attachments_only(message_builder, email, &regular_attachments)
         }
     }
 
     /// Build message with inline attachments (embedded images)
-    fn build_message_with_inline_attachments(&self, message_builder: lettre::message::MessageBuilder, email: &Email, inline_attachments: &[&crate::Attachment], regular_attachments: &[&crate::Attachment]) -> Result<Message, EmailError> {
+    fn build_message_with_inline_attachments(
+        &self,
+        message_builder: lettre::message::MessageBuilder,
+        email: &Email,
+        inline_attachments: &[&crate::Attachment],
+        regular_attachments: &[&crate::Attachment],
+    ) -> Result<Message, EmailError> {
         // Structure: multipart/mixed
         //   - multipart/related (for HTML + inline images)
         //     - multipart/alternative (for text + HTML) or single part
@@ -193,35 +211,36 @@ impl SmtpProvider {
 
         // Build the content part (either single part or alternative)
         let content_part = match (&email.html_body, &email.text_body) {
-            (Some(html), Some(text)) => {
-                MultiPart::alternative()
-                    .singlepart(SinglePart::plain(text.clone()))
-                    .singlepart(SinglePart::html(html.clone()))
-            }
+            (Some(html), Some(text)) => MultiPart::alternative()
+                .singlepart(SinglePart::plain(text.clone()))
+                .singlepart(SinglePart::html(html.clone())),
             (Some(html), None) => {
-                MultiPart::alternative()
-                    .singlepart(SinglePart::html(html.clone()))
+                MultiPart::alternative().singlepart(SinglePart::html(html.clone()))
             }
             (None, Some(text)) => {
-                MultiPart::alternative()
-                    .singlepart(SinglePart::plain(text.clone()))
+                MultiPart::alternative().singlepart(SinglePart::plain(text.clone()))
             }
             (None, None) => {
-                return Err(EmailError::validation("body", "Email must have either HTML or text body"));
+                return Err(EmailError::validation(
+                    "body",
+                    "Email must have either HTML or text body",
+                ));
             }
         };
 
         // Build multipart/related containing the content + inline attachments
         let mut related_part = MultiPart::related().multipart(content_part);
-        
+
         // Add inline attachments
         for attachment in inline_attachments {
-            let lettre_attachment = LettreAttachment::new(attachment.filename.clone())
-                .body(
-                    attachment.content.clone(),
-                    attachment.content_type.parse().unwrap_or_else(|_| "application/octet-stream".parse().unwrap())
-                );
-            
+            let lettre_attachment = LettreAttachment::new(attachment.filename.clone()).body(
+                attachment.content.clone(),
+                attachment
+                    .content_type
+                    .parse()
+                    .unwrap_or_else(|_| "application/octet-stream".parse().unwrap()),
+            );
+
             // Note: lettre 0.11 has limited support for Content-ID headers.
             // This is a known limitation. The multipart/related structure is key.
             related_part = related_part.singlepart(lettre_attachment);
@@ -230,15 +249,17 @@ impl SmtpProvider {
         // If we have regular attachments, wrap in multipart/mixed
         let final_multipart = if !regular_attachments.is_empty() {
             let mut mixed = MultiPart::mixed().multipart(related_part);
-            
+
             // Add regular attachments
             for attachment in regular_attachments {
-                let lettre_attachment = LettreAttachment::new(attachment.filename.clone())
-                    .body(
-                        attachment.content.clone(),
-                        attachment.content_type.parse().unwrap_or_else(|_| "application/octet-stream".parse().unwrap())
-                    );
-                
+                let lettre_attachment = LettreAttachment::new(attachment.filename.clone()).body(
+                    attachment.content.clone(),
+                    attachment
+                        .content_type
+                        .parse()
+                        .unwrap_or_else(|_| "application/octet-stream".parse().unwrap()),
+                );
+
                 mixed = mixed.singlepart(lettre_attachment);
             }
             mixed
@@ -251,38 +272,42 @@ impl SmtpProvider {
     }
 
     /// Build message with regular attachments only (no inline)
-    fn build_message_with_attachments_only(&self, message_builder: lettre::message::MessageBuilder, email: &Email, regular_attachments: &[&crate::Attachment]) -> Result<Message, EmailError> {
+    fn build_message_with_attachments_only(
+        &self,
+        message_builder: lettre::message::MessageBuilder,
+        email: &Email,
+        regular_attachments: &[&crate::Attachment],
+    ) -> Result<Message, EmailError> {
         // Structure: multipart/mixed
         //   - multipart/alternative (for text + HTML) OR single part
         //   - attachments
-        
+
         let mut multipart = match (&email.html_body, &email.text_body) {
-            (Some(html), Some(text)) => {
-                MultiPart::mixed().multipart(
-                    MultiPart::alternative()
-                        .singlepart(SinglePart::plain(text.clone()))
-                        .singlepart(SinglePart::html(html.clone()))
-                )
-            }
-            (Some(html), None) => {
-                MultiPart::mixed().singlepart(SinglePart::html(html.clone()))
-            }
-            (None, Some(text)) => {
-                MultiPart::mixed().singlepart(SinglePart::plain(text.clone()))
-            }
+            (Some(html), Some(text)) => MultiPart::mixed().multipart(
+                MultiPart::alternative()
+                    .singlepart(SinglePart::plain(text.clone()))
+                    .singlepart(SinglePart::html(html.clone())),
+            ),
+            (Some(html), None) => MultiPart::mixed().singlepart(SinglePart::html(html.clone())),
+            (None, Some(text)) => MultiPart::mixed().singlepart(SinglePart::plain(text.clone())),
             (None, None) => {
-                return Err(EmailError::validation("body", "Email must have either HTML or text body"));
+                return Err(EmailError::validation(
+                    "body",
+                    "Email must have either HTML or text body",
+                ));
             }
         };
 
         // Add regular attachments
         for attachment in regular_attachments {
-            let lettre_attachment = LettreAttachment::new(attachment.filename.clone())
-                .body(
-                    attachment.content.clone(),
-                    attachment.content_type.parse().unwrap_or_else(|_| "application/octet-stream".parse().unwrap())
-                );
-            
+            let lettre_attachment = LettreAttachment::new(attachment.filename.clone()).body(
+                attachment.content.clone(),
+                attachment
+                    .content_type
+                    .parse()
+                    .unwrap_or_else(|_| "application/octet-stream".parse().unwrap()),
+            );
+
             multipart = multipart.singlepart(lettre_attachment);
         }
 
@@ -293,10 +318,7 @@ impl SmtpProvider {
 #[async_trait]
 impl EmailProvider for SmtpProvider {
     async fn send(&self, email: &Email) -> Result<EmailResult, EmailError> {
-        debug!(
-            "Sending email via SMTP: {} -> {:?}",
-            email.from, email.to
-        );
+        debug!("Sending email via SMTP: {} -> {:?}", email.from, email.to);
 
         let message = self.convert_email(email)?;
 
@@ -307,15 +329,17 @@ impl EmailProvider for SmtpProvider {
 
         loop {
             // Acquire connection semaphore permit to limit concurrent connections
-            let _permit = self.connection_semaphore.acquire().await
-                .map_err(|_| EmailError::provider("SMTP", "Failed to acquire connection permit"))?;
-            
+            let _permit =
+                self.connection_semaphore.acquire().await.map_err(|_| {
+                    EmailError::provider("SMTP", "Failed to acquire connection permit")
+                })?;
+
             match self.transport.send(message.clone()).await {
                 Ok(_response) => {
                     debug!("SMTP send successful on attempt {}", attempt + 1);
                     let now = chrono::Utc::now();
                     let message_id = format!("smtp-{}-{}", email.id, now.timestamp());
-                    
+
                     return Ok(EmailResult {
                         email_id: email.id,
                         message_id,
@@ -326,13 +350,14 @@ impl EmailProvider for SmtpProvider {
                 Err(e) => {
                     attempt += 1;
                     error!("SMTP send failed on attempt {}: {}", attempt, e);
-                    
+
                     if attempt >= max_retries {
-                        return Err(EmailError::provider("SMTP", format!(
-                            "Failed after {} attempts: {}", max_retries, e
-                        )));
+                        return Err(EmailError::provider(
+                            "SMTP",
+                            format!("Failed after {} attempts: {}", max_retries, e),
+                        ));
                     }
-                    
+
                     debug!("Retrying in {} seconds...", retry_delay);
                     sleep(Duration::from_secs(retry_delay)).await;
                 }
@@ -341,39 +366,56 @@ impl EmailProvider for SmtpProvider {
     }
 
     async fn validate_config(&self) -> Result<(), EmailError> {
-        debug!("Validating SMTP configuration for {}:{}", self.config.host, self.config.port);
+        debug!(
+            "Validating SMTP configuration for {}:{}",
+            self.config.host, self.config.port
+        );
 
         // Acquire connection permit for testing
-        let _permit = self.connection_semaphore.acquire().await
-            .map_err(|_| EmailError::configuration("Failed to acquire connection permit for validation"))?;
+        let _permit = self.connection_semaphore.acquire().await.map_err(|_| {
+            EmailError::configuration("Failed to acquire connection permit for validation")
+        })?;
 
         // Test connection with timeout
         let test_result = tokio::time::timeout(
             Duration::from_secs(self.config.timeout.unwrap_or(30)),
-            self.transport.test_connection()
-        ).await;
+            self.transport.test_connection(),
+        )
+        .await;
 
         match test_result {
             Ok(Ok(true)) => {
-                debug!("SMTP connection test successful for {}:{}", self.config.host, self.config.port);
+                debug!(
+                    "SMTP connection test successful for {}:{}",
+                    self.config.host, self.config.port
+                );
                 Ok(())
             }
             Ok(Ok(false)) => {
-                error!("SMTP connection test failed for {}:{}", self.config.host, self.config.port);
+                error!(
+                    "SMTP connection test failed for {}:{}",
+                    self.config.host, self.config.port
+                );
                 Err(EmailError::configuration(format!(
                     "SMTP connection test failed for {}:{} - check host, port, and credentials",
                     self.config.host, self.config.port
                 )))
             }
             Ok(Err(e)) => {
-                error!("SMTP connection test error for {}:{}: {}", self.config.host, self.config.port, e);
+                error!(
+                    "SMTP connection test error for {}:{}: {}",
+                    self.config.host, self.config.port, e
+                );
                 Err(EmailError::configuration(format!(
                     "SMTP connection test error for {}:{}: {}",
                     self.config.host, self.config.port, e
                 )))
             }
             Err(_) => {
-                error!("SMTP connection test timeout for {}:{}", self.config.host, self.config.port);
+                error!(
+                    "SMTP connection test timeout for {}:{}",
+                    self.config.host, self.config.port
+                );
                 Err(EmailError::configuration(format!(
                     "SMTP connection test timeout for {}:{} - check network connectivity",
                     self.config.host, self.config.port

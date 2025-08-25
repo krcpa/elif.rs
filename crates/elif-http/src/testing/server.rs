@@ -1,7 +1,7 @@
 //! Test server utilities
 
-use crate::{Server, HttpConfig, ElifRouter};
 use crate::testing::container::create_test_container;
+use crate::{ElifRouter, HttpConfig, Server};
 use std::net::SocketAddr;
 
 /// Test server builder for integration tests
@@ -30,9 +30,9 @@ impl TestServerBuilder {
 
     pub fn build(self) -> Server {
         let container = create_test_container();
-        let mut server = Server::with_container(container, self.config)
-            .expect("Failed to create test server");
-        
+        let mut server =
+            Server::with_container(container, self.config).expect("Failed to create test server");
+
         if let Some(router) = self.router {
             server.use_router(router);
         }

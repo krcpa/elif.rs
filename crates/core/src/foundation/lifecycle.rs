@@ -25,12 +25,12 @@ impl LifecycleManager {
             state: Arc::new(AtomicBool::new(false)),
         }
     }
-    
+
     /// Check if the lifecycle manager is running
     pub fn is_running(&self) -> bool {
         self.state.load(Ordering::SeqCst)
     }
-    
+
     /// Set running state
     pub fn set_running(&self, running: bool) {
         self.state.store(running, Ordering::SeqCst);

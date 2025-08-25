@@ -1,9 +1,9 @@
 //! HTTP header utilities and wrappers
 
+use crate::errors::ParseError;
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
-use crate::errors::ParseError;
 
 /// Framework-native header name wrapper that hides Axum internals
 #[repr(transparent)]
@@ -99,7 +99,7 @@ impl FromStr for ElifHeaderValue {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Call our inherent method using qualified syntax to avoid recursion  
+        // Call our inherent method using qualified syntax to avoid recursion
         <ElifHeaderValue>::from_str(s)
     }
 }
@@ -124,7 +124,11 @@ impl ElifHeaderMap {
     }
 
     /// Insert a header into the map
-    pub fn insert(&mut self, name: ElifHeaderName, value: ElifHeaderValue) -> Option<ElifHeaderValue> {
+    pub fn insert(
+        &mut self,
+        name: ElifHeaderName,
+        value: ElifHeaderValue,
+    ) -> Option<ElifHeaderValue> {
         self.0.insert(name.0, value.0).map(ElifHeaderValue)
     }
 
@@ -186,9 +190,7 @@ impl ElifHeaderMap {
     pub fn iter(&self) -> impl Iterator<Item = (&ElifHeaderName, &ElifHeaderValue)> {
         self.0.iter().map(|(k, v)| {
             // SAFETY: This is safe because our wrapper types are transparent
-            unsafe { 
-                (std::mem::transmute(k), std::mem::transmute(v))
-            }
+            unsafe { (std::mem::transmute(k), std::mem::transmute(v)) }
         })
     }
 
@@ -236,7 +238,9 @@ impl ElifHeaderMap {
         self.0
             .iter()
             .filter_map(|(k, v)| {
-                v.to_str().ok().map(|v| (k.as_str().to_string(), v.to_string()))
+                v.to_str()
+                    .ok()
+                    .map(|v| (k.as_str().to_string(), v.to_string()))
             })
             .collect()
     }
@@ -284,16 +288,25 @@ pub mod header_names {
     pub const USER_AGENT: ElifHeaderName = ElifHeaderName(header::USER_AGENT);
     pub const REFERER: ElifHeaderName = ElifHeaderName(header::REFERER);
     pub const ORIGIN: ElifHeaderName = ElifHeaderName(header::ORIGIN);
-    pub const ACCESS_CONTROL_ALLOW_ORIGIN: ElifHeaderName = ElifHeaderName(header::ACCESS_CONTROL_ALLOW_ORIGIN);
-    pub const ACCESS_CONTROL_ALLOW_METHODS: ElifHeaderName = ElifHeaderName(header::ACCESS_CONTROL_ALLOW_METHODS);
-    pub const ACCESS_CONTROL_ALLOW_HEADERS: ElifHeaderName = ElifHeaderName(header::ACCESS_CONTROL_ALLOW_HEADERS);
-    pub const ACCESS_CONTROL_EXPOSE_HEADERS: ElifHeaderName = ElifHeaderName(header::ACCESS_CONTROL_EXPOSE_HEADERS);
-    pub const ACCESS_CONTROL_ALLOW_CREDENTIALS: ElifHeaderName = ElifHeaderName(header::ACCESS_CONTROL_ALLOW_CREDENTIALS);
-    pub const ACCESS_CONTROL_MAX_AGE: ElifHeaderName = ElifHeaderName(header::ACCESS_CONTROL_MAX_AGE);
-    pub const CONTENT_SECURITY_POLICY: ElifHeaderName = ElifHeaderName(header::CONTENT_SECURITY_POLICY);
-    pub const STRICT_TRANSPORT_SECURITY: ElifHeaderName = ElifHeaderName(header::STRICT_TRANSPORT_SECURITY);
+    pub const ACCESS_CONTROL_ALLOW_ORIGIN: ElifHeaderName =
+        ElifHeaderName(header::ACCESS_CONTROL_ALLOW_ORIGIN);
+    pub const ACCESS_CONTROL_ALLOW_METHODS: ElifHeaderName =
+        ElifHeaderName(header::ACCESS_CONTROL_ALLOW_METHODS);
+    pub const ACCESS_CONTROL_ALLOW_HEADERS: ElifHeaderName =
+        ElifHeaderName(header::ACCESS_CONTROL_ALLOW_HEADERS);
+    pub const ACCESS_CONTROL_EXPOSE_HEADERS: ElifHeaderName =
+        ElifHeaderName(header::ACCESS_CONTROL_EXPOSE_HEADERS);
+    pub const ACCESS_CONTROL_ALLOW_CREDENTIALS: ElifHeaderName =
+        ElifHeaderName(header::ACCESS_CONTROL_ALLOW_CREDENTIALS);
+    pub const ACCESS_CONTROL_MAX_AGE: ElifHeaderName =
+        ElifHeaderName(header::ACCESS_CONTROL_MAX_AGE);
+    pub const CONTENT_SECURITY_POLICY: ElifHeaderName =
+        ElifHeaderName(header::CONTENT_SECURITY_POLICY);
+    pub const STRICT_TRANSPORT_SECURITY: ElifHeaderName =
+        ElifHeaderName(header::STRICT_TRANSPORT_SECURITY);
     pub const X_FRAME_OPTIONS: ElifHeaderName = ElifHeaderName(header::X_FRAME_OPTIONS);
-    pub const X_CONTENT_TYPE_OPTIONS: ElifHeaderName = ElifHeaderName(header::X_CONTENT_TYPE_OPTIONS);
+    pub const X_CONTENT_TYPE_OPTIONS: ElifHeaderName =
+        ElifHeaderName(header::X_CONTENT_TYPE_OPTIONS);
     pub const X_XSS_PROTECTION: ElifHeaderName = ElifHeaderName(header::X_XSS_PROTECTION);
     pub const REFERRER_POLICY: ElifHeaderName = ElifHeaderName(header::REFERRER_POLICY);
 }

@@ -1,10 +1,10 @@
 //! Constraint builder for creating type-safe relationship constraints
 
-use std::collections::HashSet;
-use crate::error::ModelResult;
-use crate::query::{QueryBuilder, OrderDirection, QueryOperator};
-use super::types::{RelationshipConstraint, ConstraintType};
 use super::implementations::*;
+use super::types::{ConstraintType, RelationshipConstraint};
+use crate::error::ModelResult;
+use crate::query::{OrderDirection, QueryBuilder, QueryOperator};
+use std::collections::HashSet;
 
 /// Builder for relationship constraints with type safety and validation
 #[derive(Debug)]
@@ -21,7 +21,7 @@ impl RelationshipConstraintBuilder {
             applied_types: HashSet::new(),
         }
     }
-    
+
     /// Apply all constraints to the query builder
     pub async fn apply_all(&self, query: &mut QueryBuilder) -> ModelResult<()> {
         for constraint in &self.constraints {
@@ -30,17 +30,17 @@ impl RelationshipConstraintBuilder {
         }
         Ok(())
     }
-    
+
     /// Get all constraints
     pub fn constraints(&self) -> &[Box<dyn RelationshipConstraint>] {
         &self.constraints
     }
-    
+
     /// Check if a constraint type has been applied
     pub fn has_constraint_type(&self, constraint_type: &ConstraintType) -> bool {
         self.applied_types.contains(constraint_type)
     }
-    
+
     /// Add a constraint and track its type
     fn add_constraint(&mut self, constraint: Box<dyn RelationshipConstraint>) {
         let constraint_type = constraint.constraint_type();
@@ -49,7 +49,7 @@ impl RelationshipConstraintBuilder {
     }
 
     /// Add WHERE equals constraint
-    pub fn where_eq<V>(mut self, field: &str, value: V) -> Self 
+    pub fn where_eq<V>(mut self, field: &str, value: V) -> Self
     where
         V: Send + Sync + std::fmt::Display + Clone + 'static,
     {
@@ -61,9 +61,9 @@ impl RelationshipConstraintBuilder {
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add WHERE not equals constraint
-    pub fn where_ne<V>(mut self, field: &str, value: V) -> Self 
+    pub fn where_ne<V>(mut self, field: &str, value: V) -> Self
     where
         V: Send + Sync + std::fmt::Display + Clone + 'static,
     {
@@ -77,7 +77,7 @@ impl RelationshipConstraintBuilder {
     }
 
     /// Add WHERE greater than constraint
-    pub fn where_gt<V>(mut self, field: &str, value: V) -> Self 
+    pub fn where_gt<V>(mut self, field: &str, value: V) -> Self
     where
         V: Send + Sync + std::fmt::Display + Clone + 'static,
     {
@@ -89,9 +89,9 @@ impl RelationshipConstraintBuilder {
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add WHERE greater than or equal constraint
-    pub fn where_gte<V>(mut self, field: &str, value: V) -> Self 
+    pub fn where_gte<V>(mut self, field: &str, value: V) -> Self
     where
         V: Send + Sync + std::fmt::Display + Clone + 'static,
     {
@@ -103,9 +103,9 @@ impl RelationshipConstraintBuilder {
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add WHERE less than constraint
-    pub fn where_lt<V>(mut self, field: &str, value: V) -> Self 
+    pub fn where_lt<V>(mut self, field: &str, value: V) -> Self
     where
         V: Send + Sync + std::fmt::Display + Clone + 'static,
     {
@@ -117,9 +117,9 @@ impl RelationshipConstraintBuilder {
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add WHERE less than or equal constraint
-    pub fn where_lte<V>(mut self, field: &str, value: V) -> Self 
+    pub fn where_lte<V>(mut self, field: &str, value: V) -> Self
     where
         V: Send + Sync + std::fmt::Display + Clone + 'static,
     {
@@ -131,7 +131,7 @@ impl RelationshipConstraintBuilder {
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add WHERE LIKE constraint
     pub fn where_like(mut self, field: &str, pattern: &str) -> Self {
         let constraint = WhereConstraint {
@@ -142,20 +142,23 @@ impl RelationshipConstraintBuilder {
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add WHERE IN constraint
-    pub fn where_in<V>(mut self, field: &str, values: Vec<V>) -> Self 
+    pub fn where_in<V>(mut self, field: &str, values: Vec<V>) -> Self
     where
         V: Send + Sync + std::fmt::Display + Clone + 'static,
     {
         let constraint = WhereInConstraint {
             field: field.to_string(),
-            values: values.into_iter().map(|v| serde_json::Value::String(v.to_string())).collect(),
+            values: values
+                .into_iter()
+                .map(|v| serde_json::Value::String(v.to_string()))
+                .collect(),
         };
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add raw WHERE constraint
     pub fn where_raw(mut self, condition: &str) -> Self {
         let constraint = RawConstraint {
@@ -175,7 +178,7 @@ impl RelationshipConstraintBuilder {
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add ORDER BY DESC constraint
     pub fn order_by_desc(mut self, field: &str) -> Self {
         let constraint = OrderConstraint {
@@ -192,14 +195,14 @@ impl RelationshipConstraintBuilder {
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add OFFSET constraint
     pub fn offset(mut self, count: i64) -> Self {
         let constraint = OffsetConstraint { count };
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add GROUP BY constraint
     pub fn group_by(mut self, field: &str) -> Self {
         let constraint = GroupByConstraint {
@@ -208,9 +211,9 @@ impl RelationshipConstraintBuilder {
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add HAVING constraint
-    pub fn having<V>(mut self, field: &str, operator: QueryOperator, value: V) -> Self 
+    pub fn having<V>(mut self, field: &str, operator: QueryOperator, value: V) -> Self
     where
         V: Send + Sync + std::fmt::Display + Clone + 'static,
     {
@@ -222,7 +225,7 @@ impl RelationshipConstraintBuilder {
         self.add_constraint(Box::new(constraint));
         self
     }
-    
+
     /// Add raw HAVING constraint
     pub fn having_raw(mut self, condition: &str) -> Self {
         let constraint = RawConstraint {

@@ -1,9 +1,9 @@
 //! Relationship Loading Utilities - Handles the loading and caching of relationships
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use async_trait::async_trait;
 use sqlx::{Pool, Postgres};
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::error::{ModelError, ModelResult};
@@ -14,7 +14,7 @@ use crate::model::Model;
 pub trait RelationshipLoader<T>: Send + Sync {
     /// Load the relationship from the database
     async fn load(&self, pool: &Pool<Postgres>) -> ModelResult<T>;
-    
+
     /// Reload the relationship, bypassing cache
     async fn reload(&self, pool: &Pool<Postgres>) -> ModelResult<T>;
 }
@@ -22,22 +22,26 @@ pub trait RelationshipLoader<T>: Send + Sync {
 /// Cached relationship loader that implements lazy loading with caching
 pub struct CachedRelationshipLoader<T> {
     /// The loader function
-    loader_fn: Arc<dyn Fn(&Pool<Postgres>) -> Pin<Box<dyn Future<Output = ModelResult<T>> + Send>> + Send + Sync>,
+    loader_fn: Arc<
+        dyn Fn(&Pool<Postgres>) -> Pin<Box<dyn Future<Output = ModelResult<T>> + Send>>
+            + Send
+            + Sync,
+    >,
     /// Cached value
     cache: Arc<RwLock<Option<T>>>,
     /// Whether the relationship has been loaded
     loaded: Arc<RwLock<bool>>,
 }
 
-use std::pin::Pin;
 use std::future::Future;
+use std::pin::Pin;
 
-impl<T> CachedRelationshipLoader<T> 
+impl<T> CachedRelationshipLoader<T>
 where
     T: Send + Sync,
 {
     /// Create a new cached loader with a loading function
-    pub fn new<F, Fut>(loader: F) -> Self 
+    pub fn new<F, Fut>(loader: F) -> Self
     where
         F: Fn(&Pool<Postgres>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = ModelResult<T>> + Send + 'static,
@@ -69,7 +73,7 @@ where
 
         // Load the relationship
         let result = (self.loader_fn)(pool).await?;
-        
+
         // Cache the result
         {
             let mut cache = self.cache.write().await;
@@ -128,12 +132,12 @@ pub struct Lazy<T> {
     access_pattern: Arc<RwLock<AccessPattern>>,
 }
 
-impl<T> Lazy<T> 
+impl<T> Lazy<T>
 where
     T: Clone + Send + Sync + 'static,
 {
     /// Create a new lazy relationship
-    pub fn new<L>(loader: L) -> Self 
+    pub fn new<L>(loader: L) -> Self
     where
         L: RelationshipLoader<T> + 'static,
     {
@@ -154,10 +158,9 @@ where
             access_pattern: Arc::new(RwLock::new(AccessPattern::default())),
         }
     }
-
 }
 
-impl<T> Lazy<T> 
+impl<T> Lazy<T>
 where
     T: Send + Sync,
 {
@@ -168,20 +171,20 @@ where
             let mut pattern = self.access_pattern.write().await;
             pattern.access_count += 1;
             pattern.last_accessed = std::time::Instant::now();
-            
+
             // Auto-enable after multiple accesses
             if pattern.access_count >= 3 {
                 pattern.should_auto_load = true;
             }
         }
-        
+
         if !self.loaded {
             self.load(pool).await?;
         }
-        
-        self.value
-            .as_ref()
-            .ok_or_else(|| ModelError::Database("Lazy relationship value not available".to_string()))
+
+        self.value.as_ref().ok_or_else(|| {
+            ModelError::Database("Lazy relationship value not available".to_string())
+        })
     }
 
     /// Load the relationship
@@ -189,10 +192,10 @@ where
         let value = self.loader.load(pool).await?;
         self.value = Some(value);
         self.loaded = true;
-        
-        self.value
-            .as_ref()
-            .ok_or_else(|| ModelError::Database("Failed to store lazy relationship value".to_string()))
+
+        self.value.as_ref().ok_or_else(|| {
+            ModelError::Database("Failed to store lazy relationship value".to_string())
+        })
     }
 
     /// Reload the relationship, bypassing cache
@@ -200,15 +203,14 @@ where
         let value = self.loader.reload(pool).await?;
         self.value = Some(value);
         self.loaded = true;
-        
-        self.value
-            .as_ref()
-            .ok_or_else(|| ModelError::Database("Failed to store reloaded relationship value".to_string()))
+
+        self.value.as_ref().ok_or_else(|| {
+            ModelError::Database("Failed to store reloaded relationship value".to_string())
+        })
     }
 }
 
 impl<T> Lazy<T> {
-
     /// Check if the relationship has been loaded
     pub fn is_loaded(&self) -> bool {
         self.loaded
@@ -295,9 +297,15 @@ impl RelationshipCache {
     }
 
     /// Store a relationship in the cache
-    pub async fn store(&self, model_type: &str, model_id: &str, relation: &str, data: serde_json::Value) {
+    pub async fn store(
+        &self,
+        model_type: &str,
+        model_id: &str,
+        relation: &str,
+        data: serde_json::Value,
+    ) {
         let mut cache = self.cache.write().await;
-        
+
         cache
             .entry(model_type.to_string())
             .or_insert_with(HashMap::new)
@@ -307,20 +315,21 @@ impl RelationshipCache {
     }
 
     /// Retrieve a relationship from the cache
-    pub async fn get(&self, model_type: &str, model_id: &str, relation: &str) -> Option<serde_json::Value> {
+    pub async fn get(
+        &self,
+        model_type: &str,
+        model_id: &str,
+        relation: &str,
+    ) -> Option<serde_json::Value> {
         let cache = self.cache.read().await;
-        
-        cache
-            .get(model_type)?
-            .get(model_id)?
-            .get(relation)
-            .cloned()
+
+        cache.get(model_type)?.get(model_id)?.get(relation).cloned()
     }
 
     /// Check if a relationship is cached
     pub async fn contains(&self, model_type: &str, model_id: &str, relation: &str) -> bool {
         let cache = self.cache.read().await;
-        
+
         cache
             .get(model_type)
             .and_then(|models| models.get(model_id))
@@ -331,7 +340,7 @@ impl RelationshipCache {
     /// Clear all cached relationships for a model instance
     pub async fn clear_model(&self, model_type: &str, model_id: &str) {
         let mut cache = self.cache.write().await;
-        
+
         if let Some(models) = cache.get_mut(model_type) {
             models.remove(model_id);
         }
@@ -352,7 +361,7 @@ impl RelationshipCache {
     /// Get cache statistics
     pub async fn stats(&self) -> CacheStats {
         let cache = self.cache.read().await;
-        
+
         let model_types = cache.len();
         let total_models = cache.values().map(|m| m.len()).sum();
         let total_relationships = cache
@@ -384,7 +393,8 @@ pub struct CacheStats {
 }
 
 /// Global relationship cache instance
-static RELATIONSHIP_CACHE: tokio::sync::OnceCell<RelationshipCache> = tokio::sync::OnceCell::const_new();
+static RELATIONSHIP_CACHE: tokio::sync::OnceCell<RelationshipCache> =
+    tokio::sync::OnceCell::const_new();
 
 /// Get the global relationship cache
 pub async fn get_relationship_cache() -> &'static RelationshipCache {
@@ -410,7 +420,10 @@ where
 {
     /// Create a lazy HasOne loader for a relationship
     fn lazy_has_one(parent: &Parent, foreign_key: String) -> LazyHasOne<Related> {
-        let parent_id = parent.primary_key().map(|pk| pk.to_string()).unwrap_or_default();
+        let parent_id = parent
+            .primary_key()
+            .map(|pk| pk.to_string())
+            .unwrap_or_default();
         let loader = CachedRelationshipLoader::new(move |_pool| {
             let _foreign_key = foreign_key.clone();
             let _parent_id = parent_id.clone();
@@ -426,7 +439,10 @@ where
 
     /// Create a lazy HasMany loader for a relationship
     fn lazy_has_many(parent: &Parent, foreign_key: String) -> LazyHasMany<Related> {
-        let parent_id = parent.primary_key().map(|pk| pk.to_string()).unwrap_or_default();
+        let parent_id = parent
+            .primary_key()
+            .map(|pk| pk.to_string())
+            .unwrap_or_default();
         let loader = CachedRelationshipLoader::new(move |_pool| {
             let _foreign_key = foreign_key.clone();
             let _parent_id = parent_id.clone();
@@ -449,7 +465,9 @@ where
                 // This would typically execute a query like:
                 // SELECT * FROM parent_table WHERE id = parent_id LIMIT 1
                 // For now, this is a placeholder implementation
-                Err(crate::error::ModelError::Database("Placeholder implementation".to_string()))
+                Err(crate::error::ModelError::Database(
+                    "Placeholder implementation".to_string(),
+                ))
             }
         });
         Lazy::new(loader)

@@ -1,14 +1,14 @@
 //! Comprehensive tests for elif-orm
-//! 
+//!
 //! Tests cover QueryBuilder, error handling, primary keys, and Model trait functionality
 
-use std::collections::HashMap;
-use serde_json::Value;
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
-use crate::query::QueryBuilder;
 use crate::error::{ModelError, ModelResult};
 use crate::model::Model;
+use crate::query::QueryBuilder;
+use chrono::{DateTime, Utc};
+use serde_json::Value;
+use std::collections::HashMap;
+use uuid::Uuid;
 
 pub mod mapping_tests;
 
@@ -90,13 +90,22 @@ impl Model for TestUser {
         fields.insert("email".to_string(), Value::String(self.email.clone()));
         fields.insert("name".to_string(), Value::String(self.name.clone()));
         if let Some(created_at) = self.created_at {
-            fields.insert("created_at".to_string(), Value::String(created_at.to_rfc3339()));
+            fields.insert(
+                "created_at".to_string(),
+                Value::String(created_at.to_rfc3339()),
+            );
         }
         if let Some(updated_at) = self.updated_at {
-            fields.insert("updated_at".to_string(), Value::String(updated_at.to_rfc3339()));
+            fields.insert(
+                "updated_at".to_string(),
+                Value::String(updated_at.to_rfc3339()),
+            );
         }
         if let Some(deleted_at) = self.deleted_at {
-            fields.insert("deleted_at".to_string(), Value::String(deleted_at.to_rfc3339()));
+            fields.insert(
+                "deleted_at".to_string(),
+                Value::String(deleted_at.to_rfc3339()),
+            );
         }
         fields
     }
@@ -110,10 +119,8 @@ mod query_builder_tests {
 
     #[test]
     fn test_basic_select_query() {
-        let query = QueryBuilder::<TestUser>::new()
-            .select("*")
-            .from("users");
-        
+        let query = QueryBuilder::<TestUser>::new().select("*").from("users");
+
         let sql = query.to_sql();
         assert_eq!(sql, "SELECT * FROM users");
     }
@@ -125,7 +132,7 @@ mod query_builder_tests {
             .from("users")
             .where_eq("email", "test@example.com")
             .where_gt("id", 100);
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("WHERE"));
         assert!(sql.contains("email = 'test@example.com'"));
@@ -142,7 +149,7 @@ mod query_builder_tests {
             .where_in("status", vec!["active", "pending"])
             .where_not_null("email_verified_at")
             .where_between("age", 18, 65);
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("name LIKE '%John%'"));
         assert!(sql.contains("status IN ('active', 'pending')"));
@@ -157,7 +164,7 @@ mod query_builder_tests {
             .from("users")
             .join("profiles", "users.id", "profiles.user_id")
             .left_join("posts", "users.id", "posts.user_id");
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("INNER JOIN profiles ON users.id = profiles.user_id"));
         assert!(sql.contains("LEFT JOIN posts ON users.id = posts.user_id"));
@@ -172,7 +179,7 @@ mod query_builder_tests {
             .order_by_desc("created_at")
             .limit(10)
             .offset(20);
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("ORDER BY name ASC, created_at DESC"));
         assert!(sql.contains("LIMIT 10"));
@@ -186,7 +193,7 @@ mod query_builder_tests {
             .from("users")
             .group_by("country")
             .having_eq("COUNT(*)", 5);
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("GROUP BY country"));
         assert!(sql.contains("HAVING COUNT(*) = 5"));
@@ -198,7 +205,7 @@ mod query_builder_tests {
             .select("*")
             .from("users")
             .paginate(15, 3); // 15 per page, page 3
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("LIMIT 15"));
         assert!(sql.contains("OFFSET 30")); // (3-1) * 15 = 30
@@ -209,7 +216,7 @@ mod query_builder_tests {
         let query = QueryBuilder::<TestUser>::new()
             .select_distinct("country")
             .from("users");
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("SELECT DISTINCT country"));
     }
@@ -223,7 +230,7 @@ mod query_builder_tests {
             .select_min("created_at", Some("earliest"))
             .select_max("updated_at", Some("latest"))
             .from("users");
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("COUNT(*) AS total"));
         assert!(sql.contains("SUM(amount) AS total_amount"));
@@ -237,7 +244,7 @@ mod query_builder_tests {
         let query = QueryBuilder::<TestUser>::new()
             .select_raw("CASE WHEN age > 18 THEN 'adult' ELSE 'minor' END as age_group")
             .from("users");
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("CASE WHEN age > 18 THEN 'adult' ELSE 'minor' END as age_group"));
     }
@@ -248,7 +255,7 @@ mod query_builder_tests {
             .select("*")
             .from("users")
             .where_raw("EXTRACT(YEAR FROM created_at) = 2023");
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("EXTRACT(YEAR FROM created_at) = 2023"));
     }
@@ -259,12 +266,12 @@ mod query_builder_tests {
             .select("user_id")
             .from("orders")
             .where_gt("total", 1000);
-        
+
         let query = QueryBuilder::<TestUser>::new()
             .select("*")
             .from("users")
             .where_subquery("id", QueryOperator::In, subquery);
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("id IN (SELECT user_id FROM orders WHERE total > 1000)"));
     }
@@ -275,12 +282,12 @@ mod query_builder_tests {
             .select("1")
             .from("posts")
             .where_raw("posts.user_id = users.id");
-        
+
         let query = QueryBuilder::<TestUser>::new()
             .select("*")
             .from("users")
             .where_exists(subquery);
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("EXISTS (SELECT 1 FROM posts WHERE posts.user_id = users.id)"));
     }
@@ -291,7 +298,7 @@ mod query_builder_tests {
             .select("*")
             .from("users")
             .paginate_cursor("id", Some("12345"), 10, OrderDirection::Asc);
-        
+
         let sql = query.to_sql();
         assert!(sql.contains("id > '12345'"));
         assert!(sql.contains("ORDER BY id ASC"));
@@ -308,9 +315,8 @@ mod query_builder_tests {
             .join("profiles", "users.id", "profiles.user_id")
             .left_join("posts", "users.id", "posts.user_id")
             .group_by("country")
-            .having_eq("COUNT(*)", 5)
-;
-        
+            .having_eq("COUNT(*)", 5);
+
         let complexity = query.complexity_score();
         // Should be: 2 where conditions + 2 joins * 2 + 1 group by + 1 having = 7
         assert!(complexity >= 7);
@@ -324,7 +330,7 @@ mod query_builder_tests {
             .where_eq("email", "test@example.com")
             .where_in("status", vec!["active", "pending"])
             .where_between("age", 18, 65);
-        
+
         let bindings = query.bindings();
         assert!(bindings.len() >= 4); // email + 2 status values + 2 age values
     }
@@ -335,7 +341,7 @@ mod query_builder_tests {
             .select("*")
             .from("users")
             .where_eq("active", true);
-        
+
         let cloned = original.clone_for_subquery();
         assert_eq!(original.to_sql(), cloned.to_sql());
     }
@@ -351,10 +357,10 @@ mod error_tests {
     fn test_model_error_display() {
         let error = ModelError::NotFound("users".to_string());
         assert_eq!(error.to_string(), "Record not found in table 'users'");
-        
+
         let error = ModelError::Validation("Invalid email".to_string());
         assert_eq!(error.to_string(), "Validation error: Invalid email");
-        
+
         let error = ModelError::MissingPrimaryKey;
         assert_eq!(error.to_string(), "Primary key is missing or invalid");
     }
@@ -370,7 +376,7 @@ mod error_tests {
     fn test_query_error_display() {
         let error = QueryError::InvalidSql("Missing FROM clause".to_string());
         assert_eq!(error.to_string(), "Invalid SQL: Missing FROM clause");
-        
+
         let error = QueryError::UnsupportedOperation("WINDOW functions".to_string());
         assert_eq!(error.to_string(), "Unsupported operation: WINDOW functions");
     }
@@ -404,7 +410,7 @@ mod primary_key_tests {
         let mut composite = HashMap::new();
         composite.insert("tenant_id".to_string(), "1".to_string());
         composite.insert("user_id".to_string(), "123".to_string());
-        
+
         let pk = PrimaryKey::Composite(composite);
         let display = pk.to_string();
         assert!(display.contains("tenant_id:1") || display.contains("user_id:123"));
@@ -415,7 +421,7 @@ mod primary_key_tests {
         let pk1 = PrimaryKey::Integer(123);
         let pk2 = PrimaryKey::Integer(123);
         let pk3 = PrimaryKey::Integer(456);
-        
+
         assert_eq!(pk1, pk2);
         assert_ne!(pk1, pk3);
     }
@@ -440,9 +446,9 @@ mod model_tests {
             updated_at: None,
             deleted_at: None,
         };
-        
+
         assert_eq!(user.primary_key(), None);
-        
+
         let uuid = Uuid::new_v4();
         user.set_primary_key(uuid);
         assert_eq!(user.primary_key(), Some(uuid));
@@ -458,14 +464,14 @@ mod model_tests {
             updated_at: None,
             deleted_at: None,
         };
-        
+
         assert!(TestUser::uses_timestamps());
         assert_eq!(user.created_at(), None);
-        
+
         let now = Utc::now();
         user.set_created_at(now);
         assert_eq!(user.created_at(), Some(now));
-        
+
         user.set_updated_at(now);
         assert_eq!(user.updated_at(), Some(now));
     }
@@ -480,10 +486,10 @@ mod model_tests {
             updated_at: None,
             deleted_at: None,
         };
-        
+
         assert!(TestUser::uses_soft_deletes());
         assert!(!user.is_soft_deleted());
-        
+
         let now = Utc::now();
         user.set_deleted_at(Some(now));
         assert!(user.is_soft_deleted());
@@ -500,11 +506,14 @@ mod model_tests {
             updated_at: Some(Utc::now()),
             deleted_at: None,
         };
-        
+
         let fields = user.to_fields();
         assert!(fields.contains_key("email"));
         assert!(fields.contains_key("name"));
-        assert_eq!(fields.get("email").unwrap(), &Value::String("test@example.com".to_string()));
+        assert_eq!(
+            fields.get("email").unwrap(),
+            &Value::String("test@example.com".to_string())
+        );
     }
 }
 
@@ -513,16 +522,14 @@ mod performance_tests {
     use crate::query::QueryOperator;
 
     use super::*;
-    use std::time::Instant;
     use std::mem::size_of_val;
+    use std::time::Instant;
 
     #[test]
     fn test_query_builder_memory_overhead() {
         // Test query builder memory usage
-        let simple_query = QueryBuilder::<TestUser>::new()
-            .select("*")
-            .from("users");
-        
+        let simple_query = QueryBuilder::<TestUser>::new().select("*").from("users");
+
         let complex_query = QueryBuilder::<TestUser>::new()
             .select("users.*, profiles.bio, COUNT(posts.id) as post_count")
             .from("users")
@@ -539,11 +546,19 @@ mod performance_tests {
         // Memory usage should be reasonable
         let simple_size = size_of_val(&simple_query);
         let complex_size = size_of_val(&complex_query);
-        
+
         // Query builder should have minimal overhead (target: <1KB)
-        assert!(simple_size < 1024, "Simple query builder too large: {} bytes", simple_size);
-        assert!(complex_size < 2048, "Complex query builder too large: {} bytes", complex_size);
-        
+        assert!(
+            simple_size < 1024,
+            "Simple query builder too large: {} bytes",
+            simple_size
+        );
+        assert!(
+            complex_size < 2048,
+            "Complex query builder too large: {} bytes",
+            complex_size
+        );
+
         println!("Query Builder Memory Usage:");
         println!("  Simple query: {} bytes", simple_size);
         println!("  Complex query: {} bytes", complex_size);
@@ -562,11 +577,11 @@ mod performance_tests {
         };
 
         let size = size_of_val(&user);
-        
+
         // Model instance should be lightweight (target: <500 bytes overhead)
         // Base data is reasonable, focus on framework overhead
         assert!(size < 1024, "Model instance too large: {} bytes", size);
-        
+
         println!("Model Instance Memory Usage: {} bytes", size);
     }
 
@@ -574,7 +589,7 @@ mod performance_tests {
     fn test_query_builder_performance() {
         // Test query building performance
         let iterations = 10_000;
-        
+
         let start = Instant::now();
         for i in 0..iterations {
             let _query = QueryBuilder::<TestUser>::new()
@@ -587,12 +602,16 @@ mod performance_tests {
                 .to_sql();
         }
         let duration = start.elapsed();
-        
+
         let avg_per_query = duration.as_micros() / iterations;
-        
+
         // Each query should build very quickly (target: <100μs)
-        assert!(avg_per_query < 1000, "Query building too slow: {}μs per query", avg_per_query);
-        
+        assert!(
+            avg_per_query < 1000,
+            "Query building too slow: {}μs per query",
+            avg_per_query
+        );
+
         println!("Query Building Performance:");
         println!("  {} queries in {:?}", iterations, duration);
         println!("  Average: {}μs per query", avg_per_query);
@@ -609,7 +628,6 @@ mod performance_tests {
                 .select("*")
                 .from("users")
                 .where_eq("active", true),
-            
             // Complex query with joins
             QueryBuilder::<TestUser>::new()
                 .select("users.*, profiles.bio")
@@ -618,7 +636,6 @@ mod performance_tests {
                 .where_like("users.name", "%John%")
                 .where_in("users.status", vec!["active", "pending"])
                 .order_by("users.created_at"),
-                
             // Aggregation query
             QueryBuilder::<TestUser>::new()
                 .select_count("*", Some("total"))
@@ -626,16 +643,17 @@ mod performance_tests {
                 .from("users")
                 .group_by("country")
                 .having_eq("COUNT(*)", 10),
-                
             // Subquery
             QueryBuilder::<TestUser>::new()
                 .select("*")
                 .from("users")
-                .where_subquery("id", QueryOperator::In, 
+                .where_subquery(
+                    "id",
+                    QueryOperator::In,
                     QueryBuilder::<TestUser>::new()
                         .select("user_id")
                         .from("orders")
-                        .where_gt("total", 1000)
+                        .where_gt("total", 1000),
                 ),
         ];
 
@@ -643,10 +661,15 @@ mod performance_tests {
             let start = Instant::now();
             let _sql = query.to_sql();
             let duration = start.elapsed();
-            
+
             // SQL generation should be very fast (target: <10μs)
-            assert!(duration.as_micros() < 100, "SQL generation too slow for query {}: {}μs", i, duration.as_micros());
-            
+            assert!(
+                duration.as_micros() < 100,
+                "SQL generation too slow for query {}: {}μs",
+                i,
+                duration.as_micros()
+            );
+
             println!("SQL Generation {}: {}μs", i + 1, duration.as_micros());
         }
     }
@@ -658,7 +681,7 @@ mod performance_tests {
             .select("*")
             .from("users")
             .where_eq("active", true);
-        
+
         let complex = QueryBuilder::<TestUser>::new()
             .select("*")
             .from("users")
@@ -673,16 +696,27 @@ mod performance_tests {
         let complex_score = complex.complexity_score();
 
         // Complex query should have higher score
-        assert!(complex_score > simple_score, 
-            "Complex query score ({}) should be higher than simple query score ({})", 
-            complex_score, simple_score);
-        
+        assert!(
+            complex_score > simple_score,
+            "Complex query score ({}) should be higher than simple query score ({})",
+            complex_score,
+            simple_score
+        );
+
         // Simple query should have low complexity
-        assert!(simple_score <= 2, "Simple query complexity too high: {}", simple_score);
-        
+        assert!(
+            simple_score <= 2,
+            "Simple query complexity too high: {}",
+            simple_score
+        );
+
         // Complex query should reflect all its operations
-        assert!(complex_score >= 7, "Complex query complexity too low: {}", complex_score);
-        
+        assert!(
+            complex_score >= 7,
+            "Complex query complexity too low: {}",
+            complex_score
+        );
+
         println!("Query Complexity Scores:");
         println!("  Simple query: {}", simple_score);
         println!("  Complex query: {}", complex_score);
@@ -706,11 +740,19 @@ mod performance_tests {
         // Should extract the correct number of parameters
         // email(1) + status(3) + age(2) + name(1) = 7
         assert_eq!(bindings.len(), 7, "Wrong number of parameter bindings");
-        
+
         // Binding extraction should be very fast
-        assert!(duration.as_micros() < 50, "Parameter binding too slow: {}μs", duration.as_micros());
-        
-        println!("Parameter Binding: {} parameters extracted in {}μs", bindings.len(), duration.as_micros());
+        assert!(
+            duration.as_micros() < 50,
+            "Parameter binding too slow: {}μs",
+            duration.as_micros()
+        );
+
+        println!(
+            "Parameter Binding: {} parameters extracted in {}μs",
+            bindings.len(),
+            duration.as_micros()
+        );
     }
 }
 
@@ -720,21 +762,21 @@ mod integration_tests {
 
     // NOTE: These tests would require a real database connection
     // For now, they're placeholders showing what integration tests should cover
-    
+
     #[test]
     #[ignore] // Ignored until database test setup is available
     fn test_model_crud_operations() {
         // This would test:
         // - Model::find()
         // - Model::create()
-        // - Model::update() 
+        // - Model::update()
         // - Model::delete()
         // - Model::all()
         // - Model::count()
     }
 
     #[test]
-    #[ignore] // Ignored until database test setup is available  
+    #[ignore] // Ignored until database test setup is available
     fn test_query_execution() {
         // This would test:
         // - QueryBuilder::get()
@@ -764,29 +806,29 @@ mod model_database_integration_tests {
     fn test_bind_json_value_types() {
         // Test JSON value binding helper method
         // This is unit testable without a database
-        
+
         // String value
         let string_val = Value::String("test".to_string());
         assert!(matches!(string_val, Value::String(_)));
-        
-        // Number value  
+
+        // Number value
         let number_val = Value::Number(serde_json::Number::from(42));
         assert!(number_val.is_number());
         assert_eq!(number_val.as_i64().unwrap(), 42);
-        
+
         // Boolean value
         let bool_val = Value::Bool(true);
         assert!(bool_val.is_boolean());
         assert_eq!(bool_val.as_bool().unwrap(), true);
-        
+
         // Null value
         let null_val = Value::Null;
         assert!(null_val.is_null());
-        
+
         // Array value (JSON)
         let array_val = Value::Array(vec![Value::String("item".to_string())]);
         assert!(array_val.is_array());
-        
+
         // Object value (JSON)
         let mut obj = serde_json::Map::new();
         obj.insert("key".to_string(), Value::String("value".to_string()));
@@ -805,23 +847,26 @@ mod model_database_integration_tests {
             updated_at: Some(Utc::now()),
             deleted_at: None,
         };
-        
+
         let fields = user.to_fields();
-        
+
         // Should have core fields
         assert!(fields.contains_key("id"));
         assert!(fields.contains_key("email"));
         assert!(fields.contains_key("name"));
         assert!(fields.contains_key("created_at"));
         assert!(fields.contains_key("updated_at"));
-        
+
         // Should not have deleted_at since it's None
         assert!(!fields.contains_key("deleted_at"));
-        
+
         // Values should be correct types
         assert!(fields.get("email").unwrap().is_string());
         assert!(fields.get("name").unwrap().is_string());
-        assert_eq!(fields.get("email").unwrap().as_str().unwrap(), "test@example.com");
+        assert_eq!(
+            fields.get("email").unwrap().as_str().unwrap(),
+            "test@example.com"
+        );
         assert_eq!(fields.get("name").unwrap().as_str().unwrap(), "Test User");
     }
 
@@ -835,20 +880,20 @@ mod model_database_integration_tests {
             updated_at: None,
             deleted_at: None,
         };
-        
+
         // Test timestamp methods
         let now = Utc::now();
         user.set_created_at(now);
         user.set_updated_at(now);
-        
+
         assert_eq!(user.created_at(), Some(now));
         assert_eq!(user.updated_at(), Some(now));
-        
+
         // Test soft delete
         user.set_deleted_at(Some(now));
         assert!(user.is_soft_deleted());
         assert_eq!(user.deleted_at(), Some(now));
-        
+
         // Test undelete
         user.set_deleted_at(None);
         assert!(!user.is_soft_deleted());
@@ -865,10 +910,10 @@ mod model_database_integration_tests {
             updated_at: None,
             deleted_at: None,
         };
-        
+
         // Initially no primary key
         assert!(user.primary_key().is_none());
-        
+
         // Set primary key
         let id = Uuid::new_v4();
         user.set_primary_key(id);
@@ -885,32 +930,44 @@ mod model_database_integration_tests {
         assert!(TestUser::uses_soft_deletes());
     }
 
-    #[test] 
+    #[test]
     fn test_sql_generation_patterns() {
         // Test that our SQL patterns are correct (without executing)
         let table_name = "users";
-        let pk_name = "id"; 
+        let pk_name = "id";
         let _pk_value = "test-uuid";
-        
+
         // Find query pattern
         let find_sql = format!("SELECT * FROM {} WHERE {} = $1", table_name, pk_name);
         assert_eq!(find_sql, "SELECT * FROM users WHERE id = $1");
-        
+
         // Count query pattern (with soft deletes)
-        let count_sql = format!("SELECT COUNT(*) FROM {} WHERE deleted_at IS NULL", table_name);
-        assert_eq!(count_sql, "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL");
-        
+        let count_sql = format!(
+            "SELECT COUNT(*) FROM {} WHERE deleted_at IS NULL",
+            table_name
+        );
+        assert_eq!(
+            count_sql,
+            "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL"
+        );
+
         // All query pattern (with soft deletes)
         let all_sql = format!("SELECT * FROM {} WHERE deleted_at IS NULL", table_name);
         assert_eq!(all_sql, "SELECT * FROM users WHERE deleted_at IS NULL");
-        
+
         // Delete query pattern (hard delete)
         let delete_sql = format!("DELETE FROM {} WHERE {} = $1", table_name, pk_name);
         assert_eq!(delete_sql, "DELETE FROM users WHERE id = $1");
-        
+
         // Soft delete query pattern
-        let soft_delete_sql = format!("UPDATE {} SET deleted_at = NOW() WHERE {} = $1", table_name, pk_name);
-        assert_eq!(soft_delete_sql, "UPDATE users SET deleted_at = NOW() WHERE id = $1");
+        let soft_delete_sql = format!(
+            "UPDATE {} SET deleted_at = NOW() WHERE {} = $1",
+            table_name, pk_name
+        );
+        assert_eq!(
+            soft_delete_sql,
+            "UPDATE users SET deleted_at = NOW() WHERE id = $1"
+        );
     }
 
     #[test]
@@ -924,25 +981,26 @@ mod model_database_integration_tests {
             updated_at: Some(Utc::now()),
             deleted_at: None,
         };
-        
+
         let fields = user.to_fields();
         let field_names: Vec<String> = fields.keys().cloned().collect();
-        let field_placeholders: Vec<String> = (1..=field_names.len()).map(|i| format!("${}", i)).collect();
-        
+        let field_placeholders: Vec<String> =
+            (1..=field_names.len()).map(|i| format!("${}", i)).collect();
+
         let insert_sql = format!(
             "INSERT INTO {} ({}) VALUES ({}) RETURNING *",
             TestUser::table_name(),
             field_names.join(", "),
             field_placeholders.join(", ")
         );
-        
+
         // Should contain all the expected parts
         assert!(insert_sql.starts_with("INSERT INTO users"));
         assert!(insert_sql.contains("VALUES"));
         assert!(insert_sql.contains("RETURNING *"));
         assert!(insert_sql.contains("email"));
         assert!(insert_sql.contains("name"));
-        
+
         // Should have correct number of placeholders
         let placeholder_count = field_placeholders.len();
         assert_eq!(placeholder_count, fields.len());
@@ -959,15 +1017,16 @@ mod model_database_integration_tests {
             updated_at: Some(Utc::now()),
             deleted_at: None,
         };
-        
+
         let fields = user.to_fields();
         let pk_name = TestUser::primary_key_name();
-        let update_fields: Vec<String> = fields.keys()
+        let update_fields: Vec<String> = fields
+            .keys()
             .filter(|&field| field != pk_name)
             .enumerate()
             .map(|(i, field)| format!("{} = ${}", field, i + 1))
             .collect();
-        
+
         let update_sql = format!(
             "UPDATE {} SET {} WHERE {} = ${}",
             TestUser::table_name(),
@@ -975,7 +1034,7 @@ mod model_database_integration_tests {
             pk_name,
             update_fields.len() + 1
         );
-        
+
         // Should contain expected parts
         assert!(update_sql.starts_with("UPDATE users"));
         assert!(update_sql.contains("SET"));
@@ -994,18 +1053,16 @@ mod model_database_integration_tests {
             updated_at: Some(Utc::now()),
             deleted_at: None,
         };
-        
+
         let fields = user.to_fields();
         let pk_name = TestUser::primary_key_name();
-        
+
         // Should contain primary key in full fields
         assert!(fields.contains_key(pk_name));
-        
+
         // But filtered fields should not contain primary key
-        let update_fields: Vec<&String> = fields.keys()
-            .filter(|&field| field != pk_name)
-            .collect();
-            
+        let update_fields: Vec<&String> = fields.keys().filter(|&field| field != pk_name).collect();
+
         assert!(!update_fields.iter().any(|&field| field == pk_name));
         assert!(update_fields.len() < fields.len());
     }

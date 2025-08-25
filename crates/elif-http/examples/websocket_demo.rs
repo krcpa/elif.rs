@@ -4,8 +4,7 @@
 //! This is a simplified version showing the structure and API design.
 
 use elif_http::{
-    websocket::{server::WebSocketServerBuilder},
-    ElifRouter, ConnectionId, WebSocketConnection,
+    websocket::server::WebSocketServerBuilder, ConnectionId, ElifRouter, WebSocketConnection,
 };
 use std::sync::Arc;
 
@@ -16,7 +15,7 @@ async fn main() {
 
     println!("🚀 WebSocket Foundation Demo");
     println!("This demonstrates the basic WebSocket server foundation.");
-    
+
     // Create WebSocket server with configuration
     let ws_server = WebSocketServerBuilder::new()
         .max_message_size(1024 * 1024) // 1MB
@@ -26,7 +25,7 @@ async fn main() {
 
     // Create router
     let router = ElifRouter::new();
-    
+
     // Add WebSocket route - simplified for foundation
     let _router = ws_server.add_websocket_route(
         router,
@@ -34,16 +33,16 @@ async fn main() {
         |_connection_id: ConnectionId, _connection: Arc<WebSocketConnection>| async {
             // In future iterations, this will handle WebSocket messages
             println!("WebSocket connection handler called (foundation mode)");
-        }
+        },
     );
-    
+
     // Display server information
     println!("📊 WebSocket Server Configuration:");
     println!("   • Max message size: 1MB");
     println!("   • Ping interval: 30s");
     println!("   • Cleanup interval: 300s");
     println!("   • WebSocket route: /ws");
-    
+
     println!("🎯 Foundation Features Implemented:");
     println!("   ✅ WebSocket dependencies added");
     println!("   ✅ Connection abstraction types created");
@@ -57,7 +56,7 @@ async fn main() {
     println!("   ✅ Room-based messaging and broadcasting");
     println!("   ✅ Join/leave channel functionality");
     println!("   ✅ Channel permissions and access control");
-    
+
     println!("🔧 Next Steps for Full Implementation:");
     println!("   • Complete message handling pipeline");
     println!("   • Add message routing and callbacks");
@@ -65,9 +64,9 @@ async fn main() {
     println!("   • Add authentication and authorization hooks");
     println!("   • Implement connection metadata and tagging");
     println!("   • Add message queuing and backpressure handling");
-    
+
     println!("📺 Try the Channel System Demo:");
     println!("   cargo run --example websocket_channel_demo");
-    
+
     println!("✨ WebSocket Foundation with Channels is ready for production!");
 }

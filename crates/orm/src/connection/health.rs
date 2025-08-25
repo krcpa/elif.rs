@@ -24,22 +24,22 @@ impl PoolHealthReport {
     pub fn is_healthy(&self) -> bool {
         self.is_responsive() && self.has_acceptable_error_rate() && self.has_available_connections()
     }
-    
+
     /// Check if the pool is responsive (health check completed quickly)
     pub fn is_responsive(&self) -> bool {
         self.check_duration < Duration::from_millis(1000) // 1 second threshold
     }
-    
+
     /// Check if the error rate is acceptable
     pub fn has_acceptable_error_rate(&self) -> bool {
         self.error_rate < 5.0 // 5% error rate threshold
     }
-    
+
     /// Check if there are connections available
     pub fn has_available_connections(&self) -> bool {
         self.idle_connections > 0 || self.active_connections < self.pool_size
     }
-    
+
     /// Get pool utilization percentage
     pub fn utilization(&self) -> f64 {
         if self.pool_size > 0 {
@@ -48,17 +48,17 @@ impl PoolHealthReport {
             0.0
         }
     }
-    
+
     /// Get success rate percentage
     pub fn success_rate(&self) -> f64 {
         100.0 - self.error_rate
     }
-    
+
     /// Get uptime since pool creation
     pub fn uptime(&self) -> Duration {
         self.created_at.elapsed()
     }
-    
+
     /// Generate health status summary
     pub fn status_summary(&self) -> HealthStatus {
         if !self.is_responsive() {
@@ -68,7 +68,11 @@ impl PoolHealthReport {
         } else if !self.has_acceptable_error_rate() {
             HealthStatus::Degraded {
                 reason: format!("High error rate: {:.1}%", self.error_rate),
-                severity: if self.error_rate > 25.0 { Severity::High } else { Severity::Medium },
+                severity: if self.error_rate > 25.0 {
+                    Severity::High
+                } else {
+                    Severity::Medium
+                },
             }
         } else if !self.has_available_connections() {
             HealthStatus::Degraded {
@@ -113,7 +117,7 @@ impl std::fmt::Display for HealthStatus {
             HealthStatus::Warning { reason } => write!(f, "WARNING: {}", reason),
             HealthStatus::Degraded { reason, severity } => {
                 write!(f, "DEGRADED ({:?}): {}", severity, reason)
-            },
+            }
             HealthStatus::Unhealthy { reason } => write!(f, "UNHEALTHY: {}", reason),
         }
     }
@@ -163,42 +167,37 @@ impl HealthMonitor {
             max_history: 100, // Keep last 100 health reports
         }
     }
-    
+
     /// Record a health report
     pub fn record_health_report(&mut self, report: PoolHealthReport) {
         self.last_check = Some(Instant::now());
         self.history.push(report);
-        
+
         // Keep only the most recent reports
         if self.history.len() > self.max_history {
             self.history.remove(0);
         }
     }
-    
+
     /// Get the latest health report
     pub fn latest_report(&self) -> Option<&PoolHealthReport> {
         self.history.last()
     }
-    
+
     /// Get health trend over the last N reports
     pub fn health_trend(&self, count: usize) -> HealthTrend {
-        let recent_reports = self.history.iter()
-            .rev()
-            .take(count)
-            .collect::<Vec<_>>();
-        
+        let recent_reports = self.history.iter().rev().take(count).collect::<Vec<_>>();
+
         if recent_reports.is_empty() {
             return HealthTrend::Unknown;
         }
-        
-        let avg_error_rate = recent_reports.iter()
-            .map(|r| r.error_rate)
-            .sum::<f64>() / recent_reports.len() as f64;
-        
-        let avg_utilization = recent_reports.iter()
-            .map(|r| r.utilization())
-            .sum::<f64>() / recent_reports.len() as f64;
-        
+
+        let avg_error_rate =
+            recent_reports.iter().map(|r| r.error_rate).sum::<f64>() / recent_reports.len() as f64;
+
+        let avg_utilization = recent_reports.iter().map(|r| r.utilization()).sum::<f64>()
+            / recent_reports.len() as f64;
+
         if avg_error_rate > self.config.max_error_rate {
             HealthTrend::Degrading
         } else if avg_utilization > self.config.warning_utilization_threshold {
@@ -207,7 +206,7 @@ impl HealthMonitor {
             HealthTrend::Stable
         }
     }
-    
+
     /// Check if it's time for the next health check
     pub fn should_check_health(&self) -> bool {
         match self.last_check {

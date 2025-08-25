@@ -1,7 +1,7 @@
 //! # elif-http-derive
-//! 
+//!
 //! Derive macros for elif-http declarative routing and controller system.
-//! 
+//!
 //! This crate provides procedural macros to simplify controller development:
 //! - `#[controller]`: Define controller base path and metadata
 //! - `#[get]`, `#[post]`, etc.: HTTP method routing macros
@@ -19,18 +19,17 @@
 use proc_macro::TokenStream;
 
 // Re-export quote for debug tools
-use quote;
 
 // Module declarations
 mod controller;
+mod debug;
+mod groups;
 mod http_methods;
 mod inject;
 mod middleware;
+mod module;
 mod params;
 mod routes;
-mod groups;
-mod module;
-mod debug;
 mod utils;
 
 #[cfg(test)]
@@ -162,10 +161,11 @@ pub fn debug_modules(_input: TokenStream) -> TokenStream {
     let debug_utils = debug::generate_analysis_macros();
     let health_check = debug::generate_health_check_utils();
     let visualization = debug::generate_dependency_graph_visualization();
-    
+
     quote::quote! {
         #debug_utils
         #health_check
         #visualization
-    }.into()
+    }
+    .into()
 }

@@ -1,8 +1,8 @@
+use super::plan::{QueryNode, QueryPlan};
 use crate::{
     error::{OrmError, OrmResult},
     loading::batch_loader::BatchLoader,
 };
-use super::plan::{QueryPlan, QueryNode};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -116,9 +116,9 @@ impl PlanExecutor {
         let mut errors = Vec::new();
 
         // Execute each phase
-        for (_, phase) in plan.execution_phases.iter().enumerate() {
+        for phase in plan.execution_phases.iter() {
             let phase_start = Instant::now();
-            
+
             if phase.len() == 1 {
                 // Single node - execute directly
                 let node_id = &phase[0];
@@ -136,7 +136,7 @@ impl PlanExecutor {
                 // Multiple nodes - execute in parallel
                 stats.parallel_phases += 1;
                 let parallel_results = self.execute_phase_parallel(phase, plan, connection).await;
-                
+
                 for (node_id, result) in parallel_results {
                     match result {
                         Ok(node_results) => {
@@ -148,7 +148,7 @@ impl PlanExecutor {
                     }
                 }
             }
-            
+
             let phase_duration = phase_start.elapsed();
             stats.add_phase_duration(phase_duration);
         }
@@ -175,25 +175,26 @@ impl PlanExecutor {
 
         // Limit parallel tasks to avoid overwhelming the database
         let chunks: Vec<_> = phase.chunks(self.max_parallel_tasks).collect();
-        
+
         for chunk in chunks {
             let mut chunk_handles = Vec::new();
-            
+
             for node_id in chunk {
                 if let Some(node) = plan.nodes.get(node_id) {
                     let node_clone = node.clone();
                     let node_id_clone = node_id.clone();
                     let connection_clone = connection.clone();
-                    
+
                     let handle = tokio::spawn(async move {
-                        let result = Self::execute_node_query_static(&node_clone, &connection_clone).await;
+                        let result =
+                            Self::execute_node_query_static(&node_clone, &connection_clone).await;
                         (node_id_clone, result)
                     });
-                    
+
                     chunk_handles.push(handle);
                 }
             }
-            
+
             // Wait for chunk to complete
             for handle in chunk_handles {
                 match handle.await {
@@ -218,7 +219,7 @@ impl PlanExecutor {
     ) -> OrmResult<Vec<JsonValue>> {
         // Add timeout wrapper
         let query_future = self.execute_node_query_impl(node, connection);
-        
+
         match tokio::time::timeout(self.query_timeout, query_future).await {
             Ok(result) => result,
             Err(_) => Err(OrmError::Query(format!(
@@ -236,7 +237,7 @@ impl PlanExecutor {
     ) -> OrmResult<Vec<JsonValue>> {
         // Use the batch loader to execute real database queries
         // This replaces the previous mock implementation with actual database queries
-        
+
         if node.is_root() {
             // Root node: Query all records from the table (with constraints if any)
             self.execute_root_query(node, connection).await
@@ -253,34 +254,37 @@ impl PlanExecutor {
         connection: &sqlx::PgPool,
     ) -> OrmResult<Vec<JsonValue>> {
         use crate::query::QueryBuilder;
-        
+
         // Build base query for the table
         let mut query = QueryBuilder::<()>::new().from(&node.table);
-        
+
         // Apply constraints if any
         for constraint in &node.constraints {
             query = query.where_raw(constraint);
         }
-        
+
         // Apply reasonable limit to prevent excessive data loading
         let limit = std::cmp::min(node.estimated_rows, 1000);
         query = query.limit(limit as i64);
-        
+
         // Execute the query
         let (sql, _params) = query.to_sql_with_params();
         let db_query = sqlx::query(&sql);
-        
-        let rows = db_query.fetch_all(connection).await
+
+        let rows = db_query
+            .fetch_all(connection)
+            .await
             .map_err(|e| OrmError::Database(e.to_string()))?;
-        
+
         // Convert rows to JSON values
-        let results: Result<Vec<JsonValue>, OrmError> = rows.into_iter()
+        let results: Result<Vec<JsonValue>, OrmError> = rows
+            .into_iter()
             .map(|row| {
                 crate::loading::batch_loader::row_conversion::convert_row_to_json(&row)
                     .map_err(|e| OrmError::Serialization(e.to_string()))
             })
             .collect();
-        
+
         results
     }
 
@@ -293,10 +297,10 @@ impl PlanExecutor {
         // For relationship queries, we need parent IDs to load the related records
         // In a real implementation, this would be called with parent IDs
         // For now, return empty results as this indicates the need for proper relationship loading
-        
+
         // This method should be called with specific parent IDs via the batch loader
         // Example: self.batch_loader.load_batch::<Model>(parent_ids, &node.table, connection).await
-        
+
         // Return empty for now - the actual loading should happen through the relationship system
         Ok(Vec::new())
     }
@@ -320,34 +324,37 @@ impl PlanExecutor {
         connection: &sqlx::PgPool,
     ) -> OrmResult<Vec<JsonValue>> {
         use crate::query::QueryBuilder;
-        
+
         // Build base query for the table
         let mut query = QueryBuilder::<()>::new().from(&node.table);
-        
+
         // Apply constraints if any
         for constraint in &node.constraints {
             query = query.where_raw(constraint);
         }
-        
+
         // Apply reasonable limit to prevent excessive data loading
         let limit = std::cmp::min(node.estimated_rows, 1000);
         query = query.limit(limit as i64);
-        
+
         // Execute the query
         let (sql, _params) = query.to_sql_with_params();
         let db_query = sqlx::query(&sql);
-        
-        let rows = db_query.fetch_all(connection).await
+
+        let rows = db_query
+            .fetch_all(connection)
+            .await
             .map_err(|e| OrmError::Database(e.to_string()))?;
-        
+
         // Convert rows to JSON values
-        let results: Result<Vec<JsonValue>, OrmError> = rows.into_iter()
+        let results: Result<Vec<JsonValue>, OrmError> = rows
+            .into_iter()
             .map(|row| {
                 crate::loading::batch_loader::row_conversion::convert_row_to_json(&row)
                     .map_err(|e| OrmError::Serialization(e.to_string()))
             })
             .collect();
-        
+
         results
     }
 

@@ -1,19 +1,16 @@
 #[cfg(test)]
 mod tests {
-    use crate::websocket::{WebSocketMessage, ConnectionId, ChannelId, ChannelType, 
-                           ChannelPermissions, ChannelMetadata, ChannelMessage, 
-                           Channel, ChannelManager};
+    use crate::websocket::{
+        Channel, ChannelId, ChannelManager, ChannelMessage, ChannelMetadata, ChannelPermissions,
+        ChannelType, ConnectionId, WebSocketMessage,
+    };
     use std::collections::HashSet;
     use std::time::SystemTime;
     use uuid::Uuid;
 
     #[tokio::test]
     async fn test_channel_creation() {
-        let channel = Channel::new(
-            "test-channel".to_string(),
-            ChannelType::Public,
-            None,
-        );
+        let channel = Channel::new("test-channel".to_string(), ChannelType::Public, None);
 
         assert_eq!(channel.metadata.name, "test-channel");
         assert!(matches!(channel.metadata.channel_type, ChannelType::Public));
@@ -33,20 +30,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_remove_members() {
-        let channel = Channel::new(
-            "test-channel".to_string(),
-            ChannelType::Public,
-            None,
-        );
+        let channel = Channel::new("test-channel".to_string(), ChannelType::Public, None);
 
         let connection_id = ConnectionId::new();
-        
+
         // Add member
-        let result = channel.add_member(
-            connection_id,
-            ChannelPermissions::default(),
-            Some("test-user".to_string()),
-        ).await;
+        let result = channel
+            .add_member(
+                connection_id,
+                ChannelPermissions::default(),
+                Some("test-user".to_string()),
+            )
+            .await;
         assert!(result.is_ok());
         assert_eq!(channel.member_count().await, 1);
         assert!(channel.has_member(connection_id).await);
@@ -74,7 +69,7 @@ mod tests {
             max_members: Some(2),
             message_history_limit: None,
         };
-        
+
         let channel = Channel::with_metadata(metadata);
 
         // Add two members (should succeed)
@@ -82,20 +77,25 @@ mod tests {
         let id2 = ConnectionId::new();
         let id3 = ConnectionId::new();
 
-        assert!(channel.add_member(id1, ChannelPermissions::default(), None).await.is_ok());
-        assert!(channel.add_member(id2, ChannelPermissions::default(), None).await.is_ok());
-        
+        assert!(channel
+            .add_member(id1, ChannelPermissions::default(), None)
+            .await
+            .is_ok());
+        assert!(channel
+            .add_member(id2, ChannelPermissions::default(), None)
+            .await
+            .is_ok());
+
         // Try to add third member (should fail)
-        assert!(channel.add_member(id3, ChannelPermissions::default(), None).await.is_err());
+        assert!(channel
+            .add_member(id3, ChannelPermissions::default(), None)
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn test_message_history() {
-        let channel = Channel::new(
-            "test-channel".to_string(),
-            ChannelType::Public,
-            None,
-        );
+        let channel = Channel::new("test-channel".to_string(), ChannelType::Public, None);
 
         let sender_id = ConnectionId::new();
         let message1 = ChannelMessage {
@@ -134,11 +134,10 @@ mod tests {
         assert_eq!(stats.total_channels, 0);
 
         // Create a channel
-        let channel_id = manager.create_channel(
-            "test-channel".to_string(),
-            ChannelType::Public,
-            None,
-        ).await.unwrap();
+        let channel_id = manager
+            .create_channel("test-channel".to_string(), ChannelType::Public, None)
+            .await
+            .unwrap();
 
         let stats = manager.stats().await;
         assert_eq!(stats.total_channels, 1);
@@ -155,19 +154,20 @@ mod tests {
         let connection_id = ConnectionId::new();
 
         // Create a public channel
-        let channel_id = manager.create_channel(
-            "public-test".to_string(),
-            ChannelType::Public,
-            None,
-        ).await.unwrap();
+        let channel_id = manager
+            .create_channel("public-test".to_string(), ChannelType::Public, None)
+            .await
+            .unwrap();
 
         // Join channel
-        let result = manager.join_channel(
-            channel_id,
-            connection_id,
-            None,
-            Some("test-user".to_string()),
-        ).await;
+        let result = manager
+            .join_channel(
+                channel_id,
+                connection_id,
+                None,
+                Some("test-user".to_string()),
+            )
+            .await;
         assert!(result.is_ok());
 
         // Verify membership
@@ -191,32 +191,27 @@ mod tests {
 
         // Create protected channel with secure password hashing
         let channel_type = ChannelType::protected_with_password("secret123").unwrap();
-        let channel_id = manager.create_channel(
-            "protected-test".to_string(),
-            channel_type,
-            None,
-        ).await.unwrap();
+        let channel_id = manager
+            .create_channel("protected-test".to_string(), channel_type, None)
+            .await
+            .unwrap();
 
         // Try to join without password (should fail)
-        let result = manager.join_channel(channel_id, connection_id, None, None).await;
+        let result = manager
+            .join_channel(channel_id, connection_id, None, None)
+            .await;
         assert!(result.is_err());
 
         // Try with wrong password (should fail)
-        let result = manager.join_channel(
-            channel_id,
-            connection_id,
-            Some("wrong-password"),
-            None,
-        ).await;
+        let result = manager
+            .join_channel(channel_id, connection_id, Some("wrong-password"), None)
+            .await;
         assert!(result.is_err());
 
         // Try with correct password (should succeed)
-        let result = manager.join_channel(
-            channel_id,
-            connection_id,
-            Some("secret123"),
-            None,
-        ).await;
+        let result = manager
+            .join_channel(channel_id, connection_id, Some("secret123"), None)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -227,18 +222,26 @@ mod tests {
         let receiver_id = ConnectionId::new();
 
         // Create channel and add members
-        let channel_id = manager.create_channel(
-            "message-test".to_string(),
-            ChannelType::Public,
-            Some(sender_id),
-        ).await.unwrap();
+        let channel_id = manager
+            .create_channel(
+                "message-test".to_string(),
+                ChannelType::Public,
+                Some(sender_id),
+            )
+            .await
+            .unwrap();
 
         // Join second member
-        manager.join_channel(channel_id, receiver_id, None, None).await.unwrap();
+        manager
+            .join_channel(channel_id, receiver_id, None, None)
+            .await
+            .unwrap();
 
         // Send message
         let message = WebSocketMessage::text("Hello channel!");
-        let result = manager.send_to_channel(channel_id, sender_id, message).await;
+        let result = manager
+            .send_to_channel(channel_id, sender_id, message)
+            .await;
         assert!(result.is_ok());
 
         let member_ids = result.unwrap();
@@ -260,24 +263,35 @@ mod tests {
         let regular_id = ConnectionId::new();
 
         // Create channel with admin
-        let channel_id = manager.create_channel(
-            "permission-test".to_string(),
-            ChannelType::Public,
-            Some(admin_id),
-        ).await.unwrap();
+        let channel_id = manager
+            .create_channel(
+                "permission-test".to_string(),
+                ChannelType::Public,
+                Some(admin_id),
+            )
+            .await
+            .unwrap();
 
         // Join regular user
-        manager.join_channel(channel_id, regular_id, None, None).await.unwrap();
+        manager
+            .join_channel(channel_id, regular_id, None, None)
+            .await
+            .unwrap();
 
         // Get channel and update regular user permissions (remove send permission)
         let channel = manager.get_channel(channel_id).await.unwrap();
         let mut permissions = ChannelPermissions::default();
         permissions.can_send_messages = false;
-        channel.update_member_permissions(regular_id, permissions).await.unwrap();
+        channel
+            .update_member_permissions(regular_id, permissions)
+            .await
+            .unwrap();
 
         // Try to send message as regular user (should fail)
         let message = WebSocketMessage::text("This should fail");
-        let result = manager.send_to_channel(channel_id, regular_id, message).await;
+        let result = manager
+            .send_to_channel(channel_id, regular_id, message)
+            .await;
         assert!(result.is_err());
 
         // Send as admin (should succeed)
@@ -292,15 +306,20 @@ mod tests {
         let connection_id = ConnectionId::new();
 
         // Create channel without explicit creator (should be auto-deleted when empty)
-        let channel_id = manager.create_channel(
-            "cleanup-test".to_string(),
-            ChannelType::Public,
-            None,
-        ).await.unwrap();
+        let channel_id = manager
+            .create_channel("cleanup-test".to_string(), ChannelType::Public, None)
+            .await
+            .unwrap();
 
         // Join and then leave
-        manager.join_channel(channel_id, connection_id, None, None).await.unwrap();
-        manager.leave_channel(channel_id, connection_id).await.unwrap();
+        manager
+            .join_channel(channel_id, connection_id, None, None)
+            .await
+            .unwrap();
+        manager
+            .leave_channel(channel_id, connection_id)
+            .await
+            .unwrap();
 
         // Channel should be automatically deleted
         let channel = manager.get_channel(channel_id).await;
@@ -313,14 +332,32 @@ mod tests {
         let connection_id = ConnectionId::new();
 
         // Create multiple channels
-        let channel1_id = manager.create_channel("channel1".to_string(), ChannelType::Public, None).await.unwrap();
-        let channel2_id = manager.create_channel("channel2".to_string(), ChannelType::Public, None).await.unwrap();
-        let channel3_id = manager.create_channel("channel3".to_string(), ChannelType::Public, None).await.unwrap();
+        let channel1_id = manager
+            .create_channel("channel1".to_string(), ChannelType::Public, None)
+            .await
+            .unwrap();
+        let channel2_id = manager
+            .create_channel("channel2".to_string(), ChannelType::Public, None)
+            .await
+            .unwrap();
+        let channel3_id = manager
+            .create_channel("channel3".to_string(), ChannelType::Public, None)
+            .await
+            .unwrap();
 
         // Join all channels
-        manager.join_channel(channel1_id, connection_id, None, None).await.unwrap();
-        manager.join_channel(channel2_id, connection_id, None, None).await.unwrap();
-        manager.join_channel(channel3_id, connection_id, None, None).await.unwrap();
+        manager
+            .join_channel(channel1_id, connection_id, None, None)
+            .await
+            .unwrap();
+        manager
+            .join_channel(channel2_id, connection_id, None, None)
+            .await
+            .unwrap();
+        manager
+            .join_channel(channel3_id, connection_id, None, None)
+            .await
+            .unwrap();
 
         // Verify membership
         let user_channels = manager.get_connection_channels(connection_id).await;
@@ -340,17 +377,25 @@ mod tests {
         let manager = ChannelManager::new();
 
         // Create mix of channel types
-        manager.create_channel("public1".to_string(), ChannelType::Public, None).await.unwrap();
-        manager.create_channel("public2".to_string(), ChannelType::Public, None).await.unwrap();
-        manager.create_channel("private1".to_string(), ChannelType::Private, None).await.unwrap();
+        manager
+            .create_channel("public1".to_string(), ChannelType::Public, None)
+            .await
+            .unwrap();
+        manager
+            .create_channel("public2".to_string(), ChannelType::Public, None)
+            .await
+            .unwrap();
+        manager
+            .create_channel("private1".to_string(), ChannelType::Private, None)
+            .await
+            .unwrap();
 
         // Get public channels
         let public_channels = manager.get_public_channels().await;
         assert_eq!(public_channels.len(), 2);
 
-        let public_names: HashSet<String> = public_channels.iter()
-            .map(|c| c.name.clone())
-            .collect();
+        let public_names: HashSet<String> =
+            public_channels.iter().map(|c| c.name.clone()).collect();
         assert!(public_names.contains("public1"));
         assert!(public_names.contains("public2"));
         assert!(!public_names.contains("private1"));
@@ -361,22 +406,31 @@ mod tests {
         let manager = ChannelManager::new();
         let connection_id = ConnectionId::new();
 
-        let channel_id = manager.create_channel(
-            "stats-test".to_string(),
-            ChannelType::Public,
-            Some(connection_id),
-        ).await.unwrap();
+        let channel_id = manager
+            .create_channel(
+                "stats-test".to_string(),
+                ChannelType::Public,
+                Some(connection_id),
+            )
+            .await
+            .unwrap();
 
         // Send some messages
         let message1 = WebSocketMessage::text("Message 1");
         let message2 = WebSocketMessage::text("Message 2");
-        manager.send_to_channel(channel_id, connection_id, message1).await.unwrap();
-        manager.send_to_channel(channel_id, connection_id, message2).await.unwrap();
+        manager
+            .send_to_channel(channel_id, connection_id, message1)
+            .await
+            .unwrap();
+        manager
+            .send_to_channel(channel_id, connection_id, message2)
+            .await
+            .unwrap();
 
         // Check channel stats
         let channel = manager.get_channel(channel_id).await.unwrap();
         let stats = channel.stats().await;
-        
+
         assert_eq!(stats.name, "stats-test");
         assert_eq!(stats.member_count, 1);
         assert_eq!(stats.message_count, 2);

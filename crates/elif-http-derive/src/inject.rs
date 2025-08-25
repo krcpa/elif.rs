@@ -1,5 +1,5 @@
 //! Service injection macro implementation
-//! 
+//!
 //! Provides the `#[inject]` attribute macro for declarative dependency injection.
 //! Applied to struct definitions to automatically generate service fields and
 //! a `from_ioc_container()` constructor method for use with the IoC container.
@@ -12,14 +12,14 @@ use syn::{
     parse_macro_input,
     punctuated::Punctuated,
     token::{Colon, Comma, Eq},
-    Error, ItemStruct, Type, Expr, LitStr, Meta, Attribute,
+    Attribute, Error, Expr, ItemStruct, LitStr, Meta, Type,
 };
 
 /// Main implementation function for the inject macro
 pub fn inject_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let inject_args = parse_macro_input!(args as InjectArgs);
     let mut item_struct = parse_macro_input!(input as ItemStruct);
-    
+
     match process_inject_attribute(&mut item_struct, inject_args) {
         Ok(result) => result.into(),
         Err(err) => err.to_compile_error().into(),
@@ -79,19 +79,19 @@ impl Parse for ServiceDef {
     fn parse(input: ParseStream) -> Result<Self> {
         // Parse any attributes first (like #[scoped], #[factory])
         let attributes = input.call(Attribute::parse_outer)?;
-        
+
         let field_name: Ident = input.parse()?;
         let _colon: Colon = input.parse()?;
         let field_type: Type = input.parse()?;
-        
+
         // Check for named service assignment (= "name" or = factory_expr)
         let mut service_name = None;
         let mut factory_expr = None;
         let mut injection_type = InjectionType::Regular;
-        
+
         if input.peek(Eq) {
             let _eq: Eq = input.parse()?;
-            
+
             // Check if it's a string literal (named service) or expression (factory)
             if input.peek(LitStr) {
                 let lit: LitStr = input.parse()?;
@@ -104,7 +104,7 @@ impl Parse for ServiceDef {
                 injection_type = InjectionType::Factory;
             }
         }
-        
+
         // Check attributes for injection type modifiers
         for attr in &attributes {
             if let Meta::Path(path) = &attr.meta {
@@ -117,7 +117,7 @@ impl Parse for ServiceDef {
                 }
             }
         }
-        
+
         // Detect special field types
         if injection_type == InjectionType::Regular {
             if is_option_type(&field_type) {
@@ -126,7 +126,7 @@ impl Parse for ServiceDef {
                 injection_type = InjectionType::Token;
             }
         }
-        
+
         Ok(ServiceDef {
             field_name,
             field_type,
@@ -149,11 +149,11 @@ fn is_option_type(ty: &Type) -> bool {
 }
 
 /// Helper function to check if a type is a reference to a token (&TokenType)
-/// 
+///
 /// Uses a convention-based approach: the referenced type name must end with "Token"
 /// to be considered a service token. This prevents normal reference fields from being
 /// incorrectly treated as token references.
-/// 
+///
 /// ## Examples
 /// - `&EmailNotificationToken` → `true` (ends with "Token")
 /// - `&DatabaseToken` → `true` (ends with "Token")  
@@ -179,7 +179,10 @@ fn extract_token_type(ty: &Type) -> Result<&Type> {
     if let Type::Reference(type_ref) = ty {
         return Ok(type_ref.elem.as_ref());
     }
-    Err(Error::new_spanned(ty, "Expected reference type (&TokenType)"))
+    Err(Error::new_spanned(
+        ty,
+        "Expected reference type (&TokenType)",
+    ))
 }
 
 impl ServiceDef {
@@ -187,7 +190,7 @@ impl ServiceDef {
     fn is_optional(&self) -> bool {
         matches!(self.injection_type, InjectionType::Optional) || is_option_type(&self.field_type)
     }
-    
+
     /// Get the inner type for optional services
     /// For `Option<UserService>`, returns `UserService`
     fn get_inner_type(&self) -> Result<&Type> {
@@ -210,7 +213,7 @@ impl ServiceDef {
         // Not an Option, so return the type itself.
         Ok(&self.field_type)
     }
-    
+
     /// Get the service type for resolution (unwraps Option if needed)
     fn get_service_type(&self) -> Result<&Type> {
         if self.is_optional() {
@@ -219,7 +222,7 @@ impl ServiceDef {
             Ok(&self.field_type)
         }
     }
-    
+
     /// Get the token type for token-based services (&TokenType -> TokenType)
     fn get_token_type(&self) -> Result<&Type> {
         if matches!(self.injection_type, InjectionType::Token) {
@@ -244,10 +247,10 @@ fn process_inject_attribute(
             "#[inject] requires at least one service definition",
         ));
     }
-    
+
     // Generate service fields for the struct
     let service_fields = generate_service_fields(&inject_args.services)?;
-    
+
     // Add service fields to the struct
     match &mut item_struct.fields {
         syn::Fields::Named(fields) => {
@@ -269,30 +272,26 @@ fn process_inject_attribute(
             });
         }
     }
-    
+
     // Generate the from_ioc_container method
-    let from_ioc_container_impl = generate_from_ioc_container_method(
-        &item_struct.ident,
-        &inject_args.services,
-    )?;
-    
+    let from_ioc_container_impl =
+        generate_from_ioc_container_method(&item_struct.ident, &inject_args.services)?;
+
     // Return both the modified struct and the impl block
     Ok(quote! {
         #item_struct
-        
+
         #from_ioc_container_impl
     })
 }
 
 /// Generate struct fields for injected services
-fn generate_service_fields(
-    services: &Punctuated<ServiceDef, Comma>,
-) -> Result<Vec<syn::Field>> {
+fn generate_service_fields(services: &Punctuated<ServiceDef, Comma>) -> Result<Vec<syn::Field>> {
     let mut fields = Vec::new();
-    
+
     for service in services {
         let field_name = &service.field_name;
-        
+
         // Determine the actual field type based on injection type
         let field_core_type = match service.injection_type {
             InjectionType::Token => {
@@ -300,21 +299,21 @@ fn generate_service_fields(
                 // We need to get the service type that the token resolves to
                 let token_type = service.get_token_type()?;
                 quote! { std::sync::Arc<<#token_type as elif_core::container::ServiceToken>::Service> }
-            },
+            }
             _ => {
                 // For regular services, wrap the service type in Arc
                 let service_type = service.get_service_type()?;
                 quote! { std::sync::Arc<#service_type> }
             }
         };
-        
+
         // Then wrap in Option if the service is optional (regardless of injection type)
         let wrapped_type = if service.is_optional() {
             quote! { Option<#field_core_type> }
         } else {
             field_core_type
         };
-        
+
         let field = syn::Field {
             attrs: service.attributes.clone(),
             vis: syn::Visibility::Inherited, // private field
@@ -323,10 +322,10 @@ fn generate_service_fields(
             colon_token: Some(Default::default()),
             ty: syn::parse2(wrapped_type)?,
         };
-        
+
         fields.push(field);
     }
-    
+
     Ok(fields)
 }
 
@@ -336,11 +335,11 @@ fn generate_from_ioc_container_method(
     services: &Punctuated<ServiceDef, Comma>,
 ) -> Result<proc_macro2::TokenStream> {
     let mut field_initializers = Vec::new();
-    
+
     for service in services {
         let field_name = &service.field_name;
         let service_type = service.get_service_type()?;
-        
+
         let initializer = if service.is_optional() {
             // Handle optional services (can be combined with any injection type)
             match &service.injection_type {
@@ -348,17 +347,17 @@ fn generate_from_ioc_container_method(
                     quote! {
                         #field_name: container.try_resolve::<#service_type>()
                     }
-                },
+                }
                 InjectionType::Named(name) => {
                     quote! {
                         #field_name: container.try_resolve_named::<#service_type>(#name)
                     }
-                },
+                }
                 InjectionType::Scoped => {
                     quote! {
                         #field_name: container.try_resolve_scoped::<#service_type>(&scope_id)
                     }
-                },
+                }
                 InjectionType::Factory => {
                     if let Some(factory_expr) = &service.factory_expr {
                         quote! {
@@ -372,7 +371,7 @@ fn generate_from_ioc_container_method(
                             #field_name: container.try_resolve::<#service_type>()
                         }
                     }
-                },
+                }
                 InjectionType::Token => {
                     let token_type = service.get_token_type()?;
                     quote! {
@@ -388,19 +387,19 @@ fn generate_from_ioc_container_method(
                         #field_name: container.resolve::<#service_type>()
                             .map_err(|e| format!("Failed to inject service {}: {}", stringify!(#service_type), e))?
                     }
-                },
+                }
                 InjectionType::Named(name) => {
                     quote! {
                         #field_name: container.resolve_named::<#service_type>(#name)
                             .map_err(|e| format!("Failed to inject named service {}({}): {}", stringify!(#service_type), #name, e))?
                     }
-                },
+                }
                 InjectionType::Scoped => {
                     quote! {
                         #field_name: container.resolve_scoped::<#service_type>(&scope_id)
                             .map_err(|e| format!("Failed to inject scoped service {}: {}", stringify!(#service_type), e))?
                     }
-                },
+                }
                 InjectionType::Factory => {
                     if let Some(factory_expr) = &service.factory_expr {
                         quote! {
@@ -415,14 +414,14 @@ fn generate_from_ioc_container_method(
                                 .map_err(|e| format!("Failed to inject factory service {}: {}", stringify!(#service_type), e))?
                         }
                     }
-                },
+                }
                 InjectionType::Optional => {
                     // This shouldn't happen for non-optional services
                     quote! {
                         #field_name: container.resolve::<#service_type>()
                             .map_err(|e| format!("Failed to inject service {}: {}", stringify!(#service_type), e))?
                     }
-                },
+                }
                 InjectionType::Token => {
                     let token_type = service.get_token_type()?;
                     quote! {
@@ -432,10 +431,10 @@ fn generate_from_ioc_container_method(
                 }
             }
         };
-        
+
         field_initializers.push(initializer);
     }
-    
+
     // Generate IoC container implementation only
     Ok(quote! {
         impl #struct_name {
@@ -449,7 +448,7 @@ fn generate_from_ioc_container_method(
                     None => container.create_scope()
                         .map_err(|e| format!("Failed to create scope: {}", e))?
                 };
-                
+
                 Ok(Self {
                     #(#field_initializers),*
                 })
@@ -471,52 +470,52 @@ mod tests {
         // Valid token references (end with "Token")
         let email_token: Type = parse_quote!(&EmailNotificationToken);
         assert!(is_token_reference(&email_token));
-        
+
         let db_token: Type = parse_quote!(&DatabaseToken);
         assert!(is_token_reference(&db_token));
-        
+
         let user_token: Type = parse_quote!(&UserServiceToken);
         assert!(is_token_reference(&user_token));
     }
-    
+
     #[test]
     fn test_is_token_reference_without_token_suffix() {
         // Invalid token references (don't end with "Token")
         let config: Type = parse_quote!(&Config);
         assert!(!is_token_reference(&config));
-        
+
         let connection: Type = parse_quote!(&DatabaseConnection);
         assert!(!is_token_reference(&connection));
-        
+
         let str_ref: Type = parse_quote!(&str);
         assert!(!is_token_reference(&str_ref));
-        
+
         let service: Type = parse_quote!(&UserService);
         assert!(!is_token_reference(&service));
     }
-    
-    #[test] 
+
+    #[test]
     fn test_is_token_reference_non_references() {
         // Non-reference types should never be considered tokens
         let owned_token: Type = parse_quote!(EmailNotificationToken);
         assert!(!is_token_reference(&owned_token));
-        
+
         let owned_service: Type = parse_quote!(UserService);
         assert!(!is_token_reference(&owned_service));
-        
+
         let arc_service: Type = parse_quote!(Arc<UserService>);
         assert!(!is_token_reference(&arc_service));
     }
-    
+
     #[test]
     fn test_is_token_reference_with_paths() {
         // Test with module paths
         let module_token: Type = parse_quote!(&crate::tokens::EmailNotificationToken);
         assert!(is_token_reference(&module_token));
-        
+
         let module_non_token: Type = parse_quote!(&crate::config::DatabaseConfig);
         assert!(!is_token_reference(&module_non_token));
-        
+
         let std_ref: Type = parse_quote!(&std::collections::HashMap<String, String>);
         assert!(!is_token_reference(&std_ref));
     }

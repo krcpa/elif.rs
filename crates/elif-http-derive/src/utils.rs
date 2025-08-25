@@ -1,9 +1,9 @@
 //! Utility functions shared across macro implementations
 
-use syn::{Attribute, Meta, Signature, FnArg, Pat, PatIdent};
+use crate::params::{BodyParamType, BodySpec};
 use quote::quote;
 use std::collections::HashMap;
-use crate::params::{BodyParamType, BodySpec};
+use syn::{Attribute, FnArg, Meta, Pat, PatIdent, Signature};
 
 /// Extract HTTP method and path from method attributes
 pub fn extract_http_method_info(attrs: &[Attribute]) -> Option<(proc_macro2::Ident, String)> {
@@ -20,7 +20,7 @@ pub fn extract_http_method_info(attrs: &[Attribute]) -> Option<(proc_macro2::Ide
                 "options" => Some(quote::format_ident!("options")),
                 _ => None,
             }?;
-            
+
             // Extract path from the attribute arguments using proper syn parsing
             let path = extract_path_from_meta_list_robust(&meta_list.tokens);
             return Some((method_ident, path));
@@ -36,7 +36,7 @@ pub fn extract_http_method_info(attrs: &[Attribute]) -> Option<(proc_macro2::Ide
                 "options" => Some(quote::format_ident!("options")),
                 _ => None,
             }?;
-            
+
             return Some((method_ident, "".to_string()));
         }
     }
@@ -62,12 +62,12 @@ pub fn extract_path_from_meta_list_robust(tokens: &proc_macro2::TokenStream) -> 
     if tokens.is_empty() {
         return String::new();
     }
-    
+
     // Try to parse as a string literal directly
     if let Ok(lit_str) = syn::parse2::<syn::LitStr>(tokens.clone()) {
         return lit_str.value();
     }
-    
+
     // Try to parse as a parenthesized string literal: ("path")
     if let Ok(group) = syn::parse2::<proc_macro2::Group>(tokens.clone()) {
         if group.delimiter() == proc_macro2::Delimiter::Parenthesis {
@@ -76,7 +76,7 @@ pub fn extract_path_from_meta_list_robust(tokens: &proc_macro2::TokenStream) -> 
             }
         }
     }
-    
+
     // Try to manually extract from parentheses format
     let tokens_iter = tokens.clone().into_iter().collect::<Vec<_>>();
     if tokens_iter.len() == 1 {
@@ -88,7 +88,7 @@ pub fn extract_path_from_meta_list_robust(tokens: &proc_macro2::TokenStream) -> 
             }
         }
     }
-    
+
     // Fall back to empty string if we can't parse properly
     String::new()
 }
@@ -98,13 +98,13 @@ pub fn validate_route_path(path: &str) -> Result<(), String> {
     if path.is_empty() {
         return Ok(());
     }
-    
+
     // Check for malformed parameter syntax
     let chars = path.chars();
     let mut brace_count = 0;
     let mut in_param = false;
     let mut param_content = String::new();
-    
+
     for ch in chars {
         match ch {
             '{' => {
@@ -122,7 +122,10 @@ pub fn validate_route_path(path: &str) -> Result<(), String> {
                 if param_content.is_empty() {
                     return Err("empty parameter name '{}'".to_string());
                 }
-                if !param_content.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                if !param_content
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_')
+                {
                     return Err(format!("invalid parameter name '{}' - use only alphanumeric characters and underscores", param_content));
                 }
                 brace_count -= 1;
@@ -134,16 +137,16 @@ pub fn validate_route_path(path: &str) -> Result<(), String> {
             _ => {}
         }
     }
-    
+
     if brace_count != 0 {
         return Err("unmatched opening brace '{'".to_string());
     }
-    
+
     // Check for double slashes
     if path.contains("//") {
         return Err("double slashes '//' are not allowed".to_string());
     }
-    
+
     Ok(())
 }
 
@@ -151,7 +154,7 @@ pub fn validate_route_path(path: &str) -> Result<(), String> {
 pub fn extract_path_parameters(path: &str) -> Vec<String> {
     let mut params = Vec::new();
     let mut chars = path.chars();
-    
+
     while let Some(ch) = chars.next() {
         if ch == '{' {
             let mut param = String::new();
@@ -167,14 +170,14 @@ pub fn extract_path_parameters(path: &str) -> Vec<String> {
             }
         }
     }
-    
+
     params
 }
 
 /// Extract function parameter names and types from a function signature
 pub fn extract_function_parameters(sig: &Signature) -> Vec<(String, String)> {
     let mut params = Vec::new();
-    
+
     for input in &sig.inputs {
         if let FnArg::Typed(pat_type) = input {
             if let Pat::Ident(PatIdent { ident, .. }) = pat_type.pat.as_ref() {
@@ -184,22 +187,21 @@ pub fn extract_function_parameters(sig: &Signature) -> Vec<(String, String)> {
             }
         }
     }
-    
+
     params
 }
 
 /// Extract middleware names from method attributes
 pub fn extract_middleware_from_attrs(attrs: &[Attribute]) -> Vec<String> {
     let mut middleware = Vec::new();
-    
+
     for attr in attrs {
         if attr.path().is_ident("middleware") {
             if let Meta::List(meta_list) = &attr.meta {
                 // Parse middleware names from the attribute
                 let tokens = &meta_list.tokens;
                 let token_vec: Vec<_> = tokens.clone().into_iter().collect();
-                
-                
+
                 for token in token_vec {
                     match &token {
                         proc_macro2::TokenTree::Literal(lit) => {
@@ -219,7 +221,7 @@ pub fn extract_middleware_from_attrs(attrs: &[Attribute]) -> Vec<String> {
             }
         }
     }
-    
+
     middleware
 }
 
@@ -227,12 +229,12 @@ pub fn extract_middleware_from_attrs(attrs: &[Attribute]) -> Vec<String> {
 pub fn convert_param_type_to_routing(param_type: &str) -> String {
     match param_type {
         "string" => "String".to_string(),
-        "int" => "Integer".to_string(),  
+        "int" => "Integer".to_string(),
         "uint" => "Integer".to_string(),
         "uuid" => "Uuid".to_string(),
         "float" => "String".to_string(), // Float not in routing::ParamType yet
         "bool" => "String".to_string(),  // Bool not in routing::ParamType yet
-        _ => "String".to_string(), // Default fallback
+        _ => "String".to_string(),       // Default fallback
     }
 }
 
@@ -240,13 +242,13 @@ pub fn convert_param_type_to_routing(param_type: &str) -> String {
 /// Returns a map of parameter name -> parameter type
 pub fn extract_param_types_from_attrs(attrs: &[Attribute]) -> HashMap<String, String> {
     let mut param_types = HashMap::new();
-    
+
     for attr in attrs {
         if attr.path().is_ident("param") {
             if let Meta::List(meta_list) = &attr.meta {
                 // Parse parameter specifications from the attribute tokens
                 let tokens = &meta_list.tokens;
-                
+
                 // Try to parse multiple comma-separated param specs: id: int, name: string
                 if let Ok(parsed_specs) = parse_param_specs(tokens.clone()) {
                     for (name, type_str) in parsed_specs {
@@ -257,46 +259,48 @@ pub fn extract_param_types_from_attrs(attrs: &[Attribute]) -> HashMap<String, St
             }
         }
     }
-    
+
     param_types
 }
 
 /// Parse parameter specifications from token stream
 /// Expected format: "id: int, name: string" or just "id: int"
-fn parse_param_specs(tokens: proc_macro2::TokenStream) -> Result<Vec<(String, String)>, syn::Error> {
-    use syn::{Ident, Token};
+fn parse_param_specs(
+    tokens: proc_macro2::TokenStream,
+) -> Result<Vec<(String, String)>, syn::Error> {
     use syn::parse::{Parse, ParseStream};
-    
+    use syn::{Ident, Token};
+
     struct ParamSpecs {
         specs: Vec<(String, String)>,
     }
-    
+
     impl Parse for ParamSpecs {
         fn parse(input: ParseStream) -> syn::Result<Self> {
             let mut specs = Vec::new();
-            
+
             // Parse first param spec
             if !input.is_empty() {
                 let name: Ident = input.parse()?;
                 input.parse::<Token![:]>()?;
                 let type_ident: Ident = input.parse()?;
-                
+
                 specs.push((name.to_string(), type_ident.to_string()));
-                
+
                 // Parse additional comma-separated specs
                 while input.parse::<Token![,]>().is_ok() {
                     let name: Ident = input.parse()?;
                     input.parse::<Token![:]>()?;
                     let type_ident: Ident = input.parse()?;
-                    
+
                     specs.push((name.to_string(), type_ident.to_string()));
                 }
             }
-            
+
             Ok(ParamSpecs { specs })
         }
     }
-    
+
     let parsed: ParamSpecs = syn::parse2(tokens)?;
     Ok(parsed.specs)
 }

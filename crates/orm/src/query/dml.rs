@@ -1,9 +1,9 @@
 //! Query Builder DML operations (INSERT, UPDATE, DELETE)
 
-use serde_json::Value;
 use super::builder::QueryBuilder;
 use super::types::*;
 use super::upsert::UpsertBuilder;
+use serde_json::Value;
 
 impl<M> QueryBuilder<M> {
     /// Start an INSERT query
@@ -60,10 +60,13 @@ impl<M> QueryBuilder<M> {
     pub fn upsert(mut self, table: &str, conflict_columns: Vec<&str>) -> UpsertBuilder<M> {
         self.query_type = QueryType::Insert;
         self.insert_table = Some(table.to_string());
-        
+
         UpsertBuilder {
             query_builder: self,
-            conflict_columns: conflict_columns.into_iter().map(|s| s.to_string()).collect(),
+            conflict_columns: conflict_columns
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect(),
             update_clauses: Vec::new(),
         }
     }

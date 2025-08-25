@@ -6,31 +6,31 @@ use std::collections::HashMap;
 pub struct OpenApiConfig {
     /// OpenAPI specification version (should be "3.0.3")
     pub openapi_version: String,
-    
+
     /// API information
     pub info: ApiInfo,
-    
+
     /// Server configurations
     pub servers: Vec<ServerConfig>,
-    
+
     /// Global security schemes
     pub security_schemes: HashMap<String, SecurityScheme>,
-    
+
     /// Global tags for grouping operations
     pub tags: Vec<TagConfig>,
-    
+
     /// External documentation
     pub external_docs: Option<ExternalDocs>,
-    
+
     /// Whether to include example values in schemas
     pub include_examples: bool,
-    
+
     /// Whether to generate nullable fields for Option<T>
     pub nullable_optional: bool,
-    
+
     /// Custom schema mappings for specific types
     pub custom_schemas: HashMap<String, String>,
-    
+
     /// Export settings
     pub export: ExportConfig,
 }
@@ -40,19 +40,19 @@ pub struct OpenApiConfig {
 pub struct ApiInfo {
     /// API title
     pub title: String,
-    
+
     /// API description
     pub description: Option<String>,
-    
+
     /// API version
     pub version: String,
-    
+
     /// Terms of service URL
     pub terms_of_service: Option<String>,
-    
+
     /// Contact information
     pub contact: Option<Contact>,
-    
+
     /// License information
     pub license: Option<License>,
 }
@@ -98,18 +98,11 @@ pub enum SecurityScheme {
         bearer_format: Option<String>,
     },
     #[serde(rename = "apiKey")]
-    ApiKey {
-        name: String,
-        r#in: String,
-    },
+    ApiKey { name: String, r#in: String },
     #[serde(rename = "oauth2")]
-    OAuth2 {
-        flows: OAuth2Flows,
-    },
+    OAuth2 { flows: OAuth2Flows },
     #[serde(rename = "openIdConnect")]
-    OpenIdConnect {
-        open_id_connect_url: String,
-    },
+    OpenIdConnect { open_id_connect_url: String },
 }
 
 /// OAuth2 flows configuration
@@ -150,10 +143,10 @@ pub struct ExternalDocs {
 pub struct ExportConfig {
     /// Output formats to generate
     pub formats: Vec<ExportFormat>,
-    
+
     /// Whether to validate generated specifications
     pub validate: bool,
-    
+
     /// Pretty print JSON output
     pub pretty_print: bool,
 }
@@ -190,10 +183,13 @@ impl Default for OpenApiConfig {
             }],
             security_schemes: {
                 let mut schemes = HashMap::new();
-                schemes.insert("bearerAuth".to_string(), SecurityScheme::Http {
-                    scheme: "bearer".to_string(),
-                    bearer_format: Some("JWT".to_string()),
-                });
+                schemes.insert(
+                    "bearerAuth".to_string(),
+                    SecurityScheme::Http {
+                        scheme: "bearer".to_string(),
+                        bearer_format: Some("JWT".to_string()),
+                    },
+                );
                 schemes
             },
             tags: Vec::new(),

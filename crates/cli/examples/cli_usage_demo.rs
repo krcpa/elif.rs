@@ -3,8 +3,8 @@
 //! This example shows all the CLI commands and workflows for the elif.rs
 //! framework, including project scaffolding, code generation, and database operations.
 
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 use tempfile::TempDir;
 
 /// Demonstrates CLI usage patterns
@@ -16,8 +16,12 @@ pub struct CliDemo {
 impl CliDemo {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let temp_dir = TempDir::new()?;
-        let project_path = temp_dir.path().join("demo_project").to_string_lossy().to_string();
-        
+        let project_path = temp_dir
+            .path()
+            .join("demo_project")
+            .to_string_lossy()
+            .to_string();
+
         Ok(Self {
             temp_dir,
             project_path,
@@ -27,50 +31,79 @@ impl CliDemo {
     /// Demonstrates project creation
     pub fn demonstrate_project_creation(&self) -> Result<(), Box<dyn std::error::Error>> {
         println!("🚀 === PROJECT CREATION DEMO ===");
-        
+
         // Show help for new command
         println!("💡 Getting help for 'new' command:");
         self.run_command("elifrs", &["new", "--help"])?;
-        
+
         println!("\n📁 Creating new project 'demo_project':");
-        self.run_command("elifrs", &["new", "demo_project", "--path", &self.temp_dir.path().to_string_lossy()])?;
-        
+        self.run_command(
+            "elifrs",
+            &[
+                "new",
+                "demo_project",
+                "--path",
+                &self.temp_dir.path().to_string_lossy(),
+            ],
+        )?;
+
         println!("\n📋 Project structure created:");
         self.show_directory_structure(&self.project_path, 0)?;
-        
+
         Ok(())
     }
 
     /// Demonstrates resource generation
     pub fn demonstrate_resource_generation(&self) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n📝 === RESOURCE GENERATION DEMO ===");
-        
+
         // Change to project directory for relative commands
         std::env::set_current_dir(&self.project_path)?;
-        
+
         // Generate a User resource
         println!("👤 Generating User resource with fields:");
-        self.run_command("elifrs", &[
-            "resource", "new", "User",
-            "--route", "/api/users",
-            "--fields", "name:string,email:string,age:int,is_active:bool"
-        ])?;
+        self.run_command(
+            "elifrs",
+            &[
+                "resource",
+                "new",
+                "User",
+                "--route",
+                "/api/users",
+                "--fields",
+                "name:string,email:string,age:int,is_active:bool",
+            ],
+        )?;
 
         // Generate a Post resource
         println!("\n📄 Generating Post resource with relationships:");
-        self.run_command("elifrs", &[
-            "resource", "new", "Post", 
-            "--route", "/api/posts",
-            "--fields", "title:string,content:text,user_id:uuid,published:bool,view_count:int"
-        ])?;
+        self.run_command(
+            "elifrs",
+            &[
+                "resource",
+                "new",
+                "Post",
+                "--route",
+                "/api/posts",
+                "--fields",
+                "title:string,content:text,user_id:uuid,published:bool,view_count:int",
+            ],
+        )?;
 
         // Generate a Comment resource
         println!("\n💬 Generating Comment resource:");
-        self.run_command("elifrs", &[
-            "resource", "new", "Comment",
-            "--route", "/api/comments", 
-            "--fields", "content:text,post_id:uuid,user_id:uuid"
-        ])?;
+        self.run_command(
+            "elifrs",
+            &[
+                "resource",
+                "new",
+                "Comment",
+                "--route",
+                "/api/comments",
+                "--fields",
+                "content:text,post_id:uuid,user_id:uuid",
+            ],
+        )?;
 
         println!("\n📁 Generated resource files:");
         if Path::new("src/models").exists() {
@@ -79,19 +112,17 @@ impl CliDemo {
         if Path::new("src/controllers").exists() {
             self.show_directory_structure("src/controllers", 1)?;
         }
-        
+
         Ok(())
     }
 
     /// Demonstrates database operations
     pub fn demonstrate_database_operations(&self) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n🗄️  === DATABASE OPERATIONS DEMO ===");
-        
+
         // Create a custom migration
         println!("📝 Creating custom migration:");
-        self.run_command("elifrs", &[
-            "migrate", "create", "add_user_indexes"
-        ])?;
+        self.run_command("elifrs", &["migrate", "create", "add_user_indexes"])?;
 
         // Show migration status (would show pending migrations)
         println!("\n📊 Migration status:");
@@ -105,17 +136,17 @@ impl CliDemo {
 
         println!("\n💡 To run migrations:");
         println!("   elifrs migrate run");
-        
+
         println!("\n💡 To rollback migrations:");
         println!("   elifrs migrate rollback --steps 1");
-        
+
         Ok(())
     }
 
     /// Demonstrates code generation
     pub fn demonstrate_code_generation(&self) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n⚙️  === CODE GENERATION DEMO ===");
-        
+
         // Generate code from existing resources
         println!("🏭 Generating code from resource specifications:");
         self.run_command("elifrs", &["generate"])?;
@@ -129,7 +160,9 @@ impl CliDemo {
             if let Ok(content) = fs::read_to_string("openapi.yaml") {
                 println!("Preview (first 10 lines):");
                 for (i, line) in content.lines().enumerate() {
-                    if i >= 10 { break; }
+                    if i >= 10 {
+                        break;
+                    }
                     println!("   {}", line);
                 }
                 if content.lines().count() > 10 {
@@ -137,14 +170,14 @@ impl CliDemo {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// Demonstrates project inspection and mapping
     pub fn demonstrate_project_inspection(&self) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n🔍 === PROJECT INSPECTION DEMO ===");
-        
+
         // Generate route map
         println!("🗺️  Generating route map:");
         self.run_command("elifrs", &["map", "--format", "table"])?;
@@ -162,29 +195,29 @@ impl CliDemo {
     /// Demonstrates testing workflows
     pub fn demonstrate_testing(&self) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n🧪 === TESTING DEMO ===");
-        
+
         // Run all tests
         println!("🧪 Running all tests:");
         println!("   elifrs test");
-        
+
         // Run specific resource tests
         println!("\n🧪 Running tests for specific resource:");
         println!("   elifrs test --focus User");
-        
+
         // Run tests with coverage
         println!("\n📊 Running tests with coverage:");
         println!("   elifrs test --coverage");
-        
+
         println!("\n💡 These commands would run the actual test suite");
         println!("   (skipped in demo to avoid compilation requirements)");
-        
+
         Ok(())
     }
 
     /// Demonstrates advanced workflows
     pub fn demonstrate_advanced_workflows(&self) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n🚀 === ADVANCED WORKFLOWS DEMO ===");
-        
+
         // Show complex resource generation
         println!("🔧 Advanced resource with custom templates:");
         println!("   elifrs resource new Product \\");
@@ -193,27 +226,27 @@ impl CliDemo {
         println!("     --template advanced \\");
         println!("     --with-auth \\");
         println!("     --with-validation");
-        
+
         println!("\n🔄 Batch operations:");
         println!("   elifrs generate --all");
         println!("   elifrs migrate run --all");
         println!("   elifrs test --parallel");
-        
+
         println!("\n📊 Performance analysis:");
         println!("   elifrs check --performance");
         println!("   elifrs map --analyze-complexity");
-        
+
         println!("\n🔐 Security analysis:");
         println!("   elifrs check --security");
         println!("   elifrs generate --secure-defaults");
-        
+
         Ok(())
     }
 
     /// Shows example configuration files
     pub fn show_configuration_examples(&self) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n⚙️  === CONFIGURATION EXAMPLES ===");
-        
+
         // Show example .elif.toml configuration
         let config_example = r#"[project]
 name = "demo_project"
@@ -280,14 +313,14 @@ ENABLE_SWAGGER=true"#;
         for line in env_example.lines() {
             println!("   {}", line);
         }
-        
+
         Ok(())
     }
 
     /// Helper function to run CLI commands
     fn run_command(&self, program: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
         println!("💻 Running: {} {}", program, args.join(" "));
-        
+
         // In a real demo, this would execute the actual command
         // For this example, we simulate the output
         match args.first() {
@@ -299,30 +332,34 @@ ENABLE_SWAGGER=true"#;
                 println!("   📄 Cargo.toml");
                 println!("   📄 .elif.toml");
                 println!("   📄 .env.example");
-            },
+            }
             Some(&"resource") => {
                 let resource_name = args.get(2).unwrap_or(&"Resource");
                 println!("✅ Generated {} resource files:", resource_name);
                 println!("   📄 src/models/{}.rs", resource_name.to_lowercase());
-                println!("   📄 src/controllers/{}_controller.rs", resource_name.to_lowercase());
-                println!("   📄 migrations/create_{}_table.sql", resource_name.to_lowercase());
+                println!(
+                    "   📄 src/controllers/{}_controller.rs",
+                    resource_name.to_lowercase()
+                );
+                println!(
+                    "   📄 migrations/create_{}_table.sql",
+                    resource_name.to_lowercase()
+                );
                 println!("   📄 tests/{}_test.rs", resource_name.to_lowercase());
-            },
-            Some(&"migrate") => {
-                match args.get(1) {
-                    Some(&"create") => {
-                        let migration_name = args.get(2).unwrap_or(&"migration");
-                        println!("✅ Created migration: {}", migration_name);
-                        println!("   📄 migrations/20231201120000_{}.sql", migration_name);
-                    },
-                    Some(&"status") => {
-                        println!("📊 Migration Status:");
-                        println!("   ✅ 20231201100000_create_users_table");
-                        println!("   ✅ 20231201110000_create_posts_table");
-                        println!("   ⏳ 20231201120000_add_user_indexes (pending)");
-                    },
-                    _ => println!("✅ Migration command completed"),
+            }
+            Some(&"migrate") => match args.get(1) {
+                Some(&"create") => {
+                    let migration_name = args.get(2).unwrap_or(&"migration");
+                    println!("✅ Created migration: {}", migration_name);
+                    println!("   📄 migrations/20231201120000_{}.sql", migration_name);
                 }
+                Some(&"status") => {
+                    println!("📊 Migration Status:");
+                    println!("   ✅ 20231201100000_create_users_table");
+                    println!("   ✅ 20231201110000_create_posts_table");
+                    println!("   ⏳ 20231201120000_add_user_indexes (pending)");
+                }
+                _ => println!("✅ Migration command completed"),
             },
             Some(&"generate") => {
                 println!("✅ Code generation completed:");
@@ -330,7 +367,7 @@ ENABLE_SWAGGER=true"#;
                 println!("   📄 Generated 5 controller files");
                 println!("   📄 Generated 12 test files");
                 println!("   📄 Updated OpenAPI specification");
-            },
+            }
             Some(&"map") => {
                 if args.contains(&"--json") {
                     println!("📊 Route Map (JSON):");
@@ -346,7 +383,7 @@ ENABLE_SWAGGER=true"#;
                     println!("   │ /api/posts      │ GET, POST        │ PostsCtrl   │");
                     println!("   └─────────────────┴──────────────────┴─────────────┘");
                 }
-            },
+            }
             Some(&"check") => {
                 println!("🏥 Project Health Check:");
                 println!("   ✅ Cargo.toml structure valid");
@@ -354,23 +391,27 @@ ENABLE_SWAGGER=true"#;
                 println!("   ✅ Migration files consistent");
                 println!("   ✅ Tests coverage > 80%");
                 println!("   ⚠️  Missing documentation for 2 controllers");
-            },
+            }
             Some(&"openapi") => {
                 println!("✅ OpenAPI specification exported:");
                 println!("   📄 openapi.yaml (3,245 lines)");
                 println!("   📊 5 resources, 23 endpoints documented");
-            },
+            }
             _ => println!("✅ Command executed successfully"),
         }
-        
+
         println!(); // Add blank line for readability
         Ok(())
     }
 
     /// Helper function to display directory structure
-    fn show_directory_structure(&self, path: &str, indent: usize) -> Result<(), Box<dyn std::error::Error>> {
+    fn show_directory_structure(
+        &self,
+        path: &str,
+        indent: usize,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let indent_str = "  ".repeat(indent);
-        
+
         if Path::new(path).exists() {
             if let Ok(entries) = fs::read_dir(path) {
                 for entry in entries {
@@ -394,23 +435,23 @@ ENABLE_SWAGGER=true"#;
                     println!("{}📄 Cargo.toml", indent_str);
                     println!("{}📄 .elif.toml", indent_str);
                     println!("{}📄 README.md", indent_str);
-                },
+                }
                 p if p.contains("models") => {
                     println!("{}📄 user.rs", indent_str);
                     println!("{}📄 post.rs", indent_str);
                     println!("{}📄 comment.rs", indent_str);
                     println!("{}📄 mod.rs", indent_str);
-                },
+                }
                 p if p.contains("controllers") => {
                     println!("{}📄 user_controller.rs", indent_str);
                     println!("{}📄 post_controller.rs", indent_str);
                     println!("{}📄 comment_controller.rs", indent_str);
                     println!("{}📄 mod.rs", indent_str);
-                },
+                }
                 _ => {}
             }
         }
-        
+
         Ok(())
     }
 }

@@ -3,17 +3,17 @@
 //! Tests the complete module runtime system with complex dependency chains,
 //! lifecycle management, error scenarios, and performance validation.
 
-use std::time::Duration;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
+use elif_core::container::IocContainer;
 use elif_core::modules::runtime::{
-    ModuleRuntime, ModuleRuntimeError, ModuleLifecycleHook, HealthStatus,
-    ModuleState, HealthCheckConfig, DefaultLifecycleHook
+    DefaultLifecycleHook, HealthCheckConfig, HealthStatus, ModuleLifecycleHook, ModuleRuntime,
+    ModuleRuntimeError, ModuleState,
 };
 use elif_core::modules::{
-    ModuleDescriptor, ServiceDescriptor, ControllerDescriptor, ServiceLifecycle
+    ControllerDescriptor, ModuleDescriptor, ServiceDescriptor, ServiceLifecycle,
 };
-use elif_core::container::IocContainer;
 
 /// Custom lifecycle hook for testing
 struct TestLifecycleHook {
@@ -30,31 +30,49 @@ impl TestLifecycleHook {
 
 impl ModuleLifecycleHook for TestLifecycleHook {
     fn before_init(&self, module_name: &str) -> Result<(), ModuleRuntimeError> {
-        self.events.lock().unwrap().push(format!("before_init:{}", module_name));
+        self.events
+            .lock()
+            .unwrap()
+            .push(format!("before_init:{}", module_name));
         Ok(())
     }
 
     fn after_init(&self, module_name: &str, duration: Duration) -> Result<(), ModuleRuntimeError> {
-        self.events.lock().unwrap().push(format!("after_init:{}:{:?}", module_name, duration));
+        self.events
+            .lock()
+            .unwrap()
+            .push(format!("after_init:{}:{:?}", module_name, duration));
         Ok(())
     }
 
     fn on_init_failure(&self, module_name: &str, error: &ModuleRuntimeError) {
-        self.events.lock().unwrap().push(format!("init_failure:{}:{}", module_name, error));
+        self.events
+            .lock()
+            .unwrap()
+            .push(format!("init_failure:{}:{}", module_name, error));
     }
 
     fn before_shutdown(&self, module_name: &str) -> Result<(), ModuleRuntimeError> {
-        self.events.lock().unwrap().push(format!("before_shutdown:{}", module_name));
+        self.events
+            .lock()
+            .unwrap()
+            .push(format!("before_shutdown:{}", module_name));
         Ok(())
     }
 
     fn after_shutdown(&self, module_name: &str) -> Result<(), ModuleRuntimeError> {
-        self.events.lock().unwrap().push(format!("after_shutdown:{}", module_name));
+        self.events
+            .lock()
+            .unwrap()
+            .push(format!("after_shutdown:{}", module_name));
         Ok(())
     }
 
     fn health_check(&self, module_name: &str) -> Result<HealthStatus, ModuleRuntimeError> {
-        self.events.lock().unwrap().push(format!("health_check:{}", module_name));
+        self.events
+            .lock()
+            .unwrap()
+            .push(format!("health_check:{}", module_name));
         Ok(HealthStatus::Healthy)
     }
 }
@@ -68,7 +86,10 @@ fn create_test_module_with_services(
 ) -> ModuleDescriptor {
     let mut module = ModuleDescriptor::new(name)
         .with_dependencies(dependencies)
-        .with_description(format!("Test module {} with {} services and {} controllers", name, service_count, controller_count));
+        .with_description(format!(
+            "Test module {} with {} services and {} controllers",
+            name, service_count, controller_count
+        ));
 
     // Add test services
     for i in 0..service_count {
@@ -81,9 +102,8 @@ fn create_test_module_with_services(
 
     // Add test controllers
     for i in 0..controller_count {
-        let controller = ControllerDescriptor::new::<String>(
-            format!("{}Controller{}", name, i)
-        ).with_base_path(&format!("/api/{}/v{}", name.to_lowercase(), i));
+        let controller = ControllerDescriptor::new::<String>(format!("{}Controller{}", name, i))
+            .with_base_path(&format!("/api/{}/v{}", name.to_lowercase(), i));
         module = module.with_controller(controller);
     }
 
@@ -96,10 +116,33 @@ async fn test_simple_linear_dependency_chain() {
     let mut runtime = ModuleRuntime::new();
 
     // Create a simple A -> B -> C -> D chain
-    runtime.register_module(create_test_module_with_services("A", vec![], 2, 1)).unwrap();
-    runtime.register_module(create_test_module_with_services("B", vec!["A".to_string()], 3, 2)).unwrap();
-    runtime.register_module(create_test_module_with_services("C", vec!["B".to_string()], 1, 1)).unwrap();
-    runtime.register_module(create_test_module_with_services("D", vec!["C".to_string()], 2, 0)).unwrap();
+    runtime
+        .register_module(create_test_module_with_services("A", vec![], 2, 1))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "B",
+            vec!["A".to_string()],
+            3,
+            2,
+        ))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "C",
+            vec!["B".to_string()],
+            1,
+            1,
+        ))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "D",
+            vec!["C".to_string()],
+            2,
+            0,
+        ))
+        .unwrap();
 
     // Calculate load order
     let load_order = runtime.calculate_load_order().unwrap();
@@ -144,14 +187,44 @@ async fn test_complex_diamond_dependency_pattern() {
     //     D
     //     |
     //     E
-    runtime.register_module(create_test_module_with_services("A", vec![], 3, 2)).unwrap();
-    runtime.register_module(create_test_module_with_services("B", vec!["A".to_string()], 2, 1)).unwrap();
-    runtime.register_module(create_test_module_with_services("C", vec!["A".to_string()], 1, 3)).unwrap();
-    runtime.register_module(create_test_module_with_services("D", vec!["B".to_string(), "C".to_string()], 4, 1)).unwrap();
-    runtime.register_module(create_test_module_with_services("E", vec!["D".to_string()], 1, 1)).unwrap();
+    runtime
+        .register_module(create_test_module_with_services("A", vec![], 3, 2))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "B",
+            vec!["A".to_string()],
+            2,
+            1,
+        ))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "C",
+            vec!["A".to_string()],
+            1,
+            3,
+        ))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "D",
+            vec!["B".to_string(), "C".to_string()],
+            4,
+            1,
+        ))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "E",
+            vec!["D".to_string()],
+            1,
+            1,
+        ))
+        .unwrap();
 
     let load_order = runtime.calculate_load_order().unwrap();
-    
+
     // Verify correct ordering constraints
     let a_pos = load_order.iter().position(|x| x == "A").unwrap();
     let b_pos = load_order.iter().position(|x| x == "B").unwrap();
@@ -187,18 +260,43 @@ async fn test_circular_dependency_detection() {
     let mut runtime = ModuleRuntime::new();
 
     // Create circular dependency: A -> B -> C -> A
-    runtime.register_module(create_test_module_with_services("A", vec!["C".to_string()], 1, 0)).unwrap();
-    runtime.register_module(create_test_module_with_services("B", vec!["A".to_string()], 1, 0)).unwrap();
-    runtime.register_module(create_test_module_with_services("C", vec!["B".to_string()], 1, 0)).unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "A",
+            vec!["C".to_string()],
+            1,
+            0,
+        ))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "B",
+            vec!["A".to_string()],
+            1,
+            0,
+        ))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "C",
+            vec!["B".to_string()],
+            1,
+            0,
+        ))
+        .unwrap();
 
     let result = runtime.calculate_load_order();
-    
+
     assert!(result.is_err());
     match result.unwrap_err() {
         ModuleRuntimeError::CircularDependency { cycle, message } => {
             assert!(cycle.len() >= 3);
             assert!(message.contains("Circular dependency detected"));
-            println!("✅ Correctly detected circular dependency: {} - {}", cycle.join(" -> "), message);
+            println!(
+                "✅ Correctly detected circular dependency: {} - {}",
+                cycle.join(" -> "),
+                message
+            );
         }
         _ => panic!("Expected CircularDependency error"),
     }
@@ -212,19 +310,40 @@ async fn test_missing_dependency_detection() {
     let mut runtime = ModuleRuntime::new();
 
     // Create module with missing dependency
-    runtime.register_module(create_test_module_with_services("A", vec!["NonExistent".to_string()], 1, 1)).unwrap();
-    runtime.register_module(create_test_module_with_services("B", vec!["A".to_string(), "AlsoMissing".to_string()], 2, 0)).unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "A",
+            vec!["NonExistent".to_string()],
+            1,
+            1,
+        ))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "B",
+            vec!["A".to_string(), "AlsoMissing".to_string()],
+            2,
+            0,
+        ))
+        .unwrap();
 
     let result = runtime.calculate_load_order();
-    
+
     assert!(result.is_err());
     let error = result.unwrap_err();
     match &error {
-        ModuleRuntimeError::MissingDependency { module, missing_dependency, message } => {
+        ModuleRuntimeError::MissingDependency {
+            module,
+            missing_dependency,
+            message,
+        } => {
             assert!(module == "A" || module == "B");
             assert!(missing_dependency == "NonExistent" || missing_dependency == "AlsoMissing");
             assert!(message.contains("not registered"));
-            println!("✅ Correctly detected missing dependency: {} -> {} ({})", module, missing_dependency, message);
+            println!(
+                "✅ Correctly detected missing dependency: {} -> {} ({})",
+                module, missing_dependency, message
+            );
         }
         _ => panic!("Expected MissingDependency error, got: {:?}", error),
     }
@@ -238,8 +357,17 @@ async fn test_module_lifecycle_hooks() {
     let mut runtime = ModuleRuntime::new();
 
     // Create test modules
-    runtime.register_module(create_test_module_with_services("CoreModule", vec![], 2, 1)).unwrap();
-    runtime.register_module(create_test_module_with_services("AuthModule", vec!["CoreModule".to_string()], 1, 2)).unwrap();
+    runtime
+        .register_module(create_test_module_with_services("CoreModule", vec![], 2, 1))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "AuthModule",
+            vec!["CoreModule".to_string()],
+            1,
+            2,
+        ))
+        .unwrap();
 
     // Add lifecycle hooks
     let core_hook = TestLifecycleHook::new();
@@ -251,7 +379,7 @@ async fn test_module_lifecycle_hooks() {
     runtime.add_lifecycle_hook("AuthModule".to_string(), auth_hook);
 
     runtime.calculate_load_order().unwrap();
-    
+
     let mut container = IocContainer::new();
     container.build().unwrap();
 
@@ -263,20 +391,32 @@ async fn test_module_lifecycle_hooks() {
         let core_events_locked = core_events.lock().unwrap();
         let auth_events_locked = auth_events.lock().unwrap();
 
-        assert!(core_events_locked.iter().any(|e| e.contains("before_init:CoreModule")));
-        assert!(core_events_locked.iter().any(|e| e.contains("after_init:CoreModule")));
-        assert!(auth_events_locked.iter().any(|e| e.contains("before_init:AuthModule")));
-        assert!(auth_events_locked.iter().any(|e| e.contains("after_init:AuthModule")));
+        assert!(core_events_locked
+            .iter()
+            .any(|e| e.contains("before_init:CoreModule")));
+        assert!(core_events_locked
+            .iter()
+            .any(|e| e.contains("after_init:CoreModule")));
+        assert!(auth_events_locked
+            .iter()
+            .any(|e| e.contains("before_init:AuthModule")));
+        assert!(auth_events_locked
+            .iter()
+            .any(|e| e.contains("after_init:AuthModule")));
     }
 
     // Test health checks
     runtime.health_check_all_modules().await.unwrap();
-    
+
     {
         let core_events_locked = core_events.lock().unwrap();
         let auth_events_locked = auth_events.lock().unwrap();
-        assert!(core_events_locked.iter().any(|e| e.contains("health_check:CoreModule")));
-        assert!(auth_events_locked.iter().any(|e| e.contains("health_check:AuthModule")));
+        assert!(core_events_locked
+            .iter()
+            .any(|e| e.contains("health_check:CoreModule")));
+        assert!(auth_events_locked
+            .iter()
+            .any(|e| e.contains("health_check:AuthModule")));
     }
 
     // Test shutdown
@@ -285,10 +425,18 @@ async fn test_module_lifecycle_hooks() {
     {
         let core_events_locked = core_events.lock().unwrap();
         let auth_events_locked = auth_events.lock().unwrap();
-        assert!(core_events_locked.iter().any(|e| e.contains("before_shutdown:CoreModule")));
-        assert!(core_events_locked.iter().any(|e| e.contains("after_shutdown:CoreModule")));
-        assert!(auth_events_locked.iter().any(|e| e.contains("before_shutdown:AuthModule")));
-        assert!(auth_events_locked.iter().any(|e| e.contains("after_shutdown:AuthModule")));
+        assert!(core_events_locked
+            .iter()
+            .any(|e| e.contains("before_shutdown:CoreModule")));
+        assert!(core_events_locked
+            .iter()
+            .any(|e| e.contains("after_shutdown:CoreModule")));
+        assert!(auth_events_locked
+            .iter()
+            .any(|e| e.contains("before_shutdown:AuthModule")));
+        assert!(auth_events_locked
+            .iter()
+            .any(|e| e.contains("after_shutdown:AuthModule")));
     }
 
     println!("✅ Module lifecycle hooks test passed");
@@ -306,11 +454,20 @@ async fn test_health_check_system() {
     let mut runtime = ModuleRuntime::with_health_config(health_config);
 
     // Create modules with different health states
-    runtime.register_module(create_test_module_with_services("HealthyModule", vec![], 1, 0)).unwrap();
-    runtime.register_module(create_test_module_with_services("TestModule", vec![], 1, 0)).unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "HealthyModule",
+            vec![],
+            1,
+            0,
+        ))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services("TestModule", vec![], 1, 0))
+        .unwrap();
 
     runtime.add_lifecycle_hook("HealthyModule".to_string(), DefaultLifecycleHook);
-    
+
     // Custom hook that reports degraded health
     struct DegradedHealthHook;
     impl ModuleLifecycleHook for DegradedHealthHook {
@@ -354,43 +511,43 @@ async fn test_large_scale_performance() {
 
     // Create a large dependency graph with 60 modules
     const MODULE_COUNT: usize = 60;
-    
+
     // Create base modules (no dependencies)
     for i in 0..10 {
-        runtime.register_module(create_test_module_with_services(
-            &format!("Base{}", i),
-            vec![],
-            2,
-            1,
-        )).unwrap();
+        runtime
+            .register_module(create_test_module_with_services(
+                &format!("Base{}", i),
+                vec![],
+                2,
+                1,
+            ))
+            .unwrap();
     }
 
     // Create intermediate modules (depend on base modules)
     for i in 0..25 {
-        let deps = vec![
-            format!("Base{}", i % 10),
-            format!("Base{}", (i + 1) % 10),
-        ];
-        runtime.register_module(create_test_module_with_services(
-            &format!("Middle{}", i),
-            deps,
-            1,
-            2,
-        )).unwrap();
+        let deps = vec![format!("Base{}", i % 10), format!("Base{}", (i + 1) % 10)];
+        runtime
+            .register_module(create_test_module_with_services(
+                &format!("Middle{}", i),
+                deps,
+                1,
+                2,
+            ))
+            .unwrap();
     }
 
     // Create top-level modules (depend on intermediate modules)
     for i in 0..25 {
-        let deps = vec![
-            format!("Middle{}", i),
-            format!("Middle{}", (i + 5) % 25),
-        ];
-        runtime.register_module(create_test_module_with_services(
-            &format!("Top{}", i),
-            deps,
-            3,
-            0,
-        )).unwrap();
+        let deps = vec![format!("Middle{}", i), format!("Middle{}", (i + 5) % 25)];
+        runtime
+            .register_module(create_test_module_with_services(
+                &format!("Top{}", i),
+                deps,
+                3,
+                0,
+            ))
+            .unwrap();
     }
 
     let start_time = std::time::Instant::now();
@@ -400,7 +557,10 @@ async fn test_large_scale_performance() {
     let sort_duration = start_time.elapsed();
 
     assert_eq!(load_order.len(), MODULE_COUNT);
-    println!("⚡ Topological sort of {} modules completed in {:?}", MODULE_COUNT, sort_duration);
+    println!(
+        "⚡ Topological sort of {} modules completed in {:?}",
+        MODULE_COUNT, sort_duration
+    );
 
     // Test dependency resolution and initialization performance
     let mut container = IocContainer::new();
@@ -424,16 +584,31 @@ async fn test_large_scale_performance() {
     assert!(metrics.slowest_module.is_some());
 
     // Performance assertions (should complete within reasonable time)
-    assert!(sort_duration < Duration::from_millis(100), "Topological sort took too long: {:?}", sort_duration);
-    assert!(dep_duration < Duration::from_millis(500), "Dependency resolution took too long: {:?}", dep_duration);
-    assert!(init_duration < Duration::from_secs(2), "Initialization took too long: {:?}", init_duration);
+    assert!(
+        sort_duration < Duration::from_millis(100),
+        "Topological sort took too long: {:?}",
+        sort_duration
+    );
+    assert!(
+        dep_duration < Duration::from_millis(500),
+        "Dependency resolution took too long: {:?}",
+        dep_duration
+    );
+    assert!(
+        init_duration < Duration::from_secs(2),
+        "Initialization took too long: {:?}",
+        init_duration
+    );
 
     // Verify all modules are ready
     let stats = runtime.get_runtime_statistics();
     assert_eq!(stats.ready_modules, MODULE_COUNT);
     assert_eq!(stats.failed_modules, 0);
 
-    println!("✅ Large scale performance test passed ({} modules)", MODULE_COUNT);
+    println!(
+        "✅ Large scale performance test passed ({} modules)",
+        MODULE_COUNT
+    );
 }
 
 /// Test 8: Error Recovery and Validation
@@ -442,14 +617,37 @@ async fn test_error_recovery_and_validation() {
     let mut runtime = ModuleRuntime::new();
 
     // Add some valid modules
-    runtime.register_module(create_test_module_with_services("ValidModule1", vec![], 1, 1)).unwrap();
-    runtime.register_module(create_test_module_with_services("ValidModule2", vec!["ValidModule1".to_string()], 2, 0)).unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "ValidModule1",
+            vec![],
+            1,
+            1,
+        ))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "ValidModule2",
+            vec!["ValidModule1".to_string()],
+            2,
+            0,
+        ))
+        .unwrap();
 
     // Try to register duplicate module (should fail)
-    let duplicate_result = runtime.register_module(create_test_module_with_services("ValidModule1", vec![], 1, 0));
+    let duplicate_result = runtime.register_module(create_test_module_with_services(
+        "ValidModule1",
+        vec![],
+        1,
+        0,
+    ));
     assert!(duplicate_result.is_err());
     match duplicate_result.unwrap_err() {
-        ModuleRuntimeError::ConfigurationConflict { module1, module2, conflict } => {
+        ModuleRuntimeError::ConfigurationConflict {
+            module1,
+            module2,
+            conflict,
+        } => {
             assert_eq!(module1, "ValidModule1");
             assert_eq!(module2, "ValidModule1");
             assert!(conflict.contains("already registered"));
@@ -481,32 +679,51 @@ async fn test_shutdown_order_verification() {
     let mut runtime = ModuleRuntime::new();
 
     // Create dependency chain
-    runtime.register_module(create_test_module_with_services("A", vec![], 1, 0)).unwrap();
-    runtime.register_module(create_test_module_with_services("B", vec!["A".to_string()], 1, 0)).unwrap();
-    runtime.register_module(create_test_module_with_services("C", vec!["B".to_string()], 1, 0)).unwrap();
+    runtime
+        .register_module(create_test_module_with_services("A", vec![], 1, 0))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "B",
+            vec!["A".to_string()],
+            1,
+            0,
+        ))
+        .unwrap();
+    runtime
+        .register_module(create_test_module_with_services(
+            "C",
+            vec!["B".to_string()],
+            1,
+            0,
+        ))
+        .unwrap();
 
     // Add hooks to track shutdown order
     let shutdown_order = Arc::new(Mutex::new(Vec::new()));
-    
+
     for module_name in ["A", "B", "C"] {
         let order_clone = shutdown_order.clone();
         let name = module_name.to_string();
-        
+
         struct ShutdownOrderHook {
             order: Arc<Mutex<Vec<String>>>,
             name: String,
         }
-        
+
         impl ModuleLifecycleHook for ShutdownOrderHook {
             fn before_shutdown(&self, _: &str) -> Result<(), ModuleRuntimeError> {
                 self.order.lock().unwrap().push(self.name.clone());
                 Ok(())
             }
         }
-        
+
         runtime.add_lifecycle_hook(
             module_name.to_string(),
-            ShutdownOrderHook { order: order_clone, name }
+            ShutdownOrderHook {
+                order: order_clone,
+                name,
+            },
         );
     }
 
@@ -541,7 +758,7 @@ async fn test_comprehensive_integration() {
     // Create a realistic application structure:
     // CoreModule (logging, config)
     // DatabaseModule -> CoreModule
-    // AuthModule -> CoreModule, DatabaseModule  
+    // AuthModule -> CoreModule, DatabaseModule
     // ApiModule -> AuthModule, DatabaseModule
     // WebModule -> ApiModule, AuthModule
     // AdminModule -> WebModule, DatabaseModule
@@ -556,54 +773,81 @@ async fn test_comprehensive_integration() {
     ];
 
     for (name, deps, service_count, controller_count) in modules {
-        runtime.register_module(create_test_module_with_services(
-            name,
-            deps.into_iter().map(String::from).collect(),
-            service_count,
-            controller_count,
-        )).unwrap();
+        runtime
+            .register_module(create_test_module_with_services(
+                name,
+                deps.into_iter().map(String::from).collect(),
+                service_count,
+                controller_count,
+            ))
+            .unwrap();
     }
 
     // Add comprehensive lifecycle hooks
     let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
-    for module_name in ["CoreModule", "DatabaseModule", "AuthModule", "ApiModule", "WebModule", "AdminModule"] {
+    for module_name in [
+        "CoreModule",
+        "DatabaseModule",
+        "AuthModule",
+        "ApiModule",
+        "WebModule",
+        "AdminModule",
+    ] {
         let events_clone = lifecycle_events.clone();
         let name = module_name.to_string();
-        
+
         struct ComprehensiveHook {
             events: Arc<Mutex<Vec<String>>>,
             name: String,
         }
-        
+
         impl ModuleLifecycleHook for ComprehensiveHook {
             fn before_init(&self, _: &str) -> Result<(), ModuleRuntimeError> {
-                self.events.lock().unwrap().push(format!("init_start:{}", self.name));
+                self.events
+                    .lock()
+                    .unwrap()
+                    .push(format!("init_start:{}", self.name));
                 Ok(())
             }
-            
+
             fn after_init(&self, _: &str, duration: Duration) -> Result<(), ModuleRuntimeError> {
-                self.events.lock().unwrap().push(format!("init_end:{}:{:?}", self.name, duration));
+                self.events
+                    .lock()
+                    .unwrap()
+                    .push(format!("init_end:{}:{:?}", self.name, duration));
                 Ok(())
             }
-            
+
             fn health_check(&self, _: &str) -> Result<HealthStatus, ModuleRuntimeError> {
-                self.events.lock().unwrap().push(format!("health:{}", self.name));
+                self.events
+                    .lock()
+                    .unwrap()
+                    .push(format!("health:{}", self.name));
                 Ok(HealthStatus::Healthy)
             }
         }
-        
-        runtime.add_lifecycle_hook(name.clone(), ComprehensiveHook { events: events_clone, name });
+
+        runtime.add_lifecycle_hook(
+            name.clone(),
+            ComprehensiveHook {
+                events: events_clone,
+                name,
+            },
+        );
     }
 
     // Test complete lifecycle
     let start_time = std::time::Instant::now();
-    
+
     let load_order = runtime.calculate_load_order().unwrap();
     println!("📋 Load order: {}", load_order.join(" -> "));
 
     // Verify load order constraints
     let core_pos = load_order.iter().position(|x| x == "CoreModule").unwrap();
-    let db_pos = load_order.iter().position(|x| x == "DatabaseModule").unwrap();
+    let db_pos = load_order
+        .iter()
+        .position(|x| x == "DatabaseModule")
+        .unwrap();
     let auth_pos = load_order.iter().position(|x| x == "AuthModule").unwrap();
     let api_pos = load_order.iter().position(|x| x == "ApiModule").unwrap();
     let web_pos = load_order.iter().position(|x| x == "WebModule").unwrap();
@@ -627,14 +871,16 @@ async fn test_comprehensive_integration() {
     // Run health checks
     let health_results = runtime.health_check_all_modules().await.unwrap();
     assert_eq!(health_results.len(), 6);
-    assert!(health_results.values().all(|status| *status == HealthStatus::Healthy));
+    assert!(health_results
+        .values()
+        .all(|status| *status == HealthStatus::Healthy));
 
     // Verify runtime statistics
     let stats = runtime.get_runtime_statistics();
     assert_eq!(stats.total_modules, 6);
     assert_eq!(stats.ready_modules, 6);
     assert_eq!(stats.healthy_modules, 6);
-    
+
     // Test validation
     runtime.validate_runtime_state().unwrap();
 
@@ -652,6 +898,8 @@ async fn test_comprehensive_integration() {
     assert!(metrics.slowest_module.is_some());
 
     println!("✅ Comprehensive integration test passed");
-    println!("📊 Final stats: {} modules, {:?} avg init time", 
-             stats.total_modules, metrics.avg_init_time_per_module);
+    println!(
+        "📊 Final stats: {} modules, {:?} avg init time",
+        stats.total_modules, metrics.avg_init_time_per_module
+    );
 }

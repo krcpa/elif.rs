@@ -5,32 +5,32 @@ use thiserror::Error;
 pub enum ConfigError {
     #[error("Missing required field: {field}. {hint}")]
     MissingRequired { field: String, hint: String },
-    
+
     #[error("Invalid value for field '{field}': '{value}'. Expected: {expected}")]
     InvalidValue {
         field: String,
         value: String,
         expected: String,
     },
-    
+
     #[error("Configuration validation failed: {message}")]
     ValidationFailed { message: String },
-    
+
     #[error("Environment variable error: {message}")]
     EnvironmentError { message: String },
-    
+
     #[error("File system error: {message}")]
     FileSystemError { message: String },
-    
+
     #[error("Parsing error: {message}")]
     ParsingError { message: String },
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("YAML error: {0}")]
     Yaml(#[from] serde_yaml::Error),
-    
+
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 }
@@ -43,7 +43,7 @@ impl ConfigError {
             hint: hint.into(),
         }
     }
-    
+
     /// Create an invalid value error
     pub fn invalid_value(
         field: impl Into<String>,
@@ -56,14 +56,14 @@ impl ConfigError {
             expected: expected.into(),
         }
     }
-    
+
     /// Create a validation failed error
     pub fn validation_failed(message: impl Into<String>) -> Self {
         Self::ValidationFailed {
             message: message.into(),
         }
     }
-    
+
     /// Create an environment error
     pub fn environment_error(message: impl Into<String>) -> Self {
         Self::EnvironmentError {
@@ -128,12 +128,13 @@ impl ConfigValidator<String> for UrlValidator {
                 "non-empty URL",
             ));
         }
-        
+
         // Check scheme
-        let has_valid_scheme = self.schemes.iter().any(|scheme| {
-            value.starts_with(&format!("{}://", scheme))
-        });
-        
+        let has_valid_scheme = self
+            .schemes
+            .iter()
+            .any(|scheme| value.starts_with(&format!("{}://", scheme)));
+
         if !has_valid_scheme {
             return Err(ConfigError::invalid_value(
                 "url",
@@ -141,7 +142,7 @@ impl ConfigValidator<String> for UrlValidator {
                 format!("URL with scheme: {}", self.schemes.join(", ")),
             ));
         }
-        
+
         // Check for host if required
         if self.require_host && !value.contains("://") {
             return Err(ConfigError::invalid_value(
@@ -150,7 +151,7 @@ impl ConfigValidator<String> for UrlValidator {
                 "URL with host",
             ));
         }
-        
+
         Ok(())
     }
 }
@@ -183,7 +184,7 @@ impl LengthValidator {
             max_length: None,
         }
     }
-    
+
     pub fn range(min_length: usize, max_length: usize) -> Self {
         Self {
             min_length,
@@ -201,7 +202,7 @@ impl ConfigValidator<String> for LengthValidator {
                 format!("string with at least {} characters", self.min_length),
             ));
         }
-        
+
         if let Some(max_length) = self.max_length {
             if value.len() > max_length {
                 return Err(ConfigError::invalid_value(
@@ -211,7 +212,7 @@ impl ConfigValidator<String> for LengthValidator {
                 ));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -227,7 +228,7 @@ impl<T> CompositeValidator<T> {
             validators: Vec::new(),
         }
     }
-    
+
     pub fn add_validator(mut self, validator: Box<dyn ConfigValidator<T>>) -> Self {
         self.validators.push(validator);
         self
@@ -252,31 +253,37 @@ impl<T> ConfigValidator<T> for CompositeValidator<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_port_validator() {
         let validator = PortValidator::default();
-        
+
         assert!(validator.validate(&80).is_ok());
         assert!(validator.validate(&443).is_ok());
         assert!(validator.validate(&65535).is_ok());
         assert!(validator.validate(&0).is_err());
     }
-    
+
     #[test]
     fn test_url_validator() {
         let validator = UrlValidator::default();
-        
-        assert!(validator.validate(&"https://example.com".to_string()).is_ok());
-        assert!(validator.validate(&"http://localhost:3000".to_string()).is_ok());
-        assert!(validator.validate(&"ftp://example.com".to_string()).is_err());
+
+        assert!(validator
+            .validate(&"https://example.com".to_string())
+            .is_ok());
+        assert!(validator
+            .validate(&"http://localhost:3000".to_string())
+            .is_ok());
+        assert!(validator
+            .validate(&"ftp://example.com".to_string())
+            .is_err());
         assert!(validator.validate(&"not-a-url".to_string()).is_err());
     }
-    
+
     #[test]
     fn test_length_validator() {
         let validator = LengthValidator::range(3, 10);
-        
+
         assert!(validator.validate(&"hello".to_string()).is_ok());
         assert!(validator.validate(&"hi".to_string()).is_err()); // Too short
         assert!(validator.validate(&"this is too long".to_string()).is_err()); // Too long

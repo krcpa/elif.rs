@@ -1,16 +1,16 @@
 //! IoC-enabled middleware system
-//! 
+//!
 //! Provides middleware creation and dependency injection using the IoC container.
 
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde_json;
 
+use crate::errors::HttpError;
 use crate::middleware::v2::{Middleware, Next, NextFuture};
 use crate::request::ElifRequest;
 use crate::response::ElifResponse;
-use crate::errors::HttpError;
 use elif_core::container::{IocContainer, ScopeId};
 
 /// Trait for middleware that can be created from IoC container
@@ -53,10 +53,9 @@ where
         container: &IocContainer,
         scope: Option<&ScopeId>,
     ) -> Result<M, HttpError> {
-        M::from_ioc_container(container, scope)
-            .map_err(|e| HttpError::InternalError {
-                message: format!("Failed to create middleware: {}", e),
-            })
+        M::from_ioc_container(container, scope).map_err(|e| HttpError::InternalError {
+            message: format!("Failed to create middleware: {}", e),
+        })
     }
 }
 
@@ -110,11 +109,7 @@ impl MiddlewareRegistry {
     }
 
     /// Register a custom middleware factory
-    pub fn register_factory(
-        &mut self,
-        name: &str,
-        factory: Box<dyn MiddlewareFactory>,
-    ) {
+    pub fn register_factory(&mut self, name: &str, factory: Box<dyn MiddlewareFactory>) {
         self.factories.insert(name.to_string(), factory);
     }
 
@@ -124,7 +119,9 @@ impl MiddlewareRegistry {
         name: &str,
         scope: Option<&ScopeId>,
     ) -> Result<Arc<dyn Middleware>, HttpError> {
-        let factory = self.factories.get(name)
+        let factory = self
+            .factories
+            .get(name)
             .ok_or_else(|| HttpError::InternalError {
                 message: format!("Middleware '{}' not registered", name),
             })?;
@@ -182,21 +179,16 @@ impl MiddlewareRegistryBuilder {
     }
 
     /// Register a custom middleware factory
-    pub fn register_factory(
-        mut self,
-        name: &str,
-        factory: Box<dyn MiddlewareFactory>,
-    ) -> Self {
+    pub fn register_factory(mut self, name: &str, factory: Box<dyn MiddlewareFactory>) -> Self {
         self.middleware.push((name.to_string(), factory));
         self
     }
 
     /// Build the middleware registry
     pub fn build(self) -> Result<MiddlewareRegistry, HttpError> {
-        let container = self.container
-            .ok_or_else(|| HttpError::InternalError {
-                message: "IoC container is required for middleware registry".to_string(),
-            })?;
+        let container = self.container.ok_or_else(|| HttpError::InternalError {
+            message: "IoC container is required for middleware registry".to_string(),
+        })?;
 
         let mut registry = MiddlewareRegistry::new(container);
 
@@ -253,23 +245,26 @@ impl Middleware for LazyIocMiddleware {
                 Ok(middleware) => {
                     // Delegate to the actual middleware
                     let result = middleware.handle(request, next).await;
-                    
+
                     // Clean up scope
                     if let Some(scope_id) = scope {
                         let _ = registry.container.dispose_scope(&scope_id).await;
                     }
-                    
+
                     result
                 }
                 Err(e) => {
                     // CRITICAL: Middleware instantiation failure - do NOT continue processing
-                    eprintln!("CRITICAL: Failed to instantiate middleware '{}': {:?}", middleware_name, e);
-                    
+                    eprintln!(
+                        "CRITICAL: Failed to instantiate middleware '{}': {:?}",
+                        middleware_name, e
+                    );
+
                     // Clean up scope if it was created
                     if let Some(scope_id) = scope {
                         let _ = registry.container.dispose_scope(&scope_id).await;
                     }
-                    
+
                     // Return an error response immediately
                     ElifResponse::internal_server_error()
                         .json(&serde_json::json!({
@@ -341,7 +336,11 @@ pub struct MiddlewareGroup {
 
 impl MiddlewareGroup {
     /// Create new middleware group
-    pub fn new(name: String, middleware_names: Vec<String>, registry: Arc<MiddlewareRegistry>) -> Self {
+    pub fn new(
+        name: String,
+        middleware_names: Vec<String>,
+        registry: Arc<MiddlewareRegistry>,
+    ) -> Self {
         Self {
             name,
             middleware_names,
@@ -397,7 +396,8 @@ mod tests {
             container: &IocContainer,
             _scope: Option<&ScopeId>,
         ) -> Result<Self, String> {
-            let logger = container.resolve::<TestLoggerService>()
+            let logger = container
+                .resolve::<TestLoggerService>()
                 .map_err(|e| format!("Failed to resolve TestLoggerService: {}", e))?;
 
             Ok(Self { logger })
@@ -423,7 +423,7 @@ mod tests {
     #[tokio::test]
     async fn test_ioc_middleware_creation() {
         let mut container = IocContainer::new();
-        
+
         // Register the logger service
         let logger_service = TestLoggerService {
             name: "TestLogger".to_string(),
@@ -435,11 +435,13 @@ mod tests {
         let mut registry = MiddlewareRegistry::new(container_arc);
 
         // Register the IoC middleware
-        registry.register::<TestIocMiddleware>("test_middleware")
+        registry
+            .register::<TestIocMiddleware>("test_middleware")
             .expect("Failed to register middleware");
 
         // Create middleware instance
-        let middleware = registry.create_middleware("test_middleware", None)
+        let middleware = registry
+            .create_middleware("test_middleware", None)
             .expect("Failed to create middleware");
 
         assert_eq!(middleware.name(), "TestIocMiddleware");
@@ -460,7 +462,8 @@ mod tests {
         let registered = registry.registered_middleware();
         assert!(registered.contains(&"test_ioc".to_string()));
 
-        let middleware = registry.create_middleware("test_ioc", None)
+        let middleware = registry
+            .create_middleware("test_ioc", None)
             .expect("Failed to create middleware");
 
         assert_eq!(middleware.name(), "TestIocMiddleware");
@@ -500,7 +503,7 @@ mod tests {
                 .container(Arc::new(container))
                 .register::<TestIocMiddleware>("lazy_test")
                 .build()
-                .expect("Failed to build middleware registry")
+                .expect("Failed to build middleware registry"),
         );
 
         let lazy_middleware = LazyIocMiddleware::new("lazy_test".to_string(), registry);
@@ -511,14 +514,13 @@ mod tests {
             ElifHeaderMap::new(),
         );
 
-        let next = Next::new(|_req| {
-            Box::pin(async {
-                ElifResponse::ok().text("Success")
-            })
-        });
+        let next = Next::new(|_req| Box::pin(async { ElifResponse::ok().text("Success") }));
 
         let response = lazy_middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
     }
 
     #[tokio::test]
@@ -535,7 +537,7 @@ mod tests {
                 .container(Arc::new(container))
                 .register::<TestIocMiddleware>("failing_middleware")
                 .build()
-                .expect("Failed to build middleware registry")
+                .expect("Failed to build middleware registry"),
         );
 
         let lazy_middleware = LazyIocMiddleware::new("failing_middleware".to_string(), registry);
@@ -554,10 +556,13 @@ mod tests {
         });
 
         let response = lazy_middleware.handle(request, next).await;
-        
+
         // Verify we get an internal server error response
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::INTERNAL_SERVER_ERROR);
-        
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::INTERNAL_SERVER_ERROR
+        );
+
         // The key test is that the next middleware was NOT called (it would panic)
         // and we got a 500 error response instead
     }
@@ -577,11 +582,7 @@ mod tests {
             ElifHeaderValue::from_str("user-456").unwrap(),
         );
 
-        let request = ElifRequest::new(
-            HttpMethod::POST,
-            "/api/test".parse().unwrap(),
-            headers,
-        );
+        let request = ElifRequest::new(HttpMethod::POST, "/api/test".parse().unwrap(), headers);
 
         let context = MiddlewareContext::from_request(&request);
 
@@ -602,7 +603,7 @@ mod tests {
                 .register::<TestIocMiddleware>("group1")
                 .register::<TestIocMiddleware>("group2")
                 .build()
-                .expect("Failed to build middleware registry")
+                .expect("Failed to build middleware registry"),
         );
 
         let group = MiddlewareGroup::new(
@@ -614,7 +615,8 @@ mod tests {
         assert_eq!(group.name(), "test_group");
         assert_eq!(group.middleware_names().len(), 2);
 
-        let middleware = group.create_middleware(None)
+        let middleware = group
+            .create_middleware(None)
             .expect("Failed to create group middleware");
 
         assert_eq!(middleware.len(), 2);

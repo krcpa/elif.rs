@@ -1,6 +1,6 @@
 //! Test parameter injection functionality
 
-use elif_http_derive::{get, controller};
+use elif_http_derive::{controller, get};
 
 // Mock types for testing
 pub struct ElifRequest;
@@ -13,14 +13,19 @@ pub struct ParamError;
 
 impl HttpError {
     pub fn bad_request(_msg: String) -> Box<dyn std::error::Error> {
-        Box::new(std::io::Error::new(std::io::ErrorKind::Other, "bad request"))
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "bad request",
+        ))
     }
 }
 
 impl ElifResponse {
-    pub fn ok() -> Self { Self }
-    pub fn json<T>(&self, _data: &T) -> Result<Self, Box<dyn std::error::Error>> { 
-        Ok(Self) 
+    pub fn ok() -> Self {
+        Self
+    }
+    pub fn json<T>(&self, _data: &T) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self)
     }
 }
 
@@ -28,7 +33,7 @@ impl ElifRequest {
     pub fn path_param_int(&self, _name: &str) -> Result<i32, ParamError> {
         Ok(42)
     }
-    
+
     pub fn path_param_string(&self, _name: &str) -> Result<String, ParamError> {
         Ok("test".to_string())
     }
@@ -46,7 +51,7 @@ impl UserController {
         let _ = req; // Use the parameter to avoid warnings
         format!("User ID: {}", id)
     }
-    
+
     // Test multiple parameter injection (using separate param attributes for now)
     #[get("/{user_id}/posts/{post_id}")]
     #[param(user_id: int)]
@@ -55,7 +60,7 @@ impl UserController {
         let _ = req; // Use the parameter to avoid warnings
         format!("User: {}, Post: {}", user_id, post_id)
     }
-    
+
     // Test method without parameters (should work unchanged)
     #[get("/health")]
     pub async fn health(&self, _req: ElifRequest) -> String {

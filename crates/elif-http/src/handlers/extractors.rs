@@ -1,8 +1,8 @@
 //! Request data extractors for handler parameters
 
+use crate::errors::HttpError;
 use crate::foundation::RequestExtractor;
 use crate::request::ElifRequest;
-use crate::errors::HttpError;
 
 /// Extract query parameters from the request
 pub struct QueryExtractor<T> {
@@ -16,7 +16,8 @@ where
     type Error = HttpError;
 
     fn extract(request: &ElifRequest) -> Result<Self, Self::Error> {
-        let data = request.query()
+        let data = request
+            .query()
             .map_err(|e| HttpError::bad_request(format!("Invalid query parameters: {}", e)))?;
         Ok(QueryExtractor { data })
     }
@@ -67,7 +68,8 @@ where
     type Error = HttpError;
 
     fn extract(request: &ElifRequest) -> Result<Self, Self::Error> {
-        let data = request.json()
+        let data = request
+            .json()
             .map_err(|e| HttpError::bad_request(format!("Invalid JSON body: {}", e)))?;
         Ok(JsonExtractor { data })
     }

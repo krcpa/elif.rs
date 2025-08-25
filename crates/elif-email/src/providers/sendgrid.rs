@@ -1,6 +1,9 @@
 use crate::{config::SendGridConfig, Email, EmailError, EmailProvider, EmailResult};
 use async_trait::async_trait;
-use reqwest::{Client, header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE}};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE},
+    Client,
+};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{debug, error};
@@ -80,7 +83,9 @@ impl SendGridProvider {
         let client = Client::builder()
             .timeout(Duration::from_secs(timeout))
             .build()
-            .map_err(|e| EmailError::configuration(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                EmailError::configuration(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         Ok(Self { config, client })
     }
@@ -141,7 +146,10 @@ impl SendGridProvider {
         }
 
         if content.is_empty() {
-            return Err(EmailError::validation("body", "Email must have either HTML or text body"));
+            return Err(EmailError::validation(
+                "body",
+                "Email must have either HTML or text body",
+            ));
         }
 
         // Build attachments
@@ -200,14 +208,21 @@ impl SendGridProvider {
             // Format: "Name <email@domain.com>"
             let parts: Vec<&str> = addr.split('<').collect();
             if parts.len() != 2 {
-                return Err(EmailError::validation("email", format!("Invalid email format: {}", addr)));
+                return Err(EmailError::validation(
+                    "email",
+                    format!("Invalid email format: {}", addr),
+                ));
             }
             let name = parts[0].trim().trim_matches('"');
             let email = parts[1].trim().trim_end_matches('>');
-            
+
             Ok(EmailAddress {
                 email: email.to_string(),
-                name: if name.is_empty() { None } else { Some(name.to_string()) },
+                name: if name.is_empty() {
+                    None
+                } else {
+                    Some(name.to_string())
+                },
             })
         } else {
             // Simple email address
@@ -229,9 +244,9 @@ impl SendGridProvider {
     /// Build request headers
     fn build_headers(&self) -> Result<HeaderMap, EmailError> {
         let mut headers = HeaderMap::new();
-        
+
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        
+
         let auth_header = format!("Bearer {}", self.config.api_key);
         headers.insert(
             AUTHORIZATION,
@@ -279,7 +294,9 @@ impl EmailProvider for SendGridProvider {
             })
         } else {
             // Try to parse error response
-            let error_msg = if let Ok(sendgrid_response) = serde_json::from_str::<SendGridResponse>(&response_text) {
+            let error_msg = if let Ok(sendgrid_response) =
+                serde_json::from_str::<SendGridResponse>(&response_text)
+            {
                 if let Some(errors) = sendgrid_response.errors {
                     errors
                         .into_iter()
@@ -302,10 +319,10 @@ impl EmailProvider for SendGridProvider {
         debug!("Validating SendGrid configuration");
 
         let headers = self.build_headers()?;
-        
+
         // Test with a simple API call to validate the API key
         let test_endpoint = "https://api.sendgrid.com/v3/user/account";
-        
+
         let response = self
             .client
             .get(test_endpoint)
@@ -319,7 +336,10 @@ impl EmailProvider for SendGridProvider {
         } else {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            error!("SendGrid API key validation failed: {} - {}", status, error_text);
+            error!(
+                "SendGrid API key validation failed: {} - {}",
+                status, error_text
+            );
             Err(EmailError::configuration(format!(
                 "SendGrid API key validation failed: {} - {}",
                 status, error_text
@@ -389,7 +409,10 @@ mod tests {
 
         let sendgrid_email = result.unwrap();
         assert_eq!(sendgrid_email.from.email, "sender@example.com");
-        assert_eq!(sendgrid_email.personalizations[0].to[0].email, "recipient@example.com");
+        assert_eq!(
+            sendgrid_email.personalizations[0].to[0].email,
+            "recipient@example.com"
+        );
         assert_eq!(sendgrid_email.subject, "Test Email");
     }
 }

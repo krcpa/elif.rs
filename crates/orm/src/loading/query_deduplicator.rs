@@ -1,6 +1,4 @@
-use crate::{
-    error::{OrmError, OrmResult},
-};
+use crate::error::{OrmError, OrmResult};
 use serde_json::Value as JsonValue;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -22,14 +20,10 @@ pub struct QueryKey {
 
 impl QueryKey {
     /// Create a new query key for a relationship query
-    pub fn relationship(
-        table: &str,
-        foreign_key: &str,
-        parent_ids: &[Value],
-    ) -> Self {
+    pub fn relationship(table: &str, foreign_key: &str, parent_ids: &[Value]) -> Self {
         let mut conditions = HashMap::new();
         conditions.insert(foreign_key.to_string(), parent_ids.to_vec());
-        
+
         Self {
             table: table.to_string(),
             query_type: "relationship".to_string(),
@@ -41,7 +35,7 @@ impl QueryKey {
     pub fn batch_select(table: &str, ids: &[Value]) -> Self {
         let mut conditions = HashMap::new();
         conditions.insert("id".to_string(), ids.to_vec());
-        
+
         Self {
             table: table.to_string(),
             query_type: "batch_select".to_string(),
@@ -64,11 +58,11 @@ impl Hash for QueryKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.table.hash(state);
         self.query_type.hash(state);
-        
+
         // Sort conditions for consistent hashing
         let mut sorted_conditions: Vec<_> = self.conditions.iter().collect();
         sorted_conditions.sort_by_key(|(k, _)| k.as_str());
-        
+
         for (key, values) in sorted_conditions {
             key.hash(state);
             for value in values {
@@ -94,6 +88,12 @@ pub struct QueryDeduplicator {
     pending_queries: Arc<RwLock<HashMap<QueryKey, PendingQuery>>>,
     /// Statistics about deduplication
     stats: Arc<RwLock<DeduplicationStats>>,
+}
+
+impl Default for QueryDeduplicator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueryDeduplicator {
@@ -123,13 +123,13 @@ impl QueryDeduplicator {
                 // Query is already running, increment waiter count
                 pending_query.waiter_count += 1;
                 let result_mutex = pending_query.result.clone();
-                
+
                 // Update stats
                 let mut stats = self.stats.write().await;
                 stats.queries_deduplicated += 1;
                 drop(stats);
                 drop(pending);
-                
+
                 // Wait for the result
                 let mut result_guard = result_mutex.lock().await;
                 while result_guard.is_none() {
@@ -138,14 +138,13 @@ impl QueryDeduplicator {
                     tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
                     result_guard = result_mutex.lock().await;
                 }
-                
+
                 // Clone the result and return
-                return result_guard
+                result_guard
                     .as_ref()
                     .unwrap()
-                    .as_ref()
-                    .map(|v| v.clone())
-                    .map_err(|e| OrmError::Query(e.to_string()));
+                    .clone()
+                    .map_err(|e| OrmError::Query(e.to_string()))
             } else {
                 // New query, add to pending
                 let result_mutex = Arc::new(Mutex::new(None));
@@ -156,16 +155,16 @@ impl QueryDeduplicator {
                         waiter_count: 1,
                     },
                 );
-                
+
                 // Update stats
                 let mut stats = self.stats.write().await;
                 stats.unique_queries_executed += 1;
                 drop(stats);
                 drop(pending);
-                
+
                 // Execute the query
                 let result = execute_fn().await;
-                
+
                 // Store result and clean up
                 let mut pending = self.pending_queries.write().await;
                 if let Some(pending_query) = pending.get(&query_key) {
@@ -173,8 +172,8 @@ impl QueryDeduplicator {
                     *result_guard = Some(result.clone());
                 }
                 pending.remove(&query_key);
-                
-                return result;
+
+                result
             }
         }
     }
@@ -240,4 +239,3 @@ impl Display for DeduplicationStats {
         )
     }
 }
-

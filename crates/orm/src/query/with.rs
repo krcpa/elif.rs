@@ -1,33 +1,38 @@
 //! Query Builder WITH Methods - Eager loading integration for QueryBuilder
 
-use std::collections::HashMap;
 use sqlx::{Pool, Postgres, Row};
+use std::collections::HashMap;
 
 use crate::error::ModelResult;
+use crate::loading::{EagerLoadConfig, OptimizedEagerLoader};
 use crate::model::Model;
 use crate::query::QueryBuilder;
-use crate::relationships::eager_loading::EagerLoader;
 use crate::relationships::constraints::RelationshipConstraintBuilder;
-use crate::loading::{OptimizedEagerLoader, EagerLoadConfig};
+use crate::relationships::eager_loading::EagerLoader;
 
 /// Extension trait for QueryBuilder to add eager loading support
 pub trait QueryBuilderWithMethods<M> {
     /// Add a relationship to eagerly load
     fn with(self, relation: &str) -> QueryBuilderWithEagerLoading<M>;
-    
+
     /// Add a relationship with constraints
     fn with_where<F>(self, relation: &str, constraint: F) -> QueryBuilderWithEagerLoading<M>
     where
         F: FnOnce(RelationshipConstraintBuilder) -> RelationshipConstraintBuilder + 'static;
-    
+
     /// Add conditional eager loading
     fn with_when(self, condition: bool, relation: &str) -> QueryBuilderWithEagerLoading<M>;
-    
+
     /// Load relationship counts without loading the relationships
     fn with_count(self, relation: &str) -> QueryBuilderWithEagerLoading<M>;
-    
+
     /// Load relationship counts with constraints
-    fn with_count_where<F>(self, alias: &str, relation: &str, constraint: F) -> QueryBuilderWithEagerLoading<M>
+    fn with_count_where<F>(
+        self,
+        alias: &str,
+        relation: &str,
+        constraint: F,
+    ) -> QueryBuilderWithEagerLoading<M>
     where
         F: FnOnce(RelationshipConstraintBuilder) -> RelationshipConstraintBuilder + 'static;
 }
@@ -66,7 +71,7 @@ impl<M> QueryBuilderWithEagerLoading<M> {
         self.eager_loader = self.eager_loader.with(relation);
         self
     }
-    
+
     /// Add a relationship with constraints
     pub fn with_where<F>(mut self, relation: &str, constraint: F) -> Self
     where
@@ -75,7 +80,7 @@ impl<M> QueryBuilderWithEagerLoading<M> {
         self.eager_loader = self.eager_loader.with_constraint(relation, constraint);
         self
     }
-    
+
     /// Add conditional eager loading
     pub fn with_when(self, condition: bool, relation: &str) -> Self {
         if condition {
@@ -84,20 +89,22 @@ impl<M> QueryBuilderWithEagerLoading<M> {
             self
         }
     }
-    
+
     /// Load relationship counts without loading the relationships
     pub fn with_count(mut self, relation: &str) -> Self {
-        self.count_relations.insert(format!("{}_count", relation), relation.to_string());
+        self.count_relations
+            .insert(format!("{}_count", relation), relation.to_string());
         self
     }
-    
+
     /// Load relationship counts with constraints and custom alias
     pub fn with_count_where<F>(mut self, alias: &str, relation: &str, _constraint: F) -> Self
     where
         F: FnOnce(RelationshipConstraintBuilder) -> RelationshipConstraintBuilder + 'static,
     {
         // Store the relationship count with custom alias
-        self.count_relations.insert(alias.to_string(), relation.to_string());
+        self.count_relations
+            .insert(alias.to_string(), relation.to_string());
         self
     }
 
@@ -108,7 +115,7 @@ impl<M> QueryBuilderWithEagerLoading<M> {
     {
         // First, execute the base query to get the main models
         let mut models = self.query.clone().get(pool).await?;
-        
+
         if models.is_empty() {
             return Ok(models);
         }
@@ -130,13 +137,16 @@ impl<M> QueryBuilderWithEagerLoading<M> {
                     .collect();
 
                 if let Some(ref mut loader) = self.optimized_loader {
-                    let _result = loader.load_with_relationships(
-                        M::table_name(),
-                        root_ids,
-                        &relationship_names,
-                        pool,
-                    ).await.map_err(|e| crate::error::ModelError::Database(e.to_string()))?;
-                    
+                    let _result = loader
+                        .load_with_relationships(
+                            M::table_name(),
+                            root_ids,
+                            &relationship_names,
+                            pool,
+                        )
+                        .await
+                        .map_err(|e| crate::error::ModelError::Database(e.to_string()))?;
+
                     // TODO: Integrate the optimized results with the models
                     // For now, we'll fall back to the standard loading method
                 }
@@ -145,7 +155,7 @@ impl<M> QueryBuilderWithEagerLoading<M> {
             // Load the eager relationships using the standard method
             self.eager_loader.load_for_models(pool, &models).await?;
         }
-        
+
         // Load relationship counts if requested
         if !self.count_relations.is_empty() {
             self.load_relationship_counts(pool, &mut models).await?;
@@ -171,14 +181,13 @@ impl<M> QueryBuilderWithEagerLoading<M> {
     where
         M: Model + Send + Sync,
     {
-        self.first(pool).await?
-            .ok_or_else(|| crate::error::ModelError::NotFound(
-                format!("No {} found", M::table_name())
-            ))
+        self.first(pool).await?.ok_or_else(|| {
+            crate::error::ModelError::NotFound(format!("No {} found", M::table_name()))
+        })
     }
 
     /// Add WHERE conditions to the base query
-    pub fn where_eq<V>(mut self, field: &str, value: V) -> Self 
+    pub fn where_eq<V>(mut self, field: &str, value: V) -> Self
     where
         V: ToString + Send + Sync + 'static,
     {
@@ -193,7 +202,9 @@ impl<M> QueryBuilderWithEagerLoading<M> {
     {
         // Assuming QueryBuilder has a method for custom conditions
         // This would need to be implemented in the base QueryBuilder
-        self.query = self.query.where_condition(field, operator, value.to_string());
+        self.query = self
+            .query
+            .where_condition(field, operator, value.to_string());
         self
     }
 
@@ -231,9 +242,8 @@ impl<M> QueryBuilderWithEagerLoading<M> {
     /// Enable optimized loading with custom configuration
     pub fn optimize_loading_with_config(mut self, config: EagerLoadConfig) -> Self {
         self.optimization_enabled = true;
-        let batch_loader = crate::loading::BatchLoader::with_config(
-            crate::loading::BatchConfig::default()
-        );
+        let batch_loader =
+            crate::loading::BatchLoader::with_config(crate::loading::BatchConfig::default());
         self.optimized_loader = Some(OptimizedEagerLoader::with_config(config, batch_loader));
         self
     }
@@ -241,14 +251,14 @@ impl<M> QueryBuilderWithEagerLoading<M> {
     /// Set custom batch size for relationship loading
     pub fn batch_size(mut self, size: usize) -> Self {
         self.batch_size = Some(size);
-        
+
         // Update the optimized loader if it exists
         if let Some(ref mut loader) = self.optimized_loader {
             let mut config = loader.config().clone();
             config.max_batch_size = size;
             loader.update_config(config);
         }
-        
+
         self
     }
 
@@ -265,7 +275,7 @@ impl<M> QueryBuilderWithEagerLoading<M> {
             config.enable_parallelism = true;
             self = self.optimize_loading_with_config(config);
         }
-        
+
         self
     }
 
@@ -277,16 +287,20 @@ impl<M> QueryBuilderWithEagerLoading<M> {
             config.max_depth = depth;
             loader.update_config(config);
         }
-        
+
         self
     }
 
     /// Load relationship counts for the models
-    async fn load_relationship_counts(&self, pool: &Pool<Postgres>, models: &mut [M]) -> ModelResult<()>
+    async fn load_relationship_counts(
+        &self,
+        pool: &Pool<Postgres>,
+        models: &mut [M],
+    ) -> ModelResult<()>
     where
         M: Model + Send + Sync,
     {
-        for (_alias, relation) in &self.count_relations {
+        for relation in self.count_relations.values() {
             // Build count query for each relationship
             let model_ids: Vec<String> = models
                 .iter()
@@ -299,14 +313,16 @@ impl<M> QueryBuilderWithEagerLoading<M> {
 
             // Build the secure count query with parameters
             let (count_query, params) = self.build_secure_count_query(relation, &model_ids)?;
-            
+
             // Execute the parameterized count query
             let mut query = sqlx::query(&count_query);
             for param in params {
                 query = query.bind(param);
             }
-            
-            let rows = query.fetch_all(pool).await
+
+            let rows = query
+                .fetch_all(pool)
+                .await
                 .map_err(|e| crate::error::ModelError::Database(e.to_string()))?;
 
             // Map counts back to models
@@ -326,29 +342,32 @@ impl<M> QueryBuilderWithEagerLoading<M> {
     }
 
     /// Build a secure count query for a relationship using parameterized queries
-    fn build_secure_count_query(&self, relation: &str, parent_ids: &[String]) -> ModelResult<(String, Vec<String>)> {
+    fn build_secure_count_query(
+        &self,
+        relation: &str,
+        parent_ids: &[String],
+    ) -> ModelResult<(String, Vec<String>)> {
         use crate::security::{escape_identifier, validate_identifier};
-        
+
         // Validate the relationship name to prevent injection through table names
-        validate_identifier(relation).map_err(|_| 
-            crate::error::ModelError::Validation(
-                format!("Invalid relationship name: {}", relation)
-            )
-        )?;
+        validate_identifier(relation).map_err(|_| {
+            crate::error::ModelError::Validation(format!("Invalid relationship name: {}", relation))
+        })?;
 
         // Basic relationship-to-table mapping with validation
         let (table_name, foreign_key) = match relation {
             "posts" => ("posts", "user_id"),
-            "comments" => ("comments", "post_id"), 
+            "comments" => ("comments", "post_id"),
             "profile" => ("profiles", "user_id"),
             _ => {
                 // For custom relations, use the relation name as table name
                 // but validate it first
-                validate_identifier(relation).map_err(|_|
-                    crate::error::ModelError::Validation(
-                        format!("Invalid table name derived from relation: {}", relation)
-                    )
-                )?;
+                validate_identifier(relation).map_err(|_| {
+                    crate::error::ModelError::Validation(format!(
+                        "Invalid table name derived from relation: {}",
+                        relation
+                    ))
+                })?;
                 (relation, "parent_id")
             }
         };
@@ -360,16 +379,18 @@ impl<M> QueryBuilderWithEagerLoading<M> {
         // Build parameterized query with proper escaping
         let escaped_table = escape_identifier(table_name);
         let escaped_foreign_key = escape_identifier(foreign_key);
-        
+
         // Create parameter placeholders ($1, $2, $3, etc.)
-        let placeholders: Vec<String> = (1..=parent_ids.len())
-            .map(|i| format!("${}", i))
-            .collect();
+        let placeholders: Vec<String> = (1..=parent_ids.len()).map(|i| format!("${}", i)).collect();
         let placeholders_str = placeholders.join(", ");
 
         let query = format!(
             "SELECT {} as parent_id, COUNT(*) as count FROM {} WHERE {} IN ({}) GROUP BY {}",
-            escaped_foreign_key, escaped_table, escaped_foreign_key, placeholders_str, escaped_foreign_key
+            escaped_foreign_key,
+            escaped_table,
+            escaped_foreign_key,
+            placeholders_str,
+            escaped_foreign_key
         );
 
         // Return both query and parameters
@@ -383,18 +404,18 @@ impl<M> QueryBuilderWithEagerLoading<M> {
     {
         // This is where we would attach the loaded relationship data to the models
         // The implementation depends on how relationships are stored in the Model trait
-        // 
+        //
         // For now, we'll skip this as it requires changes to the Model trait
         // In a full implementation, this would:
         // 1. Iterate through each model
         // 2. Get its primary key
         // 3. Look up loaded relationship data in the eager_loader
         // 4. Attach the data to the model instance
-        
+
         for model in models {
             if let Some(pk) = model.primary_key() {
                 let pk_str = pk.to_string();
-                
+
                 // Get loaded relationships for this model
                 for relation in self.eager_loader.loaded_relations() {
                     if let Some(_data) = self.eager_loader.get_loaded_data(relation, &pk_str) {
@@ -417,23 +438,28 @@ where
     fn with(self, relation: &str) -> QueryBuilderWithEagerLoading<M> {
         QueryBuilderWithEagerLoading::new(self).with(relation)
     }
-    
+
     fn with_where<F>(self, relation: &str, constraint: F) -> QueryBuilderWithEagerLoading<M>
     where
         F: FnOnce(RelationshipConstraintBuilder) -> RelationshipConstraintBuilder + 'static,
     {
         QueryBuilderWithEagerLoading::new(self).with_where(relation, constraint)
     }
-    
+
     fn with_when(self, condition: bool, relation: &str) -> QueryBuilderWithEagerLoading<M> {
         QueryBuilderWithEagerLoading::new(self).with_when(condition, relation)
     }
-    
+
     fn with_count(self, relation: &str) -> QueryBuilderWithEagerLoading<M> {
         QueryBuilderWithEagerLoading::new(self).with_count(relation)
     }
-    
-    fn with_count_where<F>(self, alias: &str, relation: &str, constraint: F) -> QueryBuilderWithEagerLoading<M>
+
+    fn with_count_where<F>(
+        self,
+        alias: &str,
+        relation: &str,
+        constraint: F,
+    ) -> QueryBuilderWithEagerLoading<M>
     where
         F: FnOnce(RelationshipConstraintBuilder) -> RelationshipConstraintBuilder + 'static,
     {
@@ -452,13 +478,13 @@ mod tests {
         // Test that the QueryBuilderWithMethods trait exists and has the expected methods
         // This is a compilation test - if it compiles, the API is working
         let _query = QueryBuilder::<()>::new();
-        
+
         // Test method signatures exist (commented out to avoid execution issues)
         // let _with_query = query.with("posts");
-        // let _with_where_query = QueryBuilder::<()>::new().with_where("posts", |b| b);  
+        // let _with_where_query = QueryBuilder::<()>::new().with_where("posts", |b| b);
         // let _with_when_query = QueryBuilder::<()>::new().with_when(true, "posts");
         // let _with_count_query = QueryBuilder::<()>::new().with_count("posts");
-        
+
         assert!(true); // Test passes if compilation succeeds
     }
 
@@ -467,7 +493,7 @@ mod tests {
         // Test that QueryBuilderWithEagerLoading struct can be created
         let base_query = QueryBuilder::<()>::new();
         let _with_query = QueryBuilderWithEagerLoading::new(base_query);
-        
+
         assert!(true); // Test passes if compilation succeeds
     }
 
@@ -476,8 +502,8 @@ mod tests {
         // Test that EagerLoader can be created and methods exist
         let loader = EagerLoader::new();
         let _loader_with_relation = loader.with("posts");
-        
-        assert!(true); // Test passes if compilation succeeds  
+
+        assert!(true); // Test passes if compilation succeeds
     }
 
     #[test]
@@ -488,18 +514,18 @@ mod tests {
             .where_gt("views", 1000)
             .order_by_desc("created_at")
             .limit(5);
-        
+
         assert!(true); // Test passes if compilation succeeds
     }
 
-    #[test] 
+    #[test]
     fn test_eager_loading_spec_creation() {
         // Test that EagerLoadSpec can be created
         let spec = EagerLoadSpec {
             relation: "posts".to_string(),
             constraints: None,
         };
-        
+
         assert_eq!(spec.relation, "posts");
         assert!(spec.constraints.is_none());
     }
@@ -508,15 +534,15 @@ mod tests {
     fn test_api_compatibility() {
         // This test verifies that all the expected types and traits are available
         // It's a comprehensive compilation test
-        
+
         // Core query builder
         let _query = QueryBuilder::<()>::new();
-        
-        // Eager loading structures  
+
+        // Eager loading structures
         let _loader = EagerLoader::new();
         let _constraint_builder = RelationshipConstraintBuilder::new();
         let _with_eager_loading = QueryBuilderWithEagerLoading::new(QueryBuilder::<()>::new());
-        
+
         // All these should compile successfully
         assert!(true);
     }

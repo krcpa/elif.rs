@@ -1,8 +1,8 @@
 use elif_orm::{
-    loading::{OptimizedEagerLoader, EagerLoadConfig},
-    query::{QueryBuilder, QueryBuilderWithMethods},
-    model::Model,
     error::ModelResult,
+    loading::{EagerLoadConfig, OptimizedEagerLoader},
+    model::Model,
+    query::{QueryBuilder, QueryBuilderWithMethods},
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -53,7 +53,7 @@ mod tests {
     fn test_query_builder_optimization_api() {
         // Test that the optimization methods exist and can be chained
         let query = QueryBuilder::<TestUser>::new();
-        
+
         let _optimized_query = query
             .with("posts")
             .with("comments")
@@ -103,7 +103,7 @@ mod tests {
     fn test_optimized_eager_loader_creation() {
         let loader = OptimizedEagerLoader::new();
         let config = loader.config();
-        
+
         assert_eq!(config.max_batch_size, 100); // Default value
         assert!(config.enable_parallelism); // Default enabled
         assert_eq!(config.max_depth, 10); // Default depth
@@ -112,10 +112,7 @@ mod tests {
     #[test]
     fn test_batch_size_configuration() {
         let query = QueryBuilder::<TestUser>::new();
-        let _optimized_query = query
-            .with("posts")
-            .batch_size(25)
-            .optimize_loading();
+        let _optimized_query = query.with("posts").batch_size(25).optimize_loading();
 
         // Test different batch sizes
         let query2 = QueryBuilder::<TestUser>::new();
@@ -127,7 +124,7 @@ mod tests {
         assert!(true);
     }
 
-    #[test] 
+    #[test]
     fn test_fluent_api_chaining() {
         // Test extensive method chaining
         let query = QueryBuilder::<TestUser>::new();

@@ -2,7 +2,7 @@ use crate::{
     error::OrmResult,
     loading::{
         batch_loader::BatchLoader,
-        optimizer::{QueryOptimizer, QueryPlan, QueryNode, PlanExecutor, OptimizationStrategy},
+        optimizer::{OptimizationStrategy, PlanExecutor, QueryNode, QueryOptimizer, QueryPlan},
         query_deduplicator::QueryDeduplicator,
     },
     relationships::RelationshipType,
@@ -120,19 +120,19 @@ impl OptimizedEagerLoader {
         connection: &sqlx::PgPool,
     ) -> OrmResult<EagerLoadResult> {
         let start_time = std::time::Instant::now();
-        
+
         // Parse and build query plan
         let mut plan = self.build_query_plan(root_table, &root_ids, relationships)?;
-        
+
         // Optimize the plan
         let optimization_strategies = self.query_optimizer.optimize_plan(&mut plan)?;
-        
+
         // Execute the optimized plan
         let execution_result = self.plan_executor.execute_plan(&plan, connection).await?;
-        
+
         // Process results into the expected format
         let processed_data = self.process_execution_results(execution_result.results, &root_ids)?;
-        
+
         // Calculate statistics
         let execution_time = start_time.elapsed();
         let stats = EagerLoadStats {
@@ -161,7 +161,7 @@ impl OptimizedEagerLoader {
     ) -> OrmResult<EagerLoadResult> {
         // Build plan
         let mut plan = self.build_query_plan(root_table, &root_ids, relationships)?;
-        
+
         // Apply specific strategy
         match strategy {
             OptimizationStrategy::IncreaseParallelism => {
@@ -178,11 +178,11 @@ impl OptimizedEagerLoader {
                 let _strategies = self.query_optimizer.optimize_plan(&mut plan)?;
             }
         }
-        
+
         // Execute with the applied strategy
         let execution_result = self.plan_executor.execute_plan(&plan, connection).await?;
         let processed_data = self.process_execution_results(execution_result.results, &root_ids)?;
-        
+
         let stats = EagerLoadStats {
             execution_time_ms: 0, // Will be calculated
             query_count: execution_result.stats.query_count,
@@ -207,15 +207,15 @@ impl OptimizedEagerLoader {
     ) -> OrmResult<QueryPlan> {
         let mut plan = QueryPlan::new();
         let mut node_counter = 0;
-        
+
         // Create root node
         let root_node_id = format!("root_{}", node_counter);
         node_counter += 1;
-        
+
         let mut root_node = QueryNode::root(root_node_id.clone(), root_table.to_string());
         root_node.set_estimated_rows(root_ids.len());
         plan.add_node(root_node);
-        
+
         // Parse relationships and build plan tree
         if !relationships.is_empty() {
             self.build_relationship_nodes(
@@ -226,10 +226,10 @@ impl OptimizedEagerLoader {
                 &mut node_counter,
             )?;
         }
-        
+
         // Build execution phases
         plan.build_execution_phases()?;
-        
+
         Ok(plan)
     }
 
@@ -245,21 +245,15 @@ impl OptimizedEagerLoader {
         if depth > self.config.max_depth {
             return Ok(()); // Prevent infinite recursion
         }
-        
+
         // Parse relationship path (e.g., "posts.comments,profile")
         let parts: Vec<&str> = relationships.split(',').collect();
-        
+
         for part in parts {
             let relation_chain: Vec<&str> = part.split('.').collect();
-            self.build_relation_chain(
-                plan,
-                parent_node_id,
-                &relation_chain,
-                depth,
-                node_counter,
-            )?;
+            self.build_relation_chain(plan, parent_node_id, &relation_chain, depth, node_counter)?;
         }
-        
+
         Ok(())
     }
 
@@ -275,14 +269,15 @@ impl OptimizedEagerLoader {
         if chain.is_empty() || depth > self.config.max_depth {
             return Ok(());
         }
-        
+
         let relation_name = chain[0];
         let node_id = format!("{}_{}", relation_name, *node_counter);
         *node_counter += 1;
-        
+
         // Determine relationship type and table mapping
-        let (table_name, relationship_type, foreign_key) = self.get_relationship_info(relation_name)?;
-        
+        let (table_name, relationship_type, foreign_key) =
+            self.get_relationship_info(relation_name)?;
+
         // Create relationship node
         let mut node = QueryNode::child(
             node_id.clone(),
@@ -293,32 +288,45 @@ impl OptimizedEagerLoader {
         );
         node.set_depth(depth);
         node.set_estimated_rows(std::cmp::min(1000, self.config.max_batch_size)); // Reasonable default
-        
+
         plan.add_node(node);
-        
+
         // Continue with rest of chain
         if chain.len() > 1 {
-            self.build_relation_chain(
-                plan,
-                &node_id,
-                &chain[1..],
-                depth + 1,
-                node_counter,
-            )?;
+            self.build_relation_chain(plan, &node_id, &chain[1..], depth + 1, node_counter)?;
         }
-        
+
         Ok(())
     }
 
     /// Get relationship information for a relation name
-    fn get_relationship_info(&self, relation: &str) -> OrmResult<(String, RelationshipType, String)> {
+    fn get_relationship_info(
+        &self,
+        relation: &str,
+    ) -> OrmResult<(String, RelationshipType, String)> {
         // This would normally use metadata from the relationship registry
         // For now, use convention-based mapping
         match relation {
-            "posts" => Ok(("posts".to_string(), RelationshipType::HasMany, "user_id".to_string())),
-            "comments" => Ok(("comments".to_string(), RelationshipType::HasMany, "post_id".to_string())),
-            "user" => Ok(("users".to_string(), RelationshipType::BelongsTo, "user_id".to_string())),
-            "profile" => Ok(("profiles".to_string(), RelationshipType::HasOne, "user_id".to_string())),
+            "posts" => Ok((
+                "posts".to_string(),
+                RelationshipType::HasMany,
+                "user_id".to_string(),
+            )),
+            "comments" => Ok((
+                "comments".to_string(),
+                RelationshipType::HasMany,
+                "post_id".to_string(),
+            )),
+            "user" => Ok((
+                "users".to_string(),
+                RelationshipType::BelongsTo,
+                "user_id".to_string(),
+            )),
+            "profile" => Ok((
+                "profiles".to_string(),
+                RelationshipType::HasOne,
+                "user_id".to_string(),
+            )),
             _ => {
                 // Default convention: relation name -> table name + _id
                 Ok((
@@ -337,32 +345,34 @@ impl OptimizedEagerLoader {
         root_ids: &[JsonValue],
     ) -> OrmResult<HashMap<JsonValue, JsonValue>> {
         let mut processed = HashMap::new();
-        
+
         // For now, create a simplified mapping
         // In a real implementation, this would properly hydrate relationships
-        for (_, root_id) in root_ids.iter().enumerate() {
+        for root_id in root_ids.iter() {
             let mut entity_data = serde_json::json!({
                 "id": root_id,
                 "relationships": {}
             });
-            
+
             // Merge in relationship data
             for (node_id, node_results) in &results {
                 if node_id.starts_with("root_") {
                     continue; // Skip root nodes
                 }
-                
+
                 // Simple relationship assignment - in reality this would be more complex
                 if let Some(obj) = entity_data.as_object_mut() {
-                    if let Some(relationships) = obj.get_mut("relationships").and_then(|r| r.as_object_mut()) {
+                    if let Some(relationships) =
+                        obj.get_mut("relationships").and_then(|r| r.as_object_mut())
+                    {
                         relationships.insert(node_id.clone(), serde_json::json!(node_results));
                     }
                 }
             }
-            
+
             processed.insert(root_id.clone(), entity_data);
         }
-        
+
         Ok(processed)
     }
 
@@ -438,9 +448,11 @@ mod tests {
     fn test_build_query_plan() {
         let loader = OptimizedEagerLoader::new();
         let root_ids = vec![json!(1), json!(2)];
-        
-        let plan = loader.build_query_plan("users", &root_ids, "posts.comments").unwrap();
-        
+
+        let plan = loader
+            .build_query_plan("users", &root_ids, "posts.comments")
+            .unwrap();
+
         assert_eq!(plan.roots.len(), 1);
         assert!(plan.nodes.len() >= 1); // At least the root node
         assert_eq!(plan.max_depth, 2); // users -> posts -> comments
@@ -449,7 +461,7 @@ mod tests {
     #[test]
     fn test_relationship_info_mapping() {
         let loader = OptimizedEagerLoader::new();
-        
+
         let (table, rel_type, fk) = loader.get_relationship_info("posts").unwrap();
         assert_eq!(table, "posts");
         assert_eq!(rel_type, RelationshipType::HasMany);

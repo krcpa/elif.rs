@@ -1,8 +1,8 @@
 //! Connection registry for managing WebSocket connections
 
+use super::channel::{ChannelId, ChannelManager};
 use super::connection::WebSocketConnection;
 use super::types::{ConnectionId, ConnectionState, WebSocketMessage, WebSocketResult};
-use super::channel::{ChannelManager, ChannelId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -59,15 +59,15 @@ impl ConnectionRegistry {
     pub async fn add_connection(&self, connection: WebSocketConnection) -> ConnectionId {
         let id = connection.id;
         let arc_connection = Arc::new(connection);
-        
+
         {
             let mut connections = self.connections.write().await;
             connections.insert(id, arc_connection);
         }
-        
+
         info!("Added connection to registry: {}", id);
         self.emit_event(ConnectionEvent::Connected(id)).await;
-        
+
         id
     }
 
@@ -80,12 +80,16 @@ impl ConnectionRegistry {
 
         if let Some(conn) = &connection {
             let state = conn.state().await;
-            
+
             // Clean up channel memberships
             self.channel_manager.leave_all_channels(id).await;
-            
-            info!("Removed connection from registry: {} (state: {:?})", id, state);
-            self.emit_event(ConnectionEvent::Disconnected(id, state)).await;
+
+            info!(
+                "Removed connection from registry: {} (state: {:?})",
+                id, state
+            );
+            self.emit_event(ConnectionEvent::Disconnected(id, state))
+                .await;
         }
 
         connection
@@ -121,15 +125,18 @@ impl ConnectionRegistry {
         id: ConnectionId,
         message: WebSocketMessage,
     ) -> WebSocketResult<()> {
-        let connection = self.get_connection(id).await
+        let connection = self
+            .get_connection(id)
+            .await
             .ok_or(WebSocketError::ConnectionNotFound(id))?;
 
         let result = connection.send(message.clone()).await;
-        
+
         if result.is_ok() {
-            self.emit_event(ConnectionEvent::MessageSent(id, message)).await;
+            self.emit_event(ConnectionEvent::MessageSent(id, message))
+                .await;
         }
-        
+
         result
     }
 
@@ -139,7 +146,8 @@ impl ConnectionRegistry {
         id: ConnectionId,
         text: T,
     ) -> WebSocketResult<()> {
-        self.send_to_connection(id, WebSocketMessage::text(text)).await
+        self.send_to_connection(id, WebSocketMessage::text(text))
+            .await
     }
 
     /// Send a binary message to a specific connection
@@ -148,7 +156,8 @@ impl ConnectionRegistry {
         id: ConnectionId,
         data: T,
     ) -> WebSocketResult<()> {
-        self.send_to_connection(id, WebSocketMessage::binary(data)).await
+        self.send_to_connection(id, WebSocketMessage::binary(data))
+            .await
     }
 
     /// Broadcast a message to all active connections
@@ -191,13 +200,14 @@ impl ConnectionRegistry {
         message: WebSocketMessage,
     ) -> WebSocketResult<BroadcastResult> {
         // Get the member IDs from the channel manager
-        let member_ids = self.channel_manager
+        let member_ids = self
+            .channel_manager
             .send_to_channel(channel_id, sender_id, message.clone())
             .await?;
 
         // Broadcast to all channel members
         let mut results = BroadcastResult::new();
-        
+
         for member_id in member_ids {
             if let Some(connection) = self.get_connection(member_id).await {
                 if connection.is_active().await {
@@ -212,7 +222,10 @@ impl ConnectionRegistry {
                 }
             } else {
                 // Connection not in registry but still in channel - clean up
-                let _ = self.channel_manager.leave_channel(channel_id, member_id).await;
+                let _ = self
+                    .channel_manager
+                    .leave_channel(channel_id, member_id)
+                    .await;
             }
         }
 
@@ -226,7 +239,8 @@ impl ConnectionRegistry {
         sender_id: ConnectionId,
         text: T,
     ) -> WebSocketResult<BroadcastResult> {
-        self.send_to_channel(channel_id, sender_id, WebSocketMessage::text(text)).await
+        self.send_to_channel(channel_id, sender_id, WebSocketMessage::text(text))
+            .await
     }
 
     /// Send a binary message to a specific channel
@@ -236,17 +250,20 @@ impl ConnectionRegistry {
         sender_id: ConnectionId,
         data: T,
     ) -> WebSocketResult<BroadcastResult> {
-        self.send_to_channel(channel_id, sender_id, WebSocketMessage::binary(data)).await
+        self.send_to_channel(channel_id, sender_id, WebSocketMessage::binary(data))
+            .await
     }
 
     /// Close a specific connection
     pub async fn close_connection(&self, id: ConnectionId) -> WebSocketResult<()> {
-        let connection = self.get_connection(id).await
+        let connection = self
+            .get_connection(id)
+            .await
             .ok_or(WebSocketError::ConnectionNotFound(id))?;
 
         connection.close().await?;
         self.remove_connection(id).await;
-        
+
         Ok(())
     }
 
@@ -274,7 +291,10 @@ impl ConnectionRegistry {
             for id in to_remove {
                 if let Some(conn) = connections.remove(&id) {
                     let state = conn.state().await;
-                    info!("Removed connection from registry: {} (state: {:?})", id, state);
+                    info!(
+                        "Removed connection from registry: {} (state: {:?})",
+                        id, state
+                    );
                     // Note: We can't emit events here while holding the write lock
                     // to avoid potential deadlocks. Consider restructuring if events are critical.
                 }
@@ -321,9 +341,9 @@ impl ConnectionRegistry {
     pub async fn stats(&self) -> RegistryStats {
         let connections = self.get_all_connections().await;
         let mut stats = RegistryStats::default();
-        
+
         stats.total_connections = connections.len();
-        
+
         for connection in connections {
             match connection.state().await {
                 ConnectionState::Connected => stats.active_connections += 1,
@@ -332,7 +352,7 @@ impl ConnectionRegistry {
                 ConnectionState::Closed => stats.closed_connections += 1,
                 ConnectionState::Failed(_) => stats.failed_connections += 1,
             }
-            
+
             let conn_stats = connection.stats().await;
             stats.total_messages_sent += conn_stats.messages_sent;
             stats.total_messages_received += conn_stats.messages_received;

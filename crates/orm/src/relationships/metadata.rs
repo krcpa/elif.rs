@@ -1,7 +1,7 @@
 //! Relationship Metadata System - Core metadata definitions for relationships
 
-use serde::{Deserialize, Serialize};
 use crate::error::{ModelError, ModelResult};
+use serde::{Deserialize, Serialize};
 
 /// Defines the type of relationship between models
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
@@ -45,37 +45,37 @@ impl RelationshipType {
 pub struct RelationshipMetadata {
     /// The type of relationship
     pub relationship_type: RelationshipType,
-    
+
     /// Name of the relationship (field name in the model)
     pub name: String,
-    
+
     /// The related model's table name
     pub related_table: String,
-    
+
     /// The related model's type name
     pub related_model: String,
-    
+
     /// Foreign key configuration
     pub foreign_key: ForeignKeyConfig,
-    
+
     /// Local key (primary key on this model, defaults to "id")
     pub local_key: String,
-    
+
     /// Optional custom relationship name for queries
     pub custom_name: Option<String>,
-    
+
     /// Pivot table configuration for many-to-many relationships
     pub pivot_config: Option<PivotConfig>,
-    
+
     /// Polymorphic configuration
     pub polymorphic_config: Option<PolymorphicConfig>,
-    
+
     /// Whether this relationship should be eagerly loaded by default
     pub eager_load: bool,
-    
+
     /// Additional constraints for the relationship
     pub constraints: Vec<RelationshipConstraint>,
-    
+
     /// Inverse relationship name (for automatic detection)
     pub inverse: Option<String>,
 }
@@ -176,17 +176,17 @@ impl RelationshipMetadata {
     pub fn validate(&self) -> ModelResult<()> {
         // Check if relationship type matches configuration
         if self.relationship_type.requires_pivot() && self.pivot_config.is_none() {
-            return Err(ModelError::Configuration(
-                format!("Relationship '{}' of type {:?} requires pivot configuration", 
-                        self.name, self.relationship_type)
-            ));
+            return Err(ModelError::Configuration(format!(
+                "Relationship '{}' of type {:?} requires pivot configuration",
+                self.name, self.relationship_type
+            )));
         }
 
         if self.relationship_type.is_polymorphic() && self.polymorphic_config.is_none() {
-            return Err(ModelError::Configuration(
-                format!("Relationship '{}' of type {:?} requires polymorphic configuration", 
-                        self.name, self.relationship_type)
-            ));
+            return Err(ModelError::Configuration(format!(
+                "Relationship '{}' of type {:?} requires polymorphic configuration",
+                self.name, self.relationship_type
+            )));
         }
 
         // Validate foreign key configuration
@@ -216,10 +216,10 @@ impl RelationshipMetadata {
 pub struct ForeignKeyConfig {
     /// The foreign key column name(s)
     pub columns: Vec<String>,
-    
+
     /// Whether this is a composite foreign key
     pub is_composite: bool,
-    
+
     /// The table where the foreign key is located
     pub table: String,
 }
@@ -252,19 +252,19 @@ impl ForeignKeyConfig {
     pub fn validate(&self) -> ModelResult<()> {
         if self.columns.is_empty() {
             return Err(ModelError::Configuration(
-                "Foreign key configuration must have at least one column".to_string()
+                "Foreign key configuration must have at least one column".to_string(),
             ));
         }
 
         if self.is_composite && self.columns.len() < 2 {
             return Err(ModelError::Configuration(
-                "Composite foreign key must have at least 2 columns".to_string()
+                "Composite foreign key must have at least 2 columns".to_string(),
             ));
         }
 
         if self.table.is_empty() {
             return Err(ModelError::Configuration(
-                "Foreign key configuration must specify a table".to_string()
+                "Foreign key configuration must specify a table".to_string(),
             ));
         }
 
@@ -277,16 +277,16 @@ impl ForeignKeyConfig {
 pub struct PivotConfig {
     /// The pivot table name
     pub table: String,
-    
+
     /// The foreign key column for the local model in the pivot table
     pub local_key: String,
-    
+
     /// The foreign key column for the related model in the pivot table
     pub foreign_key: String,
-    
+
     /// Additional columns to include from the pivot table
     pub additional_columns: Vec<String>,
-    
+
     /// Timestamps configuration for the pivot table
     pub with_timestamps: bool,
 }
@@ -319,25 +319,25 @@ impl PivotConfig {
     pub fn validate(&self) -> ModelResult<()> {
         if self.table.is_empty() {
             return Err(ModelError::Configuration(
-                "Pivot table name cannot be empty".to_string()
+                "Pivot table name cannot be empty".to_string(),
             ));
         }
 
         if self.local_key.is_empty() {
             return Err(ModelError::Configuration(
-                "Pivot local key cannot be empty".to_string()
+                "Pivot local key cannot be empty".to_string(),
             ));
         }
 
         if self.foreign_key.is_empty() {
             return Err(ModelError::Configuration(
-                "Pivot foreign key cannot be empty".to_string()
+                "Pivot foreign key cannot be empty".to_string(),
             ));
         }
 
         if self.local_key == self.foreign_key {
             return Err(ModelError::Configuration(
-                "Pivot local key and foreign key must be different".to_string()
+                "Pivot local key and foreign key must be different".to_string(),
             ));
         }
 
@@ -350,13 +350,13 @@ impl PivotConfig {
 pub struct PolymorphicConfig {
     /// The morph type column name (stores the model type)
     pub type_column: String,
-    
+
     /// The morph id column name (stores the foreign key)
     pub id_column: String,
-    
+
     /// The name/namespace for this polymorphic relationship
     pub name: String,
-    
+
     /// Allowed types for this polymorphic relationship
     pub allowed_types: Vec<String>,
 }
@@ -382,25 +382,25 @@ impl PolymorphicConfig {
     pub fn validate(&self) -> ModelResult<()> {
         if self.name.is_empty() {
             return Err(ModelError::Configuration(
-                "Polymorphic relationship name cannot be empty".to_string()
+                "Polymorphic relationship name cannot be empty".to_string(),
             ));
         }
 
         if self.type_column.is_empty() {
             return Err(ModelError::Configuration(
-                "Polymorphic type column cannot be empty".to_string()
+                "Polymorphic type column cannot be empty".to_string(),
             ));
         }
 
         if self.id_column.is_empty() {
             return Err(ModelError::Configuration(
-                "Polymorphic ID column cannot be empty".to_string()
+                "Polymorphic ID column cannot be empty".to_string(),
             ));
         }
 
         if self.type_column == self.id_column {
             return Err(ModelError::Configuration(
-                "Polymorphic type column and ID column must be different".to_string()
+                "Polymorphic type column and ID column must be different".to_string(),
             ));
         }
 
@@ -413,10 +413,10 @@ impl PolymorphicConfig {
 pub struct RelationshipConstraint {
     /// The column to constrain
     pub column: String,
-    
+
     /// The constraint operator
     pub operator: ConstraintOperator,
-    
+
     /// The constraint value
     pub value: String,
 }
@@ -540,7 +540,8 @@ mod tests {
             "user_roles".to_string(),
             "user_id".to_string(),
             "role_id".to_string(),
-        ).with_timestamps();
+        )
+        .with_timestamps();
 
         assert_eq!(pivot.table, "user_roles");
         assert_eq!(pivot.local_key, "user_id");
@@ -555,7 +556,8 @@ mod tests {
             "commentable".to_string(),
             "commentable_type".to_string(),
             "commentable_id".to_string(),
-        ).with_allowed_types(vec!["Post".to_string(), "Video".to_string()]);
+        )
+        .with_allowed_types(vec!["Post".to_string(), "Video".to_string()]);
 
         assert_eq!(poly.name, "commentable");
         assert_eq!(poly.type_column, "commentable_type");

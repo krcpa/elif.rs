@@ -3,18 +3,18 @@
 pub mod create_simple;
 pub use create_simple as create;
 pub mod add;
-pub mod inspect;
-pub mod dev;
-pub mod check;
-pub mod doctor;
-pub mod test;
-pub mod db;
-pub mod migrate;
 pub mod build;
-pub mod optimize;
+pub mod check;
+pub mod db;
 pub mod deploy;
+pub mod dev;
+pub mod doctor;
 pub mod info;
+pub mod inspect;
+pub mod migrate;
+pub mod optimize;
 pub mod status;
+pub mod test;
 pub mod version;
 
 // ========== Legacy modules (disabled to fix compilation) ==========

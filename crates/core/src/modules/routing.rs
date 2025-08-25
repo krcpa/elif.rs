@@ -27,12 +27,15 @@ impl HttpMethod {
             HttpMethod::TRACE => "TRACE",
         }
     }
-    
+
     /// Check if method is safe (no side effects)
     pub fn is_safe(&self) -> bool {
-        matches!(self, HttpMethod::GET | HttpMethod::HEAD | HttpMethod::OPTIONS | HttpMethod::TRACE)
+        matches!(
+            self,
+            HttpMethod::GET | HttpMethod::HEAD | HttpMethod::OPTIONS | HttpMethod::TRACE
+        )
     }
-    
+
     /// Check if method is idempotent
     pub fn is_idempotent(&self) -> bool {
         matches!(
@@ -55,7 +58,7 @@ impl std::fmt::Display for HttpMethod {
 
 impl std::str::FromStr for HttpMethod {
     type Err = crate::errors::CoreError;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().as_str() {
             "GET" => Ok(HttpMethod::GET),
@@ -67,9 +70,10 @@ impl std::str::FromStr for HttpMethod {
             "HEAD" => Ok(HttpMethod::HEAD),
             "CONNECT" => Ok(HttpMethod::CONNECT),
             "TRACE" => Ok(HttpMethod::TRACE),
-            _ => Err(crate::errors::CoreError::validation(
-                format!("Invalid HTTP method: {}", s)
-            )),
+            _ => Err(crate::errors::CoreError::validation(format!(
+                "Invalid HTTP method: {}",
+                s
+            ))),
         }
     }
 }
@@ -99,59 +103,59 @@ impl RouteDefinition {
             parameters: Vec::new(),
         }
     }
-    
+
     /// Add middleware to the route
     pub fn with_middleware(mut self, middleware: Vec<String>) -> Self {
         self.middleware = middleware;
         self
     }
-    
+
     /// Add a single middleware
     pub fn add_middleware(mut self, middleware: impl Into<String>) -> Self {
         self.middleware.push(middleware.into());
         self
     }
-    
+
     /// Set route description
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
-    
+
     /// Add tags to the route
     pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
         self
     }
-    
+
     /// Add a single tag
     pub fn add_tag(mut self, tag: impl Into<String>) -> Self {
         self.tags.push(tag.into());
         self
     }
-    
+
     /// Add parameters to the route
     pub fn with_parameters(mut self, parameters: Vec<RouteParameter>) -> Self {
         self.parameters = parameters;
         self
     }
-    
+
     /// Add a single parameter
     pub fn add_parameter(mut self, parameter: RouteParameter) -> Self {
         self.parameters.push(parameter);
         self
     }
-    
+
     /// Get route path with parameter placeholders
     pub fn path_pattern(&self) -> String {
         self.path.clone()
     }
-    
+
     /// Check if route matches a given path and method
     pub fn matches(&self, method: &HttpMethod, path: &str) -> bool {
         self.method == *method && self.matches_path(path)
     }
-    
+
     /// Check if route path matches (basic implementation)
     fn matches_path(&self, path: &str) -> bool {
         // This is a simplified implementation
@@ -181,19 +185,19 @@ impl RouteParameter {
             default_value: None,
         }
     }
-    
+
     /// Make parameter optional
     pub fn optional(mut self) -> Self {
         self.required = false;
         self
     }
-    
+
     /// Set parameter description
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
-    
+
     /// Set default value
     pub fn with_default(mut self, default: impl Into<String>) -> Self {
         self.default_value = Some(default.into());
@@ -254,25 +258,25 @@ impl MiddlewareDefinition {
             config: std::collections::HashMap::new(),
         }
     }
-    
+
     /// Set middleware description
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
-    
+
     /// Set middleware enabled status
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
     }
-    
+
     /// Add configuration to middleware
     pub fn with_config(mut self, config: std::collections::HashMap<String, String>) -> Self {
         self.config = config;
         self
     }
-    
+
     /// Add a single configuration value
     pub fn add_config(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.config.insert(key.into(), value.into());
@@ -321,37 +325,37 @@ impl RouteGroup {
             description: None,
         }
     }
-    
+
     /// Set group name
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
-    
+
     /// Set group description
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
-    
+
     /// Add middleware to the group
     pub fn with_middleware(mut self, middleware: Vec<String>) -> Self {
         self.middleware = middleware;
         self
     }
-    
+
     /// Add routes to the group
     pub fn with_routes(mut self, routes: Vec<RouteDefinition>) -> Self {
         self.routes = routes;
         self
     }
-    
+
     /// Add a single route
     pub fn add_route(mut self, route: RouteDefinition) -> Self {
         self.routes.push(route);
         self
     }
-    
+
     /// Get all routes with prefix applied
     pub fn prefixed_routes(&self) -> Vec<RouteDefinition> {
         self.routes
@@ -372,7 +376,7 @@ impl RouteGroup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_http_method() {
         assert_eq!(HttpMethod::GET.as_str(), "GET");
@@ -380,18 +384,18 @@ mod tests {
         assert!(HttpMethod::GET.is_idempotent());
         assert!(!HttpMethod::POST.is_safe());
         assert!(!HttpMethod::POST.is_idempotent());
-        
+
         assert_eq!("GET".parse::<HttpMethod>().unwrap(), HttpMethod::GET);
         assert!("INVALID".parse::<HttpMethod>().is_err());
     }
-    
+
     #[test]
     fn test_route_definition() {
         let route = RouteDefinition::new(HttpMethod::GET, "/users/{id}", "get_user")
             .with_description("Get user by ID")
             .add_middleware("auth")
             .add_tag("users");
-        
+
         assert_eq!(route.method, HttpMethod::GET);
         assert_eq!(route.path, "/users/{id}");
         assert_eq!(route.handler, "get_user");
@@ -400,14 +404,22 @@ mod tests {
         assert!(route.matches(&HttpMethod::GET, "/users/{id}"));
         assert!(!route.matches(&HttpMethod::POST, "/users/{id}"));
     }
-    
+
     #[test]
     fn test_route_group() {
         let group = RouteGroup::new("/api/v1")
             .with_name("API v1")
-            .add_route(RouteDefinition::new(HttpMethod::GET, "/users", "list_users"))
-            .add_route(RouteDefinition::new(HttpMethod::POST, "/users", "create_user"));
-        
+            .add_route(RouteDefinition::new(
+                HttpMethod::GET,
+                "/users",
+                "list_users",
+            ))
+            .add_route(RouteDefinition::new(
+                HttpMethod::POST,
+                "/users",
+                "create_user",
+            ));
+
         let prefixed_routes = group.prefixed_routes();
         assert_eq!(prefixed_routes.len(), 2);
         assert_eq!(prefixed_routes[0].path, "/api/v1/users");

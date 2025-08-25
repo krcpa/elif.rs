@@ -25,29 +25,29 @@
 // New modular architecture
 pub mod backends;
 pub mod connection;
-pub mod transactions;
-pub mod query;
-pub mod sql;
-pub mod models;
-pub mod relationships;
+pub mod factories;
 pub mod loading;
 pub mod migrations;
-pub mod factories;
+pub mod models;
+pub mod query;
+pub mod relationships;
+pub mod sql;
+pub mod transactions;
 
 // Event system and observers
-pub mod events;
 pub mod event_error;
+pub mod events;
 pub mod observers;
 
 // Legacy modules (maintained for backward compatibility)
-pub mod model;
-pub mod error;
 pub mod database;
-pub mod transaction;
+pub mod error;
+pub mod factory;
 pub mod migration;
 pub mod migration_runner;
+pub mod model;
 pub mod security;
-pub mod factory;
+pub mod transaction;
 
 #[cfg(test)]
 mod tests;
@@ -55,8 +55,7 @@ mod tests;
 #[cfg(test)]
 mod transaction_tests;
 
-
-#[cfg(test)]  
+#[cfg(test)]
 mod security_tests_minimal;
 
 #[cfg(test)]
@@ -65,7 +64,6 @@ mod security_tests_comprehensive;
 #[cfg(test)]
 mod security_injection_tests;
 
-
 // Prelude-style re-exports for core functionality
 // Only export what actually exists in the modules
 
@@ -73,35 +71,39 @@ mod security_injection_tests;
 pub use error::{ModelError, ModelResult, OrmError, OrmResult};
 
 // Database core
-pub use database::{DatabaseServiceProvider, DatabasePool, PoolError, PoolHealthReport};
+pub use database::{DatabasePool, DatabaseServiceProvider, PoolError, PoolHealthReport};
 
-// Model system  
-pub use model::{Model, PrimaryKey, CrudOperations};
+// Model system
+pub use model::{CrudOperations, Model, PrimaryKey};
 
 // Query system
-pub use query::{QueryBuilder};
+pub use query::QueryBuilder;
 
 // Transaction management
-pub use transaction::{Transaction, IsolationLevel};
+pub use transaction::{IsolationLevel, Transaction};
 
-// Migration system  
-pub use migration::{Migration, MigrationManager, MigrationRunResult as MigrationResult, MigrationStatus, RollbackResult};
+// Migration system
+pub use migration::{
+    Migration, MigrationManager, MigrationRunResult as MigrationResult, MigrationStatus,
+    RollbackResult,
+};
 
 // Relationships (minimal exports to avoid conflicts)
 pub use relationships::{
-    relationship_traits::Relationship,
-    RelationshipMetadata, RelationshipType, RelationshipConstraint,
-    RelationshipCache, RelationshipRegistry,
+    relationship_traits::Relationship, RelationshipCache, RelationshipConstraint,
+    RelationshipMetadata, RelationshipRegistry, RelationshipType,
 };
 
 // Database backends
-pub use backends::{DatabaseBackendType, DatabasePoolConfig, PostgresBackend, DatabaseBackendRegistry};
+pub use backends::{
+    DatabaseBackendRegistry, DatabaseBackendType, DatabasePoolConfig, PostgresBackend,
+};
 
 // Event system and observers
-pub use events::{ModelEvent, ModelObserver};
 pub use event_error::EventError;
-pub use observers::{ObserverRegistry, GlobalObserverRegistry, ObserverManager};
+pub use events::{ModelEvent, ModelObserver};
 pub use model::lifecycle::ModelLifecycle;
+pub use observers::{GlobalObserverRegistry, ObserverManager, ObserverRegistry};
 
 // Derive macro re-exports (when implemented in future)
 // pub use elif_orm_derive::*;

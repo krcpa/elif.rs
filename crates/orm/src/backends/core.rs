@@ -1,30 +1,38 @@
 //! Core Database Backend Traits
-//! 
+//!
 //! This module defines the core traits and types for database backend abstraction.
 //! These traits abstract away database-specific implementations and provide a unified
 //! interface for the ORM to work with different database systems.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use crate::error::{OrmError, OrmResult};
 use async_trait::async_trait;
 use serde_json::Value as JsonValue;
-use crate::error::{OrmResult, OrmError};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Abstract database connection trait
 #[async_trait]
 pub trait DatabaseConnection: Send + Sync {
     /// Execute a query and return affected rows count
     async fn execute(&mut self, sql: &str, params: &[DatabaseValue]) -> OrmResult<u64>;
-    
+
     /// Execute a query and return the result rows
-    async fn fetch_all(&mut self, sql: &str, params: &[DatabaseValue]) -> OrmResult<Vec<Box<dyn DatabaseRow>>>;
-    
+    async fn fetch_all(
+        &mut self,
+        sql: &str,
+        params: &[DatabaseValue],
+    ) -> OrmResult<Vec<Box<dyn DatabaseRow>>>;
+
     /// Execute a query and return the first result row
-    async fn fetch_optional(&mut self, sql: &str, params: &[DatabaseValue]) -> OrmResult<Option<Box<dyn DatabaseRow>>>;
-    
+    async fn fetch_optional(
+        &mut self,
+        sql: &str,
+        params: &[DatabaseValue],
+    ) -> OrmResult<Option<Box<dyn DatabaseRow>>>;
+
     /// Begin a transaction
     async fn begin_transaction(&mut self) -> OrmResult<Box<dyn DatabaseTransaction>>;
-    
+
     /// Close the connection
     async fn close(&mut self) -> OrmResult<()>;
 }
@@ -34,16 +42,24 @@ pub trait DatabaseConnection: Send + Sync {
 pub trait DatabaseTransaction: Send + Sync {
     /// Execute a query within the transaction
     async fn execute(&mut self, sql: &str, params: &[DatabaseValue]) -> OrmResult<u64>;
-    
+
     /// Execute a query and return result rows within the transaction
-    async fn fetch_all(&mut self, sql: &str, params: &[DatabaseValue]) -> OrmResult<Vec<Box<dyn DatabaseRow>>>;
-    
+    async fn fetch_all(
+        &mut self,
+        sql: &str,
+        params: &[DatabaseValue],
+    ) -> OrmResult<Vec<Box<dyn DatabaseRow>>>;
+
     /// Execute a query and return the first result row within the transaction
-    async fn fetch_optional(&mut self, sql: &str, params: &[DatabaseValue]) -> OrmResult<Option<Box<dyn DatabaseRow>>>;
-    
+    async fn fetch_optional(
+        &mut self,
+        sql: &str,
+        params: &[DatabaseValue],
+    ) -> OrmResult<Option<Box<dyn DatabaseRow>>>;
+
     /// Commit the transaction
     async fn commit(self: Box<Self>) -> OrmResult<()>;
-    
+
     /// Rollback the transaction
     async fn rollback(self: Box<Self>) -> OrmResult<()>;
 }
@@ -53,25 +69,33 @@ pub trait DatabaseTransaction: Send + Sync {
 pub trait DatabasePool: Send + Sync {
     /// Acquire a connection from the pool
     async fn acquire(&self) -> OrmResult<Box<dyn DatabaseConnection>>;
-    
+
     /// Begin a transaction from the pool
     async fn begin_transaction(&self) -> OrmResult<Box<dyn DatabaseTransaction>>;
-    
+
     /// Execute a query directly on the pool
     async fn execute(&self, sql: &str, params: &[DatabaseValue]) -> OrmResult<u64>;
-    
+
     /// Execute a query and return result rows directly on the pool
-    async fn fetch_all(&self, sql: &str, params: &[DatabaseValue]) -> OrmResult<Vec<Box<dyn DatabaseRow>>>;
-    
+    async fn fetch_all(
+        &self,
+        sql: &str,
+        params: &[DatabaseValue],
+    ) -> OrmResult<Vec<Box<dyn DatabaseRow>>>;
+
     /// Execute a query and return the first result row directly on the pool
-    async fn fetch_optional(&self, sql: &str, params: &[DatabaseValue]) -> OrmResult<Option<Box<dyn DatabaseRow>>>;
-    
+    async fn fetch_optional(
+        &self,
+        sql: &str,
+        params: &[DatabaseValue],
+    ) -> OrmResult<Option<Box<dyn DatabaseRow>>>;
+
     /// Close the pool
     async fn close(&self) -> OrmResult<()>;
-    
+
     /// Get pool statistics
     fn stats(&self) -> DatabasePoolStats;
-    
+
     /// Perform a health check on the pool
     async fn health_check(&self) -> OrmResult<std::time::Duration>;
 }
@@ -88,19 +112,19 @@ pub struct DatabasePoolStats {
 pub trait DatabaseRow: Send + Sync {
     /// Get a column value by index
     fn get_by_index(&self, index: usize) -> OrmResult<DatabaseValue>;
-    
+
     /// Get a column value by name
     fn get_by_name(&self, name: &str) -> OrmResult<DatabaseValue>;
-    
+
     /// Get column count
     fn column_count(&self) -> usize;
-    
+
     /// Get column names
     fn column_names(&self) -> Vec<String>;
-    
+
     /// Convert row to JSON value
     fn to_json(&self) -> OrmResult<JsonValue>;
-    
+
     /// Convert row to HashMap
     fn to_map(&self) -> OrmResult<HashMap<String, DatabaseValue>>;
 }
@@ -111,7 +135,7 @@ pub trait DatabaseRowExt {
     fn get<T>(&self, column: &str) -> Result<T, crate::error::ModelError>
     where
         T: for<'de> serde::Deserialize<'de>;
-    
+
     /// Try to get an optional typed value from a column
     fn try_get<T>(&self, column: &str) -> Result<Option<T>, crate::error::ModelError>
     where
@@ -124,12 +148,16 @@ impl<R: DatabaseRow + ?Sized> DatabaseRowExt for R {
         T: for<'de> serde::Deserialize<'de>,
     {
         let db_value = self.get_by_name(column)?;
-        
+
         let json_value = db_value.to_json();
-        serde_json::from_value(json_value)
-            .map_err(|e| crate::error::ModelError::Serialization(format!("Failed to deserialize column '{}': {}", column, e)))
+        serde_json::from_value(json_value).map_err(|e| {
+            crate::error::ModelError::Serialization(format!(
+                "Failed to deserialize column '{}': {}",
+                column, e
+            ))
+        })
     }
-    
+
     fn try_get<T>(&self, column: &str) -> Result<Option<T>, crate::error::ModelError>
     where
         T: for<'de> serde::Deserialize<'de>,
@@ -140,11 +168,15 @@ impl<R: DatabaseRow + ?Sized> DatabaseRowExt for R {
                     Ok(None)
                 } else {
                     let json_value = db_value.to_json();
-                    let parsed: T = serde_json::from_value(json_value)
-                        .map_err(|e| crate::error::ModelError::Serialization(format!("Failed to deserialize column '{}': {}", column, e)))?;
+                    let parsed: T = serde_json::from_value(json_value).map_err(|e| {
+                        crate::error::ModelError::Serialization(format!(
+                            "Failed to deserialize column '{}': {}",
+                            column, e
+                        ))
+                    })?;
                     Ok(Some(parsed))
                 }
-            },
+            }
             Err(crate::error::ModelError::ColumnNotFound(_)) => Ok(None),
             Err(e) => Err(e), // Preserve the original error type and information
         }
@@ -175,7 +207,7 @@ impl DatabaseValue {
     pub fn is_null(&self) -> bool {
         matches!(self, DatabaseValue::Null)
     }
-    
+
     /// Convert to JSON value
     pub fn to_json(&self) -> JsonValue {
         match self {
@@ -183,22 +215,27 @@ impl DatabaseValue {
             DatabaseValue::Bool(b) => JsonValue::Bool(*b),
             DatabaseValue::Int32(i) => JsonValue::Number(serde_json::Number::from(*i)),
             DatabaseValue::Int64(i) => JsonValue::Number(serde_json::Number::from(*i)),
-            DatabaseValue::Float32(f) => {
-                JsonValue::Number(serde_json::Number::from_f64(*f as f64).unwrap_or_else(|| serde_json::Number::from(0)))
-            },
-            DatabaseValue::Float64(f) => {
-                serde_json::Number::from_f64(*f)
-                    .map(JsonValue::Number)
-                    .unwrap_or(JsonValue::Null)
-            },
+            DatabaseValue::Float32(f) => JsonValue::Number(
+                serde_json::Number::from_f64(*f as f64)
+                    .unwrap_or_else(|| serde_json::Number::from(0)),
+            ),
+            DatabaseValue::Float64(f) => serde_json::Number::from_f64(*f)
+                .map(JsonValue::Number)
+                .unwrap_or(JsonValue::Null),
             DatabaseValue::String(s) => JsonValue::String(s.clone()),
-            DatabaseValue::Bytes(b) => JsonValue::Array(b.iter().map(|&x| JsonValue::Number(serde_json::Number::from(x))).collect()),
+            DatabaseValue::Bytes(b) => JsonValue::Array(
+                b.iter()
+                    .map(|&x| JsonValue::Number(serde_json::Number::from(x)))
+                    .collect(),
+            ),
             DatabaseValue::Uuid(u) => JsonValue::String(u.to_string()),
             DatabaseValue::DateTime(dt) => JsonValue::String(dt.to_rfc3339()),
             DatabaseValue::Date(d) => JsonValue::String(d.to_string()),
             DatabaseValue::Time(t) => JsonValue::String(t.to_string()),
             DatabaseValue::Json(j) => j.clone(),
-            DatabaseValue::Array(arr) => JsonValue::Array(arr.iter().map(|v| v.to_json()).collect()),
+            DatabaseValue::Array(arr) => {
+                JsonValue::Array(arr.iter().map(|v| v.to_json()).collect())
+            }
         }
     }
 
@@ -219,7 +256,7 @@ impl DatabaseValue {
                 } else {
                     DatabaseValue::Null
                 }
-            },
+            }
             JsonValue::String(s) => {
                 // Try to parse as UUID first
                 if let Ok(uuid) = uuid::Uuid::parse_str(&s) {
@@ -229,11 +266,12 @@ impl DatabaseValue {
                 } else {
                     DatabaseValue::String(s)
                 }
-            },
+            }
             JsonValue::Array(arr) => {
-                let db_values: Vec<DatabaseValue> = arr.into_iter().map(DatabaseValue::from_json).collect();
+                let db_values: Vec<DatabaseValue> =
+                    arr.into_iter().map(DatabaseValue::from_json).collect();
                 DatabaseValue::Array(db_values)
-            },
+            }
             JsonValue::Object(_) => DatabaseValue::Json(json),
         }
     }
@@ -345,7 +383,7 @@ impl SqlDialect {
             SqlDialect::MySQL | SqlDialect::SQLite => "?".to_string(),
         }
     }
-    
+
     /// Get the quote character for identifiers in this dialect
     pub fn identifier_quote(&self) -> char {
         match self {
@@ -354,7 +392,7 @@ impl SqlDialect {
             SqlDialect::SQLite => '"',
         }
     }
-    
+
     /// Check if this dialect supports boolean types
     pub fn supports_boolean(&self) -> bool {
         match self {
@@ -362,7 +400,7 @@ impl SqlDialect {
             SqlDialect::MySQL => false,
         }
     }
-    
+
     /// Check if this dialect supports JSON types
     pub fn supports_json(&self) -> bool {
         match self {
@@ -370,7 +408,7 @@ impl SqlDialect {
             SqlDialect::SQLite => false,
         }
     }
-    
+
     /// Get the current timestamp function for this dialect
     pub fn current_timestamp(&self) -> &'static str {
         match self {
@@ -379,7 +417,7 @@ impl SqlDialect {
             SqlDialect::SQLite => "datetime('now')",
         }
     }
-    
+
     /// Get the auto-increment column definition for this dialect
     pub fn auto_increment(&self) -> &'static str {
         match self {
@@ -394,17 +432,21 @@ impl SqlDialect {
 #[async_trait]
 pub trait DatabaseBackend: Send + Sync {
     /// Create a connection pool from a database URL
-    async fn create_pool(&self, database_url: &str, config: DatabasePoolConfig) -> OrmResult<Arc<dyn DatabasePool>>;
-    
+    async fn create_pool(
+        &self,
+        database_url: &str,
+        config: DatabasePoolConfig,
+    ) -> OrmResult<Arc<dyn DatabasePool>>;
+
     /// Get the SQL dialect used by this backend
     fn sql_dialect(&self) -> SqlDialect;
-    
+
     /// Get the backend type
     fn backend_type(&self) -> crate::backends::DatabaseBackendType;
-    
+
     /// Validate a database URL for this backend
     fn validate_database_url(&self, url: &str) -> OrmResult<()>;
-    
+
     /// Parse connection parameters from a database URL
     fn parse_database_url(&self, url: &str) -> OrmResult<DatabaseConnectionConfig>;
 }
@@ -426,7 +468,7 @@ impl Default for DatabasePoolConfig {
             max_connections: 10,
             min_connections: 1,
             acquire_timeout_seconds: 30,
-            idle_timeout_seconds: Some(600), // 10 minutes
+            idle_timeout_seconds: Some(600),  // 10 minutes
             max_lifetime_seconds: Some(1800), // 30 minutes
             test_before_acquire: true,
         }
@@ -457,28 +499,43 @@ impl DatabaseBackendRegistry {
             backends: HashMap::new(),
         }
     }
-    
+
     /// Register a database backend
-    pub fn register(&mut self, backend_type: crate::backends::DatabaseBackendType, backend: Arc<dyn DatabaseBackend>) {
+    pub fn register(
+        &mut self,
+        backend_type: crate::backends::DatabaseBackendType,
+        backend: Arc<dyn DatabaseBackend>,
+    ) {
         self.backends.insert(backend_type, backend);
     }
-    
+
     /// Get a database backend by type
-    pub fn get(&self, backend_type: &crate::backends::DatabaseBackendType) -> Option<Arc<dyn DatabaseBackend>> {
+    pub fn get(
+        &self,
+        backend_type: &crate::backends::DatabaseBackendType,
+    ) -> Option<Arc<dyn DatabaseBackend>> {
         self.backends.get(backend_type).cloned()
     }
-    
+
     /// Create a connection pool using the appropriate backend for the given URL
-    pub async fn create_pool(&self, database_url: &str, config: DatabasePoolConfig) -> OrmResult<Arc<dyn DatabasePool>> {
+    pub async fn create_pool(
+        &self,
+        database_url: &str,
+        config: DatabasePoolConfig,
+    ) -> OrmResult<Arc<dyn DatabasePool>> {
         let backend_type = self.detect_backend_from_url(database_url)?;
-        let backend = self.get(&backend_type)
-            .ok_or_else(|| OrmError::Connection(format!("No backend registered for {}", backend_type)))?;
-        
+        let backend = self.get(&backend_type).ok_or_else(|| {
+            OrmError::Connection(format!("No backend registered for {}", backend_type))
+        })?;
+
         backend.create_pool(database_url, config).await
     }
-    
+
     /// Detect database backend type from URL
-    fn detect_backend_from_url(&self, url: &str) -> OrmResult<crate::backends::DatabaseBackendType> {
+    fn detect_backend_from_url(
+        &self,
+        url: &str,
+    ) -> OrmResult<crate::backends::DatabaseBackendType> {
         if url.starts_with("postgresql://") || url.starts_with("postgres://") {
             Ok(crate::backends::DatabaseBackendType::PostgreSQL)
         } else if url.starts_with("mysql://") {
@@ -486,10 +543,13 @@ impl DatabaseBackendRegistry {
         } else if url.starts_with("sqlite://") || url.starts_with("file:") {
             Ok(crate::backends::DatabaseBackendType::SQLite)
         } else {
-            Err(OrmError::Connection(format!("Unable to detect database backend from URL: {}", url)))
+            Err(OrmError::Connection(format!(
+                "Unable to detect database backend from URL: {}",
+                url
+            )))
         }
     }
-    
+
     /// List all registered backend types
     pub fn registered_backends(&self) -> Vec<crate::backends::DatabaseBackendType> {
         self.backends.keys().cloned().collect()

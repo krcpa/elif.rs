@@ -43,22 +43,22 @@
 //! }
 //! ```
 
-pub mod types;
 pub mod channel;
+pub mod events;
 pub mod manager;
 pub mod message;
-pub mod events;
 pub mod password;
+pub mod types;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export main types for convenience
-pub use types::{
-    ChannelId, ChannelType, ChannelPermissions, ChannelMember, ChannelMetadata,
-    ChannelStats, ChannelManagerStats,
-};
 pub use channel::Channel;
+pub use events::ChannelEvent;
 pub use manager::ChannelManager;
 pub use message::ChannelMessage;
-pub use events::ChannelEvent;
+pub use types::{
+    ChannelId, ChannelManagerStats, ChannelMember, ChannelMetadata, ChannelPermissions,
+    ChannelStats, ChannelType,
+};

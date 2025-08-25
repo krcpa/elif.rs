@@ -4,8 +4,8 @@
 //! relationship containers such as extracting loaded data, counting,
 //! and bulk state management.
 
+use super::core::{RelationshipContainer, RelationshipLoadingState, TypeSafeRelationship};
 use std::fmt::Debug;
-use super::core::{TypeSafeRelationship, RelationshipLoadingState, RelationshipContainer};
 
 /// Convert a collection of relationships to their loaded data
 pub fn extract_loaded_data<T>(relationships: &[TypeSafeRelationship<T>]) -> Vec<&T>
@@ -23,10 +23,7 @@ pub fn count_loaded<T>(relationships: &[TypeSafeRelationship<T>]) -> usize
 where
     T: Clone + Debug + Send + Sync,
 {
-    relationships
-        .iter()
-        .filter(|rel| rel.is_loaded())
-        .count()
+    relationships.iter().filter(|rel| rel.is_loaded()).count()
 }
 
 /// Get all failed relationships with their error messages
@@ -83,20 +80,32 @@ where
 }
 
 /// Get relationships that need loading (not loaded and not failed)
-pub fn get_pending_relationships<T>(relationships: &[TypeSafeRelationship<T>]) -> Vec<&TypeSafeRelationship<T>>
+pub fn get_pending_relationships<T>(
+    relationships: &[TypeSafeRelationship<T>],
+) -> Vec<&TypeSafeRelationship<T>>
 where
     T: Clone + Debug + Send + Sync,
 {
     relationships
         .iter()
         .filter(|rel| {
-            matches!(rel.loading_state(), RelationshipLoadingState::NotLoaded | RelationshipLoadingState::Loading)
+            matches!(
+                rel.loading_state(),
+                RelationshipLoadingState::NotLoaded | RelationshipLoadingState::Loading
+            )
         })
         .collect()
 }
 
 /// Group relationships by their loading state
-pub fn group_by_state<T>(relationships: &[TypeSafeRelationship<T>]) -> (Vec<&TypeSafeRelationship<T>>, Vec<&TypeSafeRelationship<T>>, Vec<&TypeSafeRelationship<T>>, Vec<&TypeSafeRelationship<T>>)
+pub fn group_by_state<T>(
+    relationships: &[TypeSafeRelationship<T>],
+) -> (
+    Vec<&TypeSafeRelationship<T>>,
+    Vec<&TypeSafeRelationship<T>>,
+    Vec<&TypeSafeRelationship<T>>,
+    Vec<&TypeSafeRelationship<T>>,
+)
 where
     T: Clone + Debug + Send + Sync,
 {
@@ -104,7 +113,7 @@ where
     let mut loading = Vec::new();
     let mut loaded = Vec::new();
     let mut failed = Vec::new();
-    
+
     for rel in relationships {
         match rel.loading_state() {
             RelationshipLoadingState::NotLoaded => not_loaded.push(rel),
@@ -113,6 +122,6 @@ where
             RelationshipLoadingState::Failed(_) => failed.push(rel),
         }
     }
-    
+
     (not_loaded, loading, loaded, failed)
 }

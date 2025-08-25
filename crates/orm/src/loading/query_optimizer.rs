@@ -2,8 +2,8 @@
 // This file maintains backward compatibility while redirecting to the new modular structure
 
 pub use crate::loading::optimizer::{
-    QueryNode, QueryPlan, PlanAnalysis, QueryOptimizer, OptimizationStrategy,
-    PlanExecutor, ExecutionResult, ExecutionStats, RiskLevel
+    ExecutionResult, ExecutionStats, OptimizationStrategy, PlanAnalysis, PlanExecutor, QueryNode,
+    QueryOptimizer, QueryPlan, RiskLevel,
 };
 
 use crate::{
@@ -11,8 +11,8 @@ use crate::{
     loading::{
         batch_loader::BatchLoader,
         optimizer::{
-            executor::PlanExecutor as NewPlanExecutor,
             analyzer::QueryOptimizer as NewQueryOptimizer,
+            executor::PlanExecutor as NewPlanExecutor,
         },
     },
 };
@@ -42,10 +42,10 @@ impl OptimizedQueryExecutor {
     ) -> OrmResult<HashMap<String, Vec<JsonValue>>> {
         // Optimize the plan first
         let _strategies = self.optimizer.optimize_plan(plan)?;
-        
+
         // Execute the optimized plan
         let result = self.executor.execute_plan(plan, connection).await?;
-        
+
         Ok(result.results)
     }
 
@@ -57,10 +57,10 @@ impl OptimizedQueryExecutor {
     ) -> OrmResult<(HashMap<String, Vec<JsonValue>>, ExecutionStats)> {
         // Optimize the plan first
         let _strategies = self.optimizer.optimize_plan(plan)?;
-        
+
         // Execute the optimized plan
         let result = self.executor.execute_plan(plan, connection).await?;
-        
+
         Ok((result.results, result.stats))
     }
 

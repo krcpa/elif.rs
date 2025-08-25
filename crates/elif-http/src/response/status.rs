@@ -1,7 +1,7 @@
 //! HTTP status code utilities
 
-use std::fmt;
 use crate::errors::ParseError;
+use std::fmt;
 
 /// Framework-native status code wrapper that hides Axum internals
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

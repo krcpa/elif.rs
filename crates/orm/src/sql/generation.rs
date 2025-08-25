@@ -2,11 +2,11 @@
 //! This module implements secure SQL generation with proper parameterization
 //! and identifier escaping to prevent SQL injection attacks.
 
-use serde_json::Value;
+use crate::error::ModelError;
 use crate::query::builder::QueryBuilder;
 use crate::query::types::*;
 use crate::security::{escape_identifier, validate_identifier, validate_parameter};
-use crate::error::ModelError;
+use serde_json::Value;
 
 impl<M> QueryBuilder<M> {
     /// Generate SQL from query with parameter placeholders and return parameters
@@ -35,19 +35,19 @@ impl<M> QueryBuilder<M> {
         for table in &self.from_tables {
             validate_identifier(table)?;
         }
-        
+
         if let Some(ref table) = self.insert_table {
             validate_identifier(table)?;
         }
-        
+
         if let Some(ref table) = self.update_table {
             validate_identifier(table)?;
         }
-        
+
         if let Some(ref table) = self.delete_table {
             validate_identifier(table)?;
         }
-        
+
         // Validate select field identifiers
         for field in &self.select_fields {
             // Skip wildcard and function calls for now
@@ -55,33 +55,36 @@ impl<M> QueryBuilder<M> {
                 validate_identifier(field)?;
             }
         }
-        
+
         // Validate column identifiers in WHERE clauses
         for condition in &self.where_conditions {
-            if condition.column != "RAW" && condition.column != "EXISTS" && condition.column != "NOT EXISTS" {
+            if condition.column != "RAW"
+                && condition.column != "EXISTS"
+                && condition.column != "NOT EXISTS"
+            {
                 validate_identifier(&condition.column)?;
             }
         }
-        
+
         // Validate JOIN table identifiers
         for join in &self.joins {
             validate_identifier(&join.table)?;
         }
-        
+
         // Validate parameter values
         for condition in &self.where_conditions {
             if let Some(ref value) = condition.value {
                 if let Value::String(s) = value {
-                    validate_parameter(&s)?;
+                    validate_parameter(s)?;
                 }
             }
             for value in &condition.values {
                 if let Value::String(s) = value {
-                    validate_parameter(&s)?;
+                    validate_parameter(s)?;
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -97,11 +100,13 @@ impl<M> QueryBuilder<M> {
         } else {
             sql.push_str("SELECT ");
         }
-        
+
         if self.select_fields.is_empty() {
             sql.push('*');
         } else {
-            let escaped_fields: Vec<String> = self.select_fields.iter()
+            let escaped_fields: Vec<String> = self
+                .select_fields
+                .iter()
                 .map(|field| {
                     if field == "*" || field.contains('(') {
                         // Keep wildcards and function calls as-is
@@ -117,7 +122,9 @@ impl<M> QueryBuilder<M> {
         // FROM clause
         if !self.from_tables.is_empty() {
             sql.push_str(" FROM ");
-            let escaped_tables: Vec<String> = self.from_tables.iter()
+            let escaped_tables: Vec<String> = self
+                .from_tables
+                .iter()
                 .map(|table| escape_identifier(table))
                 .collect();
             sql.push_str(&escaped_tables.join(", "));
@@ -134,7 +141,11 @@ impl<M> QueryBuilder<M> {
                 if i > 0 {
                     sql.push_str(" AND ");
                 }
-                sql.push_str(&format!("{} = {}", escape_identifier(left), escape_identifier(right)));
+                sql.push_str(&format!(
+                    "{} = {}",
+                    escape_identifier(left),
+                    escape_identifier(right)
+                ));
             }
         }
 
@@ -153,15 +164,17 @@ impl<M> QueryBuilder<M> {
         if let Some(table) = &self.insert_table {
             sql.push_str("INSERT INTO ");
             sql.push_str(&escape_identifier(table));
-            
+
             if !self.set_clauses.is_empty() {
                 sql.push_str(" (");
-                let columns: Vec<String> = self.set_clauses.iter()
+                let columns: Vec<String> = self
+                    .set_clauses
+                    .iter()
                     .map(|clause| escape_identifier(&clause.column))
                     .collect();
                 sql.push_str(&columns.join(", "));
                 sql.push_str(") VALUES (");
-                
+
                 for (i, clause) in self.set_clauses.iter().enumerate() {
                     if i > 0 {
                         sql.push_str(", ");
@@ -190,7 +203,7 @@ impl<M> QueryBuilder<M> {
         if let Some(table) = &self.update_table {
             sql.push_str("UPDATE ");
             sql.push_str(&escape_identifier(table));
-            
+
             if !self.set_clauses.is_empty() {
                 sql.push_str(" SET ");
                 for (i, clause) in self.set_clauses.iter().enumerate() {
@@ -231,15 +244,23 @@ impl<M> QueryBuilder<M> {
     }
 
     /// Helper method to build WHERE clauses
-    fn build_where_clause(&self, sql: &mut String, params: &mut Vec<String>, param_counter: &mut i32) {
+    fn build_where_clause(
+        &self,
+        sql: &mut String,
+        params: &mut Vec<String>,
+        param_counter: &mut i32,
+    ) {
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
             for (i, condition) in self.where_conditions.iter().enumerate() {
                 if i > 0 {
                     sql.push_str(" AND ");
                 }
-                
-                if condition.column == "RAW" || condition.column == "EXISTS" || condition.column == "NOT EXISTS" {
+
+                if condition.column == "RAW"
+                    || condition.column == "EXISTS"
+                    || condition.column == "NOT EXISTS"
+                {
                     // Don't escape special keywords
                     sql.push_str(&condition.column);
                 } else {
@@ -414,14 +435,14 @@ impl<M> QueryBuilder<M> {
                         return raw_sql.clone();
                     }
                 }
-                
+
                 // Handle EXISTS and NOT EXISTS
                 if condition.column == "EXISTS" || condition.column == "NOT EXISTS" {
                     if let Some(Value::String(subquery)) = &condition.value {
                         return format!("{} {}", condition.column, subquery);
                     }
                 }
-                
+
                 match &condition.operator {
                     QueryOperator::IsNull | QueryOperator::IsNotNull => {
                         format!("{} {}", condition.column, condition.operator)
@@ -434,7 +455,12 @@ impl<M> QueryBuilder<M> {
                                 format!("{} {} {}", condition.column, condition.operator, subquery)
                             } else {
                                 // Single value IN (unusual case)
-                                format!("{} {} ({})", condition.column, condition.operator, self.format_value(&condition.value.as_ref().unwrap()))
+                                format!(
+                                    "{} {} ({})",
+                                    condition.column,
+                                    condition.operator,
+                                    self.format_value(condition.value.as_ref().unwrap())
+                                )
                             }
                         } else {
                             // Regular IN with multiple values
@@ -443,7 +469,12 @@ impl<M> QueryBuilder<M> {
                                 .iter()
                                 .map(|v| self.format_value(v))
                                 .collect();
-                            format!("{} {} ({})", condition.column, condition.operator, values.join(", "))
+                            format!(
+                                "{} {} ({})",
+                                condition.column,
+                                condition.operator,
+                                values.join(", ")
+                            )
                         }
                     }
                     QueryOperator::Between => {
@@ -464,12 +495,25 @@ impl<M> QueryBuilder<M> {
                             if let Value::String(val_str) = value {
                                 if val_str.starts_with('(') && val_str.ends_with(')') {
                                     // This looks like a subquery
-                                    format!("{} {} {}", condition.column, condition.operator, val_str)
+                                    format!(
+                                        "{} {} {}",
+                                        condition.column, condition.operator, val_str
+                                    )
                                 } else {
-                                    format!("{} {} {}", condition.column, condition.operator, self.format_value(value))
+                                    format!(
+                                        "{} {} {}",
+                                        condition.column,
+                                        condition.operator,
+                                        self.format_value(value)
+                                    )
                                 }
                             } else {
-                                format!("{} {} {}", condition.column, condition.operator, self.format_value(value))
+                                format!(
+                                    "{} {} {}",
+                                    condition.column,
+                                    condition.operator,
+                                    self.format_value(value)
+                                )
                             }
                         } else {
                             format!("{} = NULL", condition.column) // Fallback

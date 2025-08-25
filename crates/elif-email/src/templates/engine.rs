@@ -4,7 +4,7 @@ use crate::{
     templates::{EmailTemplate, RenderedEmail, TemplateContext, TemplateDebugInfo},
 };
 use std::{collections::HashMap, sync::RwLock};
-use tera::{Tera, Context, Value, to_value, Result as TeraResult};
+use tera::{to_value, Context, Result as TeraResult, Tera, Value};
 
 /// Email template engine using Tera
 pub struct TemplateEngine {
@@ -17,15 +17,15 @@ impl TemplateEngine {
     /// Create new template engine
     pub fn new(config: TemplateConfig) -> Result<Self, EmailError> {
         let mut tera = Tera::new(&format!("{}/**/*", config.templates_dir))?;
-        
+
         // Register custom filters
         register_email_filters(&mut tera);
-        
+
         // Enable auto-escaping for HTML but not for text
         tera.autoescape_on(vec![".html", ".htm"]);
-        
-        Ok(Self { 
-            tera: RwLock::new(tera), 
+
+        Ok(Self {
+            tera: RwLock::new(tera),
             _config: config,
             templates: RwLock::new(HashMap::new()),
         })
@@ -48,14 +48,18 @@ impl TemplateEngine {
             tera_context.insert(key, value);
         }
 
-        let mut tera = self.tera.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
+        let mut tera = self
+            .tera
+            .write()
+            .map_err(|_| EmailError::template("Failed to acquire write lock"))?;
 
         // Render subject
         let subject = if let Some(subject_template) = &template.subject_template {
             tera.render_str(subject_template, &tera_context)?
         } else {
             // Fallback to context value or default
-            tera_context.get("subject")
+            tera_context
+                .get("subject")
                 .and_then(|v| v.as_str())
                 .unwrap_or("No Subject")
                 .to_string()
@@ -101,15 +105,22 @@ impl TemplateEngine {
 
     /// Register a template
     pub fn register_template(&self, template: EmailTemplate) -> Result<(), EmailError> {
-        let mut templates = self.templates.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
+        let mut templates = self
+            .templates
+            .write()
+            .map_err(|_| EmailError::template("Failed to acquire write lock"))?;
         templates.insert(template.name.clone(), template);
         Ok(())
     }
 
     /// Get template by name
     pub fn get_template(&self, name: &str) -> Result<EmailTemplate, EmailError> {
-        let templates = self.templates.read().map_err(|_| EmailError::template("Failed to acquire read lock"))?;
-        templates.get(name)
+        let templates = self
+            .templates
+            .read()
+            .map_err(|_| EmailError::template("Failed to acquire read lock"))?;
+        templates
+            .get(name)
             .cloned()
             .ok_or_else(|| EmailError::template(format!("Template '{}' not found", name)))
     }
@@ -125,11 +136,15 @@ impl TemplateEngine {
     }
 
     /// Validate template syntax
-    pub fn validate_template(&self, template_str: &str, template_name: Option<&str>) -> Result<(), EmailError> {
+    pub fn validate_template(
+        &self,
+        template_str: &str,
+        template_name: Option<&str>,
+    ) -> Result<(), EmailError> {
         // Create a temporary Tera instance to test template parsing without affecting the main engine
         let mut temp_tera = Tera::default();
         let temp_name = "__validation_template__";
-        
+
         match temp_tera.add_raw_template(temp_name, template_str) {
             Ok(_) => Ok(()),
             Err(e) => {
@@ -145,7 +160,10 @@ impl TemplateEngine {
 
     /// List available templates
     pub fn list_templates(&self) -> Result<Vec<String>, EmailError> {
-        let tera = self.tera.write().map_err(|_| EmailError::template("Failed to acquire write lock"))?;
+        let tera = self
+            .tera
+            .write()
+            .map_err(|_| EmailError::template("Failed to acquire write lock"))?;
         Ok(tera.get_template_names().map(|s| s.to_string()).collect())
     }
 }
@@ -156,26 +174,29 @@ fn register_email_filters(tera: &mut Tera) {
     tera.register_filter("format_date", format_date_filter);
     tera.register_filter("format_datetime", format_datetime_filter);
     tera.register_filter("now", now_filter);
-    
+
     // Email tracking filters
     tera.register_filter("tracking_pixel", tracking_pixel_filter);
     tera.register_filter("tracking_link", tracking_link_filter);
-    
+
     // Formatting filters
     tera.register_filter("currency", format_currency_filter);
     tera.register_filter("phone", format_phone_filter);
     tera.register_filter("address", format_address_filter);
-    
+
     // String filters
     tera.register_filter("url_encode", url_encode_filter);
 }
 
 // Tera filter implementations
 fn format_date_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
-    use chrono::{DateTime, Utc, NaiveDateTime, TimeZone};
-    
-    let format_str = args.get("format").and_then(|v| v.as_str()).unwrap_or("%Y-%m-%d");
-    
+    use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+
+    let format_str = args
+        .get("format")
+        .and_then(|v| v.as_str())
+        .unwrap_or("%Y-%m-%d");
+
     let formatted = match value {
         Value::String(s) => {
             if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
@@ -189,7 +210,10 @@ fn format_date_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResul
         }
         Value::Number(n) => {
             if let Some(timestamp) = n.as_i64() {
-                let dt = Utc.timestamp_opt(timestamp, 0).single().unwrap_or_else(|| Utc::now());
+                let dt = Utc
+                    .timestamp_opt(timestamp, 0)
+                    .single()
+                    .unwrap_or_else(Utc::now);
                 dt.format(format_str).to_string()
             } else {
                 "Invalid timestamp".to_string()
@@ -197,15 +221,18 @@ fn format_date_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResul
         }
         _ => "Invalid date".to_string(),
     };
-    
+
     Ok(to_value(formatted)?)
 }
 
 fn format_datetime_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
-    use chrono::{DateTime, Utc, TimeZone, NaiveDateTime};
-    
-    let format_str = args.get("format").and_then(|v| v.as_str()).unwrap_or("%Y-%m-%d %H:%M:%S");
-    
+    use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+
+    let format_str = args
+        .get("format")
+        .and_then(|v| v.as_str())
+        .unwrap_or("%Y-%m-%d %H:%M:%S");
+
     let formatted = match value {
         Value::String(s) => {
             // Try various common datetime formats
@@ -232,7 +259,10 @@ fn format_datetime_filter(value: &Value, args: &HashMap<String, Value>) -> TeraR
         }
         Value::Number(n) => {
             if let Some(timestamp) = n.as_i64() {
-                let dt = Utc.timestamp_opt(timestamp, 0).single().unwrap_or_else(|| Utc::now());
+                let dt = Utc
+                    .timestamp_opt(timestamp, 0)
+                    .single()
+                    .unwrap_or_else(Utc::now);
                 dt.format(format_str).to_string()
             } else {
                 "Invalid timestamp".to_string()
@@ -240,13 +270,16 @@ fn format_datetime_filter(value: &Value, args: &HashMap<String, Value>) -> TeraR
         }
         _ => "Invalid datetime".to_string(),
     };
-    
+
     Ok(to_value(formatted)?)
 }
 
 fn now_filter(_value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
     use chrono::Utc;
-    let format_str = args.get("format").and_then(|v| v.as_str()).unwrap_or("%Y-%m-%d %H:%M:%S");
+    let format_str = args
+        .get("format")
+        .and_then(|v| v.as_str())
+        .unwrap_or("%Y-%m-%d %H:%M:%S");
     let now = Utc::now();
     let formatted = now.format(format_str).to_string();
     Ok(to_value(formatted)?)
@@ -255,76 +288,109 @@ fn now_filter(_value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value
 fn tracking_pixel_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
     use chrono::Utc;
     use uuid::Uuid;
-    
-    let email_id = value.as_str().ok_or_else(|| tera::Error::msg("tracking_pixel: email_id must be string"))?;
-    let base_url = args.get("base_url").and_then(|v| v.as_str()).unwrap_or("https://tracking.example.com");
-    
+
+    let email_id = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("tracking_pixel: email_id must be string"))?;
+    let base_url = args
+        .get("base_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("https://tracking.example.com");
+
     // Validate UUID format
-    Uuid::parse_str(email_id).map_err(|_| tera::Error::msg("tracking_pixel: invalid UUID format"))?;
-    
+    Uuid::parse_str(email_id)
+        .map_err(|_| tera::Error::msg("tracking_pixel: invalid UUID format"))?;
+
     let timestamp = Utc::now().timestamp();
-    let pixel_url = format!("{}/email/track/open?id={}&t={}", base_url, email_id, timestamp);
+    let pixel_url = format!(
+        "{}/email/track/open?id={}&t={}",
+        base_url, email_id, timestamp
+    );
     let pixel_html = format!(
         r#"<img src="{}" alt="" width="1" height="1" style="display: block; width: 1px; height: 1px;" />"#,
         pixel_url
     );
-    
+
     Ok(to_value(pixel_html)?)
 }
 
 fn tracking_link_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
     use uuid::Uuid;
-    
-    let email_id = value.as_str().ok_or_else(|| tera::Error::msg("tracking_link: email_id must be string"))?;
-    let target_url = args.get("url").and_then(|v| v.as_str()).ok_or_else(|| tera::Error::msg("tracking_link: missing url parameter"))?;
-    let base_url = args.get("base_url").and_then(|v| v.as_str()).unwrap_or("https://tracking.example.com");
-    
+
+    let email_id = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("tracking_link: email_id must be string"))?;
+    let target_url = args
+        .get("url")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| tera::Error::msg("tracking_link: missing url parameter"))?;
+    let base_url = args
+        .get("base_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("https://tracking.example.com");
+
     // Validate UUID format
-    Uuid::parse_str(email_id).map_err(|_| tera::Error::msg("tracking_link: invalid UUID format"))?;
-    
+    Uuid::parse_str(email_id)
+        .map_err(|_| tera::Error::msg("tracking_link: invalid UUID format"))?;
+
     let encoded_url = urlencoding::encode(target_url);
-    let tracking_url = format!("{}/email/track/click?id={}&url={}", base_url, email_id, encoded_url);
-    
+    let tracking_url = format!(
+        "{}/email/track/click?id={}&url={}",
+        base_url, email_id, encoded_url
+    );
+
     Ok(to_value(tracking_url)?)
 }
 
 fn format_currency_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
-    let amount = value.as_f64().ok_or_else(|| tera::Error::msg("currency: amount must be number"))?;
-    let currency = args.get("currency").and_then(|v| v.as_str()).unwrap_or("USD");
-    
+    let amount = value
+        .as_f64()
+        .ok_or_else(|| tera::Error::msg("currency: amount must be number"))?;
+    let currency = args
+        .get("currency")
+        .and_then(|v| v.as_str())
+        .unwrap_or("USD");
+
     let symbol = match currency {
         "USD" => "$",
-        "EUR" => "€", 
+        "EUR" => "€",
         "GBP" => "£",
         "JPY" => "¥",
         _ => currency,
     };
-    
+
     let formatted = if currency == "JPY" {
         format!("{}{:.0}", symbol, amount)
     } else {
         format!("{}{:.2}", symbol, amount)
     };
-    
+
     Ok(to_value(formatted)?)
 }
 
 fn format_phone_filter(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
-    let phone_str = value.as_str().ok_or_else(|| tera::Error::msg("phone: must be string"))?;
+    let phone_str = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("phone: must be string"))?;
     let country = args.get("country").and_then(|v| v.as_str()).unwrap_or("US");
-    
+
     let digits: String = phone_str.chars().filter(|c| c.is_ascii_digit()).collect();
-    
+
     let formatted = match country {
         "US" if digits.len() == 10 => {
             format!("({}) {}-{}", &digits[0..3], &digits[3..6], &digits[6..10])
         }
         "US" if digits.len() == 11 && digits.starts_with('1') => {
-            format!("+1 ({}) {}-{}", &digits[1..4], &digits[4..7], &digits[7..11])
+            format!(
+                "+1 ({}) {}-{}",
+                &digits[1..4],
+                &digits[4..7],
+                &digits[7..11]
+            )
         }
         _ => phone_str.to_string(),
     };
-    
+
     Ok(to_value(formatted)?)
 }
 
@@ -335,12 +401,16 @@ fn format_address_filter(value: &Value, _args: &HashMap<String, Value>) -> TeraR
             let city = obj.get("city").and_then(|v| v.as_str()).unwrap_or("");
             let state = obj.get("state").and_then(|v| v.as_str()).unwrap_or("");
             let zip = obj.get("zip").and_then(|v| v.as_str()).unwrap_or("");
-            
+
             let mut parts = Vec::new();
-            if !street.is_empty() { parts.push(street.to_string()); }
-            
+            if !street.is_empty() {
+                parts.push(street.to_string());
+            }
+
             let mut city_line = Vec::new();
-            if !city.is_empty() { city_line.push(city.to_string()); }
+            if !city.is_empty() {
+                city_line.push(city.to_string());
+            }
             if !state.is_empty() && !zip.is_empty() {
                 city_line.push(format!("{} {}", state, zip));
             } else if !state.is_empty() {
@@ -348,22 +418,24 @@ fn format_address_filter(value: &Value, _args: &HashMap<String, Value>) -> TeraR
             } else if !zip.is_empty() {
                 city_line.push(zip.to_string());
             }
-            
+
             if !city_line.is_empty() {
                 parts.push(city_line.join(" "));
             }
-            
+
             parts.join("<br/>")
         }
         Value::String(s) => s.replace('\n', "<br/>"),
         _ => "Invalid address format".to_string(),
     };
-    
+
     Ok(to_value(formatted)?)
 }
 
 fn url_encode_filter(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
-    let text = value.as_str().ok_or_else(|| tera::Error::msg("url_encode: must be string"))?;
+    let text = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("url_encode: must be string"))?;
     let encoded = urlencoding::encode(text);
     Ok(to_value(encoded.to_string())?)
 }
@@ -378,12 +450,24 @@ impl From<tera::Error> for EmailError {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    
+
     fn create_test_config(temp_dir: &TempDir) -> TemplateConfig {
         TemplateConfig {
-            templates_dir: temp_dir.path().join("templates").to_string_lossy().to_string(),
-            layouts_dir: temp_dir.path().join("layouts").to_string_lossy().to_string(),
-            partials_dir: temp_dir.path().join("partials").to_string_lossy().to_string(),
+            templates_dir: temp_dir
+                .path()
+                .join("templates")
+                .to_string_lossy()
+                .to_string(),
+            layouts_dir: temp_dir
+                .path()
+                .join("layouts")
+                .to_string_lossy()
+                .to_string(),
+            partials_dir: temp_dir
+                .path()
+                .join("partials")
+                .to_string_lossy()
+                .to_string(),
             enable_cache: false,
             template_extension: ".html".to_string(),
             cache_size: None,
@@ -395,7 +479,7 @@ mod tests {
     fn test_template_engine_creation() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config);
         assert!(engine.is_ok());
@@ -405,7 +489,7 @@ mod tests {
     fn test_basic_template_rendering() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
@@ -419,12 +503,18 @@ mod tests {
         };
 
         let mut context = TemplateContext::new();
-        context.insert("name".to_string(), serde_json::Value::String("World".to_string()));
+        context.insert(
+            "name".to_string(),
+            serde_json::Value::String("World".to_string()),
+        );
 
         let rendered = engine.render_template(&template, &context).unwrap();
 
         assert_eq!(rendered.subject, "Welcome World");
-        assert_eq!(rendered.html_content, Some("<h1>Hello World</h1>".to_string()));
+        assert_eq!(
+            rendered.html_content,
+            Some("<h1>Hello World</h1>".to_string())
+        );
         assert_eq!(rendered.text_content, Some("Hello World".to_string()));
     }
 
@@ -432,7 +522,7 @@ mod tests {
     fn test_tera_filters_compatibility() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
@@ -447,7 +537,10 @@ mod tests {
         };
 
         let mut context = TemplateContext::new();
-        context.insert("amount".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(99.99).unwrap()));
+        context.insert(
+            "amount".to_string(),
+            serde_json::Value::Number(serde_json::Number::from_f64(99.99).unwrap()),
+        );
 
         let rendered = engine.render_template(&template, &context).unwrap();
         assert_eq!(rendered.html_content, Some("Price: $99.99".to_string()));
@@ -457,7 +550,7 @@ mod tests {
     fn test_phone_filter() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
@@ -471,17 +564,23 @@ mod tests {
         };
 
         let mut context = TemplateContext::new();
-        context.insert("phone_number".to_string(), serde_json::Value::String("5551234567".to_string()));
+        context.insert(
+            "phone_number".to_string(),
+            serde_json::Value::String("5551234567".to_string()),
+        );
 
         let rendered = engine.render_template(&template, &context).unwrap();
-        assert_eq!(rendered.html_content, Some("Phone: (555) 123-4567".to_string()));
+        assert_eq!(
+            rendered.html_content,
+            Some("Phone: (555) 123-4567".to_string())
+        );
     }
 
     #[test]
     fn test_address_filter() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
@@ -504,14 +603,17 @@ mod tests {
         context.insert("address".to_string(), address_obj);
 
         let rendered = engine.render_template(&template, &context).unwrap();
-        assert_eq!(rendered.html_content, Some("Address: 123 Main St<br/>Anytown CA 90210".to_string()));
+        assert_eq!(
+            rendered.html_content,
+            Some("Address: 123 Main St<br/>Anytown CA 90210".to_string())
+        );
     }
 
     #[test]
     fn test_url_encode_filter() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
@@ -525,23 +627,31 @@ mod tests {
         };
 
         let mut context = TemplateContext::new();
-        context.insert("url".to_string(), serde_json::Value::String("hello world & more".to_string()));
+        context.insert(
+            "url".to_string(),
+            serde_json::Value::String("hello world & more".to_string()),
+        );
 
         let rendered = engine.render_template(&template, &context).unwrap();
-        assert_eq!(rendered.html_content, Some("URL: hello%20world%20%26%20more".to_string()));
+        assert_eq!(
+            rendered.html_content,
+            Some("URL: hello%20world%20%26%20more".to_string())
+        );
     }
 
     #[test]
     fn test_tracking_pixel_filter() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
         let template = EmailTemplate {
             name: "tracking_test".to_string(),
-            html_template: Some("{{ email_id | tracking_pixel(base_url=\"https://test.com\") }}".to_string()),
+            html_template: Some(
+                "{{ email_id | tracking_pixel(base_url=\"https://test.com\") }}".to_string(),
+            ),
             text_template: None,
             subject_template: None,
             layout: None,
@@ -549,7 +659,10 @@ mod tests {
         };
 
         let mut context = TemplateContext::new();
-        context.insert("email_id".to_string(), serde_json::Value::String("550e8400-e29b-41d4-a716-446655440000".to_string()));
+        context.insert(
+            "email_id".to_string(),
+            serde_json::Value::String("550e8400-e29b-41d4-a716-446655440000".to_string()),
+        );
 
         let rendered = engine.render_template(&template, &context).unwrap();
         let html_content = rendered.html_content.as_ref().unwrap();
@@ -561,7 +674,7 @@ mod tests {
     fn test_tracking_link_filter() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
@@ -575,7 +688,10 @@ mod tests {
         };
 
         let mut context = TemplateContext::new();
-        context.insert("email_id".to_string(), serde_json::Value::String("550e8400-e29b-41d4-a716-446655440000".to_string()));
+        context.insert(
+            "email_id".to_string(),
+            serde_json::Value::String("550e8400-e29b-41d4-a716-446655440000".to_string()),
+        );
 
         let rendered = engine.render_template(&template, &context).unwrap();
         let expected = "https://track.com/email/track/click?id=550e8400-e29b-41d4-a716-446655440000&url=https%3A%2F%2Fexample.com";
@@ -586,13 +702,15 @@ mod tests {
     fn test_format_date_filter() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
         let template = EmailTemplate {
             name: "date_test".to_string(),
-            html_template: Some("Date: {{ date_value | format_date(format=\"%B %d, %Y\") }}".to_string()),
+            html_template: Some(
+                "Date: {{ date_value | format_date(format=\"%B %d, %Y\") }}".to_string(),
+            ),
             text_template: None,
             subject_template: None,
             layout: None,
@@ -600,24 +718,33 @@ mod tests {
         };
 
         let mut context = TemplateContext::new();
-        context.insert("date_value".to_string(), serde_json::Value::String("2023-12-25T10:00:00Z".to_string()));
+        context.insert(
+            "date_value".to_string(),
+            serde_json::Value::String("2023-12-25T10:00:00Z".to_string()),
+        );
 
         let rendered = engine.render_template(&template, &context).unwrap();
-        assert_eq!(rendered.html_content, Some("Date: December 25, 2023".to_string()));
+        assert_eq!(
+            rendered.html_content,
+            Some("Date: December 25, 2023".to_string())
+        );
     }
 
     #[test]
     fn test_format_datetime_filter_multiple_formats() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
         // Test RFC 3339 format
         let template = EmailTemplate {
             name: "datetime_rfc3339".to_string(),
-            html_template: Some("DateTime: {{ datetime_value | format_datetime(format=\"%B %d, %Y %H:%M\") }}".to_string()),
+            html_template: Some(
+                "DateTime: {{ datetime_value | format_datetime(format=\"%B %d, %Y %H:%M\") }}"
+                    .to_string(),
+            ),
             text_template: None,
             subject_template: None,
             layout: None,
@@ -625,10 +752,16 @@ mod tests {
         };
 
         let mut context = TemplateContext::new();
-        context.insert("datetime_value".to_string(), serde_json::Value::String("2023-12-25T14:30:00Z".to_string()));
+        context.insert(
+            "datetime_value".to_string(),
+            serde_json::Value::String("2023-12-25T14:30:00Z".to_string()),
+        );
 
         let rendered = engine.render_template(&template, &context).unwrap();
-        assert_eq!(rendered.html_content, Some("DateTime: December 25, 2023 14:30".to_string()));
+        assert_eq!(
+            rendered.html_content,
+            Some("DateTime: December 25, 2023 14:30".to_string())
+        );
 
         // Test legacy %Y-%m-%d %H:%M:%S format (with timezone) - This should fall back to string unchanged
         let template2 = EmailTemplate {
@@ -641,16 +774,25 @@ mod tests {
         };
 
         let mut context2 = TemplateContext::new();
-        context2.insert("datetime_value".to_string(), serde_json::Value::String("2023-12-25 14:30:00 +00:00".to_string()));
+        context2.insert(
+            "datetime_value".to_string(),
+            serde_json::Value::String("2023-12-25 14:30:00 +00:00".to_string()),
+        );
 
         let rendered2 = engine.render_template(&template2, &context2).unwrap();
         // The timezone format should be parsed and converted to UTC, then formatted with default format
-        assert_eq!(rendered2.html_content, Some("DateTime: 2023-12-25 14:30:00".to_string()));
+        assert_eq!(
+            rendered2.html_content,
+            Some("DateTime: 2023-12-25 14:30:00".to_string())
+        );
 
         // Test naive datetime format %Y-%m-%d %H:%M:%S (without timezone)
         let template3 = EmailTemplate {
             name: "datetime_naive".to_string(),
-            html_template: Some("DateTime: {{ datetime_value | format_datetime(format=\"%B %d, %Y %H:%M\") }}".to_string()),
+            html_template: Some(
+                "DateTime: {{ datetime_value | format_datetime(format=\"%B %d, %Y %H:%M\") }}"
+                    .to_string(),
+            ),
             text_template: None,
             subject_template: None,
             layout: None,
@@ -658,17 +800,23 @@ mod tests {
         };
 
         let mut context3 = TemplateContext::new();
-        context3.insert("datetime_value".to_string(), serde_json::Value::String("2023-12-25 14:30:00".to_string()));
+        context3.insert(
+            "datetime_value".to_string(),
+            serde_json::Value::String("2023-12-25 14:30:00".to_string()),
+        );
 
         let rendered3 = engine.render_template(&template3, &context3).unwrap();
-        assert_eq!(rendered3.html_content, Some("DateTime: December 25, 2023 14:30".to_string()));
+        assert_eq!(
+            rendered3.html_content,
+            Some("DateTime: December 25, 2023 14:30".to_string())
+        );
     }
 
     #[test]
     fn test_now_filter() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
@@ -683,17 +831,20 @@ mod tests {
 
         let context = TemplateContext::new();
         let rendered = engine.render_template(&template, &context).unwrap();
-        
+
         // Should contain the current year
         let current_year = chrono::Utc::now().format("%Y").to_string();
-        assert_eq!(rendered.html_content, Some(format!("Current year: {}", current_year)));
+        assert_eq!(
+            rendered.html_content,
+            Some(format!("Current year: {}", current_year))
+        );
     }
 
     #[test]
     fn test_template_registration_and_retrieval() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
@@ -716,11 +867,19 @@ mod tests {
 
         // Render by name
         let mut context = TemplateContext::new();
-        context.insert("user".to_string(), serde_json::Value::String("Alice".to_string()));
+        context.insert(
+            "user".to_string(),
+            serde_json::Value::String("Alice".to_string()),
+        );
 
-        let rendered = engine.render_template_by_name("registered_template", &context).unwrap();
+        let rendered = engine
+            .render_template_by_name("registered_template", &context)
+            .unwrap();
         assert_eq!(rendered.subject, "Welcome Alice");
-        assert_eq!(rendered.html_content, Some("<p>Hello Alice</p>".to_string()));
+        assert_eq!(
+            rendered.html_content,
+            Some("<p>Hello Alice</p>".to_string())
+        );
         assert_eq!(rendered.text_content, Some("Hello Alice".to_string()));
     }
 
@@ -728,25 +887,37 @@ mod tests {
     fn test_template_validation() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
         // Valid template with no variables should validate
-        assert!(engine.validate_template("Hello world!", Some("valid")).is_ok());
+        assert!(engine
+            .validate_template("Hello world!", Some("valid"))
+            .is_ok());
 
         // Valid template with variables should validate (syntax check only)
-        assert!(engine.validate_template("Hello {{ name }}!", Some("valid_with_vars")).is_ok());
+        assert!(engine
+            .validate_template("Hello {{ name }}!", Some("valid_with_vars"))
+            .is_ok());
 
         // Valid template with conditionals should validate
-        assert!(engine.validate_template("{% if user %}Hello {{ user.name }}{% endif %}", Some("valid_conditional")).is_ok());
+        assert!(engine
+            .validate_template(
+                "{% if user %}Hello {{ user.name }}{% endif %}",
+                Some("valid_conditional")
+            )
+            .is_ok());
 
         // Invalid template syntax should fail
         let result = engine.validate_template("Hello {{ invalid_syntax", Some("invalid"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid template 'invalid'"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid template 'invalid'"));
 
-        // Invalid template with bad syntax should fail  
+        // Invalid template with bad syntax should fail
         let result = engine.validate_template("{% if unclosed", Some("invalid2"));
         assert!(result.is_err());
     }
@@ -755,7 +926,7 @@ mod tests {
     fn test_template_metadata_in_context() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
@@ -764,7 +935,9 @@ mod tests {
 
         let template = EmailTemplate {
             name: "metadata_test".to_string(),
-            html_template: Some("<div style=\"color: {{ brand_color }}\">Hello {{ name }}</div>".to_string()),
+            html_template: Some(
+                "<div style=\"color: {{ brand_color }}\">Hello {{ name }}</div>".to_string(),
+            ),
             text_template: None,
             subject_template: None,
             layout: None,
@@ -772,17 +945,23 @@ mod tests {
         };
 
         let mut context = TemplateContext::new();
-        context.insert("name".to_string(), serde_json::Value::String("User".to_string()));
+        context.insert(
+            "name".to_string(),
+            serde_json::Value::String("User".to_string()),
+        );
 
         let rendered = engine.render_template(&template, &context).unwrap();
-        assert_eq!(rendered.html_content, Some("<div style=\"color: #ff0000\">Hello User</div>".to_string()));
+        assert_eq!(
+            rendered.html_content,
+            Some("<div style=\"color: #ff0000\">Hello User</div>".to_string())
+        );
     }
 
     #[test]
     fn test_template_debug_info() {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir_all(temp_dir.path().join("templates")).unwrap();
-        
+
         let config = create_test_config(&temp_dir);
         let engine = TemplateEngine::new(config).unwrap();
 
@@ -813,9 +992,15 @@ mod tests {
         assert_eq!(debug_info.layout, Some("base".to_string()));
         assert_eq!(debug_info.metadata.get("version"), Some(&"1.0".to_string()));
         assert_eq!(debug_info.metadata.get("author"), Some(&"test".to_string()));
-        assert_eq!(debug_info.html_content, Some("<h1>Debug Test</h1>".to_string()));
+        assert_eq!(
+            debug_info.html_content,
+            Some("<h1>Debug Test</h1>".to_string())
+        );
         assert_eq!(debug_info.text_content, Some("Debug Test".to_string()));
-        assert_eq!(debug_info.subject_content, Some("Debug: {{ type }}".to_string()));
+        assert_eq!(
+            debug_info.subject_content,
+            Some("Debug: {{ type }}".to_string())
+        );
 
         // Test with template that has no text content
         let minimal_template = EmailTemplate {
@@ -839,6 +1024,9 @@ mod tests {
         // Test error case for non-existent template
         let result = engine.get_template_info("nonexistent");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Template 'nonexistent' not found"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Template 'nonexistent' not found"));
     }
 }

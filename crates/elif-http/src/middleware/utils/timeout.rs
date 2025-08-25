@@ -3,15 +3,15 @@
 //! Framework middleware for request timeout handling.
 //! Replaces tower-http TimeoutLayer with framework-native implementation.
 
-use std::time::Duration;
-use tokio::time::timeout;
-use tracing::{warn, error};
-use serde_json;
 use crate::{
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
     response::{ElifResponse, ElifStatusCode},
 };
+use serde_json;
+use std::time::Duration;
+use tokio::time::timeout;
+use tracing::{error, warn};
 
 /// Configuration for timeout middleware
 #[derive(Debug, Clone)]
@@ -94,7 +94,7 @@ impl TimeoutMiddleware {
         self
     }
 
-    /// Enable or disable logging (builder pattern) 
+    /// Enable or disable logging (builder pattern)
     pub fn logging(mut self, enabled: bool) -> Self {
         self.config = self.config.with_logging(enabled);
         self
@@ -123,7 +123,7 @@ impl Middleware for TimeoutMiddleware {
         let timeout_duration = self.config.timeout;
         let log_timeouts = self.config.log_timeouts;
         let timeout_message = self.config.timeout_message.clone();
-        
+
         Box::pin(async move {
             // Apply timeout to the entire middleware chain
             match timeout(timeout_duration, next.run(request)).await {
@@ -137,17 +137,21 @@ impl Middleware for TimeoutMiddleware {
                 Err(_) => {
                     // Timeout occurred
                     if log_timeouts {
-                        error!("Request timed out after {:?}: {}", timeout_duration, timeout_message);
+                        error!(
+                            "Request timed out after {:?}: {}",
+                            timeout_duration, timeout_message
+                        );
                     }
-                    
-                    ElifResponse::with_status(ElifStatusCode::REQUEST_TIMEOUT)
-                        .json_value(serde_json::json!({
+
+                    ElifResponse::with_status(ElifStatusCode::REQUEST_TIMEOUT).json_value(
+                        serde_json::json!({
                             "error": {
                                 "code": "REQUEST_TIMEOUT",
                                 "message": &timeout_message,
                                 "timeout_duration_secs": timeout_duration.as_secs()
                             }
-                        }))
+                        }),
+                    )
                 }
             }
         })
@@ -177,15 +181,21 @@ where
     match timeout(duration, future).await {
         Ok(result) => Ok(result),
         Err(_) => {
-            error!("Request timed out after {:?}: {}", duration, timeout_message);
-            Err(ElifResponse::with_status(ElifStatusCode::REQUEST_TIMEOUT)
-                .json_value(serde_json::json!({
-                    "error": {
-                        "code": "REQUEST_TIMEOUT",
-                        "message": timeout_message,
-                        "timeout_duration_secs": duration.as_secs()
-                    }
-                })))
+            error!(
+                "Request timed out after {:?}: {}",
+                duration, timeout_message
+            );
+            Err(
+                ElifResponse::with_status(ElifStatusCode::REQUEST_TIMEOUT).json_value(
+                    serde_json::json!({
+                        "error": {
+                            "code": "REQUEST_TIMEOUT",
+                            "message": timeout_message,
+                            "timeout_duration_secs": duration.as_secs()
+                        }
+                    }),
+                ),
+            )
         }
     }
 }
@@ -196,24 +206,20 @@ where
 mod tests {
     use super::*;
     use crate::{middleware::v2::Next, request::ElifRequest};
-    use tokio::time::{sleep, Duration as TokioDuration};
     use std::time::Duration;
+    use tokio::time::{sleep, Duration as TokioDuration};
 
     #[tokio::test]
     async fn test_timeout_middleware_fast_response() {
         let middleware = TimeoutMiddleware::with_duration(Duration::from_secs(1));
-        
+
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/test".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
 
-        let next = Next::new(|_req| {
-            Box::pin(async {
-                ElifResponse::ok().text("Fast response")
-            })
-        });
+        let next = Next::new(|_req| Box::pin(async { ElifResponse::ok().text("Fast response") }));
 
         let response = middleware.handle(request, next).await;
         assert_eq!(response.status_code(), crate::response::ElifStatusCode::OK);
@@ -222,7 +228,7 @@ mod tests {
     #[tokio::test]
     async fn test_timeout_middleware_slow_response() {
         let middleware = TimeoutMiddleware::with_duration(Duration::from_millis(100));
-        
+
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/test".parse().unwrap(),
@@ -238,7 +244,10 @@ mod tests {
         });
 
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), crate::response::ElifStatusCode::REQUEST_TIMEOUT);
+        assert_eq!(
+            response.status_code(),
+            crate::response::ElifStatusCode::REQUEST_TIMEOUT
+        );
     }
 
     #[tokio::test]
@@ -248,7 +257,7 @@ mod tests {
             .with_message("Custom timeout");
 
         let middleware = TimeoutMiddleware::with_config(config);
-        
+
         assert_eq!(middleware.duration(), Duration::from_secs(60));
         assert!(!middleware.config.log_timeouts);
         assert_eq!(middleware.config.timeout_message, "Custom timeout");
@@ -260,7 +269,7 @@ mod tests {
             .timeout(Duration::from_secs(45))
             .logging(true)
             .message("Builder timeout");
-        
+
         assert_eq!(middleware.duration(), Duration::from_secs(45));
         assert!(middleware.config.log_timeouts);
         assert_eq!(middleware.config.timeout_message, "Builder timeout");
@@ -276,7 +285,7 @@ mod tests {
     async fn test_apply_timeout_success() {
         let future = async { "success" };
         let result = apply_timeout(future, Duration::from_secs(1), "test timeout").await;
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "success");
     }
@@ -287,19 +296,22 @@ mod tests {
             sleep(TokioDuration::from_secs(2)).await;
             "should not reach here"
         };
-        
+
         let result = apply_timeout(future, Duration::from_millis(100), "test timeout").await;
         assert!(result.is_err());
-        
+
         // Verify it's a timeout response
         let response = result.unwrap_err();
-        assert_eq!(response.status_code(), crate::response::ElifStatusCode::REQUEST_TIMEOUT);
+        assert_eq!(
+            response.status_code(),
+            crate::response::ElifStatusCode::REQUEST_TIMEOUT
+        );
     }
 
     #[tokio::test]
     async fn test_timeout_config_defaults() {
         let config = TimeoutConfig::default();
-        
+
         assert_eq!(config.timeout, Duration::from_secs(30));
         assert!(config.log_timeouts);
         assert_eq!(config.timeout_message, "Request timed out");

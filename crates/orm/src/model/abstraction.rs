@@ -5,9 +5,9 @@
 
 use std::sync::Arc;
 
+use crate::backends::{DatabasePool, DatabaseValue};
 use crate::error::{ModelError, ModelResult};
 use crate::model::core_trait::Model;
-use crate::backends::{DatabasePool, DatabaseValue};
 
 /// Trait for database-abstracted model operations
 /// This trait provides methods that use the database abstraction layer
@@ -15,7 +15,10 @@ use crate::backends::{DatabasePool, DatabaseValue};
 #[allow(async_fn_in_trait)]
 pub trait ModelAbstracted: Model {
     /// Find a model by its primary key using database abstraction
-    async fn find_abstracted(pool: &Arc<dyn DatabasePool>, id: Self::PrimaryKey) -> ModelResult<Option<Self>>
+    async fn find_abstracted(
+        pool: &Arc<dyn DatabasePool>,
+        id: Self::PrimaryKey,
+    ) -> ModelResult<Option<Self>>
     where
         Self: Sized,
     {
@@ -26,9 +29,9 @@ pub trait ModelAbstracted: Model {
         );
         let params = vec![DatabaseValue::String(id.to_string())];
 
-        let row = pool.fetch_optional(&sql, &params)
-            .await
-            .map_err(|e| ModelError::Database(format!("Failed to find {}: {}", Self::table_name(), e)))?;
+        let row = pool.fetch_optional(&sql, &params).await.map_err(|e| {
+            ModelError::Database(format!("Failed to find {}: {}", Self::table_name(), e))
+        })?;
 
         match row {
             Some(row) => {
@@ -45,15 +48,18 @@ pub trait ModelAbstracted: Model {
         Self: Sized,
     {
         let sql = if Self::uses_soft_deletes() {
-            format!("SELECT * FROM {} WHERE deleted_at IS NULL", Self::table_name())
+            format!(
+                "SELECT * FROM {} WHERE deleted_at IS NULL",
+                Self::table_name()
+            )
         } else {
             format!("SELECT * FROM {}", Self::table_name())
         };
         let params = vec![];
 
-        let rows = pool.fetch_all(&sql, &params)
-            .await
-            .map_err(|e| ModelError::Database(format!("Failed to fetch {}: {}", Self::table_name(), e)))?;
+        let rows = pool.fetch_all(&sql, &params).await.map_err(|e| {
+            ModelError::Database(format!("Failed to fetch {}: {}", Self::table_name(), e))
+        })?;
 
         let mut models = Vec::new();
         for row in rows {
@@ -70,21 +76,25 @@ pub trait ModelAbstracted: Model {
         Self: Sized,
     {
         let sql = if Self::uses_soft_deletes() {
-            format!("SELECT COUNT(*) FROM {} WHERE deleted_at IS NULL", Self::table_name())
+            format!(
+                "SELECT COUNT(*) FROM {} WHERE deleted_at IS NULL",
+                Self::table_name()
+            )
         } else {
             format!("SELECT COUNT(*) FROM {}", Self::table_name())
         };
         let params = vec![];
 
-        let row = pool.fetch_optional(&sql, &params)
-            .await
-            .map_err(|e| ModelError::Database(format!("Failed to count {}: {}", Self::table_name(), e)))?;
+        let row = pool.fetch_optional(&sql, &params).await.map_err(|e| {
+            ModelError::Database(format!("Failed to count {}: {}", Self::table_name(), e))
+        })?;
 
         match row {
             Some(row) => {
-                let count_value = row.get_by_index(0)
-                    .map_err(|e| ModelError::Database(format!("Failed to get count value: {}", e)))?;
-                
+                let count_value = row.get_by_index(0).map_err(|e| {
+                    ModelError::Database(format!("Failed to get count value: {}", e))
+                })?;
+
                 match count_value {
                     DatabaseValue::Int64(count) => Ok(count),
                     DatabaseValue::Int32(count) => Ok(count as i64),
@@ -101,42 +111,57 @@ pub trait ModelAbstracted: Model {
         Self: Sized,
     {
         let fields = model.to_fields();
-        
+
         if fields.is_empty() {
-            let insert_sql = format!("INSERT INTO {} DEFAULT VALUES RETURNING *", Self::table_name());
+            let insert_sql = format!(
+                "INSERT INTO {} DEFAULT VALUES RETURNING *",
+                Self::table_name()
+            );
             let params = vec![];
-            
-            let row = pool.fetch_optional(&insert_sql, &params)
+
+            let row = pool
+                .fetch_optional(&insert_sql, &params)
                 .await
-                .map_err(|e| ModelError::Database(format!("Failed to create {}: {}", Self::table_name(), e)))?;
-            
+                .map_err(|e| {
+                    ModelError::Database(format!("Failed to create {}: {}", Self::table_name(), e))
+                })?;
+
             match row {
                 Some(row) => Self::from_database_row(row.as_ref()),
-                None => Err(ModelError::Database("Failed to get inserted row".to_string())),
+                None => Err(ModelError::Database(
+                    "Failed to get inserted row".to_string(),
+                )),
             }
         } else {
             let field_names: Vec<String> = fields.keys().cloned().collect();
-            let field_placeholders: Vec<String> = (1..=field_names.len()).map(|i| format!("${}", i)).collect();
-            
+            let field_placeholders: Vec<String> =
+                (1..=field_names.len()).map(|i| format!("${}", i)).collect();
+
             let insert_sql = format!(
                 "INSERT INTO {} ({}) VALUES ({}) RETURNING *",
                 Self::table_name(),
                 field_names.join(", "),
                 field_placeholders.join(", ")
             );
-            
-            let params: Vec<DatabaseValue> = field_names.iter()
+
+            let params: Vec<DatabaseValue> = field_names
+                .iter()
                 .filter_map(|name| fields.get(name))
-                .map(|value| DatabaseValue::from_json_value(value))
+                .map(DatabaseValue::from_json_value)
                 .collect();
-            
-            let row = pool.fetch_optional(&insert_sql, &params)
+
+            let row = pool
+                .fetch_optional(&insert_sql, &params)
                 .await
-                .map_err(|e| ModelError::Database(format!("Failed to create {}: {}", Self::table_name(), e)))?;
-            
+                .map_err(|e| {
+                    ModelError::Database(format!("Failed to create {}: {}", Self::table_name(), e))
+                })?;
+
             match row {
                 Some(row) => Self::from_database_row(row.as_ref()),
-                None => Err(ModelError::Database("Failed to get inserted row".to_string())),
+                None => Err(ModelError::Database(
+                    "Failed to get inserted row".to_string(),
+                )),
             }
         }
     }
@@ -149,17 +174,18 @@ pub trait ModelAbstracted: Model {
         if let Some(pk) = self.primary_key() {
             let fields = self.to_fields();
             let pk_name = Self::primary_key_name();
-            
-            let update_fields: Vec<String> = fields.keys()
+
+            let update_fields: Vec<String> = fields
+                .keys()
                 .filter(|&field| field != pk_name)
                 .enumerate()
                 .map(|(i, field)| format!("{} = ${}", field, i + 1))
                 .collect();
-                
+
             if update_fields.is_empty() {
                 return Ok(());
             }
-            
+
             let update_sql = format!(
                 "UPDATE {} SET {} WHERE {} = ${}",
                 Self::table_name(),
@@ -167,17 +193,18 @@ pub trait ModelAbstracted: Model {
                 pk_name,
                 update_fields.len() + 1
             );
-            
-            let mut params: Vec<DatabaseValue> = fields.iter()
+
+            let mut params: Vec<DatabaseValue> = fields
+                .iter()
                 .filter(|(field, _)| *field != pk_name)
                 .map(|(_, value)| DatabaseValue::from_json_value(value))
                 .collect();
-            
+
             params.push(DatabaseValue::String(pk.to_string()));
-            
-            pool.execute(&update_sql, &params)
-                .await
-                .map_err(|e| ModelError::Database(format!("Failed to update {}: {}", Self::table_name(), e)))?;
+
+            pool.execute(&update_sql, &params).await.map_err(|e| {
+                ModelError::Database(format!("Failed to update {}: {}", Self::table_name(), e))
+            })?;
 
             Ok(())
         } else {
@@ -192,19 +219,25 @@ pub trait ModelAbstracted: Model {
     {
         if let Some(pk) = self.primary_key() {
             let sql = if Self::uses_soft_deletes() {
-                format!("UPDATE {} SET deleted_at = NOW() WHERE {} = $1", 
-                        Self::table_name(), Self::primary_key_name())
+                format!(
+                    "UPDATE {} SET deleted_at = NOW() WHERE {} = $1",
+                    Self::table_name(),
+                    Self::primary_key_name()
+                )
             } else {
-                format!("DELETE FROM {} WHERE {} = $1", 
-                        Self::table_name(), Self::primary_key_name())
+                format!(
+                    "DELETE FROM {} WHERE {} = $1",
+                    Self::table_name(),
+                    Self::primary_key_name()
+                )
             };
-            
+
             let params = vec![DatabaseValue::String(pk.to_string())];
-            
-            pool.execute(&sql, &params)
-                .await
-                .map_err(|e| ModelError::Database(format!("Failed to delete {}: {}", Self::table_name(), e)))?;
-            
+
+            pool.execute(&sql, &params).await.map_err(|e| {
+                ModelError::Database(format!("Failed to delete {}: {}", Self::table_name(), e))
+            })?;
+
             Ok(())
         } else {
             Err(ModelError::MissingPrimaryKey)

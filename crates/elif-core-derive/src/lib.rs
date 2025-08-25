@@ -1,7 +1,7 @@
 //! # elif-core-derive
-//! 
+//!
 //! Derive macros for elif-core dependency injection system.
-//! 
+//!
 //! This crate provides procedural macros to simplify IoC container usage:
 //! - `#[injectable]`: Automatically implement Injectable trait for structs
 

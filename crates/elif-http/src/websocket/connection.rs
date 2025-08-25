@@ -1,7 +1,8 @@
 //! WebSocket connection management - high-performance wrapper around tokio-tungstenite
 
 use super::types::{
-    ConnectionId, ConnectionState, WebSocketMessage, WebSocketError, WebSocketResult, WebSocketConfig,
+    ConnectionId, ConnectionState, WebSocketConfig, WebSocketError, WebSocketMessage,
+    WebSocketResult,
 };
 use futures_util::{SinkExt, StreamExt};
 use std::collections::HashMap;
@@ -59,16 +60,13 @@ pub struct ConnectionStats {
 
 impl WebSocketConnection {
     /// Create a new WebSocket connection from a TCP stream
-    pub async fn from_stream<S>(
-        stream: S,
-        config: WebSocketConfig,
-    ) -> WebSocketResult<Self>
+    pub async fn from_stream<S>(stream: S, config: WebSocketConfig) -> WebSocketResult<Self>
     where
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
     {
         let id = ConnectionId::new();
         let ws_stream = accept_async(stream).await?;
-        
+
         let (sender, receiver) = mpsc::unbounded_channel();
         let state = Arc::new(RwLock::new(ConnectionState::Connected));
         let metadata = Arc::new(RwLock::new(ConnectionMetadata {
@@ -90,12 +88,7 @@ impl WebSocketConnection {
 
         // Spawn the connection handler
         tokio::spawn(Self::handle_connection(
-            id,
-            ws_stream,
-            receiver,
-            state,
-            metadata,
-            config,
+            id, ws_stream, receiver, state, metadata, config,
         ));
 
         info!("WebSocket connection established: {}", id);
@@ -111,7 +104,7 @@ impl WebSocketConnection {
         self.sender
             .send(message)
             .map_err(|_| WebSocketError::SendQueueFull)?;
-        
+
         Ok(())
     }
 
@@ -133,20 +126,21 @@ impl WebSocketConnection {
     /// Close the connection
     pub async fn close(&self) -> WebSocketResult<()> {
         self.send(WebSocketMessage::close()).await?;
-        
+
         let mut state = self.state.write().await;
         *state = ConnectionState::Closing;
-        
+
         Ok(())
     }
 
     /// Close the connection with a reason
     pub async fn close_with_reason(&self, code: u16, reason: String) -> WebSocketResult<()> {
-        self.send(WebSocketMessage::close_with_reason(code, reason)).await?;
-        
+        self.send(WebSocketMessage::close_with_reason(code, reason))
+            .await?;
+
         let mut state = self.state.write().await;
         *state = ConnectionState::Closing;
-        
+
         Ok(())
     }
 
@@ -195,11 +189,9 @@ impl WebSocketConnection {
         debug!("Starting WebSocket handler for connection: {}", id);
 
         // Set up ping interval if configured
-        let mut ping_interval = if let Some(interval) = config.ping_interval {
-            Some(time::interval(Duration::from_secs(interval)))
-        } else {
-            None
-        };
+        let mut ping_interval = config
+            .ping_interval
+            .map(|interval| time::interval(Duration::from_secs(interval)));
 
         loop {
             tokio::select! {
@@ -208,13 +200,13 @@ impl WebSocketConnection {
                     match ws_msg {
                         Some(Ok(msg)) => {
                             let elif_msg = WebSocketMessage::from(msg);
-                            
+
                             // Update stats
                             {
                                 let mut meta = metadata.write().await;
                                 meta.stats.messages_received += 1;
                                 meta.stats.last_activity = Some(Instant::now());
-                                
+
                                 // Estimate bytes received
                                 let bytes = match &elif_msg {
                                     WebSocketMessage::Text(s) => s.len() as u64,
@@ -268,7 +260,7 @@ impl WebSocketConnection {
                                 let mut meta = metadata.write().await;
                                 meta.stats.messages_sent += 1;
                                 meta.stats.last_activity = Some(Instant::now());
-                                
+
                                 // Estimate bytes sent
                                 let bytes = match &msg {
                                     WebSocketMessage::Text(s) => s.len() as u64,
@@ -318,7 +310,7 @@ impl WebSocketConnection {
         if !matches!(*state_lock, ConnectionState::Failed(_)) {
             *state_lock = ConnectionState::Closed;
         }
-        
+
         info!("WebSocket connection handler finished: {}", id);
     }
 }

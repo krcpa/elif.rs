@@ -16,9 +16,8 @@ pub struct EmailValidator {
 impl EmailValidator {
     /// Create new email validator
     pub fn new() -> Result<Self, EmailError> {
-        let email_regex = Regex::new(
-            r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        ).map_err(|e| EmailError::configuration(format!("Invalid email regex: {}", e)))?;
+        let email_regex = Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+            .map_err(|e| EmailError::configuration(format!("Invalid email regex: {}", e)))?;
 
         Ok(Self {
             email_regex,
@@ -51,25 +50,33 @@ impl EmailValidator {
     /// Validate email address
     pub fn validate(&self, email: &str) -> Result<(), EmailError> {
         let email = email.trim().to_lowercase();
-        
+
         // Basic format validation
         if !self.email_regex.is_match(&email) {
             return Err(EmailError::validation("email", "Invalid email format"));
         }
 
         // Extract domain
-        let domain = email.split('@').nth(1)
+        let domain = email
+            .split('@')
+            .nth(1)
             .ok_or_else(|| EmailError::validation("email", "No domain found in email"))?;
 
         // Check domain blocklist
         if self.blocked_domains.contains(domain) {
-            return Err(EmailError::validation("email", format!("Domain '{}' is blocked", domain)));
+            return Err(EmailError::validation(
+                "email",
+                format!("Domain '{}' is blocked", domain),
+            ));
         }
 
         // Check domain allowlist
         if let Some(ref allowed_domains) = self.allowed_domains {
             if !allowed_domains.contains(domain) {
-                return Err(EmailError::validation("email", format!("Domain '{}' is not allowed", domain)));
+                return Err(EmailError::validation(
+                    "email",
+                    format!("Domain '{}' is not allowed", domain),
+                ));
             }
         }
 
@@ -81,8 +88,8 @@ impl EmailValidator {
         for (index, email) in emails.iter().enumerate() {
             self.validate(email).map_err(|e| {
                 EmailError::validation(
-                    &format!("email[{}]", index),
-                    format!("Email '{}': {}", email, e)
+                    format!("email[{}]", index),
+                    format!("Email '{}': {}", email, e),
                 )
             })?;
         }
@@ -113,9 +120,9 @@ pub fn global_validator() -> &'static EmailValidator {
 
 /// Initialize global validator with custom settings
 pub fn init_global_validator(validator: EmailValidator) -> Result<(), EmailError> {
-    GLOBAL_VALIDATOR.set(validator).map_err(|_| {
-        EmailError::configuration("Global email validator already initialized")
-    })
+    GLOBAL_VALIDATOR
+        .set(validator)
+        .map_err(|_| EmailError::configuration("Global email validator already initialized"))
 }
 
 /// Quick email validation function
@@ -186,12 +193,7 @@ pub mod blocklists {
     ];
 
     /// Test domains (should be blocked in production)
-    pub const TEST_DOMAINS: &[&str] = &[
-        "example.com",
-        "example.org",
-        "test.com",
-        "localhost",
-    ];
+    pub const TEST_DOMAINS: &[&str] = &["example.com", "example.org", "test.com", "localhost"];
 
     /// Get disposable email domains as Vec<String>
     pub fn disposable_domains() -> Vec<String> {
@@ -215,19 +217,26 @@ impl EmailContentValidator {
         }
 
         if subject.len() > 998 {
-            return Err(EmailError::validation("subject", "Subject too long (max 998 characters)"));
+            return Err(EmailError::validation(
+                "subject",
+                "Subject too long (max 998 characters)",
+            ));
         }
 
         // Check for spam-like content
         let spam_keywords = ["URGENT", "FREE MONEY", "CLICK HERE NOW", "GUARANTEED"];
         let upper_subject = subject.to_uppercase();
-        
-        let spam_count = spam_keywords.iter()
+
+        let spam_count = spam_keywords
+            .iter()
             .filter(|&&keyword| upper_subject.contains(keyword))
             .count();
-        
+
         if spam_count >= 2 {
-            return Err(EmailError::validation("subject", "Subject contains spam-like content"));
+            return Err(EmailError::validation(
+                "subject",
+                "Subject contains spam-like content",
+            ));
         }
 
         Ok(())
@@ -237,21 +246,27 @@ impl EmailContentValidator {
     pub fn validate_body_length(body: &str, max_length: usize) -> Result<(), EmailError> {
         if body.len() > max_length {
             return Err(EmailError::validation(
-                "body", 
-                format!("Body too long (max {} characters)", max_length)
+                "body",
+                format!("Body too long (max {} characters)", max_length),
             ));
         }
         Ok(())
     }
 
     /// Validate that email has some content
-    pub fn validate_has_content(html_body: &Option<String>, text_body: &Option<String>) -> Result<(), EmailError> {
+    pub fn validate_has_content(
+        html_body: &Option<String>,
+        text_body: &Option<String>,
+    ) -> Result<(), EmailError> {
         if html_body.is_none() && text_body.is_none() {
-            return Err(EmailError::validation("body", "Email must have either HTML or text body"));
+            return Err(EmailError::validation(
+                "body",
+                "Email must have either HTML or text body",
+            ));
         }
 
         if let Some(html) = html_body {
-            if html.trim().is_empty() && text_body.as_ref().map_or(true, |t| t.trim().is_empty()) {
+            if html.trim().is_empty() && text_body.as_ref().is_none_or(|t| t.trim().is_empty()) {
                 return Err(EmailError::validation("body", "Email body cannot be empty"));
             }
         } else if let Some(text) = text_body {
@@ -275,21 +290,22 @@ impl crate::Email {
 
         // Validate recipients
         if self.to.is_empty() {
-            return Err(EmailError::validation("to", "Email must have at least one recipient"));
+            return Err(EmailError::validation(
+                "to",
+                "Email must have at least one recipient",
+            ));
         }
-        
+
         for (index, to_addr) in self.to.iter().enumerate() {
-            validate_email(to_addr).map_err(|e| {
-                EmailError::validation(&format!("to[{}]", index), e.to_string())
-            })?;
+            validate_email(to_addr)
+                .map_err(|e| EmailError::validation(format!("to[{}]", index), e.to_string()))?;
         }
 
         // Validate CC recipients
         if let Some(ref cc_list) = self.cc {
             for (index, cc_addr) in cc_list.iter().enumerate() {
-                validate_email(cc_addr).map_err(|e| {
-                    EmailError::validation(&format!("cc[{}]", index), e.to_string())
-                })?;
+                validate_email(cc_addr)
+                    .map_err(|e| EmailError::validation(format!("cc[{}]", index), e.to_string()))?;
             }
         }
 
@@ -297,7 +313,7 @@ impl crate::Email {
         if let Some(ref bcc_list) = self.bcc {
             for (index, bcc_addr) in bcc_list.iter().enumerate() {
                 validate_email(bcc_addr).map_err(|e| {
-                    EmailError::validation(&format!("bcc[{}]", index), e.to_string())
+                    EmailError::validation(format!("bcc[{}]", index), e.to_string())
                 })?;
             }
         }
@@ -336,7 +352,7 @@ mod tests {
         // Valid emails
         assert!(validator.validate("user@example.com").is_ok());
         assert!(validator.validate("test.email+tag@domain.co.uk").is_ok());
-        
+
         // Invalid emails
         assert!(validator.validate("invalid-email").is_err());
         assert!(validator.validate("@domain.com").is_err());
@@ -364,8 +380,10 @@ mod tests {
     #[test]
     fn test_email_normalization() {
         let validator = EmailValidator::new().unwrap();
-        
-        let normalized = validator.validate_and_normalize("  User@Example.COM  ").unwrap();
+
+        let normalized = validator
+            .validate_and_normalize("  User@Example.COM  ")
+            .unwrap();
         assert_eq!(normalized, "user@example.com");
     }
 
@@ -373,10 +391,10 @@ mod tests {
     fn test_subject_validation() {
         assert!(EmailContentValidator::validate_subject("Valid Subject").is_ok());
         assert!(EmailContentValidator::validate_subject("").is_err());
-        
+
         let long_subject = "a".repeat(1000);
         assert!(EmailContentValidator::validate_subject(&long_subject).is_err());
-        
+
         assert!(EmailContentValidator::validate_subject("URGENT FREE MONEY NOW").is_err());
     }
 

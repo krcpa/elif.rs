@@ -1,27 +1,25 @@
 //! # Prelude
-//! 
+//!
 //! The prelude module provides convenient imports for common elif.rs functionality.
-//! 
+//!
 //! ```rust
 //! use elif::prelude::*;
 //! ```
 
 // Essential HTTP types
-pub use crate::{Server, Router, Request, Response};
-pub use crate::{HttpResult, HttpError};
+pub use crate::{HttpError, HttpResult};
+pub use crate::{Request, Response, Router, Server};
 
 // Common traits - using correct exports
+pub use elif_http::GenericHandler as Handler;
 pub use elif_http::{IntoElifResponse, Middleware};
-pub use elif_http::{GenericHandler as Handler};
-pub use elif_orm::{Model};
+pub use elif_orm::Model;
 
 // Core types
 pub use crate::{
-    Container, ContainerBuilder, ServiceRegistry, ServiceScope,
-    Module, ModuleRegistry, ModuleLoader, BaseModule,
-    AppConfigTrait, Environment, AppConfig, ConfigSource,
-    ServiceProvider, ProviderRegistry,
-    CoreError, ErrorDefinition, ApiError, ApiErrorResponse
+    ApiError, ApiErrorResponse, AppConfig, AppConfigTrait, BaseModule, ConfigSource, Container,
+    ContainerBuilder, CoreError, Environment, ErrorDefinition, Module, ModuleLoader,
+    ModuleRegistry, ProviderRegistry, ServiceProvider, ServiceRegistry, ServiceScope,
 };
 
 // Utility functions - check if these exist or create aliases
@@ -32,7 +30,7 @@ pub use crate::{
 pub use serde_json::json;
 
 // Common derives
-pub use serde::{Serialize, Deserialize};
+pub use serde::{Deserialize, Serialize};
 
 // Async traits
 pub use async_trait::async_trait;

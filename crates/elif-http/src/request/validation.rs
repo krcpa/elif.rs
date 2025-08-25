@@ -10,21 +10,30 @@ pub trait Validate {
 /// Helper functions for common validation patterns
 pub fn validate_required<T>(field: &Option<T>, field_name: &str) -> HttpResult<()> {
     if field.is_none() {
-        return Err(HttpError::bad_request(format!("{} is required", field_name)));
+        return Err(HttpError::bad_request(format!(
+            "{} is required",
+            field_name
+        )));
     }
     Ok(())
 }
 
 pub fn validate_min_length(value: &str, min: usize, field_name: &str) -> HttpResult<()> {
     if value.len() < min {
-        return Err(HttpError::bad_request(format!("{} must be at least {} characters long", field_name, min)));
+        return Err(HttpError::bad_request(format!(
+            "{} must be at least {} characters long",
+            field_name, min
+        )));
     }
     Ok(())
 }
 
 pub fn validate_max_length(value: &str, max: usize, field_name: &str) -> HttpResult<()> {
     if value.len() > max {
-        return Err(HttpError::bad_request(format!("{} must be at most {} characters long", field_name, max)));
+        return Err(HttpError::bad_request(format!(
+            "{} must be at most {} characters long",
+            field_name, max
+        )));
     }
     Ok(())
 }
@@ -32,40 +41,60 @@ pub fn validate_max_length(value: &str, max: usize, field_name: &str) -> HttpRes
 pub fn validate_email(email: &str, field_name: &str) -> HttpResult<()> {
     // Basic email validation - must have @ and . with content around them
     if !email.contains('@') || !email.contains('.') {
-        return Err(HttpError::bad_request(format!("{} must be a valid email address", field_name)));
+        return Err(HttpError::bad_request(format!(
+            "{} must be a valid email address",
+            field_name
+        )));
     }
-    
+
     // Must have at least one character before @
     let at_pos = email.find('@').unwrap();
     if at_pos == 0 {
-        return Err(HttpError::bad_request(format!("{} must be a valid email address", field_name)));
+        return Err(HttpError::bad_request(format!(
+            "{} must be a valid email address",
+            field_name
+        )));
     }
-    
+
     // Must have content after @ and a dot in the domain part
     let domain_part = &email[at_pos + 1..];
     if domain_part.is_empty() || !domain_part.contains('.') {
-        return Err(HttpError::bad_request(format!("{} must be a valid email address", field_name)));
+        return Err(HttpError::bad_request(format!(
+            "{} must be a valid email address",
+            field_name
+        )));
     }
-    
+
     // Domain must have content after the last dot
     let last_dot_pos = domain_part.rfind('.').unwrap();
     if last_dot_pos == domain_part.len() - 1 {
-        return Err(HttpError::bad_request(format!("{} must be a valid email address", field_name)));
+        return Err(HttpError::bad_request(format!(
+            "{} must be a valid email address",
+            field_name
+        )));
     }
-    
+
     Ok(())
 }
 
 pub fn validate_range<T: PartialOrd>(value: T, min: T, max: T, field_name: &str) -> HttpResult<()> {
     if value < min || value > max {
-        return Err(HttpError::bad_request(format!("{} must be between {} and {}", field_name, std::any::type_name::<T>(), std::any::type_name::<T>())));
+        return Err(HttpError::bad_request(format!(
+            "{} must be between {} and {}",
+            field_name,
+            std::any::type_name::<T>(),
+            std::any::type_name::<T>()
+        )));
     }
     Ok(())
 }
 
 pub fn validate_pattern(value: &str, pattern: &str, field_name: &str) -> HttpResult<()> {
     if !regex_simple_match(value, pattern) {
-        return Err(HttpError::bad_request(format!("{} does not match required pattern", field_name)));
+        return Err(HttpError::bad_request(format!(
+            "{} does not match required pattern",
+            field_name
+        )));
     }
     Ok(())
 }
@@ -96,7 +125,7 @@ mod tests {
         let value: Option<String> = None;
         let result = validate_required(&value, "test_field");
         assert!(result.is_err());
-        
+
         if let Err(HttpError::BadRequest { message }) = result {
             assert!(message.contains("test_field is required"));
         } else {
@@ -114,7 +143,7 @@ mod tests {
     fn test_validate_min_length_failure() {
         let result = validate_min_length("hi", 5, "message");
         assert!(result.is_err());
-        
+
         if let Err(HttpError::BadRequest { message }) = result {
             assert!(message.contains("message must be at least 5 characters long"));
         } else {
@@ -138,7 +167,7 @@ mod tests {
     fn test_validate_max_length_failure() {
         let result = validate_max_length("this is a very long message", 10, "message");
         assert!(result.is_err());
-        
+
         if let Err(HttpError::BadRequest { message }) = result {
             assert!(message.contains("message must be at most 10 characters long"));
         } else {
@@ -178,8 +207,12 @@ mod tests {
 
         for email in invalid_emails {
             let result = validate_email(email, "email");
-            assert!(result.is_err(), "Should have failed to validate email: {}", email);
-            
+            assert!(
+                result.is_err(),
+                "Should have failed to validate email: {}",
+                email
+            );
+
             if let Err(HttpError::BadRequest { message }) = result {
                 assert!(message.contains("email must be a valid email address"));
             } else {
@@ -192,10 +225,10 @@ mod tests {
     fn test_validate_range_success() {
         let result = validate_range(5, 1, 10, "number");
         assert!(result.is_ok());
-        
+
         let result = validate_range(1, 1, 10, "number");
         assert!(result.is_ok());
-        
+
         let result = validate_range(10, 1, 10, "number");
         assert!(result.is_ok());
     }
@@ -204,7 +237,7 @@ mod tests {
     fn test_validate_range_failure() {
         let result = validate_range(0, 1, 10, "number");
         assert!(result.is_err());
-        
+
         let result = validate_range(11, 1, 10, "number");
         assert!(result.is_err());
     }
@@ -213,7 +246,7 @@ mod tests {
     fn test_validate_pattern_alphanumeric() {
         let result = validate_pattern("test123", "alphanumeric", "username");
         assert!(result.is_ok());
-        
+
         let result = validate_pattern("test-123", "alphanumeric", "username");
         assert!(result.is_err());
     }
@@ -222,7 +255,7 @@ mod tests {
     fn test_validate_pattern_numeric() {
         let result = validate_pattern("12345", "numeric", "id");
         assert!(result.is_ok());
-        
+
         let result = validate_pattern("123a5", "numeric", "id");
         assert!(result.is_err());
     }
@@ -231,7 +264,7 @@ mod tests {
     fn test_validate_pattern_alpha() {
         let result = validate_pattern("hello", "alpha", "name");
         assert!(result.is_ok());
-        
+
         let result = validate_pattern("hello123", "alpha", "name");
         assert!(result.is_err());
     }
@@ -288,24 +321,16 @@ mod tests {
             Ok(())
         }
 
-        let result = validate_user_input(
-            &Some("John".to_string()), 
-            "john@example.com", 
-            25
-        );
+        let result = validate_user_input(&Some("John".to_string()), "john@example.com", 25);
         assert!(result.is_ok());
 
-        let result = validate_user_input(
-            &None,  
-            "john@example.com", 
-            25
-        );
+        let result = validate_user_input(&None, "john@example.com", 25);
         assert!(result.is_err());
 
         let result = validate_user_input(
-            &Some("J".to_string()),  // Too short
-            "john@example.com", 
-            25
+            &Some("J".to_string()), // Too short
+            "john@example.com",
+            25,
         );
         assert!(result.is_err());
     }

@@ -4,8 +4,8 @@
 //! timestamp management, soft delete support, and error handling.
 
 use chrono::Utc;
-use sqlx::{Pool, Postgres};
 use serde_json::Value;
+use sqlx::{Pool, Postgres};
 
 use crate::error::{ModelError, ModelResult};
 use crate::model::core_trait::Model;
@@ -29,7 +29,9 @@ pub trait CrudOperations: Model {
             .bind(id.to_string())
             .fetch_optional(pool)
             .await
-            .map_err(|e| ModelError::Database(format!("Failed to find {}: {}", Self::table_name(), e)))?;
+            .map_err(|e| {
+                ModelError::Database(format!("Failed to find {}: {}", Self::table_name(), e))
+            })?;
 
         match row {
             Some(row) => {
@@ -64,42 +66,47 @@ pub trait CrudOperations: Model {
 
         // Get field-value pairs from the model
         let fields = model.to_fields();
-        
+
         if fields.is_empty() {
             // Fallback to DEFAULT VALUES if no fields
-            let insert_sql = format!("INSERT INTO {} DEFAULT VALUES RETURNING *", Self::table_name());
+            let insert_sql = format!(
+                "INSERT INTO {} DEFAULT VALUES RETURNING *",
+                Self::table_name()
+            );
             let row = sqlx::query(&insert_sql)
                 .fetch_one(pool)
                 .await
-                .map_err(|e| ModelError::Database(format!("Failed to create {}: {}", Self::table_name(), e)))?;
-            
+                .map_err(|e| {
+                    ModelError::Database(format!("Failed to create {}: {}", Self::table_name(), e))
+                })?;
+
             return Self::from_row(&row);
         }
 
         // Build dynamic INSERT query with actual field values
         let field_names: Vec<String> = fields.keys().cloned().collect();
-        let field_placeholders: Vec<String> = (1..=field_names.len()).map(|i| format!("${}", i)).collect();
-        
+        let field_placeholders: Vec<String> =
+            (1..=field_names.len()).map(|i| format!("${}", i)).collect();
+
         let insert_sql = format!(
             "INSERT INTO {} ({}) VALUES ({}) RETURNING *",
             Self::table_name(),
             field_names.join(", "),
             field_placeholders.join(", ")
         );
-        
+
         let mut query = sqlx::query(&insert_sql);
-        
+
         // Bind values in the same order as field_names
         for field_name in &field_names {
             if let Some(value) = fields.get(field_name) {
                 query = Self::bind_json_value(query, value)?;
             }
         }
-        
-        let row = query
-            .fetch_one(pool)
-            .await
-            .map_err(|e| ModelError::Database(format!("Failed to create {}: {}", Self::table_name(), e)))?;
+
+        let row = query.fetch_one(pool).await.map_err(|e| {
+            ModelError::Database(format!("Failed to create {}: {}", Self::table_name(), e))
+        })?;
 
         Self::from_row(&row)
     }
@@ -114,7 +121,7 @@ pub trait CrudOperations: Model {
 
             // Get field-value pairs from the model
             let fields = self.to_fields();
-            
+
             if fields.is_empty() {
                 // Fallback to just updating timestamp
                 let update_sql = format!(
@@ -122,30 +129,37 @@ pub trait CrudOperations: Model {
                     Self::table_name(),
                     Self::primary_key_name()
                 );
-                
+
                 sqlx::query(&update_sql)
                     .bind(pk.to_string())
                     .execute(pool)
                     .await
-                    .map_err(|e| ModelError::Database(format!("Failed to update {}: {}", Self::table_name(), e)))?;
-                
+                    .map_err(|e| {
+                        ModelError::Database(format!(
+                            "Failed to update {}: {}",
+                            Self::table_name(),
+                            e
+                        ))
+                    })?;
+
                 return Ok(());
             }
 
             // Build dynamic UPDATE query with actual field values
             // Filter out primary key from updates
             let pk_name = Self::primary_key_name();
-            let update_fields: Vec<String> = fields.keys()
+            let update_fields: Vec<String> = fields
+                .keys()
                 .filter(|&field| field != pk_name)
                 .enumerate()
                 .map(|(i, field)| format!("{} = ${}", field, i + 1))
                 .collect();
-                
+
             if update_fields.is_empty() {
                 // No fields to update
                 return Ok(());
             }
-            
+
             let update_sql = format!(
                 "UPDATE {} SET {} WHERE {} = ${}",
                 Self::table_name(),
@@ -153,9 +167,9 @@ pub trait CrudOperations: Model {
                 pk_name,
                 update_fields.len() + 1
             );
-            
+
             let mut query = sqlx::query(&update_sql);
-            
+
             // Bind update values (excluding primary key)
             for field_name in fields.keys() {
                 if field_name != pk_name {
@@ -164,13 +178,13 @@ pub trait CrudOperations: Model {
                     }
                 }
             }
-            
+
             // Bind primary key for WHERE clause
             query = query.bind(pk.to_string());
-            
-            query.execute(pool)
-                .await
-                .map_err(|e| ModelError::Database(format!("Failed to update {}: {}", Self::table_name(), e)))?;
+
+            query.execute(pool).await.map_err(|e| {
+                ModelError::Database(format!("Failed to update {}: {}", Self::table_name(), e))
+            })?;
 
             Ok(())
         } else {
@@ -188,12 +202,18 @@ pub trait CrudOperations: Model {
                     Self::table_name(),
                     Self::primary_key_name()
                 );
-                
+
                 sqlx::query(&soft_delete_sql)
                     .bind(pk.to_string())
                     .execute(pool)
                     .await
-                    .map_err(|e| ModelError::Database(format!("Failed to soft delete {}: {}", Self::table_name(), e)))?;
+                    .map_err(|e| {
+                        ModelError::Database(format!(
+                            "Failed to soft delete {}: {}",
+                            Self::table_name(),
+                            e
+                        ))
+                    })?;
             } else {
                 // Hard delete - remove from database
                 let delete_sql = format!(
@@ -201,14 +221,20 @@ pub trait CrudOperations: Model {
                     Self::table_name(),
                     Self::primary_key_name()
                 );
-                
+
                 sqlx::query(&delete_sql)
                     .bind(pk.to_string())
                     .execute(pool)
                     .await
-                    .map_err(|e| ModelError::Database(format!("Failed to delete {}: {}", Self::table_name(), e)))?;
+                    .map_err(|e| {
+                        ModelError::Database(format!(
+                            "Failed to delete {}: {}",
+                            Self::table_name(),
+                            e
+                        ))
+                    })?;
             }
-            
+
             Ok(())
         } else {
             Err(ModelError::MissingPrimaryKey)
@@ -216,7 +242,10 @@ pub trait CrudOperations: Model {
     }
 
     /// Helper method to bind JSON values to SQL queries
-    fn bind_json_value<'a>(query: sqlx::query::Query<'a, Postgres, sqlx::postgres::PgArguments>, value: &Value) -> ModelResult<sqlx::query::Query<'a, Postgres, sqlx::postgres::PgArguments>> {
+    fn bind_json_value<'a>(
+        query: sqlx::query::Query<'a, Postgres, sqlx::postgres::PgArguments>,
+        value: &Value,
+    ) -> ModelResult<sqlx::query::Query<'a, Postgres, sqlx::postgres::PgArguments>> {
         match value {
             Value::Null => Ok(query.bind(None::<String>)),
             Value::Bool(b) => Ok(query.bind(*b)),

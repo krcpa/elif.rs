@@ -1,5 +1,5 @@
 //! Database Backend Abstractions
-//! 
+//!
 //! This module provides database backend abstractions to support multiple database types
 //! (PostgreSQL, MySQL, SQLite, etc.) through common traits and interfaces.
 
@@ -14,7 +14,7 @@ pub use postgres::PostgresBackend;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DatabaseBackendType {
     PostgreSQL,
-    MySQL, 
+    MySQL,
     SQLite,
 }
 

@@ -1,19 +1,19 @@
 //! Relationships Module - Complete relationship system with eager loading
 
-pub mod traits;
-pub mod has_one;
-pub mod has_many;
 pub mod belongs_to;
-pub mod eager_loading;
-pub mod loader;
 pub mod cache;
+pub mod eager_loading;
+pub mod has_many;
+pub mod has_one;
+pub mod loader;
+pub mod traits;
 
 // Phase 6.2.1: Relationship Metadata System
 pub mod metadata;
-pub mod types;
 pub mod registry;
+pub mod types;
 
-// Phase 6.2.3: Constraint System 
+// Phase 6.2.3: Constraint System
 pub mod constraints;
 
 // Phase 6.2.5: Type-Safe Relationship Loading
@@ -32,31 +32,23 @@ pub mod type_safe_tests;
 pub mod lazy_loading_tests;
 
 // Re-export main types (minimal exports to avoid conflicts)
-pub use traits as relationship_traits;
 pub use eager_loading::EagerLoader;
-pub use loader::{RelationshipLoader, RelationshipCache};
+pub use loader::{RelationshipCache, RelationshipLoader};
+pub use traits as relationship_traits;
 
 // Re-export metadata system types
-pub use metadata::{RelationshipMetadata, RelationshipType, RelationshipConstraint};
+pub use metadata::{RelationshipConstraint, RelationshipMetadata, RelationshipType};
 pub use registry::RelationshipRegistry;
 
 // Re-export constraint system types
-pub use constraints::{RelationshipConstraintBuilder, ConstraintType};
+pub use constraints::{ConstraintType, RelationshipConstraintBuilder};
 
 // Re-export type-safe relationship types
 // Use the new modular containers
 pub use containers::{
-    RelationshipLoadingState,
-    RelationshipContainer,
-    TypeSafeRelationship,
-    HasOne,
-    HasMany,
-    BelongsTo,
-    ManyToMany,
-    MorphOne,
-    MorphMany,
+    type_safe_utils, BelongsTo, HasMany, HasOne, ManyToMany, MorphMany, MorphOne,
+    RelationshipContainer, RelationshipLoadingState, TypeSafeRelationship,
     TypeSafeRelationshipLoader,
-    type_safe_utils,
 };
 pub use hydration::*;
 pub use inference::*;

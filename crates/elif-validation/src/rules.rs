@@ -5,9 +5,9 @@ use crate::traits::{ValidateField, ValidateRequest, ValidationRule};
 use crate::validators::*;
 use async_trait::async_trait;
 use serde_json::Value;
+use service_builder::builder;
 use std::collections::HashMap;
 use std::sync::Arc;
-use service_builder::builder;
 
 /// Collection of validation rules for a specific field or request
 #[derive(Clone)]
@@ -60,11 +60,8 @@ impl Rules {
             .into_iter()
             .map(|r| Arc::new(r) as Arc<dyn ValidationRule>)
             .collect();
-        
-        self.field_rules
-            .entry(field)
-            .or_default()
-            .extend(rule_arcs);
+
+        self.field_rules.entry(field).or_default().extend(rule_arcs);
         self
     }
 
@@ -119,13 +116,13 @@ impl ValidateField for Rules {
     async fn validate_field(&self, field: &str, value: &Value) -> ValidationResult<()> {
         if let Some(rules) = self.field_rules.get(field) {
             let mut errors = ValidationErrors::new();
-            
+
             for rule in rules {
                 if let Err(rule_errors) = rule.validate(value, field).await {
                     errors.merge(rule_errors);
                 }
             }
-            
+
             if errors.is_empty() {
                 Ok(())
             } else {
@@ -142,21 +139,21 @@ impl ValidateField for Rules {
 impl ValidateRequest for Rules {
     async fn validate_request(&self, data: &HashMap<String, Value>) -> ValidationResult<()> {
         let mut errors = ValidationErrors::new();
-        
+
         // Apply request-level validation rules
         for rule in &self.request_rules {
             // For request-level rules, we pass the entire data as a JSON object
             let data_value = Value::Object(
                 data.iter()
                     .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect::<serde_json::Map<String, Value>>()
+                    .collect::<serde_json::Map<String, Value>>(),
             );
-            
+
             if let Err(rule_errors) = rule.validate(&data_value, "request").await {
                 errors.merge(rule_errors);
             }
         }
-        
+
         if errors.is_empty() {
             Ok(())
         } else {
@@ -171,7 +168,7 @@ impl ValidateRequest for Rules {
 pub struct RulesBuilderConfig {
     #[builder(default)]
     pub field_rules: HashMap<String, Vec<Arc<dyn ValidationRule>>>,
-    
+
     #[builder(default)]
     pub request_rules: Vec<Arc<dyn ValidationRule>>,
 }
@@ -204,16 +201,13 @@ impl RulesBuilderConfigBuilder {
     {
         let field = field.into();
         let mut field_rules = self.field_rules.unwrap_or_default();
-        field_rules
-            .entry(field)
-            .or_default()
-            .push(Arc::new(rule));
+        field_rules.entry(field).or_default().push(Arc::new(rule));
         RulesBuilderConfigBuilder {
             field_rules: Some(field_rules),
             request_rules: self.request_rules,
         }
     }
-    
+
     /// Add multiple validation rules for a specific field
     pub fn field_rules_vec<R>(self, field: impl Into<String>, rules: Vec<R>) -> Self
     where
@@ -224,18 +218,15 @@ impl RulesBuilderConfigBuilder {
             .into_iter()
             .map(|r| Arc::new(r) as Arc<dyn ValidationRule>)
             .collect();
-        
+
         let mut field_rules = self.field_rules.unwrap_or_default();
-        field_rules
-            .entry(field)
-            .or_default()
-            .extend(rule_arcs);
+        field_rules.entry(field).or_default().extend(rule_arcs);
         RulesBuilderConfigBuilder {
             field_rules: Some(field_rules),
             request_rules: self.request_rules,
         }
     }
-    
+
     /// Add a request-level validation rule
     pub fn request_rule<R>(self, rule: R) -> Self
     where
@@ -248,7 +239,7 @@ impl RulesBuilderConfigBuilder {
             request_rules: Some(request_rules),
         }
     }
-    
+
     pub fn build_config(self) -> RulesBuilderConfig {
         self.build_with_defaults().unwrap()
     }
@@ -274,16 +265,18 @@ impl RulesBuilder {
 
     /// Add validation rules for a required string field
     pub fn required_string(
-        mut self, 
-        field: impl Into<String>, 
-        min_length: Option<usize>, 
-        max_length: Option<usize>
+        mut self,
+        field: impl Into<String>,
+        min_length: Option<usize>,
+        max_length: Option<usize>,
     ) -> Self {
         let field = field.into();
-        
+
         // Add required validator
-        self.builder_config = self.builder_config.field_rule(field.clone(), RequiredValidator::new());
-        
+        self.builder_config = self
+            .builder_config
+            .field_rule(field.clone(), RequiredValidator::new());
+
         // Add length validator if constraints are specified
         if min_length.is_some() || max_length.is_some() {
             let mut length_validator = LengthValidator::new();
@@ -295,42 +288,45 @@ impl RulesBuilder {
             }
             self.builder_config = self.builder_config.field_rule(field, length_validator);
         }
-        
+
         self
     }
 
     /// Add validation rules for a required email field
     pub fn required_email(mut self, field: impl Into<String>) -> Self {
         let field = field.into();
-        
-        self.builder_config = self.builder_config
+
+        self.builder_config = self
+            .builder_config
             .field_rule(field.clone(), RequiredValidator::new())
             .field_rule(field, EmailValidator::new());
-        
+
         self
     }
 
     /// Add validation rules for an optional email field
     pub fn optional_email(mut self, field: impl Into<String>) -> Self {
         let field = field.into();
-        
+
         // Only add email validation - no required validation
         self.builder_config = self.builder_config.field_rule(field, EmailValidator::new());
-        
+
         self
     }
 
     /// Add validation rules for a required numeric field
     pub fn required_number(
-        mut self, 
-        field: impl Into<String>, 
-        min: Option<f64>, 
-        max: Option<f64>
+        mut self,
+        field: impl Into<String>,
+        min: Option<f64>,
+        max: Option<f64>,
     ) -> Self {
         let field = field.into();
-        
-        self.builder_config = self.builder_config.field_rule(field.clone(), RequiredValidator::new());
-        
+
+        self.builder_config = self
+            .builder_config
+            .field_rule(field.clone(), RequiredValidator::new());
+
         let mut numeric_validator = NumericValidator::new();
         if let Some(min_val) = min {
             numeric_validator = numeric_validator.min(min_val);
@@ -338,23 +334,25 @@ impl RulesBuilder {
         if let Some(max_val) = max {
             numeric_validator = numeric_validator.max(max_val);
         }
-        
+
         self.builder_config = self.builder_config.field_rule(field, numeric_validator);
-        
+
         self
     }
 
     /// Add validation rules for a required integer field
     pub fn required_integer(
-        mut self, 
-        field: impl Into<String>, 
-        min: Option<f64>, 
-        max: Option<f64>
+        mut self,
+        field: impl Into<String>,
+        min: Option<f64>,
+        max: Option<f64>,
     ) -> Self {
         let field = field.into();
-        
-        self.builder_config = self.builder_config.field_rule(field.clone(), RequiredValidator::new());
-        
+
+        self.builder_config = self
+            .builder_config
+            .field_rule(field.clone(), RequiredValidator::new());
+
         let mut numeric_validator = NumericValidator::new().integer_only(true);
         if let Some(min_val) = min {
             numeric_validator = numeric_validator.min(min_val);
@@ -362,34 +360,31 @@ impl RulesBuilder {
         if let Some(max_val) = max {
             numeric_validator = numeric_validator.max(max_val);
         }
-        
+
         self.builder_config = self.builder_config.field_rule(field, numeric_validator);
-        
+
         self
     }
 
     /// Add validation rules for a field that must match a pattern
     pub fn pattern(mut self, field: impl Into<String>, pattern: &str) -> Self {
         let field = field.into();
-        
+
         if let Ok(pattern_validator) = PatternValidator::new(pattern) {
             self.builder_config = self.builder_config.field_rule(field, pattern_validator);
         }
-        
+
         self
     }
 
     /// Add validation rules for a field that must be one of the allowed values
     pub fn one_of(mut self, field: impl Into<String>, allowed_values: Vec<String>) -> Self {
         let field = field.into();
-        
-        let custom_validator = CustomValidator::one_of(
-            format!("{}_one_of", field),
-            allowed_values
-        );
-        
+
+        let custom_validator = CustomValidator::one_of(format!("{}_one_of", field), allowed_values);
+
         self.builder_config = self.builder_config.field_rule(field, custom_validator);
-        
+
         self
     }
 
@@ -432,54 +427,83 @@ mod tests {
             .field("email", EmailValidator::new());
 
         // Valid name
-        let result = rules.validate_field("name", &Value::String("John".to_string())).await;
+        let result = rules
+            .validate_field("name", &Value::String("John".to_string()))
+            .await;
         assert!(result.is_ok());
 
         // Invalid name (too short)
-        let result = rules.validate_field("name", &Value::String("J".to_string())).await;
+        let result = rules
+            .validate_field("name", &Value::String("J".to_string()))
+            .await;
         assert!(result.is_err());
 
         // Valid email
-        let result = rules.validate_field("email", &Value::String("john@example.com".to_string())).await;
+        let result = rules
+            .validate_field("email", &Value::String("john@example.com".to_string()))
+            .await;
         assert!(result.is_ok());
 
         // Invalid email
-        let result = rules.validate_field("email", &Value::String("not-an-email".to_string())).await;
+        let result = rules
+            .validate_field("email", &Value::String("not-an-email".to_string()))
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_rules_request_validation() {
-        let password_confirmation_rule = CustomValidator::new("password_confirmation", |value, _field| {
-            if let Some(obj) = value.as_object() {
-                let password = obj.get("password").and_then(|v| v.as_str());
-                let confirmation = obj.get("password_confirmation").and_then(|v| v.as_str());
-                
-                match (password, confirmation) {
-                    (Some(pwd), Some(conf)) if pwd == conf => Ok(()),
-                    (Some(_), Some(_)) => Err(ValidationError::new("password_confirmation", "Passwords do not match").into()),
-                    (Some(_), None) => Err(ValidationError::new("password_confirmation", "Password confirmation is required").into()),
-                    _ => Ok(()), // No password field, skip validation
+        let password_confirmation_rule =
+            CustomValidator::new("password_confirmation", |value, _field| {
+                if let Some(obj) = value.as_object() {
+                    let password = obj.get("password").and_then(|v| v.as_str());
+                    let confirmation = obj.get("password_confirmation").and_then(|v| v.as_str());
+
+                    match (password, confirmation) {
+                        (Some(pwd), Some(conf)) if pwd == conf => Ok(()),
+                        (Some(_), Some(_)) => Err(ValidationError::new(
+                            "password_confirmation",
+                            "Passwords do not match",
+                        )
+                        .into()),
+                        (Some(_), None) => Err(ValidationError::new(
+                            "password_confirmation",
+                            "Password confirmation is required",
+                        )
+                        .into()),
+                        _ => Ok(()), // No password field, skip validation
+                    }
+                } else {
+                    Ok(())
                 }
-            } else {
-                Ok(())
-            }
-        });
+            });
 
         let rules = Rules::new().request(password_confirmation_rule);
 
         // Valid matching passwords
         let mut data = HashMap::new();
-        data.insert("password".to_string(), Value::String("secret123".to_string()));
-        data.insert("password_confirmation".to_string(), Value::String("secret123".to_string()));
+        data.insert(
+            "password".to_string(),
+            Value::String("secret123".to_string()),
+        );
+        data.insert(
+            "password_confirmation".to_string(),
+            Value::String("secret123".to_string()),
+        );
 
         let result = rules.validate_request(&data).await;
         assert!(result.is_ok());
 
         // Invalid non-matching passwords
         let mut data = HashMap::new();
-        data.insert("password".to_string(), Value::String("secret123".to_string()));
-        data.insert("password_confirmation".to_string(), Value::String("different".to_string()));
+        data.insert(
+            "password".to_string(),
+            Value::String("secret123".to_string()),
+        );
+        data.insert(
+            "password_confirmation".to_string(),
+            Value::String("different".to_string()),
+        );
 
         let result = rules.validate_request(&data).await;
         assert!(result.is_err());
@@ -492,45 +516,55 @@ mod tests {
             .build();
 
         // Valid string
-        let result = rules.validate_field("name", &Value::String("John".to_string())).await;
+        let result = rules
+            .validate_field("name", &Value::String("John".to_string()))
+            .await;
         assert!(result.is_ok());
 
         // Empty string (should fail required)
-        let result = rules.validate_field("name", &Value::String("".to_string())).await;
+        let result = rules
+            .validate_field("name", &Value::String("".to_string()))
+            .await;
         assert!(result.is_err());
 
         // Too short string
-        let result = rules.validate_field("name", &Value::String("J".to_string())).await;
+        let result = rules
+            .validate_field("name", &Value::String("J".to_string()))
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_rules_builder_required_email() {
-        let rules = RulesBuilder::new()
-            .required_email("email")
-            .build();
+        let rules = RulesBuilder::new().required_email("email").build();
 
         // Valid email
-        let result = rules.validate_field("email", &Value::String("test@example.com".to_string())).await;
+        let result = rules
+            .validate_field("email", &Value::String("test@example.com".to_string()))
+            .await;
         assert!(result.is_ok());
 
         // Empty email (should fail required)
-        let result = rules.validate_field("email", &Value::String("".to_string())).await;
+        let result = rules
+            .validate_field("email", &Value::String("".to_string()))
+            .await;
         assert!(result.is_err());
 
         // Invalid email format
-        let result = rules.validate_field("email", &Value::String("not-an-email".to_string())).await;
+        let result = rules
+            .validate_field("email", &Value::String("not-an-email".to_string()))
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_rules_builder_optional_email() {
-        let rules = RulesBuilder::new()
-            .optional_email("email")
-            .build();
+        let rules = RulesBuilder::new().optional_email("email").build();
 
         // Valid email
-        let result = rules.validate_field("email", &Value::String("test@example.com".to_string())).await;
+        let result = rules
+            .validate_field("email", &Value::String("test@example.com".to_string()))
+            .await;
         assert!(result.is_ok());
 
         // Null email (should pass - it's optional)
@@ -538,7 +572,9 @@ mod tests {
         assert!(result.is_ok());
 
         // Invalid email format (should still fail)
-        let result = rules.validate_field("email", &Value::String("not-an-email".to_string())).await;
+        let result = rules
+            .validate_field("email", &Value::String("not-an-email".to_string()))
+            .await;
         assert!(result.is_err());
     }
 
@@ -549,7 +585,9 @@ mod tests {
             .build();
 
         // Valid number
-        let result = rules.validate_field("age", &Value::Number(serde_json::Number::from(25))).await;
+        let result = rules
+            .validate_field("age", &Value::Number(serde_json::Number::from(25)))
+            .await;
         assert!(result.is_ok());
 
         // Null (should fail required)
@@ -557,7 +595,9 @@ mod tests {
         assert!(result.is_err());
 
         // Out of range
-        let result = rules.validate_field("age", &Value::Number(serde_json::Number::from(150))).await;
+        let result = rules
+            .validate_field("age", &Value::Number(serde_json::Number::from(150)))
+            .await;
         assert!(result.is_err());
     }
 
@@ -568,26 +608,35 @@ mod tests {
             .build();
 
         // Valid integer
-        let result = rules.validate_field("count", &Value::Number(serde_json::Number::from(10))).await;
+        let result = rules
+            .validate_field("count", &Value::Number(serde_json::Number::from(10)))
+            .await;
         assert!(result.is_ok());
 
         // Decimal (should fail integer check)
-        let result = rules.validate_field("count", &Value::Number(serde_json::Number::from_f64(10.5).unwrap())).await;
+        let result = rules
+            .validate_field(
+                "count",
+                &Value::Number(serde_json::Number::from_f64(10.5).unwrap()),
+            )
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_rules_builder_pattern() {
-        let rules = RulesBuilder::new()
-            .pattern("code", r"^[A-Z]{3}$")
-            .build();
+        let rules = RulesBuilder::new().pattern("code", r"^[A-Z]{3}$").build();
 
         // Valid pattern
-        let result = rules.validate_field("code", &Value::String("ABC".to_string())).await;
+        let result = rules
+            .validate_field("code", &Value::String("ABC".to_string()))
+            .await;
         assert!(result.is_ok());
 
         // Invalid pattern
-        let result = rules.validate_field("code", &Value::String("abc".to_string())).await;
+        let result = rules
+            .validate_field("code", &Value::String("abc".to_string()))
+            .await;
         assert!(result.is_err());
     }
 
@@ -598,11 +647,15 @@ mod tests {
             .build();
 
         // Valid value
-        let result = rules.validate_field("status", &Value::String("active".to_string())).await;
+        let result = rules
+            .validate_field("status", &Value::String("active".to_string()))
+            .await;
         assert!(result.is_ok());
 
         // Invalid value
-        let result = rules.validate_field("status", &Value::String("unknown".to_string())).await;
+        let result = rules
+            .validate_field("status", &Value::String("unknown".to_string()))
+            .await;
         assert!(result.is_err());
     }
 
@@ -612,12 +665,15 @@ mod tests {
             if let Some(obj) = value.as_object() {
                 let password = obj.get("password").and_then(|v| v.as_str());
                 let confirmation = obj.get("password_confirmation").and_then(|v| v.as_str());
-                
+
                 if let (Some(pwd), Some(conf)) = (password, confirmation) {
                     if pwd == conf {
                         Ok(())
                     } else {
-                        Err(ValidationError::new("password_confirmation", "Passwords do not match").into())
+                        Err(
+                            ValidationError::new("password_confirmation", "Passwords do not match")
+                                .into(),
+                        )
                     }
                 } else {
                     Ok(())
@@ -634,8 +690,14 @@ mod tests {
             .build();
 
         let mut data = HashMap::new();
-        data.insert("password".to_string(), Value::String("password123".to_string()));
-        data.insert("password_confirmation".to_string(), Value::String("password123".to_string()));
+        data.insert(
+            "password".to_string(),
+            Value::String("password123".to_string()),
+        );
+        data.insert(
+            "password_confirmation".to_string(),
+            Value::String("password123".to_string()),
+        );
 
         // Should validate both fields individually and the request as a whole
         let result = rules.validate(&data).await;
@@ -643,12 +705,18 @@ mod tests {
 
         // Test with non-matching passwords
         let mut data = HashMap::new();
-        data.insert("password".to_string(), Value::String("password123".to_string()));
-        data.insert("password_confirmation".to_string(), Value::String("different".to_string()));
+        data.insert(
+            "password".to_string(),
+            Value::String("password123".to_string()),
+        );
+        data.insert(
+            "password_confirmation".to_string(),
+            Value::String("different".to_string()),
+        );
 
         let result = rules.validate(&data).await;
         assert!(result.is_err());
-        
+
         let errors = result.unwrap_err();
         assert!(errors.has_field_errors("password_confirmation"));
     }

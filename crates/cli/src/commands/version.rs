@@ -5,12 +5,16 @@ pub async fn create(version: &str, description: Option<&str>) -> Result<(), Elif
     if let Some(desc) = description {
         println!("   Description: {}", desc);
     }
-    
+
     println!("⏳ API version management implementation coming soon!");
     Ok(())
 }
 
-pub async fn deprecate(version: &str, message: Option<&str>, sunset_date: Option<&str>) -> Result<(), ElifError> {
+pub async fn deprecate(
+    version: &str,
+    message: Option<&str>,
+    sunset_date: Option<&str>,
+) -> Result<(), ElifError> {
     println!("⚠️ Deprecating API version: {}", version);
     if let Some(msg) = message {
         println!("   Message: {}", msg);
@@ -18,7 +22,7 @@ pub async fn deprecate(version: &str, message: Option<&str>, sunset_date: Option
     if let Some(date) = sunset_date {
         println!("   Sunset date: {}", date);
     }
-    
+
     println!("⏳ API version deprecation implementation coming soon!");
     Ok(())
 }

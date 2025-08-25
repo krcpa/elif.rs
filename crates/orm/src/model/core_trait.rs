@@ -3,13 +3,13 @@
 //! Defines the fundamental Model trait with type requirements, table metadata,
 //! primary key handling, timestamp configuration, and serialization contract.
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
 
-use crate::error::ModelResult;
 use crate::backends::DatabaseRow;
+use crate::error::ModelResult;
 
 /// Core trait for database models with standard ORM operations
 pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
@@ -83,7 +83,10 @@ pub trait Model: Send + Sync + Debug + Serialize + for<'de> Deserialize<'de> {
     {
         // Default implementation that can be overridden
         // For now, this requires concrete implementation by each model
-        Err(crate::error::ModelError::Serialization("from_database_row not implemented for this model - still using legacy from_row".to_string()))
+        Err(crate::error::ModelError::Serialization(
+            "from_database_row not implemented for this model - still using legacy from_row"
+                .to_string(),
+        ))
     }
 
     /// Convert model to field-value pairs for database operations

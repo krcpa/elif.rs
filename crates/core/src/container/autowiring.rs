@@ -1,13 +1,13 @@
-use std::any::Any;
-use std::sync::Arc;
 use crate::container::descriptor::ServiceId;
 use crate::errors::CoreError;
+use std::any::Any;
+use std::sync::Arc;
 
 /// Trait for services that can be automatically resolved by the IoC container
 pub trait Injectable: Send + Sync + 'static {
     /// Get the list of dependencies this service requires
     fn dependencies() -> Vec<ServiceId>;
-    
+
     /// Create an instance of this service, resolving dependencies from the container
     fn create<R: DependencyResolver>(resolver: &R) -> Result<Self, CoreError>
     where
@@ -20,13 +20,13 @@ pub trait Injectable: Send + Sync + 'static {
 pub trait DependencyResolver {
     /// Resolve a service by type
     fn resolve<T: Send + Sync + 'static>(&self) -> Result<Arc<T>, CoreError>;
-    
+
     /// Resolve a named service
     fn resolve_named<T: Send + Sync + 'static>(&self, name: &str) -> Result<Arc<T>, CoreError>;
-    
+
     /// Try to resolve a service, returning None if not found
     fn try_resolve<T: Send + Sync + 'static>(&self) -> Option<Arc<T>>;
-    
+
     /// Try to resolve a named service, returning None if not found
     fn try_resolve_named<T: Send + Sync + 'static>(&self, name: &str) -> Option<Arc<T>>;
 }
@@ -35,7 +35,7 @@ pub trait DependencyResolver {
 pub trait AutowireService: Send + Sync + 'static {
     /// The concrete type this service implements
     type ServiceType: Injectable;
-    
+
     /// Create an instance with auto-wiring
     fn autowire<R: DependencyResolver>(resolver: &R) -> Result<Self::ServiceType, CoreError>;
 }
@@ -44,7 +44,7 @@ pub trait AutowireService: Send + Sync + 'static {
 pub trait ConstructorParameter: Send + Sync + 'static {
     /// Get the service ID for this parameter type
     fn service_id() -> ServiceId;
-    
+
     /// Resolve this parameter from the container
     fn resolve<R: DependencyResolver>(resolver: &R) -> Result<Self, CoreError>
     where
@@ -56,7 +56,7 @@ impl<T: Send + Sync + 'static> ConstructorParameter for Arc<T> {
     fn service_id() -> ServiceId {
         ServiceId::of::<T>()
     }
-    
+
     fn resolve<R: DependencyResolver>(resolver: &R) -> Result<Self, CoreError> {
         resolver.resolve::<T>()
     }
@@ -70,7 +70,7 @@ impl<T: Send + Sync + 'static> ConstructorParameter for Option<Arc<T>> {
     fn service_id() -> ServiceId {
         ServiceId::of::<T>()
     }
-    
+
     fn resolve<R: DependencyResolver>(resolver: &R) -> Result<Self, CoreError> {
         Ok(resolver.try_resolve::<T>())
     }
@@ -109,7 +109,7 @@ pub trait ConstructorMetadata {
 pub trait InjectableFactory<T: Send + Sync + 'static> {
     /// Create an instance with the given parameters
     fn create_instance<R: DependencyResolver>(resolver: &R) -> Result<T, CoreError>;
-    
+
     /// Get the dependencies this factory requires
     fn dependencies() -> Vec<ServiceId>;
 }
@@ -119,9 +119,11 @@ pub trait InjectableFactory<T: Send + Sync + 'static> {
 pub trait InjectableHelper {
     /// Extract dependencies from constructor signature
     fn extract_dependencies() -> Vec<ServiceId>;
-    
+
     /// Create instance by resolving constructor parameters
-    fn create_with_resolver<R: DependencyResolver>(resolver: &R) -> Result<Box<dyn Any + Send + Sync>, CoreError>;
+    fn create_with_resolver<R: DependencyResolver>(
+        resolver: &R,
+    ) -> Result<Box<dyn Any + Send + Sync>, CoreError>;
 }
 
 /// Implementation for services with no dependencies
@@ -129,7 +131,7 @@ impl Injectable for () {
     fn dependencies() -> Vec<ServiceId> {
         Vec::new()
     }
-    
+
     fn create<R: DependencyResolver>(_resolver: &R) -> Result<Self, CoreError> {
         Ok(())
     }
@@ -151,12 +153,13 @@ mod tests {
                 services: HashMap::new(),
             }
         }
-        
+
         fn register<T: Send + Sync + 'static>(&mut self, instance: T) {
             let service_id = ServiceId::of::<T>();
-            self.services.insert(service_id, Box::new(Arc::new(instance)));
+            self.services
+                .insert(service_id, Box::new(Arc::new(instance)));
         }
-        
+
         #[allow(dead_code)]
         fn register_trait<T: ?Sized + Send + Sync + 'static>(&mut self, instance: Arc<T>) {
             let service_id = ServiceId::of::<T>();
@@ -167,28 +170,35 @@ mod tests {
     impl DependencyResolver for MockResolver {
         fn resolve<T: Send + Sync + 'static>(&self) -> Result<Arc<T>, CoreError> {
             let service_id = ServiceId::of::<T>();
-            let instance = self.services.get(&service_id)
-                .ok_or_else(|| CoreError::ServiceNotFound {
-                    service_type: std::any::type_name::<T>().to_string(),
-                })?;
-            
-            let arc_instance = instance.downcast_ref::<Arc<T>>()
-                .ok_or_else(|| CoreError::ServiceNotFound {
-                    service_type: std::any::type_name::<T>().to_string(),
-                })?;
-            
+            let instance =
+                self.services
+                    .get(&service_id)
+                    .ok_or_else(|| CoreError::ServiceNotFound {
+                        service_type: std::any::type_name::<T>().to_string(),
+                    })?;
+
+            let arc_instance =
+                instance
+                    .downcast_ref::<Arc<T>>()
+                    .ok_or_else(|| CoreError::ServiceNotFound {
+                        service_type: std::any::type_name::<T>().to_string(),
+                    })?;
+
             Ok(arc_instance.clone())
         }
-        
-        fn resolve_named<T: Send + Sync + 'static>(&self, _name: &str) -> Result<Arc<T>, CoreError> {
+
+        fn resolve_named<T: Send + Sync + 'static>(
+            &self,
+            _name: &str,
+        ) -> Result<Arc<T>, CoreError> {
             // For now, just delegate to resolve
             self.resolve::<T>()
         }
-        
+
         fn try_resolve<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
             self.resolve::<T>().ok()
         }
-        
+
         fn try_resolve_named<T: Send + Sync + 'static>(&self, name: &str) -> Option<Arc<T>> {
             self.resolve_named::<T>(name).ok()
         }
@@ -257,22 +267,22 @@ mod tests {
                 logger,
             }
         }
-        
+
         pub fn create_user(&self, name: &str) -> Result<String, String> {
             if let Some(logger) = &self.logger {
                 logger.log(&format!("Creating user: {}", name));
             }
-            
+
             // Use repository to check for existing user
             let _existing = self.repository.find(1);
-            
+
             let user_id = format!("user_{}", name);
             self.email_service.send(
                 &format!("{}@example.com", name),
                 "Welcome",
                 "Welcome to our service",
             )?;
-            
+
             Ok(user_id)
         }
     }
@@ -286,12 +296,12 @@ mod tests {
                 ServiceId::of::<FileLogger>(), // Optional, but still listed
             ]
         }
-        
+
         fn create<R: DependencyResolver>(resolver: &R) -> Result<Self, CoreError> {
             let repository = resolver.resolve::<PostgresRepository>()?;
             let email_service = resolver.resolve::<SmtpEmailService>()?;
             let logger = resolver.try_resolve::<FileLogger>(); // Optional
-            
+
             Ok(UserService::new(repository, email_service, logger))
         }
     }
@@ -299,21 +309,24 @@ mod tests {
     #[test]
     fn test_parameter_type_extraction() {
         assert_eq!(Arc::<String>::service_id(), ServiceId::of::<String>());
-        assert_eq!(Option::<Arc<String>>::service_id(), ServiceId::of::<String>());
+        assert_eq!(
+            Option::<Arc<String>>::service_id(),
+            ServiceId::of::<String>()
+        );
     }
 
     #[test]
     fn test_injectable_with_dependencies() {
         let mut resolver = MockResolver::new();
-        
+
         // Register dependencies as concrete types
         resolver.register(PostgresRepository);
         resolver.register(SmtpEmailService);
         resolver.register(FileLogger);
-        
+
         // Create service with auto-wiring
         let user_service = UserService::create(&resolver).unwrap();
-        
+
         // Test that it works
         let result = user_service.create_user("john");
         assert!(result.is_ok());
@@ -323,14 +336,14 @@ mod tests {
     #[test]
     fn test_optional_dependencies() {
         let mut resolver = MockResolver::new();
-        
+
         // Register only required dependencies (not the optional logger)
         resolver.register(PostgresRepository);
         resolver.register(SmtpEmailService);
-        
+
         // Should still work without optional dependency
         let user_service = UserService::create(&resolver).unwrap();
-        
+
         let result = user_service.create_user("jane");
         assert!(result.is_ok());
     }
@@ -338,15 +351,15 @@ mod tests {
     #[test]
     fn test_missing_required_dependency() {
         let mut resolver = MockResolver::new();
-        
+
         // Register only partial dependencies
         resolver.register(PostgresRepository);
         // Missing EmailService
-        
+
         // Should fail with missing dependency error
         let result = UserService::create(&resolver);
         assert!(result.is_err());
-        
+
         if let Err(CoreError::ServiceNotFound { .. }) = result {
             // Expected
         } else {

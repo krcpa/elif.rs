@@ -143,9 +143,13 @@ impl fmt::Display for RelationshipError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RelationshipError::NotFound(msg) => write!(f, "Relationship not found: {}", msg),
-            RelationshipError::InvalidConfiguration(msg) => write!(f, "Invalid relationship configuration: {}", msg),
+            RelationshipError::InvalidConfiguration(msg) => {
+                write!(f, "Invalid relationship configuration: {}", msg)
+            }
             RelationshipError::CircularDependency(msg) => write!(f, "Circular dependency: {}", msg),
-            RelationshipError::ForeignKeyViolation(msg) => write!(f, "Foreign key violation: {}", msg),
+            RelationshipError::ForeignKeyViolation(msg) => {
+                write!(f, "Foreign key violation: {}", msg)
+            }
         }
     }
 }
@@ -209,7 +213,9 @@ impl fmt::Display for EventError {
         match self {
             EventError::HandlerFailed(msg) => write!(f, "Event handler failed: {}", msg),
             EventError::PropagationStopped(msg) => write!(f, "Event propagation stopped: {}", msg),
-            EventError::InvalidConfiguration(msg) => write!(f, "Invalid event configuration: {}", msg),
+            EventError::InvalidConfiguration(msg) => {
+                write!(f, "Invalid event configuration: {}", msg)
+            }
         }
     }
 }

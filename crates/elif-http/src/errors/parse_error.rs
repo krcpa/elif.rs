@@ -1,5 +1,5 @@
 //! Framework-native parsing error types
-//! 
+//!
 //! These errors replace Axum error type exposures in public APIs.
 //! They represent parsing/validation failures that occur during request processing.
 
@@ -13,19 +13,19 @@ pub type ParseResult<T> = Result<T, ParseError>;
 pub enum ParseError {
     #[error("Invalid HTTP method: {method}")]
     InvalidMethod { method: String },
-    
+
     #[error("Invalid header name: {name}")]
     InvalidHeaderName { name: String },
-    
+
     #[error("Invalid header value: {value}")]
     InvalidHeaderValue { value: String },
-    
+
     #[error("Header value contains non-ASCII characters")]
     HeaderToStrError,
-    
+
     #[error("Invalid status code: {code}")]
     InvalidStatusCode { code: u16 },
-    
+
     #[error("JSON parsing failed: {message}")]
     JsonRejection { message: String },
 }
@@ -33,39 +33,37 @@ pub enum ParseError {
 impl ParseError {
     /// Create an invalid method error
     pub fn invalid_method<T: Into<String>>(method: T) -> Self {
-        ParseError::InvalidMethod { 
-            method: method.into() 
+        ParseError::InvalidMethod {
+            method: method.into(),
         }
     }
-    
+
     /// Create an invalid header name error
     pub fn invalid_header_name<T: Into<String>>(name: T) -> Self {
-        ParseError::InvalidHeaderName { 
-            name: name.into() 
-        }
+        ParseError::InvalidHeaderName { name: name.into() }
     }
-    
+
     /// Create an invalid header value error
     pub fn invalid_header_value<T: Into<String>>(value: T) -> Self {
-        ParseError::InvalidHeaderValue { 
-            value: value.into() 
+        ParseError::InvalidHeaderValue {
+            value: value.into(),
         }
     }
-    
+
     /// Create a header to string error
     pub fn header_to_str_error() -> Self {
         ParseError::HeaderToStrError
     }
-    
+
     /// Create an invalid status code error
     pub fn invalid_status_code(code: u16) -> Self {
         ParseError::InvalidStatusCode { code }
     }
-    
+
     /// Create a JSON rejection error
     pub fn json_rejection<T: Into<String>>(message: T) -> Self {
-        ParseError::JsonRejection { 
-            message: message.into() 
+        ParseError::JsonRejection {
+            message: message.into(),
         }
     }
 }
@@ -73,24 +71,24 @@ impl ParseError {
 // Convert from Axum error types to framework-native errors
 impl From<axum::http::method::InvalidMethod> for ParseError {
     fn from(err: axum::http::method::InvalidMethod) -> Self {
-        ParseError::InvalidMethod { 
-            method: err.to_string() 
+        ParseError::InvalidMethod {
+            method: err.to_string(),
         }
     }
 }
 
 impl From<axum::http::header::InvalidHeaderName> for ParseError {
     fn from(err: axum::http::header::InvalidHeaderName) -> Self {
-        ParseError::InvalidHeaderName { 
-            name: err.to_string() 
+        ParseError::InvalidHeaderName {
+            name: err.to_string(),
         }
     }
 }
 
 impl From<axum::http::header::InvalidHeaderValue> for ParseError {
     fn from(err: axum::http::header::InvalidHeaderValue) -> Self {
-        ParseError::InvalidHeaderValue { 
-            value: err.to_string() 
+        ParseError::InvalidHeaderValue {
+            value: err.to_string(),
         }
     }
 }
@@ -106,8 +104,8 @@ impl From<axum::http::header::ToStrError> for ParseError {
 
 impl From<axum::extract::rejection::JsonRejection> for ParseError {
     fn from(err: axum::extract::rejection::JsonRejection) -> Self {
-        ParseError::JsonRejection { 
-            message: err.to_string() 
+        ParseError::JsonRejection {
+            message: err.to_string(),
         }
     }
 }
@@ -128,7 +126,7 @@ mod tests {
         let name_error = ParseError::invalid_header_name("bad name");
         let value_error = ParseError::invalid_header_value("bad\x00value");
         let str_error = ParseError::header_to_str_error();
-        
+
         assert!(matches!(name_error, ParseError::InvalidHeaderName { .. }));
         assert!(matches!(value_error, ParseError::InvalidHeaderValue { .. }));
         assert!(matches!(str_error, ParseError::HeaderToStrError));
@@ -149,7 +147,8 @@ mod tests {
     #[test]
     fn test_axum_conversions() {
         // Test that we can convert from Axum errors
-        let axum_method_err = axum::http::Method::from_bytes(b"INVALID METHOD WITH SPACES").unwrap_err();
+        let axum_method_err =
+            axum::http::Method::from_bytes(b"INVALID METHOD WITH SPACES").unwrap_err();
         let parse_err: ParseError = axum_method_err.into();
         assert!(matches!(parse_err, ParseError::InvalidMethod { .. }));
     }

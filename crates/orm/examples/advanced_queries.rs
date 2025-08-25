@@ -2,13 +2,13 @@
 //!
 //! This example demonstrates complex database queries using the elif-orm
 //! QueryBuilder with joins, subqueries, aggregations, and more.
-#[allow(unused_imports)]
-use elif_orm::{QueryBuilder, Model, ModelResult};
-use serde::{Deserialize, Serialize};
-use sqlx::{Row};
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
+#[allow(unused_imports)]
+use elif_orm::{Model, ModelResult, QueryBuilder};
+use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 // Example model for User
 #[derive(Debug, Serialize, Deserialize)]
@@ -33,7 +33,7 @@ impl Model for User {
     fn primary_key(&self) -> Option<Self::PrimaryKey> {
         Some(self.id)
     }
-    
+
     fn set_primary_key(&mut self, key: Self::PrimaryKey) {
         self.id = key;
     }
@@ -79,7 +79,7 @@ impl Model for Post {
     fn primary_key(&self) -> Option<Self::PrimaryKey> {
         Some(self.id)
     }
-    
+
     fn set_primary_key(&mut self, key: Self::PrimaryKey) {
         self.id = key;
     }
@@ -103,23 +103,23 @@ impl Model for Post {
 }
 
 /// Main function demonstrating query building patterns
-#[tokio::main] 
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 Advanced ORM Queries Demo");
     println!("============================");
-    
+
     println!("📝 This demo shows QueryBuilder API patterns:");
-    
+
     println!("🔍 Basic Queries:");
     println!("   User::query().where_eq('active', true).get(pool)");
     println!("   Post::query().where_like('title', '%rust%').order_by('created_at').get(pool)");
-    
+
     println!("🔗 Join Queries:");
     println!("   User::query().join('posts', 'users.id', 'posts.user_id').get(pool)");
-    
+
     println!("📊 Aggregations:");
     println!("   Post::query().select('COUNT(*) as total').count(pool)");
-    
+
     println!("✅ Query API demonstration completed!");
     println!("   Connect to a PostgreSQL database to execute these queries");
 

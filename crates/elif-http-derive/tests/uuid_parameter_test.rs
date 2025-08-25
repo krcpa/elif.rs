@@ -1,6 +1,6 @@
 //! Test UUID parameter extraction
 
-use elif_http_derive::{get, controller};
+use elif_http_derive::{controller, get};
 
 // Mock the required types
 pub struct ElifRequest;
@@ -23,14 +23,19 @@ impl Uuid {
 
 impl HttpError {
     pub fn bad_request(_msg: String) -> Box<dyn std::error::Error> {
-        Box::new(std::io::Error::new(std::io::ErrorKind::Other, "bad request"))
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "bad request",
+        ))
     }
 }
 
 impl ElifResponse {
-    pub fn ok() -> Self { Self }
-    pub fn json<T>(&self, _data: &T) -> Result<Self, Box<dyn std::error::Error>> { 
-        Ok(Self) 
+    pub fn ok() -> Self {
+        Self
+    }
+    pub fn json<T>(&self, _data: &T) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self)
     }
 }
 
@@ -50,13 +55,17 @@ impl UuidController {
     pub async fn get_user(&self, user_id: Uuid) -> String {
         format!("User UUID: {}", user_id.to_string())
     }
-    
+
     // Test multiple UUID parameters
     #[get("/{user_id}/posts/{post_id}")]
     #[param(user_id: uuid)]
     #[param(post_id: uuid)]
     pub async fn get_user_post(&self, user_id: Uuid, post_id: Uuid) -> String {
-        format!("User: {}, Post: {}", user_id.to_string(), post_id.to_string())
+        format!(
+            "User: {}, Post: {}",
+            user_id.to_string(),
+            post_id.to_string()
+        )
     }
 }
 

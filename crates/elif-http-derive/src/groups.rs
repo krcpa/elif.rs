@@ -1,12 +1,12 @@
 //! Route grouping macros
-//! 
+//!
 //! Provides #[group] macro for grouping routes with shared attributes.
 
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, ItemImpl, ImplItem, LitStr, Ident, Token, Expr,
-    parse::Parse, parse::ParseStream
+    parse::Parse, parse::ParseStream, parse_macro_input, Expr, Ident, ImplItem, ItemImpl, LitStr,
+    Token,
 };
 
 use crate::utils::extract_http_method_info;
@@ -27,13 +27,13 @@ pub struct GroupArgs {
 impl Parse for GroupArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let prefix = input.parse()?;
-        
+
         let _comma = if input.peek(Token![,]) {
             Some(input.parse()?)
         } else {
             None
         };
-        
+
         let middleware_assignment = if !input.is_empty() {
             let ident: Ident = input.parse()?;
             if ident != "middleware" {
@@ -48,7 +48,7 @@ impl Parse for GroupArgs {
         } else {
             None
         };
-        
+
         Ok(GroupArgs {
             prefix,
             _comma,
@@ -60,12 +60,12 @@ impl Parse for GroupArgs {
 /// Parse group attribute arguments using robust syn parsing
 pub fn parse_group_args_robust(args: TokenStream) -> syn::Result<GroupConfig> {
     let parsed_args = syn::parse::<GroupArgs>(args)?;
-    
+
     let mut config = GroupConfig {
         prefix: parsed_args.prefix.value(),
         middleware: Vec::new(),
     };
-    
+
     // Extract middleware from expression if present
     if let Some((_ident, _eq, expr)) = parsed_args.middleware_assignment {
         // Try to parse middleware list from various expression forms
@@ -91,7 +91,7 @@ pub fn parse_group_args_robust(args: TokenStream) -> syn::Result<GroupConfig> {
             }
         }
     }
-    
+
     Ok(config)
 }
 
@@ -103,9 +103,9 @@ pub fn parse_group_args(args: TokenStream) -> GroupConfig {
 }
 
 /// Route group macro for grouping routes with shared attributes
-/// 
+///
 /// Groups routes under a common prefix with shared middleware.
-/// 
+///
 /// Example:
 /// ```rust,ignore
 /// #[group("/api/v1", middleware = [cors, auth])]
@@ -116,13 +116,13 @@ pub fn parse_group_args(args: TokenStream) -> GroupConfig {
 /// ```
 pub fn group_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let input_impl = parse_macro_input!(input as ItemImpl);
-    
-    // Parse group arguments (path and optional middleware) 
+
+    // Parse group arguments (path and optional middleware)
     let group_config = match parse_group_args_robust(args) {
         Ok(config) => config,
         Err(err) => return err.to_compile_error().into(),
     };
-    
+
     let impl_name = if let syn::Type::Path(type_path) = &*input_impl.self_ty {
         if let Some(segment) = type_path.path.segments.last() {
             &segment.ident
@@ -142,19 +142,19 @@ pub fn group_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         .to_compile_error()
         .into();
     };
-    
+
     let prefix = group_config.prefix;
     let _middleware_items = group_config.middleware.iter().map(|mw| {
         quote! { group = group.middleware(#mw); }
     });
-    
+
     let mut route_registrations = Vec::new();
-    
+
     // Process methods in the group
     for item in &input_impl.items {
         if let ImplItem::Fn(method) = item {
             let method_name = &method.sig.ident;
-            
+
             if let Some((http_method, path)) = extract_http_method_info(&method.attrs) {
                 let full_path = if path.is_empty() { "" } else { &path };
                 route_registrations.push(quote! {
@@ -163,12 +163,12 @@ pub fn group_impl(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
     }
-    
+
     let route_count = route_registrations.len();
-    
+
     let expanded = quote! {
         #input_impl
-        
+
         impl #impl_name {
             /// Generated route group setup function
             pub fn build_group() -> String {
@@ -178,6 +178,6 @@ pub fn group_impl(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
     };
-    
+
     TokenStream::from(expanded)
 }

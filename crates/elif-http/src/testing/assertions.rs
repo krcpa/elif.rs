@@ -1,6 +1,6 @@
 //! Custom test assertions for HTTP testing
 
-use crate::{ElifResponse, response::ElifStatusCode, errors::HttpError};
+use crate::{errors::HttpError, response::ElifStatusCode, ElifResponse};
 
 pub trait HttpAssertions {
     fn assert_ok(&self);

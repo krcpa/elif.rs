@@ -81,7 +81,7 @@ where
     pub fn iter(&self) -> std::slice::Iter<'_, Related> {
         self.related.iter()
     }
-    
+
     /// Iterate mutably over related models
     pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Related> {
         self.related.iter_mut()
@@ -112,13 +112,13 @@ where
 
     fn query(&self) -> QueryBuilder<Related> {
         let mut query = QueryBuilder::new();
-        
+
         if let Some(parent_key) = self.parent.primary_key() {
             query = query
                 .from(&self.meta.related_table)
                 .where_eq(&self.meta.foreign_key, parent_key.to_string());
         }
-        
+
         query
     }
 

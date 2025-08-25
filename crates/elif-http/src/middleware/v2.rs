@@ -3,13 +3,13 @@
 //! New middleware system with handle(request, next) pattern for Laravel-style simplicity.
 //! This is the new middleware API that will replace the current one.
 
-use crate::request::{ElifRequest, ElifMethod};
+use crate::request::{ElifMethod, ElifRequest};
 use crate::response::ElifResponse;
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use std::collections::HashMap;
 // use axum::extract::Request;
 // use super::Middleware as OldMiddleware; // Import the old middleware trait
 
@@ -49,7 +49,7 @@ impl Next {
 pub trait Middleware: Send + Sync + std::fmt::Debug {
     /// Handle the request and call the next middleware in the chain
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static>;
-    
+
     /// Optional middleware name for debugging
     fn name(&self) -> &'static str {
         "Middleware"
@@ -75,13 +75,13 @@ impl MiddlewarePipelineV2 {
             middleware: Vec::new(),
         }
     }
-    
+
     /// Add middleware to the pipeline
     pub fn add<M: Middleware + 'static>(mut self, middleware: M) -> Self {
         self.middleware.push(Arc::new(middleware));
         self
     }
-    
+
     /// Add middleware to the pipeline (mutable version)
     pub fn add_mut<M: Middleware + 'static>(&mut self, middleware: M) {
         self.middleware.push(Arc::new(middleware));
@@ -104,16 +104,16 @@ impl MiddlewarePipelineV2 {
         self.middleware.extend(other.middleware);
         self
     }
-    
+
     /// Execute the middleware pipeline with a handler
     pub async fn execute<F, Fut>(&self, request: ElifRequest, handler: F) -> ElifResponse
     where
         F: FnOnce(ElifRequest) -> Fut + Send + 'static,
         Fut: Future<Output = ElifResponse> + Send + 'static,
     {
-        let mut chain = Box::new(move |req: ElifRequest| {
-            Box::pin(handler(req)) as NextFuture<'static>
-        }) as Box<dyn FnOnce(ElifRequest) -> NextFuture<'static> + Send>;
+        let mut chain =
+            Box::new(move |req: ElifRequest| Box::pin(handler(req)) as NextFuture<'static>)
+                as Box<dyn FnOnce(ElifRequest) -> NextFuture<'static> + Send>;
 
         for middleware in self.middleware.iter().rev() {
             let middleware = middleware.clone();
@@ -126,17 +126,17 @@ impl MiddlewarePipelineV2 {
 
         chain(request).await
     }
-    
+
     /// Get number of middleware in pipeline
     pub fn len(&self) -> usize {
         self.middleware.len()
     }
-    
+
     /// Check if pipeline is empty
     pub fn is_empty(&self) -> bool {
         self.middleware.is_empty()
     }
-    
+
     /// Get middleware names for debugging
     pub fn names(&self) -> Vec<&'static str> {
         self.middleware.iter().map(|m| m.name()).collect()
@@ -202,7 +202,7 @@ impl<M> ConditionalMiddleware<M> {
     }
 
     /// Add a custom condition function that determines whether to run the middleware
-    pub fn condition<F>(mut self, condition: F) -> Self 
+    pub fn condition<F>(mut self, condition: F) -> Self
     where
         F: Fn(&ElifRequest) -> bool + Send + Sync + 'static,
     {
@@ -261,9 +261,7 @@ impl<M: Middleware> Middleware for ConditionalMiddleware<M> {
             self.middleware.handle(request, next)
         } else {
             // Skip the middleware and go directly to next
-            Box::pin(async move {
-                next.run(request).await
-            })
+            Box::pin(async move { next.run(request).await })
         }
     }
 
@@ -276,52 +274,50 @@ impl<M: Middleware> Middleware for ConditionalMiddleware<M> {
 pub mod factories {
     use super::*;
     use std::time::Duration;
-    
+
     /// Rate limiting middleware factory
     pub fn rate_limit(requests_per_minute: u32) -> RateLimitMiddleware {
         RateLimitMiddleware::new()
             .limit(requests_per_minute)
             .window(Duration::from_secs(60))
     }
-    
+
     /// Rate limiting middleware with custom window
     pub fn rate_limit_with_window(requests: u32, window: Duration) -> RateLimitMiddleware {
-        RateLimitMiddleware::new()
-            .limit(requests)
-            .window(window)
+        RateLimitMiddleware::new().limit(requests).window(window)
     }
-    
+
     /// Authentication middleware factory
     pub fn bearer_auth(token: String) -> SimpleAuthMiddleware {
         SimpleAuthMiddleware::new(token)
     }
-    
+
     /// CORS middleware factory
     pub fn cors() -> CorsMiddleware {
         CorsMiddleware::new()
     }
-    
+
     /// CORS middleware with specific origins
     pub fn cors_with_origins(origins: Vec<String>) -> CorsMiddleware {
         CorsMiddleware::new().allow_origins(origins)
     }
-    
+
     /// Timeout middleware factory
     pub fn timeout(duration: Duration) -> TimeoutMiddleware {
         TimeoutMiddleware::new(duration)
     }
-    
+
     /// Body size limit middleware factory
     pub fn body_limit(max_bytes: u64) -> BodyLimitMiddleware {
         BodyLimitMiddleware::new(max_bytes)
     }
-    
+
     /// Profiler middleware factory
     pub fn profiler() -> ProfilerMiddleware {
         ProfilerMiddleware::new()
     }
-    
-    /// Disabled profiler middleware factory 
+
+    /// Disabled profiler middleware factory
     pub fn profiler_disabled() -> ProfilerMiddleware {
         ProfilerMiddleware::disabled()
     }
@@ -353,7 +349,7 @@ pub mod composition {
     pub fn group(middleware: Vec<Arc<dyn Middleware>>) -> MiddlewarePipelineV2 {
         MiddlewarePipelineV2::from(middleware)
     }
-    
+
     /// Compose three middleware into a pipeline
     pub fn compose3<M1, M2, M3>(first: M1, second: M2, third: M3) -> MiddlewarePipelineV2
     where
@@ -361,18 +357,30 @@ pub mod composition {
         M2: Middleware + 'static,
         M3: Middleware + 'static,
     {
-        MiddlewarePipelineV2::new().add(first).add(second).add(third)
+        MiddlewarePipelineV2::new()
+            .add(first)
+            .add(second)
+            .add(third)
     }
 
     /// Compose four middleware into a pipeline
-    pub fn compose4<M1, M2, M3, M4>(first: M1, second: M2, third: M3, fourth: M4) -> MiddlewarePipelineV2
+    pub fn compose4<M1, M2, M3, M4>(
+        first: M1,
+        second: M2,
+        third: M3,
+        fourth: M4,
+    ) -> MiddlewarePipelineV2
     where
         M1: Middleware + 'static,
         M2: Middleware + 'static,
         M3: Middleware + 'static,
         M4: Middleware + 'static,
     {
-        MiddlewarePipelineV2::new().add(first).add(second).add(third).add(fourth)
+        MiddlewarePipelineV2::new()
+            .add(first)
+            .add(second)
+            .add(third)
+            .add(fourth)
     }
 }
 
@@ -395,7 +403,6 @@ impl<M1, M2> ComposedMiddleware<M1, M2> {
     pub fn new(first: M1, second: M2) -> Self {
         Self { first, second }
     }
-
 }
 
 // For now, let's implement composition via pipeline extension
@@ -407,9 +414,7 @@ where
 {
     /// Convert to a pipeline for easier execution
     pub fn to_pipeline(self) -> MiddlewarePipelineV2 {
-        MiddlewarePipelineV2::new()
-            .add(self.first)
-            .add(self.second)
+        MiddlewarePipelineV2::new().add(self.first).add(self.second)
     }
 }
 
@@ -443,7 +448,8 @@ pub mod introspection {
             self.executions += 1;
             self.total_time += duration;
             // Safe division using u128 to avoid overflow and division-by-zero
-            self.avg_time = Duration::from_nanos((self.total_time.as_nanos() / self.executions as u128) as u64);
+            self.avg_time =
+                Duration::from_nanos((self.total_time.as_nanos() / self.executions as u128) as u64);
             self.last_execution = Some(Instant::now());
         }
     }
@@ -494,24 +500,38 @@ pub mod introspection {
 
         /// Get execution statistics for all middleware
         pub fn stats(&self) -> HashMap<String, MiddlewareStats> {
-            self.stats.lock().expect("Stats mutex should not be poisoned").clone()
+            self.stats
+                .lock()
+                .expect("Stats mutex should not be poisoned")
+                .clone()
         }
 
         /// Get statistics for a specific middleware
         pub fn middleware_stats(&self, name: &str) -> Option<MiddlewareStats> {
-            self.stats.lock().expect("Stats mutex should not be poisoned").get(name).cloned()
+            self.stats
+                .lock()
+                .expect("Stats mutex should not be poisoned")
+                .get(name)
+                .cloned()
         }
 
         /// Reset all statistics
         pub fn reset_stats(&self) {
-            let mut stats = self.stats.lock().expect("Stats mutex should not be poisoned");
+            let mut stats = self
+                .stats
+                .lock()
+                .expect("Stats mutex should not be poisoned");
             for (name, stat) in stats.iter_mut() {
                 *stat = MiddlewareStats::new(name.clone());
             }
         }
 
         /// Execute the pipeline with debug tracking
-        pub async fn execute_debug<F, Fut>(&self, request: ElifRequest, handler: F) -> (ElifResponse, Duration)
+        pub async fn execute_debug<F, Fut>(
+            &self,
+            request: ElifRequest,
+            handler: F,
+        ) -> (ElifResponse, Duration)
         where
             F: FnOnce(ElifRequest) -> Fut + Send + 'static,
             Fut: Future<Output = ElifResponse> + Send + 'static,
@@ -519,7 +539,7 @@ pub mod introspection {
             let start_time = Instant::now();
             let response = self.pipeline.execute(request, handler).await;
             let total_duration = start_time.elapsed();
-            
+
             (response, total_duration)
         }
     }
@@ -544,12 +564,18 @@ pub mod introspection {
 
         /// Get the current statistics for this middleware
         pub fn stats(&self) -> MiddlewareStats {
-            self.stats.lock().expect("Middleware stats mutex should not be poisoned").clone()
+            self.stats
+                .lock()
+                .expect("Middleware stats mutex should not be poisoned")
+                .clone()
         }
 
         /// Reset statistics for this middleware
         pub fn reset_stats(&self) {
-            let mut stats = self.stats.lock().expect("Middleware stats mutex should not be poisoned");
+            let mut stats = self
+                .stats
+                .lock()
+                .expect("Middleware stats mutex should not be poisoned");
             *stats = MiddlewareStats::new(self.name.clone());
         }
     }
@@ -563,8 +589,11 @@ pub mod introspection {
                 let start = Instant::now();
                 let response = middleware_result.await;
                 let duration = start.elapsed();
-                
-                stats.lock().expect("Middleware stats mutex should not be poisoned").record_execution(duration);
+
+                stats
+                    .lock()
+                    .expect("Middleware stats mutex should not be poisoned")
+                    .record_execution(duration);
                 response
             })
         }
@@ -575,7 +604,10 @@ pub mod introspection {
     }
 
     /// Utility function to wrap middleware with instrumentation
-    pub fn instrument<M: Middleware + 'static>(middleware: M, name: String) -> InstrumentedMiddleware<M> {
+    pub fn instrument<M: Middleware + 'static>(
+        middleware: M,
+        name: String,
+    ) -> InstrumentedMiddleware<M> {
         InstrumentedMiddleware::new(middleware, name)
     }
 }
@@ -597,6 +629,12 @@ impl std::fmt::Debug for RateLimitMiddleware {
             .field("window", &self.window)
             .field("last_cleanup", &"<Mutex<Instant>>")
             .finish()
+    }
+}
+
+impl Default for RateLimitMiddleware {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -623,7 +661,8 @@ impl RateLimitMiddleware {
 
     fn get_client_id(&self, request: &ElifRequest) -> String {
         // Simple IP-based rate limiting - in production you might use user ID, API key, etc.
-        request.header("x-forwarded-for")
+        request
+            .header("x-forwarded-for")
             .and_then(|h| h.to_str().ok())
             .unwrap_or("unknown")
             .to_string()
@@ -631,25 +670,34 @@ impl RateLimitMiddleware {
 
     fn is_rate_limited(&self, client_id: &str) -> bool {
         let now = std::time::Instant::now();
-        
+
         // Periodic cleanup to avoid O(N) operation on every request
         // Only clean up every 30 seconds to balance memory usage vs performance
         const CLEANUP_INTERVAL: Duration = Duration::from_secs(30);
-        
+
         {
-            let mut last_cleanup = self.last_cleanup.lock().expect("Cleanup time mutex should not be poisoned");
+            let mut last_cleanup = self
+                .last_cleanup
+                .lock()
+                .expect("Cleanup time mutex should not be poisoned");
             if now.duration_since(*last_cleanup) > CLEANUP_INTERVAL {
                 // Time for cleanup - acquire requests lock and clean
-                let mut requests = self.requests.lock().expect("Rate limiter mutex should not be poisoned");
+                let mut requests = self
+                    .requests
+                    .lock()
+                    .expect("Rate limiter mutex should not be poisoned");
                 requests.retain(|_, (timestamp, _)| now.duration_since(*timestamp) < self.window);
                 *last_cleanup = now;
                 // Release both locks before continuing
                 drop(requests);
             }
         }
-        
+
         // Now handle the actual rate limiting logic
-        let mut requests = self.requests.lock().expect("Rate limiter mutex should not be poisoned");
+        let mut requests = self
+            .requests
+            .lock()
+            .expect("Rate limiter mutex should not be poisoned");
 
         // Check current rate
         if let Some((timestamp, count)) = requests.get_mut(client_id) {
@@ -679,13 +727,15 @@ impl Middleware for RateLimitMiddleware {
 
         Box::pin(async move {
             if is_limited {
-                ElifResponse::with_status(crate::response::status::ElifStatusCode::TOO_MANY_REQUESTS)
-                    .json_value(serde_json::json!({
-                        "error": {
-                            "code": "rate_limited",
-                            "message": "Too many requests. Please try again later."
-                        }
-                    }))
+                ElifResponse::with_status(
+                    crate::response::status::ElifStatusCode::TOO_MANY_REQUESTS,
+                )
+                .json_value(serde_json::json!({
+                    "error": {
+                        "code": "rate_limited",
+                        "message": "Too many requests. Please try again later."
+                    }
+                }))
             } else {
                 next.run(request).await
             }
@@ -705,11 +755,23 @@ pub struct CorsMiddleware {
     allowed_headers: Vec<String>,
 }
 
+impl Default for CorsMiddleware {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CorsMiddleware {
     pub fn new() -> Self {
         Self {
             allowed_origins: vec!["*".to_string()],
-            allowed_methods: vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string(), "OPTIONS".to_string()],
+            allowed_methods: vec![
+                "GET".to_string(),
+                "POST".to_string(),
+                "PUT".to_string(),
+                "DELETE".to_string(),
+                "OPTIONS".to_string(),
+            ],
             allowed_headers: vec!["Content-Type".to_string(), "Authorization".to_string()],
         }
     }
@@ -741,14 +803,17 @@ impl Middleware for CorsMiddleware {
             if request.method == ElifMethod::OPTIONS {
                 let mut preflight_response = ElifResponse::ok();
                 // Add headers safely - ignore failures to avoid replacing response
-                let _ = preflight_response.add_header("Access-Control-Allow-Origin", allowed_origins.join(","));
-                let _ = preflight_response.add_header("Access-Control-Allow-Methods", allowed_methods.join(","));
-                let _ = preflight_response.add_header("Access-Control-Allow-Headers", allowed_headers.join(","));
+                let _ = preflight_response
+                    .add_header("Access-Control-Allow-Origin", allowed_origins.join(","));
+                let _ = preflight_response
+                    .add_header("Access-Control-Allow-Methods", allowed_methods.join(","));
+                let _ = preflight_response
+                    .add_header("Access-Control-Allow-Headers", allowed_headers.join(","));
                 return preflight_response;
             }
 
             let mut response = next.run(request).await;
-            
+
             // Add CORS headers to response safely - never replace the response on failure
             let _ = response.add_header("Access-Control-Allow-Origin", allowed_origins.join(","));
             let _ = response.add_header("Access-Control-Allow-Methods", allowed_methods.join(","));
@@ -781,13 +846,15 @@ impl Middleware for TimeoutMiddleware {
         Box::pin(async move {
             match tokio::time::timeout(timeout, next.run(request)).await {
                 Ok(response) => response,
-                Err(_) => ElifResponse::with_status(crate::response::status::ElifStatusCode::REQUEST_TIMEOUT)
-                    .json_value(serde_json::json!({
-                        "error": {
-                            "code": "timeout",
-                            "message": "Request timed out"
-                        }
-                    }))
+                Err(_) => ElifResponse::with_status(
+                    crate::response::status::ElifStatusCode::REQUEST_TIMEOUT,
+                )
+                .json_value(serde_json::json!({
+                    "error": {
+                        "code": "timeout",
+                        "message": "Request timed out"
+                    }
+                })),
             }
         })
     }
@@ -846,18 +913,24 @@ impl Middleware for LoggingMiddleware {
             let start = std::time::Instant::now();
             let method = request.method.clone();
             let path = request.path().to_string();
-            
+
             // Pass to next middleware
             let response = next.run(request).await;
-            
+
             // After response
             let duration = start.elapsed();
-            println!("{} {} - {} - {:?}", method, path, response.status_code(), duration);
-            
+            println!(
+                "{} {} - {} - {:?}",
+                method,
+                path,
+                response.status_code(),
+                duration
+            );
+
             response
         })
     }
-    
+
     fn name(&self) -> &'static str {
         "LoggingMiddleware"
     }
@@ -869,11 +942,17 @@ pub struct ProfilerMiddleware {
     enabled: bool,
 }
 
+impl Default for ProfilerMiddleware {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProfilerMiddleware {
     pub fn new() -> Self {
         Self { enabled: true }
     }
-    
+
     pub fn disabled() -> Self {
         Self { enabled: false }
     }
@@ -886,23 +965,28 @@ impl Middleware for ProfilerMiddleware {
             if !enabled {
                 return next.run(request).await;
             }
-            
+
             let start = std::time::Instant::now();
             let method = request.method.clone();
             let path = request.path().to_string();
-            
+
             println!("⏱️  [PROFILER] Starting request {} {}", method, path);
-            
+
             let response = next.run(request).await;
-            
+
             let duration = start.elapsed();
-            println!("⏱️  [PROFILER] Completed {} {} in {:?} - Status: {}", 
-                method, path, duration, response.status_code());
-            
+            println!(
+                "⏱️  [PROFILER] Completed {} {} in {:?} - Status: {}",
+                method,
+                path,
+                duration,
+                response.status_code()
+            );
+
             response
         })
     }
-    
+
     fn name(&self) -> &'static str {
         "ProfilerMiddleware"
     }
@@ -928,47 +1012,42 @@ impl Middleware for SimpleAuthMiddleware {
         Box::pin(async move {
             // Extract token
             let token = match request.header("Authorization") {
-                Some(h) => {
-                    match h.to_str() {
-                        Ok(header_str) if header_str.starts_with("Bearer ") => &header_str[7..],
-                        _ => {
-                            return ElifResponse::unauthorized()
-                                .json_value(serde_json::json!({
-                                    "error": {
-                                        "code": "unauthorized",
-                                        "message": "Missing or invalid authorization header"
-                                    }
-                                }));
-                        }
-                    }
-                }
-                None => {
-                    return ElifResponse::unauthorized()
-                        .json_value(serde_json::json!({
+                Some(h) => match h.to_str() {
+                    Ok(header_str) if header_str.starts_with("Bearer ") => &header_str[7..],
+                    _ => {
+                        return ElifResponse::unauthorized().json_value(serde_json::json!({
                             "error": {
-                                "code": "unauthorized", 
-                                "message": "Missing authorization header"
+                                "code": "unauthorized",
+                                "message": "Missing or invalid authorization header"
                             }
                         }));
-                }
-            };
-            
-            // Validate token
-            if token != required_token {
-                return ElifResponse::unauthorized()
-                    .json_value(serde_json::json!({
+                    }
+                },
+                None => {
+                    return ElifResponse::unauthorized().json_value(serde_json::json!({
                         "error": {
                             "code": "unauthorized",
-                            "message": "Invalid token"
+                            "message": "Missing authorization header"
                         }
                     }));
+                }
+            };
+
+            // Validate token
+            if token != required_token {
+                return ElifResponse::unauthorized().json_value(serde_json::json!({
+                    "error": {
+                        "code": "unauthorized",
+                        "message": "Invalid token"
+                    }
+                }));
             }
-            
+
             // Token is valid, proceed to next middleware
             next.run(request).await
         })
     }
-    
+
     fn name(&self) -> &'static str {
         "SimpleAuthMiddleware"
     }
@@ -979,67 +1058,91 @@ mod tests {
     use super::*;
     use crate::request::ElifRequest;
     use crate::response::ElifResponse;
-    
+
     /// Test middleware that adds a header to requests
     #[derive(Debug)]
     pub struct TestMiddleware {
         name: &'static str,
     }
-    
+
     impl TestMiddleware {
         pub fn new(name: &'static str) -> Self {
             Self { name }
         }
     }
-    
+
     impl Middleware for TestMiddleware {
         fn handle(&self, mut request: ElifRequest, next: Next) -> NextFuture<'static> {
             let name = self.name;
             Box::pin(async move {
                 // Add a custom header to track middleware execution
-                let header_name = crate::response::headers::ElifHeaderName::from_str(&format!("x-middleware-{}", name.to_lowercase())).unwrap();
-                let header_value = crate::response::headers::ElifHeaderValue::from_str("executed").unwrap();
+                let header_name = crate::response::headers::ElifHeaderName::from_str(&format!(
+                    "x-middleware-{}",
+                    name.to_lowercase()
+                ))
+                .unwrap();
+                let header_value =
+                    crate::response::headers::ElifHeaderValue::from_str("executed").unwrap();
                 request.headers.insert(header_name, header_value);
-                
+
                 let response = next.run(request).await;
-                
+
                 // Add response header - simplified for now
                 response
             })
         }
-        
+
         fn name(&self) -> &'static str {
             self.name
         }
     }
-    
+
     #[tokio::test]
     async fn test_simple_middleware_execution() {
         let pipeline = MiddlewarePipelineV2::new()
             .add(TestMiddleware::new("First"))
             .add(TestMiddleware::new("Second"));
-        
+
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/test".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response = pipeline.execute(request, |req| {
-            Box::pin(async move {
-                // Verify both middleware executed by checking headers they added
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-first").unwrap()), 
-                    "First middleware should have added header");
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-second").unwrap()), 
-                    "Second middleware should have added header");
-                
-                ElifResponse::ok().text("Hello World")
+
+        let response = pipeline
+            .execute(request, |req| {
+                Box::pin(async move {
+                    // Verify both middleware executed by checking headers they added
+                    assert!(
+                        req.headers.contains_key(
+                            &crate::response::headers::ElifHeaderName::from_str(
+                                "x-middleware-first"
+                            )
+                            .unwrap()
+                        ),
+                        "First middleware should have added header"
+                    );
+                    assert!(
+                        req.headers.contains_key(
+                            &crate::response::headers::ElifHeaderName::from_str(
+                                "x-middleware-second"
+                            )
+                            .unwrap()
+                        ),
+                        "Second middleware should have added header"
+                    );
+
+                    ElifResponse::ok().text("Hello World")
+                })
             })
-        }).await;
-        
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
     }
-    
+
     #[tokio::test]
     async fn test_middleware_chain_execution_order() {
         /// Test middleware that tracks execution order
@@ -1047,142 +1150,165 @@ mod tests {
         struct OrderTestMiddleware {
             name: &'static str,
         }
-        
+
         impl OrderTestMiddleware {
             fn new(name: &'static str) -> Self {
                 Self { name }
             }
         }
-        
+
         impl Middleware for OrderTestMiddleware {
             fn handle(&self, mut request: ElifRequest, next: Next) -> NextFuture<'static> {
                 let name = self.name;
                 Box::pin(async move {
                     // Add execution order to request headers (before handler)
                     let header_name_str = format!("x-before-{}", name.to_lowercase());
-                    let header_name = crate::response::headers::ElifHeaderName::from_str(&header_name_str).unwrap();
-                    let header_value = crate::response::headers::ElifHeaderValue::from_str("executed").unwrap();
+                    let header_name =
+                        crate::response::headers::ElifHeaderName::from_str(&header_name_str)
+                            .unwrap();
+                    let header_value =
+                        crate::response::headers::ElifHeaderValue::from_str("executed").unwrap();
                     request.headers.insert(header_name, header_value);
-                    
+
                     // Call next middleware/handler
                     let response = next.run(request).await;
-                    
-                    // Add execution order to response headers (after handler) 
+
+                    // Add execution order to response headers (after handler)
                     let response_header = format!("x-after-{}", name.to_lowercase());
                     response.header(&response_header, "executed").unwrap_or(
-                        // If header addition fails, return original response  
-                        ElifResponse::ok().text("fallback")
+                        // If header addition fails, return original response
+                        ElifResponse::ok().text("fallback"),
                     )
                 })
             }
-            
+
             fn name(&self) -> &'static str {
                 self.name
             }
         }
-        
+
         // Create pipeline with multiple middleware
         let pipeline = MiddlewarePipelineV2::new()
             .add(OrderTestMiddleware::new("First"))
             .add(OrderTestMiddleware::new("Second"))
             .add(OrderTestMiddleware::new("Third"));
-        
+
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/test".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response = pipeline.execute(request, |req| {
-            Box::pin(async move {
-                // Verify all middleware ran before the handler
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-before-first").unwrap()));
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-before-second").unwrap()));
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-before-third").unwrap()));
-                
-                ElifResponse::ok().text("Handler executed")
+
+        let response = pipeline
+            .execute(request, |req| {
+                Box::pin(async move {
+                    // Verify all middleware ran before the handler
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-before-first")
+                            .unwrap()
+                    ));
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-before-second")
+                            .unwrap()
+                    ));
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-before-third")
+                            .unwrap()
+                    ));
+
+                    ElifResponse::ok().text("Handler executed")
+                })
             })
-        }).await;
-        
+            .await;
+
         // Verify response and that all middleware ran after the handler
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
-        
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
+
         // Convert to axum response to check headers
         let axum_response = response.into_axum_response();
         let (parts, _body) = axum_response.into_parts();
         assert!(parts.headers.contains_key("x-after-first"));
         assert!(parts.headers.contains_key("x-after-second"));
         assert!(parts.headers.contains_key("x-after-third"));
-        
+
         // Verify pipeline info
         assert_eq!(pipeline.len(), 3);
         assert_eq!(pipeline.names(), vec!["First", "Second", "Third"]);
     }
-    
+
     #[tokio::test]
     async fn test_auth_middleware() {
         let auth_middleware = SimpleAuthMiddleware::new("secret123".to_string());
-        
+
         // Test with valid token
         let mut headers = crate::response::headers::ElifHeaderMap::new();
-        headers.insert(crate::response::headers::ElifHeaderName::from_str("authorization").unwrap(), "Bearer secret123".parse().unwrap());
+        headers.insert(
+            crate::response::headers::ElifHeaderName::from_str("authorization").unwrap(),
+            "Bearer secret123".parse().unwrap(),
+        );
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/protected".parse().unwrap(),
             headers,
         );
-        
-        let next = Next::new(|_req| {
-            Box::pin(async {
-                ElifResponse::ok().text("Protected content")
-            })
-        });
-        
+
+        let next =
+            Next::new(|_req| Box::pin(async { ElifResponse::ok().text("Protected content") }));
+
         let response = auth_middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
-        
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
+
         // Test with invalid token
         let mut headers = crate::response::headers::ElifHeaderMap::new();
-        headers.insert(crate::response::headers::ElifHeaderName::from_str("authorization").unwrap(), "Bearer invalid".parse().unwrap());
+        headers.insert(
+            crate::response::headers::ElifHeaderName::from_str("authorization").unwrap(),
+            "Bearer invalid".parse().unwrap(),
+        );
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/protected".parse().unwrap(),
             headers,
         );
-        
-        let next = Next::new(|_req| {
-            Box::pin(async {
-                ElifResponse::ok().text("Protected content")
-            })
-        });
-        
+
+        let next =
+            Next::new(|_req| Box::pin(async { ElifResponse::ok().text("Protected content") }));
+
         let response = auth_middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::UNAUTHORIZED);
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::UNAUTHORIZED
+        );
     }
-    
+
     #[tokio::test]
     async fn test_pipeline_info() {
         let pipeline = MiddlewarePipelineV2::new()
             .add(TestMiddleware::new("Test1"))
             .add(TestMiddleware::new("Test2"));
-        
+
         assert_eq!(pipeline.len(), 2);
         assert!(!pipeline.is_empty());
         assert_eq!(pipeline.names(), vec!["Test1", "Test2"]);
-        
+
         let empty_pipeline = MiddlewarePipelineV2::new();
         assert_eq!(empty_pipeline.len(), 0);
         assert!(empty_pipeline.is_empty());
     }
-    
+
     // Legacy compatibility test removed - all middleware use V2 system directly
 
     #[tokio::test]
     async fn test_conditional_middleware_skip_paths() {
         let base_middleware = TestMiddleware::new("Conditional");
-        let conditional = ConditionalMiddleware::new(base_middleware)
-            .skip_paths(vec!["/public/*", "/health"]);
-        
+        let conditional =
+            ConditionalMiddleware::new(base_middleware).skip_paths(vec!["/public/*", "/health"]);
+
         let pipeline = MiddlewarePipelineV2::new().add(conditional);
 
         // Test skipped path
@@ -1191,16 +1317,26 @@ mod tests {
             "/public/assets/style.css".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response1 = pipeline.execute(request1, |req| {
-            Box::pin(async move {
-                // Middleware should be skipped - no header added
-                assert!(!req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-conditional").unwrap()));
-                ElifResponse::ok().text("OK")
+
+        let response1 = pipeline
+            .execute(request1, |req| {
+                Box::pin(async move {
+                    // Middleware should be skipped - no header added
+                    assert!(!req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str(
+                            "x-middleware-conditional"
+                        )
+                        .unwrap()
+                    ));
+                    ElifResponse::ok().text("OK")
+                })
             })
-        }).await;
-        
-        assert_eq!(response1.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response1.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
 
         // Test non-skipped path
         let request2 = ElifRequest::new(
@@ -1208,16 +1344,26 @@ mod tests {
             "/api/users".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response2 = pipeline.execute(request2, |req| {
-            Box::pin(async move {
-                // Middleware should execute - header added
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-conditional").unwrap()));
-                ElifResponse::ok().text("OK")
+
+        let response2 = pipeline
+            .execute(request2, |req| {
+                Box::pin(async move {
+                    // Middleware should execute - header added
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str(
+                            "x-middleware-conditional"
+                        )
+                        .unwrap()
+                    ));
+                    ElifResponse::ok().text("OK")
+                })
             })
-        }).await;
-        
-        assert_eq!(response2.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response2.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
     }
 
     #[tokio::test]
@@ -1225,7 +1371,7 @@ mod tests {
         let base_middleware = TestMiddleware::new("MethodConditional");
         let conditional = ConditionalMiddleware::new(base_middleware)
             .only_methods(vec![ElifMethod::POST, ElifMethod::PUT]);
-        
+
         let pipeline = MiddlewarePipelineV2::new().add(conditional);
 
         // Test allowed method
@@ -1234,16 +1380,26 @@ mod tests {
             "/api/users".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response1 = pipeline.execute(request1, |req| {
-            Box::pin(async move {
-                // Middleware should execute for POST
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-methodconditional").unwrap()));
-                ElifResponse::ok().text("OK")
+
+        let response1 = pipeline
+            .execute(request1, |req| {
+                Box::pin(async move {
+                    // Middleware should execute for POST
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str(
+                            "x-middleware-methodconditional"
+                        )
+                        .unwrap()
+                    ));
+                    ElifResponse::ok().text("OK")
+                })
             })
-        }).await;
-        
-        assert_eq!(response1.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response1.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
 
         // Test disallowed method
         let request2 = ElifRequest::new(
@@ -1251,16 +1407,26 @@ mod tests {
             "/api/users".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response2 = pipeline.execute(request2, |req| {
-            Box::pin(async move {
-                // Middleware should be skipped for GET
-                assert!(!req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-methodconditional").unwrap()));
-                ElifResponse::ok().text("OK")
+
+        let response2 = pipeline
+            .execute(request2, |req| {
+                Box::pin(async move {
+                    // Middleware should be skipped for GET
+                    assert!(!req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str(
+                            "x-middleware-methodconditional"
+                        )
+                        .unwrap()
+                    ));
+                    ElifResponse::ok().text("OK")
+                })
             })
-        }).await;
-        
-        assert_eq!(response2.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response2.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
     }
 
     #[tokio::test]
@@ -1268,27 +1434,36 @@ mod tests {
         let base_middleware = TestMiddleware::new("CustomConditional");
         let conditional = ConditionalMiddleware::new(base_middleware)
             .condition(|req| req.header("X-Debug").is_some());
-        
+
         let pipeline = MiddlewarePipelineV2::new().add(conditional);
 
         // Test with condition met
         let mut headers1 = crate::response::headers::ElifHeaderMap::new();
-        headers1.insert(crate::response::headers::ElifHeaderName::from_str("x-debug").unwrap(), "true".parse().unwrap());
-        let request1 = ElifRequest::new(
-            ElifMethod::GET,
-            "/api/test".parse().unwrap(),
-            headers1,
+        headers1.insert(
+            crate::response::headers::ElifHeaderName::from_str("x-debug").unwrap(),
+            "true".parse().unwrap(),
         );
-        
-        let response1 = pipeline.execute(request1, |req| {
-            Box::pin(async move {
-                // Middleware should execute when X-Debug header present
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-customconditional").unwrap()));
-                ElifResponse::ok().text("OK")
+        let request1 = ElifRequest::new(ElifMethod::GET, "/api/test".parse().unwrap(), headers1);
+
+        let response1 = pipeline
+            .execute(request1, |req| {
+                Box::pin(async move {
+                    // Middleware should execute when X-Debug header present
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str(
+                            "x-middleware-customconditional"
+                        )
+                        .unwrap()
+                    ));
+                    ElifResponse::ok().text("OK")
+                })
             })
-        }).await;
-        
-        assert_eq!(response1.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response1.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
 
         // Test without condition met
         let request2 = ElifRequest::new(
@@ -1296,22 +1471,32 @@ mod tests {
             "/api/test".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response2 = pipeline.execute(request2, |req| {
-            Box::pin(async move {
-                // Middleware should be skipped when X-Debug header not present
-                assert!(!req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-customconditional").unwrap()));
-                ElifResponse::ok().text("OK")
+
+        let response2 = pipeline
+            .execute(request2, |req| {
+                Box::pin(async move {
+                    // Middleware should be skipped when X-Debug header not present
+                    assert!(!req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str(
+                            "x-middleware-customconditional"
+                        )
+                        .unwrap()
+                    ));
+                    ElifResponse::ok().text("OK")
+                })
             })
-        }).await;
-        
-        assert_eq!(response2.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response2.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
     }
 
     #[tokio::test]
     async fn test_rate_limit_factory() {
         use super::factories;
-        
+
         let rate_limiter = factories::rate_limit(2); // 2 requests per minute
         let pipeline = MiddlewarePipelineV2::new().add(rate_limiter);
 
@@ -1321,14 +1506,17 @@ mod tests {
             "/api/test".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response1 = pipeline.execute(request1, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("OK")
+
+        let response1 = pipeline
+            .execute(request1, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("OK") })
             })
-        }).await;
-        
-        assert_eq!(response1.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response1.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
 
         // Second request should also pass
         let request2 = ElifRequest::new(
@@ -1336,14 +1524,17 @@ mod tests {
             "/api/test".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response2 = pipeline.execute(request2, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("OK")
+
+        let response2 = pipeline
+            .execute(request2, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("OK") })
             })
-        }).await;
-        
-        assert_eq!(response2.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response2.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
 
         // Third request should be rate limited
         let request3 = ElifRequest::new(
@@ -1351,20 +1542,23 @@ mod tests {
             "/api/test".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response3 = pipeline.execute(request3, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("OK")
+
+        let response3 = pipeline
+            .execute(request3, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("OK") })
             })
-        }).await;
-        
-        assert_eq!(response3.status_code(), crate::response::status::ElifStatusCode::TOO_MANY_REQUESTS);
+            .await;
+
+        assert_eq!(
+            response3.status_code(),
+            crate::response::status::ElifStatusCode::TOO_MANY_REQUESTS
+        );
     }
 
     #[tokio::test]
     async fn test_cors_factory() {
         use super::factories;
-        
+
         let cors = factories::cors_with_origins(vec!["https://example.com".to_string()]);
         let pipeline = MiddlewarePipelineV2::new().add(cors);
 
@@ -1374,14 +1568,17 @@ mod tests {
             "/api/test".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response1 = pipeline.execute(request1, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("Should not reach here")
+
+        let response1 = pipeline
+            .execute(request1, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("Should not reach here") })
             })
-        }).await;
-        
-        assert_eq!(response1.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response1.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
 
         // Test normal request with CORS headers added
         let request2 = ElifRequest::new(
@@ -1389,21 +1586,24 @@ mod tests {
             "/api/test".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response2 = pipeline.execute(request2, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("OK")
+
+        let response2 = pipeline
+            .execute(request2, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("OK") })
             })
-        }).await;
-        
-        assert_eq!(response2.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response2.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
     }
 
     #[tokio::test]
     async fn test_timeout_factory() {
         use super::factories;
         use std::time::Duration;
-        
+
         let timeout_middleware = factories::timeout(Duration::from_millis(100));
         let pipeline = MiddlewarePipelineV2::new().add(timeout_middleware);
 
@@ -1413,15 +1613,20 @@ mod tests {
             "/api/fast".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response1 = pipeline.execute(request1, |_req| {
-            Box::pin(async move {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-                ElifResponse::ok().text("Fast response")
+
+        let response1 = pipeline
+            .execute(request1, |_req| {
+                Box::pin(async move {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    ElifResponse::ok().text("Fast response")
+                })
             })
-        }).await;
-        
-        assert_eq!(response1.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response1.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
 
         // Test request that times out
         let request2 = ElifRequest::new(
@@ -1429,22 +1634,27 @@ mod tests {
             "/api/slow".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response2 = pipeline.execute(request2, |_req| {
-            Box::pin(async move {
-                tokio::time::sleep(Duration::from_millis(200)).await;
-                ElifResponse::ok().text("Slow response")
+
+        let response2 = pipeline
+            .execute(request2, |_req| {
+                Box::pin(async move {
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                    ElifResponse::ok().text("Slow response")
+                })
             })
-        }).await;
-        
-        assert_eq!(response2.status_code(), crate::response::status::ElifStatusCode::REQUEST_TIMEOUT);
+            .await;
+
+        assert_eq!(
+            response2.status_code(),
+            crate::response::status::ElifStatusCode::REQUEST_TIMEOUT
+        );
     }
 
     #[tokio::test]
     async fn test_body_limit_factory() {
         use super::factories;
         use axum::body::Bytes;
-        
+
         let body_limit = factories::body_limit(10); // 10 bytes max
         let pipeline = MiddlewarePipelineV2::new().add(body_limit);
 
@@ -1454,15 +1664,19 @@ mod tests {
             ElifMethod::POST,
             "/api/upload".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
-        ).with_body(small_body);
-        
-        let response1 = pipeline.execute(request1, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("Upload successful")
+        )
+        .with_body(small_body);
+
+        let response1 = pipeline
+            .execute(request1, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("Upload successful") })
             })
-        }).await;
-        
-        assert_eq!(response1.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response1.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
 
         // Test request with large body
         let large_body = Bytes::from("this body is way too large for the limit");
@@ -1470,101 +1684,144 @@ mod tests {
             ElifMethod::POST,
             "/api/upload".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
-        ).with_body(large_body);
-        
-        let response2 = pipeline.execute(request2, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("Should not reach here")
+        )
+        .with_body(large_body);
+
+        let response2 = pipeline
+            .execute(request2, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("Should not reach here") })
             })
-        }).await;
-        
-        assert_eq!(response2.status_code(), crate::response::status::ElifStatusCode::PAYLOAD_TOO_LARGE);
+            .await;
+
+        assert_eq!(
+            response2.status_code(),
+            crate::response::status::ElifStatusCode::PAYLOAD_TOO_LARGE
+        );
     }
 
     #[tokio::test]
     async fn test_composition_utilities() {
         use super::composition;
-        
+
         let middleware1 = TestMiddleware::new("First");
         let middleware2 = TestMiddleware::new("Second");
-        
+
         // Test compose function
         let composed_pipeline = composition::compose(middleware1, middleware2);
-        
+
         let request = ElifRequest::new(
             ElifMethod::GET,
             "/api/test".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response = composed_pipeline.execute(request, |req| {
-            Box::pin(async move {
-                // Both middleware should have executed
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-first").unwrap()));
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-second").unwrap()));
-                ElifResponse::ok().text("Composed response")
+
+        let response = composed_pipeline
+            .execute(request, |req| {
+                Box::pin(async move {
+                    // Both middleware should have executed
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-middleware-first")
+                            .unwrap()
+                    ));
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-middleware-second")
+                            .unwrap()
+                    ));
+                    ElifResponse::ok().text("Composed response")
+                })
             })
-        }).await;
-        
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
         assert_eq!(composed_pipeline.len(), 2);
 
         // Test compose3 function
         let middleware1 = TestMiddleware::new("Alpha");
-        let middleware2 = TestMiddleware::new("Beta"); 
+        let middleware2 = TestMiddleware::new("Beta");
         let middleware3 = TestMiddleware::new("Gamma");
-        
+
         let composed3_pipeline = composition::compose3(middleware1, middleware2, middleware3);
-        
+
         let request2 = ElifRequest::new(
             ElifMethod::POST,
             "/api/composed".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response2 = composed3_pipeline.execute(request2, |req| {
-            Box::pin(async move {
-                // All three middleware should have executed
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-alpha").unwrap()));
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-beta").unwrap()));
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-gamma").unwrap()));
-                ElifResponse::ok().text("Triple composed response")
+
+        let response2 = composed3_pipeline
+            .execute(request2, |req| {
+                Box::pin(async move {
+                    // All three middleware should have executed
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-middleware-alpha")
+                            .unwrap()
+                    ));
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-middleware-beta")
+                            .unwrap()
+                    ));
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-middleware-gamma")
+                            .unwrap()
+                    ));
+                    ElifResponse::ok().text("Triple composed response")
+                })
             })
-        }).await;
-        
-        assert_eq!(response2.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response2.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
         assert_eq!(composed3_pipeline.len(), 3);
     }
 
     #[tokio::test]
     async fn test_composition_group() {
         use super::composition;
-        
+
         let middleware_vec: Vec<Arc<dyn Middleware>> = vec![
             Arc::new(TestMiddleware::new("Group1")),
             Arc::new(TestMiddleware::new("Group2")),
             Arc::new(TestMiddleware::new("Group3")),
         ];
-        
+
         let group_pipeline = composition::group(middleware_vec);
-        
+
         let request = ElifRequest::new(
             ElifMethod::DELETE,
             "/api/group".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response = group_pipeline.execute(request, |req| {
-            Box::pin(async move {
-                // All group middleware should have executed
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-group1").unwrap()));
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-group2").unwrap()));
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-group3").unwrap()));
-                ElifResponse::ok().text("Group response")
+
+        let response = group_pipeline
+            .execute(request, |req| {
+                Box::pin(async move {
+                    // All group middleware should have executed
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-middleware-group1")
+                            .unwrap()
+                    ));
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-middleware-group2")
+                            .unwrap()
+                    ));
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-middleware-group3")
+                            .unwrap()
+                    ));
+                    ElifResponse::ok().text("Group response")
+                })
             })
-        }).await;
-        
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
         assert_eq!(group_pipeline.len(), 3);
         assert_eq!(group_pipeline.names(), vec!["Group1", "Group2", "Group3"]);
     }
@@ -1573,26 +1830,41 @@ mod tests {
     async fn test_composed_middleware_to_pipeline() {
         let middleware1 = TestMiddleware::new("ComposedA");
         let middleware2 = TestMiddleware::new("ComposedB");
-        
+
         let composed = ComposedMiddleware::new(middleware1, middleware2);
         let pipeline = composed.to_pipeline();
-        
+
         let request = ElifRequest::new(
             ElifMethod::PUT,
             "/api/composed".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response = pipeline.execute(request, |req| {
-            Box::pin(async move {
-                // Both composed middleware should have executed
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-composeda").unwrap()));
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-composedb").unwrap()));
-                ElifResponse::ok().text("Composed pipeline response")
+
+        let response = pipeline
+            .execute(request, |req| {
+                Box::pin(async move {
+                    // Both composed middleware should have executed
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str(
+                            "x-middleware-composeda"
+                        )
+                        .unwrap()
+                    ));
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str(
+                            "x-middleware-composedb"
+                        )
+                        .unwrap()
+                    ));
+                    ElifResponse::ok().text("Composed pipeline response")
+                })
             })
-        }).await;
-        
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
         assert_eq!(pipeline.len(), 2);
     }
 
@@ -1602,12 +1874,18 @@ mod tests {
             .add(TestMiddleware::new("Debug1"))
             .add(TestMiddleware::new("Debug2"))
             .add(TestMiddleware::new("Debug3"));
-        
+
         let debug_info = pipeline.debug_info();
-        
+
         assert_eq!(debug_info.middleware_count, 3);
-        assert_eq!(debug_info.middleware_names, vec!["Debug1", "Debug2", "Debug3"]);
-        assert_eq!(debug_info.execution_order, vec!["Debug1", "Debug2", "Debug3"]);
+        assert_eq!(
+            debug_info.middleware_names,
+            vec!["Debug1", "Debug2", "Debug3"]
+        );
+        assert_eq!(
+            debug_info.execution_order,
+            vec!["Debug1", "Debug2", "Debug3"]
+        );
     }
 
     #[tokio::test]
@@ -1615,26 +1893,31 @@ mod tests {
         let pipeline = MiddlewarePipelineV2::new()
             .add(TestMiddleware::new("Timed1"))
             .add(TestMiddleware::new("Timed2"));
-        
+
         let debug_pipeline = pipeline.with_debug();
-        
+
         let request = ElifRequest::new(
             ElifMethod::GET,
             "/api/debug".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let (response, duration) = debug_pipeline.execute_debug(request, |_req| {
-            Box::pin(async move {
-                // Simulate some processing time
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                ElifResponse::ok().text("Debug response")
+
+        let (response, duration) = debug_pipeline
+            .execute_debug(request, |_req| {
+                Box::pin(async move {
+                    // Simulate some processing time
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                    ElifResponse::ok().text("Debug response")
+                })
             })
-        }).await;
-        
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
         assert!(duration > std::time::Duration::from_millis(5));
-        
+
         // Check that we can get stats (even if middleware aren't individually tracked yet)
         let stats = debug_pipeline.stats();
         assert_eq!(stats.len(), 2);
@@ -1645,51 +1928,60 @@ mod tests {
     #[tokio::test]
     async fn test_introspection_instrumented_middleware() {
         let base_middleware = TestMiddleware::new("Base");
-        let instrumented = introspection::instrument(base_middleware, "InstrumentedTest".to_string());
-        
+        let instrumented =
+            introspection::instrument(base_middleware, "InstrumentedTest".to_string());
+
         let pipeline = MiddlewarePipelineV2::new().add(instrumented);
-        
+
         let request = ElifRequest::new(
             ElifMethod::POST,
             "/api/instrumented".parse().unwrap(),
             crate::response::headers::ElifHeaderMap::new(),
         );
-        
-        let response = pipeline.execute(request, |req| {
-            Box::pin(async move {
-                // Verify middleware executed
-                assert!(req.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("x-middleware-base").unwrap()));
-                ElifResponse::ok().text("Instrumented response")
+
+        let response = pipeline
+            .execute(request, |req| {
+                Box::pin(async move {
+                    // Verify middleware executed
+                    assert!(req.headers.contains_key(
+                        &crate::response::headers::ElifHeaderName::from_str("x-middleware-base")
+                            .unwrap()
+                    ));
+                    ElifResponse::ok().text("Instrumented response")
+                })
             })
-        }).await;
-        
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
     }
 
     #[tokio::test]
     async fn test_introspection_middleware_stats() {
-        use super::introspection::{MiddlewareStats, instrument};
-        
+        use super::introspection::{instrument, MiddlewareStats};
+
         let mut stats = MiddlewareStats::new("TestStats".to_string());
-        
+
         // Record some executions
         stats.record_execution(std::time::Duration::from_millis(10));
         stats.record_execution(std::time::Duration::from_millis(20));
         stats.record_execution(std::time::Duration::from_millis(30));
-        
+
         assert_eq!(stats.executions, 3);
         assert_eq!(stats.total_time, std::time::Duration::from_millis(60));
         assert_eq!(stats.avg_time, std::time::Duration::from_millis(20));
         assert!(stats.last_execution.is_some());
-        
+
         // Test instrumented middleware stats
         let base_middleware = TestMiddleware::new("StatsTest");
         let instrumented = instrument(base_middleware, "StatsInstrumented".to_string());
-        
+
         let initial_stats = instrumented.stats();
         assert_eq!(initial_stats.executions, 0);
         assert_eq!(initial_stats.total_time, std::time::Duration::ZERO);
-        
+
         // Test reset functionality
         instrumented.reset_stats();
         let reset_stats = instrumented.stats();

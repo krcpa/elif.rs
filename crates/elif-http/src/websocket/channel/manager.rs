@@ -1,10 +1,12 @@
 //! Channel manager for WebSocket channel operations
 
-use super::super::types::{ConnectionId, WebSocketMessage, WebSocketResult, WebSocketError};
-use super::types::{ChannelId, ChannelType, ChannelPermissions, ChannelMetadata, ChannelStats, ChannelManagerStats};
+use super::super::types::{ConnectionId, WebSocketError, WebSocketMessage, WebSocketResult};
 use super::channel::Channel;
-use super::message::ChannelMessage;
 use super::events::ChannelEvent;
+use super::message::ChannelMessage;
+use super::types::{
+    ChannelId, ChannelManagerStats, ChannelMetadata, ChannelPermissions, ChannelStats, ChannelType,
+};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -39,11 +41,13 @@ impl ChannelManager {
     ) -> WebSocketResult<ChannelId> {
         let channel = Channel::new(name.clone(), channel_type, created_by);
         let channel_id = channel.id;
-        
+
         // Add creator as admin if specified
         if let Some(creator_id) = created_by {
-            channel.add_member(creator_id, ChannelPermissions::admin(), None).await?;
-            
+            channel
+                .add_member(creator_id, ChannelPermissions::admin(), None)
+                .await?;
+
             // Track the connection's channel membership
             let mut connection_channels = self.connection_channels.write().await;
             connection_channels
@@ -59,8 +63,9 @@ impl ChannelManager {
         }
 
         info!("Created channel '{}' with ID {}", name, channel_id);
-        self.emit_event(ChannelEvent::ChannelCreated(channel_id, name)).await;
-        
+        self.emit_event(ChannelEvent::ChannelCreated(channel_id, name))
+            .await;
+
         Ok(channel_id)
     }
 
@@ -71,11 +76,13 @@ impl ChannelManager {
     ) -> WebSocketResult<ChannelId> {
         let channel = Channel::with_metadata(metadata.clone());
         let channel_id = channel.id;
-        
+
         // Add creator as admin if specified
         if let Some(creator_id) = metadata.created_by {
-            channel.add_member(creator_id, ChannelPermissions::admin(), None).await?;
-            
+            channel
+                .add_member(creator_id, ChannelPermissions::admin(), None)
+                .await?;
+
             // Track the connection's channel membership
             let mut connection_channels = self.connection_channels.write().await;
             connection_channels
@@ -91,8 +98,9 @@ impl ChannelManager {
         }
 
         info!("Created channel '{}' with ID {}", metadata.name, channel_id);
-        self.emit_event(ChannelEvent::ChannelCreated(channel_id, metadata.name)).await;
-        
+        self.emit_event(ChannelEvent::ChannelCreated(channel_id, metadata.name))
+            .await;
+
         Ok(channel_id)
     }
 
@@ -121,10 +129,14 @@ impl ChannelManager {
             }
 
             info!("Deleted channel '{}' with ID {}", channel_name, channel_id);
-            self.emit_event(ChannelEvent::ChannelDeleted(channel_id, channel_name)).await;
+            self.emit_event(ChannelEvent::ChannelDeleted(channel_id, channel_name))
+                .await;
             Ok(())
         } else {
-            Err(WebSocketError::Connection(format!("Channel {} not found", channel_id)))
+            Err(WebSocketError::Connection(format!(
+                "Channel {} not found",
+                channel_id
+            )))
         }
     }
 
@@ -149,7 +161,7 @@ impl ChannelManager {
     /// Get channels that a connection is a member of
     pub async fn get_connection_channels(&self, connection_id: ConnectionId) -> Vec<Arc<Channel>> {
         let connection_channels = self.connection_channels.read().await;
-        
+
         if let Some(channel_ids) = connection_channels.get(&connection_id) {
             let channels = self.channels.read().await;
             channel_ids
@@ -169,8 +181,13 @@ impl ChannelManager {
         password: Option<&str>,
         nickname: Option<String>,
     ) -> WebSocketResult<()> {
-        let channel = self.get_channel(channel_id).await
-            .ok_or(WebSocketError::Connection(format!("Channel {} not found", channel_id)))?;
+        let channel = self
+            .get_channel(channel_id)
+            .await
+            .ok_or(WebSocketError::Connection(format!(
+                "Channel {} not found",
+                channel_id
+            )))?;
 
         // Check access permissions
         match &channel.metadata.channel_type {
@@ -180,12 +197,15 @@ impl ChannelManager {
             ChannelType::Private => {
                 // For private channels, we'd need invitation logic
                 // For now, reject all attempts
-                return Err(WebSocketError::Connection("Channel is private and requires invitation".to_string()));
+                return Err(WebSocketError::Connection(
+                    "Channel is private and requires invitation".to_string(),
+                ));
             }
             ChannelType::Protected { .. } => {
-                let provided_password = password
-                    .ok_or(WebSocketError::Connection("Password required for protected channel".to_string()))?;
-                
+                let provided_password = password.ok_or(WebSocketError::Connection(
+                    "Password required for protected channel".to_string(),
+                ))?;
+
                 if !channel.validate_password(provided_password) {
                     return Err(WebSocketError::Connection("Invalid password".to_string()));
                 }
@@ -199,7 +219,9 @@ impl ChannelManager {
             ChannelPermissions::default()
         };
 
-        channel.add_member(connection_id, permissions, nickname.clone()).await?;
+        channel
+            .add_member(connection_id, permissions, nickname.clone())
+            .await?;
 
         // Track the connection's channel membership
         {
@@ -211,8 +233,13 @@ impl ChannelManager {
         }
 
         info!("Connection {} joined channel {}", connection_id, channel_id);
-        self.emit_event(ChannelEvent::MemberJoined(channel_id, connection_id, nickname)).await;
-        
+        self.emit_event(ChannelEvent::MemberJoined(
+            channel_id,
+            connection_id,
+            nickname,
+        ))
+        .await;
+
         Ok(())
     }
 
@@ -222,16 +249,25 @@ impl ChannelManager {
         channel_id: ChannelId,
         connection_id: ConnectionId,
     ) -> WebSocketResult<()> {
-        let channel = self.get_channel(channel_id).await
-            .ok_or(WebSocketError::Connection(format!("Channel {} not found", channel_id)))?;
+        let channel = self
+            .get_channel(channel_id)
+            .await
+            .ok_or(WebSocketError::Connection(format!(
+                "Channel {} not found",
+                channel_id
+            )))?;
 
         // Get member info before removal
         let member = channel.get_member(connection_id).await;
         let nickname = member.as_ref().and_then(|m| m.nickname.clone());
 
         // Remove member from channel
-        channel.remove_member(connection_id).await
-            .ok_or(WebSocketError::Connection("Connection not a member of channel".to_string()))?;
+        channel
+            .remove_member(connection_id)
+            .await
+            .ok_or(WebSocketError::Connection(
+                "Connection not a member of channel".to_string(),
+            ))?;
 
         // Remove from connection tracking
         {
@@ -245,13 +281,18 @@ impl ChannelManager {
         }
 
         info!("Connection {} left channel {}", connection_id, channel_id);
-        self.emit_event(ChannelEvent::MemberLeft(channel_id, connection_id, nickname)).await;
-        
+        self.emit_event(ChannelEvent::MemberLeft(
+            channel_id,
+            connection_id,
+            nickname,
+        ))
+        .await;
+
         // Auto-delete empty channels (except those with explicit creators)
         if channel.is_empty().await && channel.metadata.created_by.is_none() {
             self.delete_channel(channel_id).await?;
         }
-        
+
         Ok(())
     }
 
@@ -260,25 +301,32 @@ impl ChannelManager {
         // Acquire write lock once and remove all channel entries for this connection
         let channel_ids = {
             let mut connection_channels = self.connection_channels.write().await;
-            connection_channels.remove(&connection_id).unwrap_or_default()
+            connection_channels
+                .remove(&connection_id)
+                .unwrap_or_default()
         };
 
         let mut left_channels = Vec::new();
-        
+
         // Now handle cleanup for each channel without repeated lock acquisitions
         for channel_id in channel_ids {
             if let Some(channel) = self.get_channel(channel_id).await {
                 // Get member info before removal for event logging
                 let member = channel.get_member(connection_id).await;
                 let nickname = member.as_ref().and_then(|m| m.nickname.clone());
-                
+
                 // Remove member from channel
                 if channel.remove_member(connection_id).await.is_some() {
                     left_channels.push(channel_id);
-                    
+
                     info!("Connection {} left channel {}", connection_id, channel_id);
-                    self.emit_event(ChannelEvent::MemberLeft(channel_id, connection_id, nickname)).await;
-                    
+                    self.emit_event(ChannelEvent::MemberLeft(
+                        channel_id,
+                        connection_id,
+                        nickname,
+                    ))
+                    .await;
+
                     // Auto-delete empty channels (except those with explicit creators)
                     if channel.is_empty().await && channel.metadata.created_by.is_none() {
                         let _ = self.delete_channel(channel_id).await;
@@ -288,7 +336,11 @@ impl ChannelManager {
         }
 
         if !left_channels.is_empty() {
-            info!("Connection {} left {} channels", connection_id, left_channels.len());
+            info!(
+                "Connection {} left {} channels",
+                connection_id,
+                left_channels.len()
+            );
         }
 
         left_channels
@@ -301,15 +353,27 @@ impl ChannelManager {
         sender_id: ConnectionId,
         message: WebSocketMessage,
     ) -> WebSocketResult<Vec<ConnectionId>> {
-        let channel = self.get_channel(channel_id).await
-            .ok_or(WebSocketError::Connection(format!("Channel {} not found", channel_id)))?;
+        let channel = self
+            .get_channel(channel_id)
+            .await
+            .ok_or(WebSocketError::Connection(format!(
+                "Channel {} not found",
+                channel_id
+            )))?;
 
         // Check if sender is a member and has permission to send messages
-        let sender_member = channel.get_member(sender_id).await
-            .ok_or(WebSocketError::Connection("Sender not a member of channel".to_string()))?;
+        let sender_member =
+            channel
+                .get_member(sender_id)
+                .await
+                .ok_or(WebSocketError::Connection(
+                    "Sender not a member of channel".to_string(),
+                ))?;
 
         if !sender_member.permissions.can_send_messages {
-            return Err(WebSocketError::Connection("No permission to send messages".to_string()));
+            return Err(WebSocketError::Connection(
+                "No permission to send messages".to_string(),
+            ));
         }
 
         // Create channel message
@@ -326,11 +390,16 @@ impl ChannelManager {
         // Get all member IDs for broadcasting
         let member_ids = channel.get_member_ids().await;
 
-        info!("Message sent to channel {} by {} (broadcasting to {} members)", 
-              channel_id, sender_id, member_ids.len());
-        
-        self.emit_event(ChannelEvent::MessageSent(channel_id, channel_message)).await;
-        
+        info!(
+            "Message sent to channel {} by {} (broadcasting to {} members)",
+            channel_id,
+            sender_id,
+            member_ids.len()
+        );
+
+        self.emit_event(ChannelEvent::MessageSent(channel_id, channel_message))
+            .await;
+
         Ok(member_ids)
     }
 
@@ -338,11 +407,11 @@ impl ChannelManager {
     pub async fn get_all_channel_stats(&self) -> Vec<ChannelStats> {
         let channels = self.channels.read().await;
         let mut stats = Vec::with_capacity(channels.len());
-        
+
         for channel in channels.values() {
             stats.push(channel.stats().await);
         }
-        
+
         stats
     }
 
@@ -350,13 +419,13 @@ impl ChannelManager {
     pub async fn get_public_channels(&self) -> Vec<ChannelStats> {
         let channels = self.channels.read().await;
         let mut public_channels = Vec::new();
-        
+
         for channel in channels.values() {
             if matches!(channel.metadata.channel_type, ChannelType::Public) {
                 public_channels.push(channel.stats().await);
             }
         }
-        
+
         public_channels
     }
 
@@ -364,7 +433,7 @@ impl ChannelManager {
     pub async fn stats(&self) -> ChannelManagerStats {
         let channels = self.channels.read().await;
         let connection_channels = self.connection_channels.read().await;
-        
+
         let mut stats = ChannelManagerStats {
             total_channels: channels.len(),
             total_connections_in_channels: connection_channels.len(),
@@ -373,19 +442,19 @@ impl ChannelManager {
             protected_channels: 0,
             empty_channels: 0,
         };
-        
+
         for channel in channels.values() {
             match channel.metadata.channel_type {
                 ChannelType::Public => stats.public_channels += 1,
                 ChannelType::Private => stats.private_channels += 1,
                 ChannelType::Protected { .. } => stats.protected_channels += 1,
             }
-            
+
             if channel.is_empty().await {
                 stats.empty_channels += 1;
             }
         }
-        
+
         stats
     }
 
@@ -393,20 +462,21 @@ impl ChannelManager {
     pub async fn cleanup_empty_channels(&self) -> usize {
         let channels = self.get_all_channels().await;
         let mut cleaned_up = 0;
-        
+
         for channel in channels {
             // Only auto-delete channels without explicit creators
-            if channel.is_empty().await && channel.metadata.created_by.is_none() {
-                if self.delete_channel(channel.id).await.is_ok() {
-                    cleaned_up += 1;
-                }
+            if channel.is_empty().await
+                && channel.metadata.created_by.is_none()
+                && self.delete_channel(channel.id).await.is_ok()
+            {
+                cleaned_up += 1;
             }
         }
-        
+
         if cleaned_up > 0 {
             info!("Cleaned up {} empty channels", cleaned_up);
         }
-        
+
         cleaned_up
     }
 

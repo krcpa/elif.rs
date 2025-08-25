@@ -1,24 +1,24 @@
 //! Relationship Registry - Runtime metadata storage and access system
 
+use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::Arc;
-use dashmap::DashMap;
 
-use crate::error::{ModelError, ModelResult};
 use super::metadata::{RelationshipMetadata, RelationshipType};
+use crate::error::{ModelError, ModelResult};
 
 /// Thread-safe relationship registry for storing and accessing metadata at runtime
 #[derive(Debug, Clone)]
 pub struct RelationshipRegistry {
     /// Map of model name -> relationship name -> metadata
     relationships: Arc<DashMap<String, HashMap<String, RelationshipMetadata>>>,
-    
+
     /// Reverse lookup: foreign key table -> local table -> relationship metadata
     foreign_key_index: Arc<DashMap<String, HashMap<String, Vec<RelationshipMetadata>>>>,
-    
+
     /// Index of polymorphic relationships by morph name
     polymorphic_index: Arc<DashMap<String, Vec<RelationshipMetadata>>>,
-    
+
     /// Eager loading relationships index
     eager_index: Arc<DashMap<String, Vec<String>>>,
 }
@@ -51,10 +51,11 @@ impl RelationshipRegistry {
         metadata.validate()?;
 
         // Insert into main registry
-        let mut model_relationships = self.relationships
+        let mut model_relationships = self
+            .relationships
             .entry(model_name.to_string())
-            .or_insert_with(HashMap::new);
-        
+            .or_default();
+
         model_relationships.insert(relationship_name.to_string(), metadata.clone());
 
         // Update foreign key index for reverse lookups
@@ -63,18 +64,18 @@ impl RelationshipRegistry {
         // Update polymorphic index if applicable
         if metadata.relationship_type.is_polymorphic() {
             if let Some(ref poly_config) = metadata.polymorphic_config {
-                let mut poly_relationships = self.polymorphic_index
+                let mut poly_relationships = self
+                    .polymorphic_index
                     .entry(poly_config.name.clone())
-                    .or_insert_with(Vec::new);
+                    .or_default();
                 poly_relationships.push(metadata.clone());
             }
         }
 
         // Update eager loading index
         if metadata.eager_load {
-            let mut eager_relationships = self.eager_index
-                .entry(model_name.to_string())
-                .or_insert_with(Vec::new);
+            let mut eager_relationships =
+                self.eager_index.entry(model_name.to_string()).or_default();
             eager_relationships.push(relationship_name.to_string());
         }
 
@@ -90,8 +91,13 @@ impl RelationshipRegistry {
     }
 
     /// Get all relationships for a model
-    pub fn get_all_for_model(&self, model_name: &str) -> Option<HashMap<String, RelationshipMetadata>> {
-        self.relationships.get(model_name).map(|entry| entry.clone())
+    pub fn get_all_for_model(
+        &self,
+        model_name: &str,
+    ) -> Option<HashMap<String, RelationshipMetadata>> {
+        self.relationships
+            .get(model_name)
+            .map(|entry| entry.clone())
     }
 
     /// Check if a relationship exists
@@ -121,15 +127,17 @@ impl RelationshipRegistry {
     /// Find relationships that reference a specific foreign table
     pub fn find_by_foreign_table(&self, foreign_table: &str) -> Vec<RelationshipMetadata> {
         let mut results = Vec::new();
-        
+
         for entry in self.relationships.iter() {
-            for (_, metadata) in entry.value() {
-                if metadata.foreign_key.table == foreign_table || metadata.related_table == foreign_table {
+            for metadata in entry.value().values() {
+                if metadata.foreign_key.table == foreign_table
+                    || metadata.related_table == foreign_table
+                {
                     results.push(metadata.clone());
                 }
             }
         }
-        
+
         results
     }
 
@@ -168,17 +176,20 @@ impl RelationshipRegistry {
     /// Get statistics about the registry
     pub fn stats(&self) -> RegistryStats {
         let total_models = self.relationships.len();
-        let total_relationships: usize = self.relationships
-            .iter()
-            .map(|entry| entry.value().len())
-            .sum();
-        
-        let eager_relationships: usize = self.eager_index
+        let total_relationships: usize = self
+            .relationships
             .iter()
             .map(|entry| entry.value().len())
             .sum();
 
-        let polymorphic_relationships: usize = self.polymorphic_index
+        let eager_relationships: usize = self
+            .eager_index
+            .iter()
+            .map(|entry| entry.value().len())
+            .sum();
+
+        let polymorphic_relationships: usize = self
+            .polymorphic_index
             .iter()
             .map(|entry| entry.value().len())
             .sum();
@@ -209,7 +220,9 @@ impl RelationshipRegistry {
                 metadata.validate().map_err(|e| {
                     ModelError::Configuration(format!(
                         "Validation failed for relationship '{}' in model '{}': {}",
-                        relationship_name, model_entry.key(), e
+                        relationship_name,
+                        model_entry.key(),
+                        e
                     ))
                 })?;
             }
@@ -221,26 +234,31 @@ impl RelationshipRegistry {
     fn update_foreign_key_index(&self, metadata: &RelationshipMetadata) {
         let foreign_table = &metadata.foreign_key.table;
         let local_table = &metadata.related_table;
-        
-        let mut foreign_key_relationships = self.foreign_key_index
+
+        let mut foreign_key_relationships = self
+            .foreign_key_index
             .entry(foreign_table.clone())
-            .or_insert_with(HashMap::new);
-        
+            .or_default();
+
         let relationships = foreign_key_relationships
             .entry(local_table.clone())
-            .or_insert_with(Vec::new);
-        
+            .or_default();
+
         relationships.push(metadata.clone());
     }
 
     /// Check if two relationships are inverses of each other
-    fn is_inverse_relationship(&self, rel1: &RelationshipMetadata, rel2: &RelationshipMetadata) -> bool {
+    fn is_inverse_relationship(
+        &self,
+        rel1: &RelationshipMetadata,
+        rel2: &RelationshipMetadata,
+    ) -> bool {
         // Basic inverse detection - can be enhanced
         match (rel1.relationship_type, rel2.relationship_type) {
-            (RelationshipType::HasOne, RelationshipType::BelongsTo) |
-            (RelationshipType::BelongsTo, RelationshipType::HasOne) |
-            (RelationshipType::HasMany, RelationshipType::BelongsTo) |
-            (RelationshipType::BelongsTo, RelationshipType::HasMany) => {
+            (RelationshipType::HasOne, RelationshipType::BelongsTo)
+            | (RelationshipType::BelongsTo, RelationshipType::HasOne)
+            | (RelationshipType::HasMany, RelationshipType::BelongsTo)
+            | (RelationshipType::BelongsTo, RelationshipType::HasMany) => {
                 // Check if foreign keys match appropriately
                 rel1.foreign_key.primary_column() == rel2.foreign_key.primary_column()
             }
@@ -258,13 +276,13 @@ impl RelationshipRegistry {
     /// Count relationships by type
     fn count_relationship_types(&self) -> HashMap<RelationshipType, usize> {
         let mut counts = HashMap::new();
-        
+
         for model_entry in self.relationships.iter() {
-            for (_, metadata) in model_entry.value() {
+            for metadata in model_entry.value().values() {
                 *counts.entry(metadata.relationship_type).or_insert(0) += 1;
             }
         }
-        
+
         counts
     }
 }
@@ -318,8 +336,8 @@ macro_rules! register_relationship {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::metadata::*;
+    use super::*;
 
     fn create_test_metadata(name: &str, rel_type: RelationshipType) -> RelationshipMetadata {
         RelationshipMetadata::new(
@@ -362,7 +380,7 @@ mod tests {
         metadata.eager_load = true;
 
         registry.register("User", "profile", metadata).unwrap();
-        
+
         let eager_relationships = registry.get_eager_relationships("User");
         assert_eq!(eager_relationships, vec!["profile"]);
     }
@@ -378,7 +396,7 @@ mod tests {
         ));
 
         registry.register("Post", "comments", metadata).unwrap();
-        
+
         let poly_relationships = registry.get_polymorphic_relationships("commentable");
         assert_eq!(poly_relationships.len(), 1);
     }
@@ -389,7 +407,7 @@ mod tests {
         let metadata = create_test_metadata("user", RelationshipType::BelongsTo);
 
         registry.register("Post", "user", metadata).unwrap();
-        
+
         let found = registry.find_by_foreign_table("user_table");
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].name, "user");
@@ -398,36 +416,42 @@ mod tests {
     #[test]
     fn test_registry_stats() {
         let registry = RelationshipRegistry::new();
-        
+
         let posts_metadata = create_test_metadata("posts", RelationshipType::HasMany);
         let profile_metadata = create_test_metadata("profile", RelationshipType::HasOne);
         let mut eager_metadata = create_test_metadata("comments", RelationshipType::HasMany);
         eager_metadata.eager_load = true;
 
         registry.register("User", "posts", posts_metadata).unwrap();
-        registry.register("User", "profile", profile_metadata).unwrap();
-        registry.register("User", "comments", eager_metadata).unwrap();
+        registry
+            .register("User", "profile", profile_metadata)
+            .unwrap();
+        registry
+            .register("User", "comments", eager_metadata)
+            .unwrap();
 
         let stats = registry.stats();
         assert_eq!(stats.total_models, 1);
         assert_eq!(stats.total_relationships, 3);
         assert_eq!(stats.eager_relationships, 1);
-        
+
         let most_common = stats.most_common_relationship_type();
         assert_eq!(most_common, Some((RelationshipType::HasMany, 2)));
-        
+
         assert!(stats.eager_relationship_percentage() > 30.0);
     }
 
     #[test]
     fn test_all_relationships_for_model() {
         let registry = RelationshipRegistry::new();
-        
+
         let posts_metadata = create_test_metadata("posts", RelationshipType::HasMany);
         let profile_metadata = create_test_metadata("profile", RelationshipType::HasOne);
 
         registry.register("User", "posts", posts_metadata).unwrap();
-        registry.register("User", "profile", profile_metadata).unwrap();
+        registry
+            .register("User", "profile", profile_metadata)
+            .unwrap();
 
         let all_relationships = registry.get_all_for_model("User").unwrap();
         assert_eq!(all_relationships.len(), 2);
@@ -438,12 +462,14 @@ mod tests {
     #[test]
     fn test_relationship_names() {
         let registry = RelationshipRegistry::new();
-        
+
         let posts_metadata = create_test_metadata("posts", RelationshipType::HasMany);
         let profile_metadata = create_test_metadata("profile", RelationshipType::HasOne);
 
         registry.register("User", "posts", posts_metadata).unwrap();
-        registry.register("User", "profile", profile_metadata).unwrap();
+        registry
+            .register("User", "profile", profile_metadata)
+            .unwrap();
 
         let mut names = registry.get_relationship_names("User");
         names.sort();
@@ -453,7 +479,7 @@ mod tests {
     #[test]
     fn test_registry_validation() {
         let registry = RelationshipRegistry::new();
-        
+
         // Valid relationship
         let valid_metadata = create_test_metadata("posts", RelationshipType::HasMany);
         registry.register("User", "posts", valid_metadata).unwrap();

@@ -1,12 +1,12 @@
 //! Integration tests for controller macro on impl blocks
-//! 
+//!
 //! Tests the new architecture where #[controller] is applied to impl blocks
 //! instead of structs, enabling automatic route registration.
-//! 
+//!
 //! Note: We cannot test the full ElifController trait implementation here
 //! due to circular dependency issues. That will be tested in elif-http itself.
 
-use elif_http_derive::{controller, get, post, middleware};
+use elif_http_derive::{controller, get, middleware, post};
 
 // Define a simple controller struct
 pub struct UserController;
@@ -21,12 +21,12 @@ impl UserController {
     pub async fn list(&self, _req: String) -> Result<String, String> {
         Ok("User list".to_string())
     }
-    
+
     #[get("/{id}")]
     pub async fn show(&self, _req: String) -> Result<String, String> {
         Ok("User details".to_string())
     }
-    
+
     #[post("")]
     #[middleware("auth")]
     pub async fn create(&self, _req: String) -> Result<String, String> {
@@ -54,7 +54,7 @@ impl AdminController {
     pub async fn dashboard(&self, _req: String) -> Result<String, String> {
         Ok("Admin dashboard".to_string())
     }
-    
+
     #[post("/settings")]
     #[middleware("auth", "admin", "csrf")]
     pub async fn update_settings(&self, _req: String) -> Result<String, String> {

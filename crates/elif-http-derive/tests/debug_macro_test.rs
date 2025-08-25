@@ -1,6 +1,6 @@
 //! Debug macro test
 
-use elif_http_derive::{get};
+use elif_http_derive::get;
 
 // Mock the required types
 pub struct ElifRequest;
@@ -13,14 +13,19 @@ pub struct ParamError;
 
 impl HttpError {
     pub fn bad_request(_msg: String) -> Box<dyn std::error::Error> {
-        Box::new(std::io::Error::new(std::io::ErrorKind::Other, "bad request"))
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "bad request",
+        ))
     }
 }
 
 impl ElifResponse {
-    pub fn ok() -> Self { Self }
-    pub fn json<T>(&self, _data: &T) -> Result<Self, Box<dyn std::error::Error>> { 
-        Ok(Self) 
+    pub fn ok() -> Self {
+        Self
+    }
+    pub fn json<T>(&self, _data: &T) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self)
     }
 }
 

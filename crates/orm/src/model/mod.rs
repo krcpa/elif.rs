@@ -10,29 +10,32 @@
 //! - `extensions`: Utility methods and convenience functions
 //! - `abstraction`: Database-agnostic operations
 
-pub mod core_trait;
-pub mod primary_key;
-pub mod crud_operations;
-pub mod query_methods;
-pub mod extensions;
 pub mod abstraction;
+pub mod core_trait;
+pub mod crud_operations;
+pub mod extensions;
 pub mod lifecycle;
+pub mod primary_key;
+pub mod query_methods;
 
 // Re-export main types and traits for convenience
-pub use core_trait::Model;
-pub use primary_key::PrimaryKey;
-pub use crud_operations::CrudOperations;
-pub use query_methods::QueryMethods;
-pub use extensions::ModelExtensions;
 pub use abstraction::ModelAbstracted;
+pub use core_trait::Model;
+pub use crud_operations::CrudOperations;
+pub use extensions::ModelExtensions;
 pub use lifecycle::ModelLifecycle;
+pub use primary_key::PrimaryKey;
+pub use query_methods::QueryMethods;
 
 // Re-export all traits in a single composite trait for easy importing
 /// Composite trait that includes all model functionality
-pub trait FullModel: Model + CrudOperations + QueryMethods + ModelExtensions + ModelAbstracted {}
+pub trait FullModel:
+    Model + CrudOperations + QueryMethods + ModelExtensions + ModelAbstracted
+{
+}
 
 // Implement FullModel for all types that implement the component traits
-impl<T> FullModel for T 
-where 
-    T: Model + CrudOperations + QueryMethods + ModelExtensions + ModelAbstracted 
-{}
+impl<T> FullModel for T where
+    T: Model + CrudOperations + QueryMethods + ModelExtensions + ModelAbstracted
+{
+}

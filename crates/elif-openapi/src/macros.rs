@@ -9,7 +9,7 @@ The derive macro implementation would be in a separate proc-macro crate.
 pub trait OpenApiSchema {
     /// Generate OpenAPI schema for this type
     fn openapi_schema() -> crate::specification::Schema;
-    
+
     /// Get the schema name/title
     fn schema_name() -> String;
 }
@@ -25,7 +25,7 @@ impl OpenApiSchema for String {
             ..Default::default()
         }
     }
-    
+
     fn schema_name() -> String {
         "String".to_string()
     }
@@ -39,7 +39,7 @@ impl OpenApiSchema for i32 {
             ..Default::default()
         }
     }
-    
+
     fn schema_name() -> String {
         "i32".to_string()
     }
@@ -53,7 +53,7 @@ impl OpenApiSchema for i64 {
             ..Default::default()
         }
     }
-    
+
     fn schema_name() -> String {
         "i64".to_string()
     }
@@ -66,7 +66,7 @@ impl OpenApiSchema for bool {
             ..Default::default()
         }
     }
-    
+
     fn schema_name() -> String {
         "bool".to_string()
     }
@@ -78,7 +78,7 @@ impl<T: OpenApiSchema> OpenApiSchema for Option<T> {
         schema.nullable = Some(true);
         schema
     }
-    
+
     fn schema_name() -> String {
         format!("Option<{}>", T::schema_name())
     }
@@ -92,10 +92,8 @@ impl<T: OpenApiSchema> OpenApiSchema for Vec<T> {
             ..Default::default()
         }
     }
-    
+
     fn schema_name() -> String {
         format!("Vec<{}>", T::schema_name())
     }
 }
-
-

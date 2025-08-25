@@ -1,22 +1,22 @@
 use crate::container::{Container, ContainerBuilder};
 use crate::errors::CoreError;
-use crate::modules::routing::{RouteDefinition, MiddlewareDefinition};
+use crate::modules::routing::{MiddlewareDefinition, RouteDefinition};
 
 /// Core module error type
 #[derive(Debug, thiserror::Error)]
 pub enum ModuleError {
     #[error("Circular dependency detected in module: {module}")]
     CircularDependency { module: String },
-    
+
     #[error("Missing dependency '{dependency}' for module '{module}'")]
     MissingDependency { module: String, dependency: String },
-    
+
     #[error("Module configuration failed: {message}")]
     ConfigurationFailed { message: String },
-    
+
     #[error("Module boot failed: {message}")]
     BootFailed { message: String },
-    
+
     #[error("Container error: {0}")]
     Container(#[from] CoreError),
 }
@@ -25,41 +25,41 @@ pub enum ModuleError {
 pub trait Module: Send + Sync {
     /// Module name for identification
     fn name(&self) -> &'static str;
-    
+
     /// Configure services in the container builder
     fn configure(&self, builder: ContainerBuilder) -> Result<ContainerBuilder, ModuleError>;
-    
+
     /// Define routes for this module
     fn routes(&self) -> Vec<RouteDefinition> {
         vec![]
     }
-    
+
     /// Define middleware for this module
     fn middleware(&self) -> Vec<MiddlewareDefinition> {
         vec![]
     }
-    
+
     /// Boot the module after container is built
     fn boot(&self, _container: &Container) -> Result<(), ModuleError> {
         // Default implementation does nothing
         Ok(())
     }
-    
+
     /// Module dependencies (other modules that must be loaded first)
     fn dependencies(&self) -> Vec<&'static str> {
         vec![]
     }
-    
+
     /// Module version for compatibility checking
     fn version(&self) -> Option<&'static str> {
         None
     }
-    
+
     /// Module description
     fn description(&self) -> Option<&'static str> {
         None
     }
-    
+
     /// Check if this module can be disabled
     fn is_optional(&self) -> bool {
         true
@@ -83,12 +83,16 @@ impl ModuleMetadata {
     pub fn from_module<M: Module + ?Sized>(module: &M) -> Self {
         let routes = module.routes();
         let middleware = module.middleware();
-        
+
         Self {
             name: module.name().to_string(),
             version: module.version().map(|v| v.to_string()),
             description: module.description().map(|d| d.to_string()),
-            dependencies: module.dependencies().iter().map(|d| d.to_string()).collect(),
+            dependencies: module
+                .dependencies()
+                .iter()
+                .map(|d| d.to_string())
+                .collect(),
             is_optional: module.is_optional(),
             route_count: routes.len(),
             middleware_count: middleware.len(),
@@ -117,25 +121,25 @@ impl BaseModule {
             is_optional: true,
         }
     }
-    
+
     /// Set module version
     pub fn with_version(mut self, version: &'static str) -> Self {
         self.version = Some(version);
         self
     }
-    
+
     /// Set module description
     pub fn with_description(mut self, description: &'static str) -> Self {
         self.description = Some(description);
         self
     }
-    
+
     /// Set module dependencies
     pub fn with_dependencies(mut self, dependencies: Vec<&'static str>) -> Self {
         self.dependencies = dependencies;
         self
     }
-    
+
     /// Set if module is optional
     pub fn with_optional(mut self, is_optional: bool) -> Self {
         self.is_optional = is_optional;
@@ -147,24 +151,24 @@ impl Module for BaseModule {
     fn name(&self) -> &'static str {
         self.name
     }
-    
+
     fn configure(&self, builder: ContainerBuilder) -> Result<ContainerBuilder, ModuleError> {
         // Base module doesn't configure anything by default
         Ok(builder)
     }
-    
+
     fn dependencies(&self) -> Vec<&'static str> {
         self.dependencies.clone()
     }
-    
+
     fn version(&self) -> Option<&'static str> {
         self.version
     }
-    
+
     fn description(&self) -> Option<&'static str> {
         self.description
     }
-    
+
     fn is_optional(&self) -> bool {
         self.is_optional
     }
@@ -186,49 +190,49 @@ macro_rules! module {
     ) => {
         {
             struct CustomModule;
-            
+
             impl $crate::modules::Module for CustomModule {
                 fn name(&self) -> &'static str {
                     $name
                 }
-                
+
                 $(fn version(&self) -> Option<&'static str> {
                     Some($version)
                 })?
-                
+
                 $(fn description(&self) -> Option<&'static str> {
                     Some($description)
                 })?
-                
+
                 $(fn dependencies(&self) -> Vec<&'static str> {
                     vec![$($dep),*]
                 })?
-                
+
                 $(fn is_optional(&self) -> bool {
                     $optional
                 })?
-                
-                fn configure(&self, $builder: $crate::container::ContainerBuilder) 
-                    -> Result<$crate::container::ContainerBuilder, $crate::modules::ModuleError> 
+
+                fn configure(&self, $builder: $crate::container::ContainerBuilder)
+                    -> Result<$crate::container::ContainerBuilder, $crate::modules::ModuleError>
                 {
                     $config
                 }
-                
-                $(fn boot(&self, $container: &$crate::container::Container) 
-                    -> Result<(), $crate::modules::ModuleError> 
+
+                $(fn boot(&self, $container: &$crate::container::Container)
+                    -> Result<(), $crate::modules::ModuleError>
                 {
                     $boot
                 })?
-                
+
                 $(fn routes(&self) -> Vec<$crate::modules::RouteDefinition> {
                     $routes
                 })?
-                
+
                 $(fn middleware(&self) -> Vec<$crate::modules::MiddlewareDefinition> {
                     $middleware
                 })?
             }
-            
+
             CustomModule
         }
     };
@@ -237,7 +241,7 @@ macro_rules! module {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_module_metadata() {
         let base_module = BaseModule::new("test_module")
@@ -245,9 +249,9 @@ mod tests {
             .with_description("A test module")
             .with_dependencies(vec!["dependency1", "dependency2"])
             .with_optional(false);
-        
+
         let metadata = ModuleMetadata::from_module(&base_module);
-        
+
         assert_eq!(metadata.name, "test_module");
         assert_eq!(metadata.version, Some("1.0.0".to_string()));
         assert_eq!(metadata.description, Some("A test module".to_string()));

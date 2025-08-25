@@ -3,11 +3,11 @@
 //! Tests model mapping from database rows without requiring a real database connection.
 //! Uses mock database rows to test the hydration and serialization functionality.
 
+use crate::backends::{DatabaseRow, DatabaseRowExt, DatabaseValue};
 use crate::{Model, ModelError, ModelResult, OrmResult};
-use crate::backends::{DatabaseRow, DatabaseValue, DatabaseRowExt};
-use serde_json::Value as JsonValue;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value as JsonValue;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -22,22 +22,24 @@ impl MockDatabaseRow {
             columns: HashMap::new(),
         }
     }
-    
+
     pub fn with_column<T: Into<Value>>(mut self, name: &str, value: T) -> Self {
         self.columns.insert(name.to_string(), value.into());
         self
     }
-    
+
     pub fn get_column<T>(&self, name: &str) -> Result<T, ModelError>
     where
         T: for<'de> Deserialize<'de>,
     {
         match self.columns.get(name) {
-            Some(value) => {
-                serde_json::from_value(value.clone())
-                    .map_err(|e| ModelError::Serialization(format!("Failed to deserialize column '{}': {}", name, e)))
-            },
-            None => Err(ModelError::ColumnNotFound(format!("Column '{}' not found", name)))
+            Some(value) => serde_json::from_value(value.clone()).map_err(|e| {
+                ModelError::Serialization(format!("Failed to deserialize column '{}': {}", name, e))
+            }),
+            None => Err(ModelError::ColumnNotFound(format!(
+                "Column '{}' not found",
+                name
+            ))),
         }
     }
 }
@@ -49,14 +51,20 @@ impl DatabaseRow for MockDatabaseRow {
             let value = self.columns.get(*key).unwrap();
             Ok(DatabaseValue::from_json(value.clone()))
         } else {
-            Err(crate::ModelError::ColumnNotFound(format!("Column at index {} not found", index)))
+            Err(crate::ModelError::ColumnNotFound(format!(
+                "Column at index {} not found",
+                index
+            )))
         }
     }
 
     fn get_by_name(&self, name: &str) -> OrmResult<DatabaseValue> {
         match self.columns.get(name) {
             Some(value) => Ok(DatabaseValue::from_json(value.clone())),
-            None => Err(crate::ModelError::ColumnNotFound(format!("Column '{}' not found", name)))
+            None => Err(crate::ModelError::ColumnNotFound(format!(
+                "Column '{}' not found",
+                name
+            ))),
         }
     }
 
@@ -95,15 +103,15 @@ pub struct TestUser {
 
 impl Model for TestUser {
     type PrimaryKey = Uuid;
-    
+
     fn table_name() -> &'static str {
         "users"
     }
-    
+
     fn primary_key(&self) -> Option<Self::PrimaryKey> {
         Some(self.id)
     }
-    
+
     fn to_fields(&self) -> HashMap<String, Value> {
         let mut fields = HashMap::new();
         fields.insert("id".to_string(), json!(self.id));
@@ -115,7 +123,7 @@ impl Model for TestUser {
         fields.insert("updated_at".to_string(), json!(self.updated_at));
         fields
     }
-    
+
     fn from_row(row: &sqlx::postgres::PgRow) -> ModelResult<Self> {
         use sqlx::Row;
         Ok(TestUser {
@@ -166,15 +174,15 @@ pub struct TestPost {
 
 impl Model for TestPost {
     type PrimaryKey = i32;
-    
+
     fn table_name() -> &'static str {
         "posts"
     }
-    
+
     fn primary_key(&self) -> Option<Self::PrimaryKey> {
         Some(self.id)
     }
-    
+
     fn to_fields(&self) -> HashMap<String, Value> {
         let mut fields = HashMap::new();
         fields.insert("id".to_string(), json!(self.id));
@@ -188,7 +196,7 @@ impl Model for TestPost {
         fields.insert("created_at".to_string(), json!(self.created_at));
         fields
     }
-    
+
     fn from_row(row: &sqlx::postgres::PgRow) -> ModelResult<Self> {
         use sqlx::Row;
         Ok(TestPost {
@@ -239,37 +247,36 @@ mod tests {
             .with_column("id", 1)
             .with_column("name", "Test User")
             .with_column("active", true);
-        
+
         assert_eq!(row.get::<i32>("id").unwrap(), 1);
         assert_eq!(row.get::<String>("name").unwrap(), "Test User");
         assert_eq!(row.get::<bool>("active").unwrap(), true);
     }
-    
+
     #[test]
     fn test_mock_database_row_missing_column() {
-        let row = MockDatabaseRow::new()
-            .with_column("id", 1);
-        
+        let row = MockDatabaseRow::new().with_column("id", 1);
+
         let result = row.get::<String>("missing_column");
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), ModelError::ColumnNotFound(_)));
     }
-    
+
     #[test]
     fn test_mock_database_row_null_handling() {
         let row = MockDatabaseRow::new()
             .with_column("id", 1)
             .with_column("nullable_field", Value::Null);
-        
+
         assert_eq!(row.get::<i32>("id").unwrap(), 1);
         assert_eq!(row.try_get::<String>("nullable_field").unwrap(), None);
     }
-    
+
     #[test]
     fn test_user_model_from_row() {
         let user_id = Uuid::new_v4();
         let now = Utc::now();
-        
+
         let row = MockDatabaseRow::new()
             .with_column("id", user_id.to_string())
             .with_column("name", "John Doe")
@@ -278,9 +285,9 @@ mod tests {
             .with_column("active", true)
             .with_column("created_at", now.to_rfc3339())
             .with_column("updated_at", Value::Null);
-        
+
         let user = TestUser::from_mock_row(&row).unwrap();
-        
+
         assert_eq!(user.id, user_id);
         assert_eq!(user.name, "John Doe");
         assert_eq!(user.email, "john@example.com");
@@ -288,12 +295,12 @@ mod tests {
         assert_eq!(user.active, true);
         assert_eq!(user.updated_at, None);
     }
-    
+
     #[test]
     fn test_user_model_to_fields() {
         let user_id = Uuid::new_v4();
         let now = Utc::now();
-        
+
         let user = TestUser {
             id: user_id,
             name: "Jane Smith".to_string(),
@@ -303,21 +310,21 @@ mod tests {
             created_at: now,
             updated_at: Some(now),
         };
-        
+
         let fields = user.to_fields();
-        
+
         assert_eq!(fields.get("id").unwrap(), &json!(user_id));
         assert_eq!(fields.get("name").unwrap(), "Jane Smith");
         assert_eq!(fields.get("email").unwrap(), "jane@example.com");
         assert_eq!(fields.get("age").unwrap(), &json!(25));
         assert_eq!(fields.get("active").unwrap(), &json!(true));
     }
-    
+
     #[test]
     fn test_post_model_with_complex_types() {
         let user_id = Uuid::new_v4();
         let now = Utc::now();
-        
+
         let row = MockDatabaseRow::new()
             .with_column("id", 1)
             .with_column("user_id", user_id.to_string())
@@ -328,9 +335,9 @@ mod tests {
             .with_column("tags", json!(["rust", "orm", "testing"]))
             .with_column("metadata", json!({"priority": "high", "featured": true}))
             .with_column("created_at", now.to_rfc3339());
-        
+
         let post = TestPost::from_mock_row(&row).unwrap();
-        
+
         assert_eq!(post.id, 1);
         assert_eq!(post.user_id, user_id);
         assert_eq!(post.title, "Test Post");
@@ -341,12 +348,12 @@ mod tests {
         assert_eq!(post.metadata["priority"], "high");
         assert_eq!(post.metadata["featured"], true);
     }
-    
+
     #[test]
     fn test_post_model_with_optional_content() {
         let user_id = Uuid::new_v4();
         let now = Utc::now();
-        
+
         let row = MockDatabaseRow::new()
             .with_column("id", 2)
             .with_column("user_id", user_id.to_string())
@@ -357,21 +364,21 @@ mod tests {
             .with_column("tags", json!([]))
             .with_column("metadata", json!({}))
             .with_column("created_at", now.to_rfc3339());
-        
+
         let post = TestPost::from_mock_row(&row).unwrap();
-        
+
         assert_eq!(post.id, 2);
         assert_eq!(post.title, "Draft Post");
         assert_eq!(post.content, None);
         assert_eq!(post.published, false);
         assert_eq!(post.tags, Vec::<String>::new());
     }
-    
+
     #[test]
     fn test_model_serialization_roundtrip() {
         let user_id = Uuid::new_v4();
         let now = Utc::now();
-        
+
         let original_user = TestUser {
             id: user_id,
             name: "Test User".to_string(),
@@ -381,22 +388,22 @@ mod tests {
             created_at: now,
             updated_at: Some(now),
         };
-        
+
         // Convert to fields (as if saving to database)
         let fields = original_user.to_fields();
-        
+
         // Create mock row from fields (as if loading from database)
         let mut mock_row = MockDatabaseRow::new();
         for (key, value) in &fields {
             mock_row = mock_row.with_column(key, value.clone());
         }
-        
+
         // Convert back to model
         let restored_user = TestUser::from_mock_row(&mock_row).unwrap();
-        
+
         assert_eq!(original_user, restored_user);
     }
-    
+
     #[test]
     fn test_model_primary_key_handling() {
         let user_id = Uuid::new_v4();
@@ -409,11 +416,11 @@ mod tests {
             created_at: Utc::now(),
             updated_at: None,
         };
-        
+
         assert_eq!(user.primary_key(), Some(user_id));
         assert_eq!(TestUser::table_name(), "users");
         // Primary key type assertion removed as trait no longer exists
-        
+
         let post = TestPost {
             id: 42,
             user_id: user_id,
@@ -425,12 +432,12 @@ mod tests {
             metadata: json!({}),
             created_at: Utc::now(),
         };
-        
+
         assert_eq!(post.primary_key(), Some(42));
         assert_eq!(TestPost::table_name(), "posts");
         // Primary key type assertion removed as trait no longer exists
     }
-    
+
     #[test]
     fn test_model_type_safety() {
         let row = MockDatabaseRow::new()
@@ -440,13 +447,13 @@ mod tests {
             .with_column("age", Value::Null)
             .with_column("active", true)
             .with_column("created_at", Utc::now().to_rfc3339());
-        
+
         // Should fail due to invalid UUID
         let result = TestUser::from_mock_row(&row);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), ModelError::Serialization(_)));
     }
-    
+
     #[test]
     fn test_complex_json_mapping() {
         let complex_metadata = json!({
@@ -464,7 +471,7 @@ mod tests {
                 "shares": 5
             }
         });
-        
+
         let row = MockDatabaseRow::new()
             .with_column("id", 1)
             .with_column("user_id", Uuid::new_v4().to_string())
@@ -475,9 +482,9 @@ mod tests {
             .with_column("tags", json!(["complex", "json"]))
             .with_column("metadata", complex_metadata.clone())
             .with_column("created_at", Utc::now().to_rfc3339());
-        
+
         let post = TestPost::from_mock_row(&row).unwrap();
-        
+
         assert_eq!(post.metadata, complex_metadata);
         assert_eq!(post.metadata["author"]["name"], "John Doe");
         assert_eq!(post.metadata["stats"]["likes"], 25);

@@ -1,7 +1,7 @@
 //! Password hashing and cryptographic utilities
 
-use crate::{AuthError, AuthResult};
 use crate::traits::PasswordHasher;
+use crate::{AuthError, AuthResult};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::collections::HashMap;
 
@@ -69,12 +69,8 @@ impl PasswordHasher for Argon2Hasher {
         let argon2 = Argon2::new(
             argon2::Algorithm::Argon2id,
             argon2::Version::V0x13,
-            argon2::Params::new(
-                self.memory_cost,
-                self.time_cost,
-                self.parallelism,
-                None,
-            ).map_err(|e| AuthError::crypto_error(e.to_string()))?,
+            argon2::Params::new(self.memory_cost, self.time_cost, self.parallelism, None)
+                .map_err(|e| AuthError::crypto_error(e.to_string()))?,
         );
 
         let password_hash = argon2
@@ -85,18 +81,14 @@ impl PasswordHasher for Argon2Hasher {
     }
 
     fn verify_password(&self, password: &str, hash: &str) -> AuthResult<bool> {
-        let parsed_hash = PasswordHash::new(hash)
-            .map_err(|e| AuthError::crypto_error(e.to_string()))?;
+        let parsed_hash =
+            PasswordHash::new(hash).map_err(|e| AuthError::crypto_error(e.to_string()))?;
 
         let argon2 = Argon2::new(
             argon2::Algorithm::Argon2id,
             argon2::Version::V0x13,
-            argon2::Params::new(
-                self.memory_cost,
-                self.time_cost,
-                self.parallelism,
-                None,
-            ).map_err(|e| AuthError::crypto_error(e.to_string()))?,
+            argon2::Params::new(self.memory_cost, self.time_cost, self.parallelism, None)
+                .map_err(|e| AuthError::crypto_error(e.to_string()))?,
         );
 
         match argon2.verify_password(password.as_bytes(), &parsed_hash) {
@@ -180,7 +172,11 @@ impl PasswordHasherFactory {
                     .and_then(|v| v.as_u64())
                     .unwrap_or(4) as u32;
 
-                Ok(Box::new(Argon2Hasher::new(memory_cost, time_cost, parallelism)))
+                Ok(Box::new(Argon2Hasher::new(
+                    memory_cost,
+                    time_cost,
+                    parallelism,
+                )))
             }
             #[cfg(feature = "bcrypt")]
             "bcrypt" => {
@@ -203,10 +199,10 @@ impl PasswordHasherFactory {
     pub fn default_hasher() -> Box<dyn PasswordHasher> {
         #[cfg(feature = "argon2")]
         return Box::new(Argon2Hasher::default());
-        
+
         #[cfg(all(not(feature = "argon2"), feature = "bcrypt"))]
         return Box::new(BcryptHasher::default());
-        
+
         #[cfg(all(not(feature = "argon2"), not(feature = "bcrypt")))]
         panic!("No password hasher available. Enable either 'argon2' or 'bcrypt' feature");
     }
@@ -294,7 +290,11 @@ impl CryptoUtils {
             ));
         }
 
-        if require_special && !password.chars().any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c)) {
+        if require_special
+            && !password
+                .chars()
+                .any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c))
+        {
             return Err(AuthError::generic_error(
                 "Password must contain at least one special character".to_string(),
             ));
@@ -324,11 +324,11 @@ mod tests {
     fn test_argon2_hasher() {
         let hasher = Argon2Hasher::default();
         let password = "test_password_123";
-        
+
         let hash = hasher.hash_password(password).unwrap();
         assert!(!hash.is_empty());
         assert_ne!(hash, password);
-        
+
         assert!(hasher.verify_password(password, &hash).unwrap());
         assert!(!hasher.verify_password("wrong_password", &hash).unwrap());
     }
@@ -337,11 +337,11 @@ mod tests {
     fn test_bcrypt_hasher() {
         let hasher = BcryptHasher::development(); // Use low cost for tests
         let password = "test_password_123";
-        
+
         let hash = hasher.hash_password(password).unwrap();
         assert!(!hash.is_empty());
         assert_ne!(hash, password);
-        
+
         assert!(hasher.verify_password(password, &hash).unwrap());
         assert!(!hasher.verify_password("wrong_password", &hash).unwrap());
     }
@@ -349,17 +349,23 @@ mod tests {
     #[test]
     fn test_password_hasher_factory() {
         let mut config = HashMap::new();
-        config.insert("cost".to_string(), serde_json::Value::Number(serde_json::Number::from(4)));
-        
+        config.insert(
+            "cost".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(4)),
+        );
+
         let hasher = PasswordHasherFactory::create_hasher("bcrypt", config).unwrap();
         assert_eq!(hasher.hasher_name(), "bcrypt");
-        
+
         let mut config = HashMap::new();
-        config.insert("memory_cost".to_string(), serde_json::Value::Number(serde_json::Number::from(4096)));
-        
+        config.insert(
+            "memory_cost".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(4096)),
+        );
+
         let hasher = PasswordHasherFactory::create_hasher("argon2", config).unwrap();
         assert_eq!(hasher.hasher_name(), "argon2");
-        
+
         let result = PasswordHasherFactory::create_hasher("invalid", HashMap::new());
         assert!(result.is_err());
     }
@@ -368,14 +374,14 @@ mod tests {
     fn test_crypto_utils_random_generation() {
         let token1 = CryptoUtils::generate_token(16);
         let token2 = CryptoUtils::generate_token(16);
-        
+
         assert_eq!(token1.len(), 16);
         assert_eq!(token2.len(), 16);
         assert_ne!(token1, token2);
-        
+
         let session_id = CryptoUtils::generate_session_id();
         assert_eq!(session_id.len(), 32);
-        
+
         let backup_codes = CryptoUtils::generate_backup_codes(5, 8);
         assert_eq!(backup_codes.len(), 5);
         assert!(backup_codes.iter().all(|code| code.len() == 8));
@@ -384,61 +390,33 @@ mod tests {
     #[test]
     fn test_password_strength_validation() {
         // Valid password
-        let result = CryptoUtils::validate_password_strength(
-            "Test123!",
-            8,
-            128,
-            true,
-            true,
-            true,
-            true,
-        );
+        let result =
+            CryptoUtils::validate_password_strength("Test123!", 8, 128, true, true, true, true);
         assert!(result.is_ok());
 
         // Too short
-        let result = CryptoUtils::validate_password_strength(
-            "Test1!",
-            8,
-            128,
-            true,
-            true,
-            true,
-            true,
-        );
+        let result =
+            CryptoUtils::validate_password_strength("Test1!", 8, 128, true, true, true, true);
         assert!(result.is_err());
 
         // Missing uppercase
-        let result = CryptoUtils::validate_password_strength(
-            "test123!",
-            8,
-            128,
-            true,
-            true,
-            true,
-            true,
-        );
+        let result =
+            CryptoUtils::validate_password_strength("test123!", 8, 128, true, true, true, true);
         assert!(result.is_err());
 
         // Missing special character
-        let result = CryptoUtils::validate_password_strength(
-            "Test1234",
-            8,
-            128,
-            true,
-            true,
-            true,
-            true,
-        );
+        let result =
+            CryptoUtils::validate_password_strength("Test1234", 8, 128, true, true, true, true);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_default_password_operations() {
         let password = "test_password_123";
-        
+
         let hash = CryptoUtils::hash_password(password).unwrap();
         assert!(!hash.is_empty());
-        
+
         assert!(CryptoUtils::verify_password(password, &hash).unwrap());
         assert!(!CryptoUtils::verify_password("wrong", &hash).unwrap());
     }

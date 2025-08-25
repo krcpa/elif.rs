@@ -1,5 +1,5 @@
 //! Error handling middleware for HTTP requests
-//! 
+//!
 //! Provides comprehensive error handling including panic recovery and error response formatting.
 
 use crate::{
@@ -15,7 +15,7 @@ use futures_util::future::FutureExt;
 pub struct ErrorHandlerConfig {
     /// Whether to include panic details in error responses (development only)
     pub include_panic_details: bool,
-    
+
     /// Whether to log errors
     pub log_errors: bool,
 }
@@ -59,7 +59,6 @@ impl ErrorHandlerMiddleware {
         self.config.log_errors = enable;
         self
     }
-
 }
 
 impl Default for ErrorHandlerMiddleware {
@@ -129,7 +128,7 @@ mod tests {
     use crate::{
         middleware::v2::MiddlewarePipelineV2,
         request::ElifMethod,
-        response::{ElifResponse, headers::ElifHeaderMap},
+        response::{headers::ElifHeaderMap, ElifResponse},
     };
 
     #[tokio::test]
@@ -156,54 +155,60 @@ mod tests {
     #[tokio::test]
     async fn test_error_handler_with_http_error() {
         let middleware = ErrorHandlerMiddleware::new();
-        
+
         let request = ElifRequest::new(
             ElifMethod::GET,
             "/test".parse().unwrap(),
             ElifHeaderMap::new(),
         );
-        
+
         let next = crate::middleware::v2::Next::new(|_req| {
             Box::pin(async {
                 // Return an error response
                 HttpError::bad_request("Test error").into_response()
             })
         });
-        
+
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::BAD_REQUEST
+        );
     }
 
     #[tokio::test]
     async fn test_error_handler_normal_flow() {
         let middleware = ErrorHandlerMiddleware::new();
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
-        
+
         let request = ElifRequest::new(
             ElifMethod::GET,
             "/test".parse().unwrap(),
             ElifHeaderMap::new(),
         );
-        
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async {
-                ElifResponse::ok().json_value(serde_json::json!({
-                    "message": "Success"
-                }))
+
+        let response = pipeline
+            .execute(request, |_req| {
+                Box::pin(async {
+                    ElifResponse::ok().json_value(serde_json::json!({
+                        "message": "Success"
+                    }))
+                })
             })
-        }).await;
-        
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
+            .await;
+
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
     }
 
     #[test]
     fn test_error_handler_config_default() {
         let config = ErrorHandlerConfig::default();
-        
+
         // Should include panic details only in debug mode
         assert_eq!(config.include_panic_details, cfg!(debug_assertions));
         assert!(config.log_errors);
     }
-
-
 }

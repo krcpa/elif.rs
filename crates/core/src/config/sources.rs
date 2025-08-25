@@ -18,17 +18,17 @@ impl ConfigSource {
     pub fn is_env_var(&self) -> bool {
         matches!(self, ConfigSource::EnvVar(_))
     }
-    
+
     /// Check if source is default value
     pub fn is_default(&self) -> bool {
         matches!(self, ConfigSource::Default(_))
     }
-    
+
     /// Check if source is from file
     pub fn is_file(&self) -> bool {
         matches!(self, ConfigSource::File(_))
     }
-    
+
     /// Get source description
     pub fn description(&self) -> String {
         match self {

@@ -1,7 +1,7 @@
 //! # elif-http
-//! 
+//!
 //! HTTP server core for the elif.rs LLM-friendly web framework.
-//! 
+//!
 //! This crate provides a NestJS-like HTTP server experience with:
 //! - Clean, intuitive API that abstracts Axum complexity
 //! - Integration with the elif-core DI container
@@ -11,17 +11,17 @@
 //! - Framework-native routing system
 
 // Core modules
-pub mod foundation;
-pub mod server;
 pub mod config;
+pub mod controller;
 pub mod errors;
-pub mod routing;
-pub mod request;
-pub mod response;
-pub mod middleware;
+pub mod foundation;
 pub mod handlers;
 pub mod logging;
-pub mod controller;
+pub mod middleware;
+pub mod request;
+pub mod response;
+pub mod routing;
+pub mod server;
 pub mod testing;
 pub mod websocket;
 
@@ -30,111 +30,130 @@ pub mod websocket;
 pub mod auth;
 
 // Main server API - NestJS-like experience
-pub use server::Server;
 pub use config::HttpConfig;
 pub use errors::{HttpError, HttpResult, VersionedError, VersionedErrorBuilder, VersionedErrorExt};
+pub use server::Server;
 
 // Re-export foundation types
-pub use foundation::{GenericHandler, IntoElifResponse, RequestExtractor, BoxFuture};
+pub use foundation::{BoxFuture, GenericHandler, IntoElifResponse, RequestExtractor};
 
 // Re-export routing types
 pub use routing::{
-    HttpMethod, RouteInfo, RouteRegistry,
-    ElifRouter, RouteBuilder,
-    PathParams, RouteParam as RoutingRouteParam, ParamError, ParamType,
-    RouteGroup, GroupBuilder,
+    header_versioned_router,
+    path_versioned_router,
+    versioned_router,
+    ElifRouter,
+    GroupBuilder,
+    HttpMethod,
+    ParamError,
+    ParamType,
+    PathParams,
+    RouteBuilder,
+    RouteGroup,
+    RouteInfo,
+    RouteParam as RoutingRouteParam,
+    RouteRegistry,
+    VersionedRouteBuilder,
     // Versioned routing
-    VersionedRouter, VersionedRouteBuilder, versioned_router, path_versioned_router, header_versioned_router,
+    VersionedRouter,
 };
 
-// Re-export request/response types  
-pub use request::{ElifRequest, ElifQuery, ElifPath, ElifState, ElifMethod};
-pub use response::{ElifResponse, ResponseBody, ElifStatusCode, ElifHeaderMap, ElifHeaderName, ElifHeaderValue};
+// Re-export request/response types
+pub use request::{ElifMethod, ElifPath, ElifQuery, ElifRequest, ElifState};
+pub use response::{
+    ElifHeaderMap, ElifHeaderName, ElifHeaderValue, ElifResponse, ElifStatusCode, ResponseBody,
+};
 
 // Re-export JSON handling
-pub use response::{ElifJson, JsonError, JsonResponse, ValidationErrors, ApiResponse};
+pub use response::{ApiResponse, ElifJson, JsonError, JsonResponse, ValidationErrors};
 
 // Re-export middleware types - V2 system is now the default
 pub use middleware::{
-    // V2 Middleware System (default)
-    v2::{
-        Middleware, MiddlewarePipelineV2 as MiddlewarePipeline, Next, 
-        LoggingMiddleware, SimpleAuthMiddleware
+    body_limit::{BodyLimitConfig, BodyLimitInfo, BodyLimitMiddleware},
+    enhanced_logging::{
+        EnhancedLoggingMiddleware, LoggingConfig as MiddlewareLoggingConfig, RequestContext,
     },
     // Core middleware
     error_handler::{
-        ErrorHandlerMiddleware, ErrorHandlerConfig,
-        error_handler, error_handler_with_config
+        error_handler, error_handler_with_config, ErrorHandlerConfig, ErrorHandlerMiddleware,
     },
     logging::LoggingMiddleware as LegacyLoggingMiddleware,
-    enhanced_logging::{EnhancedLoggingMiddleware, LoggingConfig as MiddlewareLoggingConfig, RequestContext},
-    timing::{TimingMiddleware, RequestStartTime, format_duration},
-    tracing::{TracingMiddleware, TracingConfig, RequestMetadata},
-    timeout::{TimeoutMiddleware, TimeoutConfig, TimeoutInfo, apply_timeout},
-    body_limit::{BodyLimitMiddleware, BodyLimitConfig, BodyLimitInfo},
+    timeout::{apply_timeout, TimeoutConfig, TimeoutInfo, TimeoutMiddleware},
+    timing::{format_duration, RequestStartTime, TimingMiddleware},
+    tracing::{RequestMetadata, TracingConfig, TracingMiddleware},
+    // V2 Middleware System (default)
+    v2::{
+        LoggingMiddleware, Middleware, MiddlewarePipelineV2 as MiddlewarePipeline, Next,
+        SimpleAuthMiddleware,
+    },
     // Versioning middleware
     versioning::{
-        VersioningMiddleware, VersioningConfig, VersionStrategy, ApiVersion, VersionInfo,
-        VersioningLayer, VersioningService,
-        versioning_middleware, versioning_layer, default_versioning_middleware, RequestVersionExt
+        default_versioning_middleware, versioning_layer, versioning_middleware, ApiVersion,
+        RequestVersionExt, VersionInfo, VersionStrategy, VersioningConfig, VersioningLayer,
+        VersioningMiddleware, VersioningService,
     },
 };
 
 // Re-export authentication types (if auth feature is enabled)
 #[cfg(feature = "auth")]
-pub use auth::{RequestAuthExt, AuthMiddleware};
+pub use auth::{AuthMiddleware, RequestAuthExt};
 
 // Re-export logging types
-pub use logging::{
-    LoggingConfig, init_logging, log_startup_info, log_shutdown_info, 
-    structured,
-};
+pub use logging::{init_logging, log_shutdown_info, log_startup_info, structured, LoggingConfig};
 // Re-export specific LoggingContext from context module
 pub use logging::context::LoggingContext;
 
 // Re-export controller types
 pub use controller::{
-    Controller, BaseController, 
-    ElifController, ControllerRoute, RouteParam as ControllerRouteParam
+    BaseController, Controller, ControllerRoute, ElifController, RouteParam as ControllerRouteParam,
 };
 // Re-export from specific modules to avoid conflicts
-pub use controller::pagination::{QueryParams, PaginationMeta};
+pub use controller::pagination::{PaginationMeta, QueryParams};
 
 // Re-export derive macros (if derive feature is enabled)
 #[cfg(feature = "derive")]
 pub use elif_http_derive::{
-    controller, get, post, put, delete, patch, head, options,
-    middleware, param, body, routes, resource, group
+    body, controller, delete, get, group, head, middleware, options, param, patch, post, put,
+    resource, routes,
 };
 
 // Re-export handler types
-pub use handlers::{ElifHandler, elif_handler};
+pub use handlers::{elif_handler, ElifHandler};
 
 // Re-export testing utilities (for development and testing)
 pub use testing::{
-    TestUser, TestQuery, test_http_config, test_handler, test_json_handler, test_error_handler,
-    create_test_container, TestContainerBuilder, TestServerBuilder,
-    HttpAssertions, ErrorAssertions,
-    get_test_port, test_socket_addr
+    create_test_container, get_test_port, test_error_handler, test_handler, test_http_config,
+    test_json_handler, test_socket_addr, ErrorAssertions, HttpAssertions, TestContainerBuilder,
+    TestQuery, TestServerBuilder, TestUser,
 };
 
 // Re-export WebSocket types
 pub use websocket::{
-    // Core types
-    WebSocketMessage, WebSocketError, WebSocketResult, ConnectionId, ConnectionState,
-    WebSocketConfig, MessageType,
+    ConnectionEvent,
+    ConnectionId,
+    ConnectionRegistry,
+    ConnectionState,
+    MessageType,
+    SimpleWebSocketHandler,
+    WebSocketConfig,
     // Connection management
-    WebSocketConnection, ConnectionRegistry, ConnectionEvent,
+    WebSocketConnection,
+    WebSocketError,
+    WebSocketHandler,
+    // Core types
+    WebSocketMessage,
+    WebSocketResult,
     // Server and handler
-    WebSocketServer, WebSocketHandler, WebSocketUpgrade, SimpleWebSocketHandler,
+    WebSocketServer,
+    WebSocketUpgrade,
 };
 
 // Legacy compatibility re-exports
-pub use response::ElifJson as Json;
 pub use errors::HttpError as ElifError;
+pub use response::ElifJson as Json;
 
 // Framework-native types - Use these instead of raw Axum types
 // Note: Use Router from routing module, not axum::Router
 // Note: Use ElifJson instead of axum::Json
-// Note: Use ElifResponse instead of axum::Response  
+// Note: Use ElifResponse instead of axum::Response
 // Note: HTTP types are available through response/request modules when needed

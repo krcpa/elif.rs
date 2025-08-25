@@ -72,12 +72,12 @@ impl SwaggerUi {
             config,
         }
     }
-    
+
     /// Get the specification
     pub fn specification(&self) -> Option<&OpenApiSpec> {
         Some(&self.spec)
     }
-    
+
     /// Get the configuration  
     pub fn config(&self) -> &SwaggerConfig {
         &self.config
@@ -100,7 +100,8 @@ impl SwaggerUi {
 
         // Bind to the configured address
         let addr = format!("{}:{}", self.config.host, self.config.port);
-        let listener = tokio::net::TcpListener::bind(&addr).await
+        let listener = tokio::net::TcpListener::bind(&addr)
+            .await
             .map_err(|e| OpenApiError::generic(format!("Failed to bind to {}: {}", addr, e)))?;
 
         println!("🚀 Swagger UI server running at http://{}", addr);
@@ -124,16 +125,29 @@ async fn serve_index(State(state): State<SwaggerState>) -> Html<String> {
 }
 
 /// Serve the OpenAPI specification JSON
-async fn serve_spec(State(state): State<SwaggerState>) -> Result<Json<OpenApiSpec>, (StatusCode, String)> {
+async fn serve_spec(
+    State(state): State<SwaggerState>,
+) -> Result<Json<OpenApiSpec>, (StatusCode, String)> {
     Ok(Json((*state.spec).clone()))
 }
 
 /// Serve static assets (CSS, JS)
-async fn serve_static(Path(path): Path<String>) -> Result<Response<Body>, (StatusCode, &'static str)> {
+async fn serve_static(
+    Path(path): Path<String>,
+) -> Result<Response<Body>, (StatusCode, &'static str)> {
     let (content_type, body) = match path.as_str() {
-        "swagger-ui-bundle.js" => ("application/javascript", "// Swagger UI Bundle - placeholder for CDN content"),
-        "swagger-ui-standalone-preset.js" => ("application/javascript", "// Swagger UI Preset - placeholder for CDN content"),  
-        "swagger-ui.css" => ("text/css", "/* Swagger UI CSS - placeholder for CDN content */"),
+        "swagger-ui-bundle.js" => (
+            "application/javascript",
+            "// Swagger UI Bundle - placeholder for CDN content",
+        ),
+        "swagger-ui-standalone-preset.js" => (
+            "application/javascript",
+            "// Swagger UI Preset - placeholder for CDN content",
+        ),
+        "swagger-ui.css" => (
+            "text/css",
+            "/* Swagger UI CSS - placeholder for CDN content */",
+        ),
         _ => return Err((StatusCode::NOT_FOUND, "Not Found")),
     };
 
@@ -141,13 +155,17 @@ async fn serve_static(Path(path): Path<String>) -> Result<Response<Body>, (Statu
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, content_type)
         .body(Body::from(body))
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response"))?;
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to build response",
+            )
+        })?;
 
     Ok(response)
 }
 
 impl SwaggerUi {
-
     /// Generate the main HTML page
     fn generate_index_html(config: &SwaggerConfig) -> String {
         let oauth_config = if let Some(oauth) = &config.oauth {
@@ -163,7 +181,12 @@ impl SwaggerUi {
                 oauth.client_id,
                 oauth.realm.as_deref().unwrap_or(""),
                 oauth.app_name,
-                oauth.scopes.iter().map(|s| format!(r#""{}""#, s)).collect::<Vec<_>>().join(", ")
+                oauth
+                    .scopes
+                    .iter()
+                    .map(|s| format!(r#""{}""#, s))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )
         } else {
             String::new()
@@ -239,15 +262,15 @@ impl SwaggerUi {
     </script>
 </body>
 </html>"#,
-            config.title,
-            custom_css,
-            oauth_config,
-            custom_js
+            config.title, custom_css, oauth_config, custom_js
         )
     }
 
     /// Generate static Swagger UI HTML file
-    pub fn generate_static_html(spec: &OpenApiSpec, config: &SwaggerConfig) -> OpenApiResult<String> {
+    pub fn generate_static_html(
+        spec: &OpenApiSpec,
+        config: &SwaggerConfig,
+    ) -> OpenApiResult<String> {
         let spec_json = serde_json::to_string(spec)
             .map_err(|e| OpenApiError::export_error(format!("Failed to serialize spec: {}", e)))?;
 
@@ -264,7 +287,12 @@ impl SwaggerUi {
                 oauth.client_id,
                 oauth.realm.as_deref().unwrap_or(""),
                 oauth.app_name,
-                oauth.scopes.iter().map(|s| format!(r#""{}""#, s)).collect::<Vec<_>>().join(", ")
+                oauth
+                    .scopes
+                    .iter()
+                    .map(|s| format!(r#""{}""#, s))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )
         } else {
             String::new()
@@ -342,15 +370,10 @@ impl SwaggerUi {
     </script>
 </body>
 </html>"#,
-            config.title,
-            custom_css,
-            spec_json,
-            oauth_config,
-            custom_js
+            config.title, custom_css, spec_json, oauth_config, custom_js
         ))
     }
 }
-
 
 impl Default for SwaggerConfig {
     fn default() -> Self {
@@ -425,7 +448,7 @@ mod tests {
         let config = SwaggerConfig::new().with_title("Test API Documentation");
 
         let html = SwaggerUi::generate_static_html(&spec, &config).unwrap();
-        
+
         assert!(html.contains("Test API Documentation"));
         assert!(html.contains("swagger-ui"));
         assert!(html.contains("SwaggerUIBundle"));
@@ -435,7 +458,7 @@ mod tests {
     fn test_swagger_ui_creation() {
         let spec = OpenApiSpec::new("Test API", "1.0.0");
         let config = SwaggerConfig::default();
-        
+
         let swagger_ui = SwaggerUi::new(spec, config);
         assert_eq!(swagger_ui.config.host, "127.0.0.1");
         assert_eq!(swagger_ui.config.port, 8080);

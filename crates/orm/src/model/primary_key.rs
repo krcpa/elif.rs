@@ -3,8 +3,8 @@
 //! Supports integer, UUID, and composite primary keys with proper serialization,
 //! display formatting, and type conversion utilities.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
 /// Primary key types supported by the ORM
@@ -24,9 +24,8 @@ impl std::fmt::Display for PrimaryKey {
             PrimaryKey::Integer(id) => write!(f, "{}", id),
             PrimaryKey::Uuid(id) => write!(f, "{}", id),
             PrimaryKey::Composite(fields) => {
-                let pairs: Vec<String> = fields.iter()
-                    .map(|(k, v)| format!("{}:{}", k, v))
-                    .collect();
+                let pairs: Vec<String> =
+                    fields.iter().map(|(k, v)| format!("{}:{}", k, v)).collect();
                 write!(f, "{}", pairs.join(","))
             }
         }
@@ -84,8 +83,12 @@ mod tests {
         let int_key = PrimaryKey::Integer(123);
         assert_eq!(format!("{}", int_key), "123");
 
-        let uuid_key = PrimaryKey::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap());
-        assert_eq!(format!("{}", uuid_key), "550e8400-e29b-41d4-a716-446655440000");
+        let uuid_key =
+            PrimaryKey::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap());
+        assert_eq!(
+            format!("{}", uuid_key),
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
 
         let mut fields = HashMap::new();
         fields.insert("user_id".to_string(), "1".to_string());
@@ -99,10 +102,10 @@ mod tests {
     fn test_primary_key_validation() {
         assert!(!PrimaryKey::Integer(0).is_valid());
         assert!(PrimaryKey::Integer(1).is_valid());
-        
+
         assert!(!PrimaryKey::Uuid(Uuid::nil()).is_valid());
         assert!(PrimaryKey::Uuid(Uuid::new_v4()).is_valid());
-        
+
         assert!(!PrimaryKey::Composite(HashMap::new()).is_valid());
         let mut fields = HashMap::new();
         fields.insert("id".to_string(), "1".to_string());

@@ -1,13 +1,19 @@
 //! Relationship factory support for creating related models
 
+use super::traits::{RelationshipFactory, RelationshipType};
 use crate::error::OrmResult;
 use crate::model::Model;
-use super::traits::{RelationshipFactory, RelationshipType};
 
 /// Factory for creating has_one relationships
 #[derive(Debug)]
 pub struct HasOneFactory<Parent, Related> {
     _phantom: std::marker::PhantomData<(Parent, Related)>,
+}
+
+impl<Parent, Related> Default for HasOneFactory<Parent, Related> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<Parent, Related> HasOneFactory<Parent, Related> {
@@ -33,12 +39,12 @@ where
         // This requires integration with the relationship system and model creation
         Ok(vec![])
     }
-    
+
     async fn make_for_parent(&self, _parent: &Parent) -> OrmResult<Vec<Related>> {
         // TODO: Implement has_one relationship creation without saving
         Ok(vec![])
     }
-    
+
     fn relationship_type(&self) -> RelationshipType {
         RelationshipType::HasOne
     }
@@ -79,12 +85,12 @@ where
         // Create self.count instances of Related models linked to parent
         Ok(vec![])
     }
-    
+
     async fn make_for_parent(&self, _parent: &Parent) -> OrmResult<Vec<Related>> {
         // TODO: Implement has_many relationship creation without saving
         Ok(vec![])
     }
-    
+
     fn relationship_type(&self) -> RelationshipType {
         RelationshipType::HasMany
     }
@@ -94,6 +100,12 @@ where
 #[derive(Debug)]
 pub struct BelongsToFactory<Child, Parent> {
     _phantom: std::marker::PhantomData<(Child, Parent)>,
+}
+
+impl<Child, Parent> Default for BelongsToFactory<Child, Parent> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<Child, Parent> BelongsToFactory<Child, Parent> {
@@ -119,12 +131,12 @@ where
         // For belongs_to, we might create a parent or use an existing one
         Ok(vec![])
     }
-    
+
     async fn make_for_parent(&self, _parent: &Child) -> OrmResult<Vec<Parent>> {
         // TODO: Implement belongs_to relationship creation without saving
         Ok(vec![])
     }
-    
+
     fn relationship_type(&self) -> RelationshipType {
         RelationshipType::BelongsTo
     }
@@ -136,7 +148,17 @@ pub struct RelationshipBuilder<Parent, Related> {
     _phantom: std::marker::PhantomData<(Parent, Related)>,
 }
 
-impl<Parent, Related> RelationshipBuilder<Parent, Related> 
+impl<Parent, Related> Default for RelationshipBuilder<Parent, Related>
+where
+    Parent: crate::model::Model + 'static,
+    Related: crate::model::Model + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<Parent, Related> RelationshipBuilder<Parent, Related>
 where
     Parent: crate::model::Model + 'static,
     Related: crate::model::Model + 'static,
@@ -147,23 +169,23 @@ where
             _phantom: std::marker::PhantomData,
         }
     }
-    
+
     pub fn has_one(mut self) -> Self {
         self.factories.push(Box::new(HasOneFactory::new()));
         self
     }
-    
+
     pub fn has_many(mut self, count: usize) -> Self {
         self.factories.push(Box::new(HasManyFactory::new(count)));
         self
     }
-    
+
     pub fn belongs_to(self) -> Self {
         // Type conversion needed for belongs_to
         // self.factories.push(Box::new(BelongsToFactory::new()));
         self
     }
-    
+
     pub async fn create_all_for_parent(
         &self,
         parent: &Parent,
@@ -174,12 +196,12 @@ where
         Related: Model + Send + Sync,
     {
         let mut all_related = Vec::new();
-        
+
         for factory in &self.factories {
             let related = factory.create_for_parent(parent, pool).await?;
             all_related.push(related);
         }
-        
+
         Ok(all_related)
     }
 }
@@ -203,26 +225,26 @@ mod tests {
     // Mock model for testing
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     struct MockModel;
-    
+
     impl crate::model::Model for MockModel {
         type PrimaryKey = i32;
-        
+
         fn table_name() -> &'static str {
             "mock_models"
         }
-        
+
         fn primary_key(&self) -> Option<Self::PrimaryKey> {
             Some(1)
         }
-        
+
         fn set_primary_key(&mut self, _key: Self::PrimaryKey) {
             // Mock implementation
         }
-        
+
         fn to_fields(&self) -> std::collections::HashMap<String, serde_json::Value> {
             std::collections::HashMap::new()
         }
-        
+
         fn from_row(_row: &sqlx::postgres::PgRow) -> crate::error::ModelResult<Self> {
             Ok(MockModel)
         }
@@ -231,21 +253,29 @@ mod tests {
     #[test]
     fn test_relationship_factory_creation() {
         let has_one_factory: HasOneFactory<MockModel, MockModel> = HasOneFactory::new();
-        assert_eq!(has_one_factory.relationship_type(), RelationshipType::HasOne);
-        
+        assert_eq!(
+            has_one_factory.relationship_type(),
+            RelationshipType::HasOne
+        );
+
         let has_many_factory: HasManyFactory<MockModel, MockModel> = HasManyFactory::new(5);
-        assert_eq!(has_many_factory.relationship_type(), RelationshipType::HasMany);
-        
+        assert_eq!(
+            has_many_factory.relationship_type(),
+            RelationshipType::HasMany
+        );
+
         let belongs_to_factory: BelongsToFactory<MockModel, MockModel> = BelongsToFactory::new();
-        assert_eq!(belongs_to_factory.relationship_type(), RelationshipType::BelongsTo);
+        assert_eq!(
+            belongs_to_factory.relationship_type(),
+            RelationshipType::BelongsTo
+        );
     }
 
     #[test]
     fn test_relationship_builder() {
-        let builder: RelationshipBuilder<MockModel, MockModel> = RelationshipBuilder::new()
-            .has_one()
-            .has_many(3);
-            
+        let builder: RelationshipBuilder<MockModel, MockModel> =
+            RelationshipBuilder::new().has_one().has_many(3);
+
         assert_eq!(builder.factories.len(), 2);
     }
 }

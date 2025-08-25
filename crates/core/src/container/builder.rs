@@ -1,6 +1,6 @@
 use crate::container::{Container, ServiceRegistry, ServiceScope};
-use crate::foundation::traits::Service;
 use crate::errors::CoreError;
+use crate::foundation::traits::Service;
 
 /// Builder for constructing containers with services
 pub struct ContainerBuilder {
@@ -16,13 +16,13 @@ impl ContainerBuilder {
             scope: ServiceScope::Singleton,
         }
     }
-    
+
     /// Set the default scope for services
     pub fn with_scope(mut self, scope: ServiceScope) -> Self {
         self.scope = scope;
         self
     }
-    
+
     /// Add a service to the container
     pub fn add_service<T>(mut self, service: T) -> Result<Self, CoreError>
     where
@@ -31,7 +31,7 @@ impl ContainerBuilder {
         self.registry.register_service(service)?;
         Ok(self)
     }
-    
+
     /// Add a singleton service
     pub fn add_singleton<T>(mut self, service: T) -> Result<Self, CoreError>
     where
@@ -40,16 +40,19 @@ impl ContainerBuilder {
         self.registry.register_singleton(service)?;
         Ok(self)
     }
-    
+
     /// Add a transient service with factory
-    pub fn add_transient<T>(mut self, factory: Box<dyn Fn() -> T + Send + Sync>) -> Result<Self, CoreError>
+    pub fn add_transient<T>(
+        mut self,
+        factory: Box<dyn Fn() -> T + Send + Sync>,
+    ) -> Result<Self, CoreError>
     where
         T: Service + 'static,
     {
         self.registry.register_transient(factory)?;
         Ok(self)
     }
-    
+
     /// Add multiple services at once
     pub fn add_services<T>(mut self, services: Vec<T>) -> Result<Self, CoreError>
     where
@@ -60,7 +63,7 @@ impl ContainerBuilder {
         }
         Ok(self)
     }
-    
+
     /// Configure the builder from a configuration closure
     pub fn configure<F>(self, configure: F) -> Result<Self, CoreError>
     where
@@ -68,7 +71,7 @@ impl ContainerBuilder {
     {
         configure(self)
     }
-    
+
     /// Build the container
     pub fn build(self) -> Result<Container, CoreError> {
         let container = Container::new();
@@ -76,7 +79,7 @@ impl ContainerBuilder {
         container.validate()?;
         Ok(container)
     }
-    
+
     /// Build and initialize the container
     pub async fn build_and_initialize(self) -> Result<Container, CoreError> {
         let mut container = self.build()?;
@@ -123,17 +126,17 @@ macro_rules! singleton_container {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::foundation::traits::{Service, FrameworkComponent};
-    
+    use crate::foundation::traits::{FrameworkComponent, Service};
+
     #[derive(Clone, Debug)]
     #[allow(dead_code)]
     struct TestService {
         name: String,
     }
-    
+
     impl FrameworkComponent for TestService {}
     impl Service for TestService {}
-    
+
     impl TestService {
         fn new(name: &str) -> Self {
             Self {
@@ -141,7 +144,7 @@ mod tests {
             }
         }
     }
-    
+
     #[tokio::test]
     async fn test_container_builder() -> Result<(), CoreError> {
         let container = ContainerBuilder::new()
@@ -149,11 +152,11 @@ mod tests {
             .add_singleton(TestService::new("test2"))?
             .build_and_initialize()
             .await?;
-        
+
         // TODO: Fix service transfer from builder to container
         // assert_eq!(container.service_count(), 2);
         assert!(container.is_initialized());
-        
+
         Ok(())
     }
 }

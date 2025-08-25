@@ -17,17 +17,17 @@ impl ChannelId {
     }
 
     /// Create a channel ID from a string name (deterministic)
-    /// 
+    ///
     /// Uses UUID v5 with SHA-1 hashing to generate a stable, deterministic UUID
     /// that will be the same across Rust versions and platforms.
     pub fn from_name(name: &str) -> Self {
         // Use UUID v5 with a namespace for channel names
         // Using OID namespace as it's appropriate for application-specific identifiers
         const CHANNEL_NAMESPACE: Uuid = Uuid::from_bytes([
-            0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1,
-            0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
+            0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4,
+            0x30, 0xc8,
         ]); // This is the standard OID namespace UUID
-        
+
         Self(Uuid::new_v5(&CHANNEL_NAMESPACE, name.as_bytes()))
     }
 }
@@ -52,10 +52,10 @@ pub enum ChannelType {
     /// Private channel - invitation required
     Private,
     /// Protected channel - password required with secure Argon2 hashing
-    Protected { 
+    Protected {
         #[serde(serialize_with = "serialize_password_hash")]
         #[serde(deserialize_with = "deserialize_password_hash")]
-        password_hash: SecurePasswordHash 
+        password_hash: SecurePasswordHash,
     },
 }
 
@@ -67,14 +67,13 @@ where
     serializer.serialize_str(hash.as_str())
 }
 
-// Custom deserialization for SecurePasswordHash  
+// Custom deserialization for SecurePasswordHash
 fn deserialize_password_hash<'de, D>(deserializer: D) -> Result<SecurePasswordHash, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let hash_string = String::deserialize(deserializer)?;
-    SecurePasswordHash::from_hash_string(hash_string)
-        .map_err(serde::de::Error::custom)
+    SecurePasswordHash::from_hash_string(hash_string).map_err(serde::de::Error::custom)
 }
 
 impl ChannelType {

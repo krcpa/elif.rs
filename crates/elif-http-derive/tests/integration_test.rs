@@ -1,5 +1,5 @@
 //! Integration tests for the derive macros
-//! 
+//!
 //! These tests verify that the macros can be used as intended.
 
 use elif_http_derive::{controller, get, post};
@@ -14,12 +14,12 @@ impl TestController {
     pub async fn hello(&self) -> String {
         "Hello World!".to_string()
     }
-    
-    #[get("")]  // Empty string for root route under controller
+
+    #[get("")] // Empty string for root route under controller
     pub async fn index(&self) -> String {
         "Index".to_string()
     }
-    
+
     #[post("/data")]
     pub async fn create_data(&self) -> String {
         "Data created".to_string()
@@ -33,7 +33,7 @@ fn test_controller_macro_constants() {
     assert_eq!(TestController::CONTROLLER_NAME, "TestController");
 }
 
-#[test] 
+#[test]
 fn test_controller_compilation() {
     // If this test compiles and runs, the macros are working
     let _controller = TestController;

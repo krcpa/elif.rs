@@ -4,7 +4,7 @@
 //! Replaces tower-http TraceLayer with framework-native implementation.
 
 use std::time::Instant;
-use tracing::{info, warn, error, Span, Level};
+use tracing::{error, info, warn, Level, Span};
 use uuid::Uuid;
 
 use crate::{
@@ -119,9 +119,11 @@ impl TracingMiddleware {
     #[cfg(test)]
     pub fn is_sensitive_header(&self, header: &str) -> bool {
         let header_lower = header.to_lowercase();
-        self.config.sensitive_headers.iter().any(|h| h == &header_lower)
+        self.config
+            .sensitive_headers
+            .iter()
+            .any(|h| h == &header_lower)
     }
-
 }
 
 impl Default for TracingMiddleware {
@@ -136,7 +138,7 @@ impl Middleware for TracingMiddleware {
         Box::pin(async move {
             let start_time = Instant::now();
             let request_id = Uuid::new_v4();
-            
+
             // Create tracing span for this request
             let span = match config.level {
                 Level::ERROR => tracing::error_span!(
@@ -183,26 +185,20 @@ impl Middleware for TracingMiddleware {
             match config.level {
                 Level::ERROR => error!(
                     "HTTP Request: {} {} (ID: {})",
-                    request.method,
-                    request.uri,
-                    request_id
+                    request.method, request.uri, request_id
                 ),
                 Level::WARN => warn!(
                     "HTTP Request: {} {} (ID: {})",
-                    request.method,
-                    request.uri, 
-                    request_id
+                    request.method, request.uri, request_id
                 ),
                 Level::INFO => info!(
                     "HTTP Request: {} {} (ID: {})",
-                    request.method,
-                    request.uri,
-                    request_id
+                    request.method, request.uri, request_id
                 ),
                 Level::DEBUG => {
                     let headers = {
                         let mut header_strings = Vec::new();
-                        
+
                         for name in request.headers.keys() {
                             let name_str = name.as_str();
                             if let Some(value) = request.headers.get_str(name_str) {
@@ -219,7 +215,7 @@ impl Middleware for TracingMiddleware {
                                 header_strings.push(format!("{}={}", name_str, value_str));
                             }
                         }
-                        
+
                         header_strings.join(", ")
                     };
                     tracing::debug!(
@@ -229,11 +225,11 @@ impl Middleware for TracingMiddleware {
                         request_id,
                         headers
                     );
-                },
+                }
                 Level::TRACE => {
                     let headers = {
                         let mut header_strings = Vec::new();
-                        
+
                         for name in request.headers.keys() {
                             let name_str = name.as_str();
                             if let Some(value) = request.headers.get_str(name_str) {
@@ -250,7 +246,7 @@ impl Middleware for TracingMiddleware {
                                 header_strings.push(format!("{}={}", name_str, value_str));
                             }
                         }
-                        
+
                         header_strings.join(", ")
                     };
                     tracing::trace!(
@@ -266,25 +262,34 @@ impl Middleware for TracingMiddleware {
 
             // Continue to next middleware/handler
             let response = next.run(request).await;
-            
+
             // Calculate duration and log response
             let duration = start_time.elapsed();
             let status = response.status_code();
-            
+
             match config.level {
                 Level::ERROR if status.is_server_error() => {
-                    error!("HTTP Response: {:?} (Server Error) - Duration: {:?} (ID: {})", status, duration, request_id);
-                },
+                    error!(
+                        "HTTP Response: {:?} (Server Error) - Duration: {:?} (ID: {})",
+                        status, duration, request_id
+                    );
+                }
                 Level::WARN if status.is_client_error() => {
-                    warn!("HTTP Response: {:?} (Client Error) - Duration: {:?} (ID: {})", status, duration, request_id);
-                },
+                    warn!(
+                        "HTTP Response: {:?} (Client Error) - Duration: {:?} (ID: {})",
+                        status, duration, request_id
+                    );
+                }
                 Level::INFO => {
-                    info!("HTTP Response: {:?} - Duration: {:?} (ID: {})", status, duration, request_id);
-                },
+                    info!(
+                        "HTTP Response: {:?} - Duration: {:?} (ID: {})",
+                        status, duration, request_id
+                    );
+                }
                 Level::DEBUG => {
                     let headers = {
                         let mut header_strings = Vec::new();
-                        
+
                         for (name, value) in response.headers().iter() {
                             let name_str = name.as_str();
                             let value_str = if config.include_sensitive_headers {
@@ -299,7 +304,7 @@ impl Middleware for TracingMiddleware {
                             };
                             header_strings.push(format!("{}={}", name_str, value_str));
                         }
-                        
+
                         header_strings.join(", ")
                     };
                     tracing::debug!(
@@ -309,11 +314,11 @@ impl Middleware for TracingMiddleware {
                         headers,
                         request_id
                     );
-                },
+                }
                 Level::TRACE => {
                     let headers = {
                         let mut header_strings = Vec::new();
-                        
+
                         for (name, value) in response.headers().iter() {
                             let name_str = name.as_str();
                             let value_str = if config.include_sensitive_headers {
@@ -328,7 +333,7 @@ impl Middleware for TracingMiddleware {
                             };
                             header_strings.push(format!("{}={}", name_str, value_str));
                         }
-                        
+
                         header_strings.join(", ")
                     };
                     tracing::trace!(
@@ -339,7 +344,7 @@ impl Middleware for TracingMiddleware {
                         config.trace_response_bodies,
                         request_id
                     );
-                },
+                }
                 _ => {} // Skip logging for other combinations
             }
 
@@ -364,30 +369,32 @@ pub struct RequestMetadata {
 mod tests {
     use super::*;
     use crate::middleware::v2::MiddlewarePipelineV2;
-    use crate::request::{ElifRequest, ElifMethod};
-    use crate::response::{ElifResponse, ElifStatusCode, ElifHeaderMap};
+    use crate::request::{ElifMethod, ElifRequest};
+    use crate::response::{ElifHeaderMap, ElifResponse, ElifStatusCode};
 
     #[tokio::test]
     async fn test_tracing_middleware_v2() {
         let middleware = TracingMiddleware::new();
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
-        
+
         let mut headers = ElifHeaderMap::new();
-        headers.insert("content-type".parse().unwrap(), "application/json".parse().unwrap());
-        headers.insert("authorization".parse().unwrap(), "Bearer secret".parse().unwrap());
-        
-        let request = ElifRequest::new(
-            ElifMethod::GET,
-            "/test".parse().unwrap(),
-            headers,
+        headers.insert(
+            "content-type".parse().unwrap(),
+            "application/json".parse().unwrap(),
+        );
+        headers.insert(
+            "authorization".parse().unwrap(),
+            "Bearer secret".parse().unwrap(),
         );
 
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("Success")
+        let request = ElifRequest::new(ElifMethod::GET, "/test".parse().unwrap(), headers);
+
+        let response = pipeline
+            .execute(request, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("Success") })
             })
-        }).await;
-        
+            .await;
+
         assert_eq!(response.status_code(), ElifStatusCode::OK);
     }
 
@@ -403,13 +410,16 @@ mod tests {
         assert!(middleware.config.trace_bodies);
         assert_eq!(middleware.config.level, Level::DEBUG);
         assert_eq!(middleware.config.max_body_size, 2048);
-        assert!(middleware.config.sensitive_headers.contains(&"x-custom-secret".to_string()));
+        assert!(middleware
+            .config
+            .sensitive_headers
+            .contains(&"x-custom-secret".to_string()));
     }
 
     #[tokio::test]
     async fn test_sensitive_header_detection() {
         let middleware = TracingMiddleware::new();
-        
+
         assert!(middleware.is_sensitive_header("Authorization"));
         assert!(middleware.is_sensitive_header("COOKIE"));
         assert!(middleware.is_sensitive_header("x-api-key"));

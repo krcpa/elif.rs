@@ -3,10 +3,13 @@
 //! Provides tools for load testing, benchmarking, and performance
 //! analysis of elif.rs applications.
 
+use crate::{client::TestClient, TestResult};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 use std::time::{Duration, Instant};
-use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
 use tokio::time::sleep;
-use crate::{TestResult, client::TestClient};
 
 /// Performance test configuration
 #[derive(Debug, Clone)]
@@ -34,7 +37,7 @@ impl LoadTestConfig {
             timeout: Duration::from_secs(30),
         }
     }
-    
+
     /// Create a light load test
     pub fn light() -> Self {
         Self {
@@ -45,7 +48,7 @@ impl LoadTestConfig {
             timeout: Duration::from_secs(10),
         }
     }
-    
+
     /// Create a heavy load test
     pub fn heavy() -> Self {
         Self {
@@ -56,19 +59,19 @@ impl LoadTestConfig {
             timeout: Duration::from_secs(30),
         }
     }
-    
+
     /// Set concurrent users
     pub fn with_concurrent_users(mut self, users: usize) -> Self {
         self.concurrent_users = users;
         self
     }
-    
+
     /// Set test duration
     pub fn with_duration(mut self, duration: Duration) -> Self {
         self.duration = duration;
         self
     }
-    
+
     /// Set target requests per second
     pub fn with_target_rps(mut self, rps: usize) -> Self {
         self.target_rps = rps;
@@ -104,11 +107,10 @@ impl LoadTestResults {
             (self.successful_requests as f64 / self.total_requests as f64) * 100.0
         }
     }
-    
+
     /// Check if the test passed based on criteria
     pub fn passes_criteria(&self, min_success_rate: f64, max_avg_response_time: Duration) -> bool {
-        self.success_rate() >= min_success_rate &&
-        self.response_times.avg <= max_avg_response_time
+        self.success_rate() >= min_success_rate && self.response_times.avg <= max_avg_response_time
     }
 }
 
@@ -134,26 +136,33 @@ impl ResponseTimeStats {
             p99: Duration::ZERO,
         }
     }
-    
+
     fn from_times(mut times: Vec<Duration>) -> Self {
         if times.is_empty() {
             return Self::new();
         }
-        
+
         times.sort();
         let len = times.len();
-        
+
         let min = times[0];
         let max = times[len - 1];
         let avg = Duration::from_nanos(
-            times.iter().map(|d| d.as_nanos() as u64).sum::<u64>() / len as u64
+            times.iter().map(|d| d.as_nanos() as u64).sum::<u64>() / len as u64,
         );
-        
+
         let p50 = times[len * 50 / 100];
         let p95 = times[len * 95 / 100];
         let p99 = times[len * 99 / 100];
-        
-        Self { min, max, avg, p50, p95, p99 }
+
+        Self {
+            min,
+            max,
+            avg,
+            p50,
+            p95,
+            p99,
+        }
     }
 }
 
@@ -171,19 +180,19 @@ impl LoadTestRunner {
             base_client: TestClient::new(),
         }
     }
-    
+
     /// Set the base URL for testing
     pub fn with_base_url(mut self, url: impl Into<String>) -> Self {
         self.base_client = TestClient::with_base_url(url);
         self
     }
-    
+
     /// Set authentication for all requests
     pub fn with_auth_token(mut self, token: impl Into<String>) -> Self {
         self.base_client = self.base_client.authenticated_with_token(token);
         self
     }
-    
+
     /// Run a load test with a custom scenario
     pub async fn run_scenario<F, Fut>(&self, scenario: F) -> TestResult<LoadTestResults>
     where
@@ -192,23 +201,23 @@ impl LoadTestRunner {
     {
         let start_time = Instant::now();
         let end_time = start_time + self.config.duration;
-        
+
         // Shared counters
         let total_requests = Arc::new(AtomicUsize::new(0));
         let successful_requests = Arc::new(AtomicUsize::new(0));
         let failed_requests = Arc::new(AtomicUsize::new(0));
         let response_times = Arc::new(tokio::sync::Mutex::new(Vec::<Duration>::new()));
         let errors = Arc::new(tokio::sync::Mutex::new(Vec::<String>::new()));
-        
+
         // Calculate delays for ramp-up
         let ramp_up_delay = if self.config.concurrent_users > 0 {
             self.config.ramp_up.as_millis() / self.config.concurrent_users as u128
         } else {
             0
         };
-        
+
         let target_rps = self.config.target_rps;
-        
+
         // Spawn worker tasks
         let mut handles = Vec::new();
         for i in 0..self.config.concurrent_users {
@@ -220,27 +229,27 @@ impl LoadTestRunner {
             let response_times = response_times.clone();
             let errors = errors.clone();
             let end_time = end_time;
-            
+
             let handle = tokio::spawn(async move {
                 // Ramp-up delay
                 if ramp_up_delay > 0 {
                     sleep(Duration::from_millis((i as u128 * ramp_up_delay) as u64)).await;
                 }
-                
+
                 while Instant::now() < end_time {
                     total_requests.fetch_add(1, Ordering::Relaxed);
-                    
+
                     match scenario(client.clone()).await {
                         Ok(duration) => {
                             successful_requests.fetch_add(1, Ordering::Relaxed);
                             response_times.lock().await.push(duration);
-                        },
+                        }
                         Err(e) => {
                             failed_requests.fetch_add(1, Ordering::Relaxed);
                             errors.lock().await.push(e.to_string());
                         }
                     }
-                    
+
                     // Rate limiting if specified
                     if target_rps > 0 {
                         let delay = Duration::from_millis(1000 / target_rps as u64);
@@ -248,30 +257,30 @@ impl LoadTestRunner {
                     }
                 }
             });
-            
+
             handles.push(handle);
         }
-        
+
         // Wait for all tasks to complete
         for handle in handles {
             let _ = handle.await;
         }
-        
+
         let actual_duration = start_time.elapsed();
         let total = total_requests.load(Ordering::Relaxed);
         let successful = successful_requests.load(Ordering::Relaxed);
         let failed = failed_requests.load(Ordering::Relaxed);
-        
+
         let avg_rps = if actual_duration.as_secs() > 0 {
             total as f64 / actual_duration.as_secs_f64()
         } else {
             0.0
         };
-        
+
         // Process response times
         let times = response_times.lock().await.clone();
         let response_time_stats = ResponseTimeStats::from_times(times);
-        
+
         // Process errors
         let error_list = errors.lock().await.clone();
         let mut error_counts = std::collections::HashMap::new();
@@ -279,7 +288,7 @@ impl LoadTestRunner {
             *error_counts.entry(error).or_insert(0) += 1;
         }
         let error_distribution: Vec<(String, usize)> = error_counts.into_iter().collect();
-        
+
         Ok(LoadTestResults {
             total_requests: total,
             successful_requests: successful,
@@ -290,7 +299,7 @@ impl LoadTestRunner {
             errors: error_distribution,
         })
     }
-    
+
     /// Run a simple GET request load test
     pub async fn run_get_test(&self, path: impl Into<String>) -> TestResult<LoadTestResults> {
         let path = path.into();
@@ -301,14 +310,15 @@ impl LoadTestRunner {
                 client.get(path).send().await?;
                 Ok(start.elapsed())
             }
-        }).await
+        })
+        .await
     }
-    
+
     /// Run a POST request load test
     pub async fn run_post_test<T: serde::Serialize + Clone + Send + Sync + 'static>(
-        &self, 
-        path: impl Into<String>, 
-        data: T
+        &self,
+        path: impl Into<String>,
+        data: T,
     ) -> TestResult<LoadTestResults> {
         let path = path.into();
         self.run_scenario(move |client| {
@@ -319,7 +329,8 @@ impl LoadTestRunner {
                 client.post(path).json(&data).send().await?;
                 Ok(start.elapsed())
             }
-        }).await
+        })
+        .await
     }
 }
 
@@ -337,27 +348,27 @@ impl Benchmark {
             iterations,
         }
     }
-    
+
     /// Run a synchronous benchmark
     pub fn run_sync<F>(&self, mut operation: F) -> BenchmarkResult
     where
-        F: FnMut() -> (),
+        F: FnMut(),
     {
         let mut times = Vec::with_capacity(self.iterations);
-        
+
         for _ in 0..self.iterations {
             let start = Instant::now();
             operation();
             times.push(start.elapsed());
         }
-        
+
         BenchmarkResult {
             name: self.name.clone(),
             iterations: self.iterations,
             stats: ResponseTimeStats::from_times(times),
         }
     }
-    
+
     /// Run an async benchmark
     pub async fn run_async<F, Fut>(&self, operation: F) -> BenchmarkResult
     where
@@ -365,13 +376,13 @@ impl Benchmark {
         Fut: std::future::Future<Output = ()>,
     {
         let mut times = Vec::with_capacity(self.iterations);
-        
+
         for _ in 0..self.iterations {
             let start = Instant::now();
             operation().await;
             times.push(start.elapsed());
         }
-        
+
         BenchmarkResult {
             name: self.name.clone(),
             iterations: self.iterations,
@@ -397,7 +408,7 @@ impl BenchmarkResult {
             0.0
         }
     }
-    
+
     /// Print benchmark results
     pub fn print(&self) {
         println!("Benchmark: {}", self.name);
@@ -415,17 +426,17 @@ impl BenchmarkResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_load_test_config() {
         let config = LoadTestConfig::basic()
             .with_concurrent_users(20)
             .with_duration(Duration::from_secs(60));
-            
+
         assert_eq!(config.concurrent_users, 20);
         assert_eq!(config.duration, Duration::from_secs(60));
     }
-    
+
     #[test]
     fn test_response_time_stats() {
         let times = vec![
@@ -435,13 +446,13 @@ mod tests {
             Duration::from_millis(40),
             Duration::from_millis(50),
         ];
-        
+
         let stats = ResponseTimeStats::from_times(times);
         assert_eq!(stats.min, Duration::from_millis(10));
         assert_eq!(stats.max, Duration::from_millis(50));
         assert_eq!(stats.avg, Duration::from_millis(30));
     }
-    
+
     #[test]
     fn test_load_test_results() {
         let results = LoadTestResults {
@@ -453,40 +464,42 @@ mod tests {
             response_times: ResponseTimeStats::new(),
             errors: vec![],
         };
-        
+
         assert_eq!(results.success_rate(), 95.0);
     }
-    
+
     #[tokio::test]
     async fn test_benchmark() {
         let benchmark = Benchmark::new("test_operation", 100);
-        
+
         let result = benchmark.run_sync(|| {
             // Simulate some work
             std::thread::sleep(Duration::from_micros(1));
         });
-        
+
         assert_eq!(result.name, "test_operation");
         assert_eq!(result.iterations, 100);
         assert!(result.ops_per_second() > 0.0);
     }
-    
+
     #[tokio::test]
     async fn test_async_benchmark() {
         let benchmark = Benchmark::new("async_test_operation", 10);
-        
-        let result = benchmark.run_async(|| async {
-            tokio::time::sleep(Duration::from_millis(1)).await;
-        }).await;
-        
+
+        let result = benchmark
+            .run_async(|| async {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            })
+            .await;
+
         assert_eq!(result.iterations, 10);
     }
-    
+
     #[tokio::test]
     async fn test_load_test_runner_creation() {
         let config = LoadTestConfig::light();
         let runner = LoadTestRunner::new(config.clone());
-        
+
         assert_eq!(runner.config.concurrent_users, config.concurrent_users);
     }
 }

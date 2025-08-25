@@ -20,12 +20,12 @@ impl IsolationLevel {
     pub fn as_sql(&self) -> &'static str {
         match self {
             IsolationLevel::ReadUncommitted => "READ UNCOMMITTED",
-            IsolationLevel::ReadCommitted => "READ COMMITTED", 
+            IsolationLevel::ReadCommitted => "READ COMMITTED",
             IsolationLevel::RepeatableRead => "REPEATABLE READ",
             IsolationLevel::Serializable => "SERIALIZABLE",
         }
     }
-    
+
     /// Get the default isolation level for a database dialect
     pub fn default_for_dialect(dialect: &crate::backends::SqlDialect) -> Self {
         match dialect {
@@ -34,19 +34,24 @@ impl IsolationLevel {
             crate::backends::SqlDialect::SQLite => IsolationLevel::Serializable,
         }
     }
-    
+
     /// Check if this isolation level is supported by the given dialect
     pub fn is_supported_by(&self, dialect: &crate::backends::SqlDialect) -> bool {
         match dialect {
             crate::backends::SqlDialect::PostgreSQL => true, // All levels supported
             crate::backends::SqlDialect::MySQL => {
-                matches!(self, IsolationLevel::ReadUncommitted | IsolationLevel::ReadCommitted | 
-                              IsolationLevel::RepeatableRead | IsolationLevel::Serializable)
-            },
+                matches!(
+                    self,
+                    IsolationLevel::ReadUncommitted
+                        | IsolationLevel::ReadCommitted
+                        | IsolationLevel::RepeatableRead
+                        | IsolationLevel::Serializable
+                )
+            }
             crate::backends::SqlDialect::SQLite => {
                 // SQLite only effectively supports Serializable
                 matches!(self, IsolationLevel::Serializable)
-            },
+            }
         }
     }
 }

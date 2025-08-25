@@ -31,9 +31,10 @@ pub enum ProviderConfig {
 }
 
 /// SMTP authentication method
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum SmtpAuthMethod {
     #[serde(rename = "plain")]
+    #[default]
     Plain,
     #[serde(rename = "login")]
     Login,
@@ -42,13 +43,14 @@ pub enum SmtpAuthMethod {
 }
 
 /// SMTP TLS configuration
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum SmtpTlsConfig {
     #[serde(rename = "none")]
     None,
     #[serde(rename = "tls")]
     Tls,
     #[serde(rename = "starttls")]
+    #[default]
     StartTls,
     #[serde(rename = "starttls_required")]
     StartTlsRequired,
@@ -79,7 +81,7 @@ pub struct SmtpConfig {
     pub max_retries: u32,
     /// Retry delay in seconds
     pub retry_delay: u64,
-    
+
     /// Legacy fields for backward compatibility
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_tls: Option<bool>,
@@ -230,10 +232,10 @@ impl Default for GlobalTrackingConfig {
 impl Default for AttachmentConfig {
     fn default() -> Self {
         Self {
-            max_size: 25 * 1024 * 1024,        // 25MB
-            max_total_size: 50 * 1024 * 1024,  // 50MB
+            max_size: 25 * 1024 * 1024,       // 25MB
+            max_total_size: 50 * 1024 * 1024, // 50MB
             max_count: 10,
-            allowed_types: vec![],  // Empty means all allowed
+            allowed_types: vec![], // Empty means all allowed
             blocked_types: vec![
                 "application/x-executable".to_string(),
                 "application/x-dosexec".to_string(),
@@ -242,18 +244,6 @@ impl Default for AttachmentConfig {
             auto_compress: false,
             compression_quality: Some(85),
         }
-    }
-}
-
-impl Default for SmtpAuthMethod {
-    fn default() -> Self {
-        SmtpAuthMethod::Plain
-    }
-}
-
-impl Default for SmtpTlsConfig {
-    fn default() -> Self {
-        SmtpTlsConfig::StartTls
     }
 }
 
@@ -331,7 +321,7 @@ mod tests {
     fn test_effective_tls_config_new_field() {
         let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
         config.tls = SmtpTlsConfig::Tls;
-        
+
         assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::Tls));
     }
 
@@ -340,7 +330,7 @@ mod tests {
         let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
         config.use_tls = Some(true);
         config.use_starttls = Some(false);
-        
+
         assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::Tls));
     }
 
@@ -349,7 +339,7 @@ mod tests {
         let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
         config.use_tls = Some(true);
         // use_starttls remains None, should default to false
-        
+
         assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::Tls));
     }
 
@@ -358,8 +348,11 @@ mod tests {
         let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
         config.use_starttls = Some(true);
         // use_tls remains None, should default to false
-        
-        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::StartTls));
+
+        assert!(matches!(
+            config.effective_tls_config(),
+            SmtpTlsConfig::StartTls
+        ));
     }
 
     #[test]
@@ -367,7 +360,7 @@ mod tests {
         let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
         config.use_tls = Some(false);
         config.use_starttls = Some(false);
-        
+
         assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::None));
     }
 
@@ -376,9 +369,12 @@ mod tests {
         let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
         config.use_tls = Some(true);
         config.use_starttls = Some(true);
-        
+
         // Should prefer STARTTLS when both are true
-        assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::StartTls));
+        assert!(matches!(
+            config.effective_tls_config(),
+            SmtpTlsConfig::StartTls
+        ));
     }
 
     #[test]
@@ -386,7 +382,7 @@ mod tests {
         let mut config = SmtpConfig::new("smtp.gmail.com", 587, "user", "pass");
         config.use_tls = Some(false);
         // use_starttls remains None, should default to false
-        
+
         assert!(matches!(config.effective_tls_config(), SmtpTlsConfig::None));
     }
 }

@@ -18,9 +18,8 @@ pub trait QueryMethods: Model {
     where
         Self: Sized,
     {
-        let builder = QueryBuilder::new()
-            .from(Self::table_name());
-        
+        let builder = QueryBuilder::new().from(Self::table_name());
+
         // Exclude soft-deleted records by default
         if Self::uses_soft_deletes() {
             builder.where_null("deleted_at")
@@ -35,21 +34,27 @@ pub trait QueryMethods: Model {
         Self: Sized,
     {
         let sql = if Self::uses_soft_deletes() {
-            format!("SELECT * FROM {} WHERE deleted_at IS NULL", Self::table_name())
+            format!(
+                "SELECT * FROM {} WHERE deleted_at IS NULL",
+                Self::table_name()
+            )
         } else {
             format!("SELECT * FROM {}", Self::table_name())
         };
-        
-        let rows = sqlx::query(&sql)
-            .fetch_all(pool)
-            .await
-            .map_err(|e| ModelError::Database(format!("Failed to fetch all from {}: {}", Self::table_name(), e)))?;
+
+        let rows = sqlx::query(&sql).fetch_all(pool).await.map_err(|e| {
+            ModelError::Database(format!(
+                "Failed to fetch all from {}: {}",
+                Self::table_name(),
+                e
+            ))
+        })?;
 
         let mut models = Vec::new();
         for row in rows {
             models.push(Self::from_row(&row)?);
         }
-        
+
         Ok(models)
     }
 
@@ -59,17 +64,20 @@ pub trait QueryMethods: Model {
         Self: Sized,
     {
         let sql = if Self::uses_soft_deletes() {
-            format!("SELECT COUNT(*) FROM {} WHERE deleted_at IS NULL", Self::table_name())
+            format!(
+                "SELECT COUNT(*) FROM {} WHERE deleted_at IS NULL",
+                Self::table_name()
+            )
         } else {
             format!("SELECT COUNT(*) FROM {}", Self::table_name())
         };
-        
-        let row = sqlx::query(&sql)
-            .fetch_one(pool)
-            .await
-            .map_err(|e| ModelError::Database(format!("Failed to count {}: {}", Self::table_name(), e)))?;
 
-        let count: i64 = row.try_get(0)
+        let row = sqlx::query(&sql).fetch_one(pool).await.map_err(|e| {
+            ModelError::Database(format!("Failed to count {}: {}", Self::table_name(), e))
+        })?;
+
+        let count: i64 = row
+            .try_get(0)
             .map_err(|e| ModelError::Database(format!("Failed to extract count: {}", e)))?;
         Ok(count)
     }
@@ -82,43 +90,73 @@ pub trait QueryMethods: Model {
         for<'q> V: sqlx::Encode<'q, Postgres> + sqlx::Type<Postgres>,
     {
         let sql = if Self::uses_soft_deletes() {
-            format!("SELECT * FROM {} WHERE {} = $1 AND deleted_at IS NULL", Self::table_name(), field)
+            format!(
+                "SELECT * FROM {} WHERE {} = $1 AND deleted_at IS NULL",
+                Self::table_name(),
+                field
+            )
         } else {
             format!("SELECT * FROM {} WHERE {} = $1", Self::table_name(), field)
         };
-        
+
         let rows = sqlx::query(&sql)
             .bind(value)
             .fetch_all(pool)
             .await
-            .map_err(|e| ModelError::Database(format!("Failed to query {} by {}: {}", Self::table_name(), field, e)))?;
+            .map_err(|e| {
+                ModelError::Database(format!(
+                    "Failed to query {} by {}: {}",
+                    Self::table_name(),
+                    field,
+                    e
+                ))
+            })?;
 
         let mut models = Vec::new();
         for row in rows {
             models.push(Self::from_row(&row)?);
         }
-        
+
         Ok(models)
     }
 
     /// Find the first model by a specific field value
-    async fn first_where<V>(pool: &Pool<Postgres>, field: &str, value: V) -> ModelResult<Option<Self>>
+    async fn first_where<V>(
+        pool: &Pool<Postgres>,
+        field: &str,
+        value: V,
+    ) -> ModelResult<Option<Self>>
     where
         Self: Sized,
         V: Send + Sync + 'static,
         for<'q> V: sqlx::Encode<'q, Postgres> + sqlx::Type<Postgres>,
     {
         let sql = if Self::uses_soft_deletes() {
-            format!("SELECT * FROM {} WHERE {} = $1 AND deleted_at IS NULL LIMIT 1", Self::table_name(), field)
+            format!(
+                "SELECT * FROM {} WHERE {} = $1 AND deleted_at IS NULL LIMIT 1",
+                Self::table_name(),
+                field
+            )
         } else {
-            format!("SELECT * FROM {} WHERE {} = $1 LIMIT 1", Self::table_name(), field)
+            format!(
+                "SELECT * FROM {} WHERE {} = $1 LIMIT 1",
+                Self::table_name(),
+                field
+            )
         };
-        
+
         let row = sqlx::query(&sql)
             .bind(value)
             .fetch_optional(pool)
             .await
-            .map_err(|e| ModelError::Database(format!("Failed to find first {} by {}: {}", Self::table_name(), field, e)))?;
+            .map_err(|e| {
+                ModelError::Database(format!(
+                    "Failed to find first {} by {}: {}",
+                    Self::table_name(),
+                    field,
+                    e
+                ))
+            })?;
 
         match row {
             Some(row) => {
@@ -135,15 +173,17 @@ pub trait QueryMethods: Model {
         Self: Sized,
     {
         let sql = if Self::uses_soft_deletes() {
-            format!("SELECT * FROM {} WHERE deleted_at IS NULL LIMIT 1", Self::table_name())
+            format!(
+                "SELECT * FROM {} WHERE deleted_at IS NULL LIMIT 1",
+                Self::table_name()
+            )
         } else {
             format!("SELECT * FROM {} LIMIT 1", Self::table_name())
         };
-        
-        let row = sqlx::query(&sql)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| ModelError::Database(format!("Failed to get first {}: {}", Self::table_name(), e)))?;
+
+        let row = sqlx::query(&sql).fetch_optional(pool).await.map_err(|e| {
+            ModelError::Database(format!("Failed to get first {}: {}", Self::table_name(), e))
+        })?;
 
         match row {
             Some(row) => {
@@ -160,17 +200,22 @@ pub trait QueryMethods: Model {
         Self: Sized,
     {
         let sql = if Self::uses_soft_deletes() {
-            format!("SELECT * FROM {} WHERE deleted_at IS NULL ORDER BY {} DESC LIMIT 1", 
-                    Self::table_name(), Self::primary_key_name())
+            format!(
+                "SELECT * FROM {} WHERE deleted_at IS NULL ORDER BY {} DESC LIMIT 1",
+                Self::table_name(),
+                Self::primary_key_name()
+            )
         } else {
-            format!("SELECT * FROM {} ORDER BY {} DESC LIMIT 1", 
-                    Self::table_name(), Self::primary_key_name())
+            format!(
+                "SELECT * FROM {} ORDER BY {} DESC LIMIT 1",
+                Self::table_name(),
+                Self::primary_key_name()
+            )
         };
-        
-        let row = sqlx::query(&sql)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| ModelError::Database(format!("Failed to get last {}: {}", Self::table_name(), e)))?;
+
+        let row = sqlx::query(&sql).fetch_optional(pool).await.map_err(|e| {
+            ModelError::Database(format!("Failed to get last {}: {}", Self::table_name(), e))
+        })?;
 
         match row {
             Some(row) => {

@@ -1,7 +1,7 @@
 use crate::EmailError;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 /// Email tracking event types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,14 +87,22 @@ impl TrackingService {
 
     /// Generate tracking pixel URL
     pub fn generate_pixel_url(&self, email_id: Uuid) -> String {
-        format!("{}/email/track/open?id={}&t={}", 
-                self.base_url, email_id, chrono::Utc::now().timestamp())
+        format!(
+            "{}/email/track/open?id={}&t={}",
+            self.base_url,
+            email_id,
+            chrono::Utc::now().timestamp()
+        )
     }
 
     /// Generate tracking link URL
     pub fn generate_link_url(&self, email_id: Uuid, target_url: &str) -> String {
-        format!("{}/email/track/click?id={}&url={}", 
-                self.base_url, email_id, urlencoding::encode(target_url))
+        format!(
+            "{}/email/track/click?id={}&url={}",
+            self.base_url,
+            email_id,
+            urlencoding::encode(target_url)
+        )
     }
 
     /// Record tracking event

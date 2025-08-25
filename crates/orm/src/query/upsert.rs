@@ -47,15 +47,18 @@ impl<M> UpsertBuilder<M> {
         // Start with INSERT
         if let Some(table) = &self.query_builder.insert_table {
             sql.push_str(&format!("INSERT INTO {}", table));
-            
+
             if !self.query_builder.set_clauses.is_empty() {
                 sql.push_str(" (");
-                let columns: Vec<String> = self.query_builder.set_clauses.iter()
+                let columns: Vec<String> = self
+                    .query_builder
+                    .set_clauses
+                    .iter()
                     .map(|clause| clause.column.clone())
                     .collect();
                 sql.push_str(&columns.join(", "));
                 sql.push_str(") VALUES (");
-                
+
                 for (i, clause) in self.query_builder.set_clauses.iter().enumerate() {
                     if i > 0 {
                         sql.push_str(", ");
@@ -74,8 +77,11 @@ impl<M> UpsertBuilder<M> {
 
         // Add ON CONFLICT clause
         if !self.conflict_columns.is_empty() {
-            sql.push_str(&format!(" ON CONFLICT ({}) DO UPDATE SET ", self.conflict_columns.join(", ")));
-            
+            sql.push_str(&format!(
+                " ON CONFLICT ({}) DO UPDATE SET ",
+                self.conflict_columns.join(", ")
+            ));
+
             for (i, clause) in self.update_clauses.iter().enumerate() {
                 if i > 0 {
                     sql.push_str(", ");

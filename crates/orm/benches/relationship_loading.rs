@@ -2,21 +2,19 @@
 //!
 //! Tests eager/lazy loading performance, N+1 prevention, and relationship hydration
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use elif_orm::{
-    relationships::{
-        RelationshipType, RelationshipMetadata,
-        eager_loader::EagerLoader,
-        lazy_loading::LazyRelationshipLoader,
-        cache::RelationshipCache,
-    },
     loading::{
-        batch_loader::{BatchLoader, BatchConfig},
+        batch_loader::{BatchConfig, BatchLoader},
         eager_loader::OptimizedEagerLoader,
-    }
+    },
+    relationships::{
+        cache::RelationshipCache, eager_loader::EagerLoader, lazy_loading::LazyRelationshipLoader,
+        RelationshipMetadata, RelationshipType,
+    },
 };
-use std::collections::HashMap;
 use serde_json::Value;
+use std::collections::HashMap;
 use tokio::runtime::Runtime;
 
 // Mock data structures for benchmarks
@@ -55,17 +53,17 @@ fn generate_relationship_metadata(relationship_type: RelationshipType) -> Relati
 
 fn bench_eager_loader_creation(c: &mut Criterion) {
     let mut group = c.benchmark_group("eager_loader_creation");
-    
+
     group.bench_function("basic_eager_loader", |b| {
         b.iter(|| {
             let loader = EagerLoader::new(
                 black_box("users".to_string()),
-                black_box(vec!["id".to_string(), "name".to_string()])
+                black_box(vec!["id".to_string(), "name".to_string()]),
             );
             black_box(loader)
         })
     });
-    
+
     group.bench_function("optimized_eager_loader", |b| {
         b.iter(|| {
             let config = elif_orm::loading::EagerLoadConfig::builder()
@@ -73,18 +71,18 @@ fn bench_eager_loader_creation(c: &mut Criterion) {
                 .parallel_batches(black_box(true))
                 .cache_results(black_box(true))
                 .build_with_defaults();
-            
+
             let loader = OptimizedEagerLoader::new(config);
             black_box(loader)
         })
     });
-    
+
     group.finish();
 }
 
 fn bench_batch_loader_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_loader_operations");
-    
+
     for &batch_size in &[10, 50, 100, 200] {
         group.bench_with_input(
             BenchmarkId::new("batch_configuration", batch_size),
@@ -96,14 +94,14 @@ fn bench_batch_loader_operations(c: &mut Criterion) {
                         .max_concurrent_batches(black_box(4))
                         .enable_query_deduplication(black_box(true))
                         .build_with_defaults();
-                    
+
                     let loader = BatchLoader::new(config);
                     black_box(loader)
                 })
             },
         );
     }
-    
+
     // Benchmark simulated batch loading
     for &data_size in &[100, 500, 1000, 2000] {
         group.bench_with_input(
@@ -111,35 +109,41 @@ fn bench_batch_loader_operations(c: &mut Criterion) {
             &data_size,
             |b, &data_size| {
                 let models = generate_mock_data(data_size);
-                
+
                 b.iter(|| {
                     // Simulate batching logic
                     let batch_size = 100;
                     let mut batches = Vec::new();
-                    
+
                     for chunk in models.chunks(batch_size) {
                         let ids: Vec<i32> = chunk.iter().map(|m| m.id).collect();
                         batches.push(ids);
                     }
-                    
+
                     // Simulate processing each batch
                     for batch in &batches {
-                        let _query = format!("SELECT * FROM related WHERE parent_id IN ({})", 
-                                           batch.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(","));
+                        let _query = format!(
+                            "SELECT * FROM related WHERE parent_id IN ({})",
+                            batch
+                                .iter()
+                                .map(|id| id.to_string())
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        );
                     }
-                    
+
                     black_box(batches)
                 })
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_relationship_cache_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("relationship_cache_operations");
-    
+
     // Cache creation and configuration
     group.bench_function("cache_creation", |b| {
         b.iter(|| {
@@ -147,7 +151,7 @@ fn bench_relationship_cache_operations(c: &mut Criterion) {
             black_box(cache)
         })
     });
-    
+
     // Cache operations
     for &cache_size in &[100, 500, 1000, 2000] {
         group.bench_with_input(
@@ -181,21 +185,21 @@ fn bench_relationship_cache_operations(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_relationship_hydration(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("relationship_hydration");
-    
+
     // Test different relationship types
     let relationship_types = vec![
         ("has_one", RelationshipType::HasOne),
         ("has_many", RelationshipType::HasMany),
         ("belongs_to", RelationshipType::BelongsTo),
     ];
-    
+
     for (name, relationship_type) in relationship_types {
         group.bench_function(&format!("hydrate_{}", name), |b| {
             let metadata = generate_relationship_metadata(relationship_type);
@@ -244,13 +248,13 @@ fn bench_relationship_hydration(c: &mut Criterion) {
             })
         });
     }
-    
+
     group.finish();
 }
 
 fn bench_n_plus_one_prevention(c: &mut Criterion) {
     let mut group = c.benchmark_group("n_plus_one_prevention");
-    
+
     // Compare N+1 vs batched loading patterns
     for &model_count in &[10, 50, 100, 200] {
         group.bench_with_input(
@@ -258,53 +262,56 @@ fn bench_n_plus_one_prevention(c: &mut Criterion) {
             &model_count,
             |b, &model_count| {
                 let models = generate_mock_data(model_count);
-                
+
                 b.iter(|| {
                     // Simulate N+1 queries (bad pattern)
                     let mut results = Vec::new();
-                    
+
                     for model in &models {
                         // Simulate individual query for each model's relationships
                         let query = format!("SELECT * FROM related WHERE parent_id = {}", model.id);
                         let _simulated_result = vec![format!("result_for_{}", model.id)];
                         results.push(query);
                     }
-                    
+
                     black_box(results)
                 })
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("simulated_batched_loading", model_count),
             &model_count,
             |b, &model_count| {
                 let models = generate_mock_data(model_count);
-                
+
                 b.iter(|| {
                     // Simulate batched loading (good pattern)
                     let batch_size = 50;
                     let mut batch_queries = Vec::new();
-                    
+
                     for chunk in models.chunks(batch_size) {
                         let ids: Vec<String> = chunk.iter().map(|m| m.id.to_string()).collect();
-                        let query = format!("SELECT * FROM related WHERE parent_id IN ({})", ids.join(","));
+                        let query = format!(
+                            "SELECT * FROM related WHERE parent_id IN ({})",
+                            ids.join(",")
+                        );
                         batch_queries.push(query);
                     }
-                    
+
                     black_box(batch_queries)
                 })
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_lazy_loading_patterns(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("lazy_loading_patterns");
-    
+
     group.bench_function("lazy_loader_creation", |b| {
         b.iter(|| {
             let loader = LazyRelationshipLoader::new(
@@ -315,7 +322,7 @@ fn bench_lazy_loading_patterns(c: &mut Criterion) {
             black_box(loader)
         })
     });
-    
+
     // Simulate lazy loading access patterns
     for &access_pattern in &[10, 25, 50, 100] {
         group.bench_with_input(
@@ -358,7 +365,7 @@ fn bench_lazy_loading_patterns(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 

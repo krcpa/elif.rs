@@ -1,9 +1,9 @@
 use crate::{
     errors::{HttpError, HttpResult},
-    response::{ElifResponse, ElifStatusCode},
     middleware::versioning::VersionInfo,
+    response::{ElifResponse, ElifStatusCode},
 };
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Version-aware error response structure
@@ -87,7 +87,7 @@ impl VersionedErrorBuilder {
         self.field_errors
             .get_or_insert_with(HashMap::new)
             .entry(field.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(error.to_string());
         self
     }
@@ -119,15 +119,15 @@ impl VersionedErrorBuilder {
         };
 
         let mut response = ElifResponse::with_status(self.status_code);
-        
+
         // Add JSON body
         response = response.json(&versioned_error)?;
-        
+
         // Add deprecation headers if needed using safe header handling
         if version_info.is_deprecated {
             // Use safe header parsing for static values
             response = response.header("Deprecation", "true")?;
-            
+
             // Handle dynamic warning message safely
             if let Some(message) = &version_info.api_version.deprecation_message {
                 let warning_value = format!("299 - \"{}\"", message);
@@ -136,10 +136,10 @@ impl VersionedErrorBuilder {
                     response = response.header("Warning", warning_value)?;
                 }
             }
-            
+
             // Handle dynamic sunset date safely
             if let Some(sunset) = &version_info.api_version.sunset_date {
-                // Only add header if it can be parsed successfully  
+                // Only add header if it can be parsed successfully
                 if sunset.parse::<axum::http::HeaderValue>().is_ok() {
                     response = response.header("Sunset", sunset)?;
                 }
@@ -171,44 +171,58 @@ impl VersionedErrorBuilder {
 /// Extension trait for version-aware error handling
 pub trait VersionedErrorExt {
     /// Create a version-aware bad request error
-    fn versioned_bad_request(version_info: &VersionInfo, code: &str, message: &str) -> HttpResult<ElifResponse>;
-    
+    fn versioned_bad_request(
+        version_info: &VersionInfo,
+        code: &str,
+        message: &str,
+    ) -> HttpResult<ElifResponse>;
+
     /// Create a version-aware not found error
     fn versioned_not_found(version_info: &VersionInfo, resource: &str) -> HttpResult<ElifResponse>;
-    
+
     /// Create a version-aware validation error
     fn versioned_validation_error(
-        version_info: &VersionInfo, 
-        field_errors: HashMap<String, Vec<String>>
+        version_info: &VersionInfo,
+        field_errors: HashMap<String, Vec<String>>,
     ) -> HttpResult<ElifResponse>;
-    
+
     /// Create a version-aware internal server error
-    fn versioned_internal_error(version_info: &VersionInfo, message: &str) -> HttpResult<ElifResponse>;
-    
+    fn versioned_internal_error(
+        version_info: &VersionInfo,
+        message: &str,
+    ) -> HttpResult<ElifResponse>;
+
     /// Create a version-aware unauthorized error
-    fn versioned_unauthorized(version_info: &VersionInfo, message: &str) -> HttpResult<ElifResponse>;
-    
+    fn versioned_unauthorized(
+        version_info: &VersionInfo,
+        message: &str,
+    ) -> HttpResult<ElifResponse>;
+
     /// Create a version-aware forbidden error
     fn versioned_forbidden(version_info: &VersionInfo, message: &str) -> HttpResult<ElifResponse>;
 }
 
 impl VersionedErrorExt for HttpError {
-    fn versioned_bad_request(version_info: &VersionInfo, code: &str, message: &str) -> HttpResult<ElifResponse> {
+    fn versioned_bad_request(
+        version_info: &VersionInfo,
+        code: &str,
+        message: &str,
+    ) -> HttpResult<ElifResponse> {
         VersionedErrorBuilder::new(code, message)
             .status(ElifStatusCode::BAD_REQUEST)
             .build(version_info)
     }
-    
+
     fn versioned_not_found(version_info: &VersionInfo, resource: &str) -> HttpResult<ElifResponse> {
         VersionedErrorBuilder::new("NOT_FOUND", &format!("{} not found", resource))
             .status(ElifStatusCode::NOT_FOUND)
             .details(&format!("The requested {} could not be found", resource))
             .build(version_info)
     }
-    
+
     fn versioned_validation_error(
-        version_info: &VersionInfo, 
-        field_errors: HashMap<String, Vec<String>>
+        version_info: &VersionInfo,
+        field_errors: HashMap<String, Vec<String>>,
     ) -> HttpResult<ElifResponse> {
         VersionedErrorBuilder::new("VALIDATION_ERROR", "Request validation failed")
             .status(ElifStatusCode::UNPROCESSABLE_ENTITY)
@@ -216,21 +230,27 @@ impl VersionedErrorExt for HttpError {
             .field_errors(field_errors)
             .build(version_info)
     }
-    
-    fn versioned_internal_error(version_info: &VersionInfo, message: &str) -> HttpResult<ElifResponse> {
+
+    fn versioned_internal_error(
+        version_info: &VersionInfo,
+        message: &str,
+    ) -> HttpResult<ElifResponse> {
         VersionedErrorBuilder::new("INTERNAL_ERROR", "Internal server error")
             .status(ElifStatusCode::INTERNAL_SERVER_ERROR)
             .details(message)
             .build(version_info)
     }
-    
-    fn versioned_unauthorized(version_info: &VersionInfo, message: &str) -> HttpResult<ElifResponse> {
+
+    fn versioned_unauthorized(
+        version_info: &VersionInfo,
+        message: &str,
+    ) -> HttpResult<ElifResponse> {
         VersionedErrorBuilder::new("UNAUTHORIZED", "Authentication required")
             .status(ElifStatusCode::UNAUTHORIZED)
             .details(message)
             .build(version_info)
     }
-    
+
     fn versioned_forbidden(version_info: &VersionInfo, message: &str) -> HttpResult<ElifResponse> {
         VersionedErrorBuilder::new("FORBIDDEN", "Access denied")
             .status(ElifStatusCode::FORBIDDEN)
@@ -240,11 +260,19 @@ impl VersionedErrorExt for HttpError {
 }
 
 /// Convenience functions for creating versioned errors
-pub fn versioned_error(_version_info: &VersionInfo, code: &str, message: &str) -> VersionedErrorBuilder {
+pub fn versioned_error(
+    _version_info: &VersionInfo,
+    code: &str,
+    message: &str,
+) -> VersionedErrorBuilder {
     VersionedErrorBuilder::new(code, message)
 }
 
-pub fn bad_request_v(version_info: &VersionInfo, code: &str, message: &str) -> HttpResult<ElifResponse> {
+pub fn bad_request_v(
+    version_info: &VersionInfo,
+    code: &str,
+    message: &str,
+) -> HttpResult<ElifResponse> {
     HttpError::versioned_bad_request(version_info, code, message)
 }
 
@@ -252,7 +280,10 @@ pub fn not_found_v(version_info: &VersionInfo, resource: &str) -> HttpResult<Eli
     HttpError::versioned_not_found(version_info, resource)
 }
 
-pub fn validation_error_v(version_info: &VersionInfo, field_errors: HashMap<String, Vec<String>>) -> HttpResult<ElifResponse> {
+pub fn validation_error_v(
+    version_info: &VersionInfo,
+    field_errors: HashMap<String, Vec<String>>,
+) -> HttpResult<ElifResponse> {
     HttpError::versioned_validation_error(version_info, field_errors)
 }
 
@@ -298,25 +329,25 @@ mod tests {
     #[test]
     fn test_versioned_error_builder() {
         let version_info = create_test_version_info("v1", false);
-        
+
         let response = VersionedErrorBuilder::new("TEST_ERROR", "Test error message")
             .status(ElifStatusCode::BAD_REQUEST)
             .details("Additional details")
             .build(&version_info)
             .unwrap();
-        
+
         assert_eq!(response.status_code(), ElifStatusCode::BAD_REQUEST);
     }
 
     #[test]
     fn test_deprecated_version_migration_info() {
         let version_info = create_test_version_info("v1", true);
-        
+
         let response = VersionedErrorBuilder::new("TEST_ERROR", "Test error")
             .status(ElifStatusCode::BAD_REQUEST)
             .build(&version_info)
             .unwrap();
-        
+
         // Test passes if we can build the response
         assert_eq!(response.status_code(), ElifStatusCode::BAD_REQUEST);
     }
@@ -325,18 +356,21 @@ mod tests {
     fn test_validation_error_with_fields() {
         let version_info = create_test_version_info("v2", false);
         let mut field_errors = HashMap::new();
-        field_errors.insert("email".to_string(), vec!["Invalid email format".to_string()]);
+        field_errors.insert(
+            "email".to_string(),
+            vec!["Invalid email format".to_string()],
+        );
         field_errors.insert("age".to_string(), vec!["Must be positive".to_string()]);
-        
+
         let response = HttpError::versioned_validation_error(&version_info, field_errors).unwrap();
-        
+
         assert_eq!(response.status_code(), ElifStatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[test]
     fn test_convenience_functions() {
         let version_info = create_test_version_info("v1", false);
-        
+
         let _bad_request = bad_request_v(&version_info, "BAD_INPUT", "Invalid input").unwrap();
         let _not_found = not_found_v(&version_info, "User").unwrap();
         let _internal = internal_error_v(&version_info, "Something went wrong").unwrap();

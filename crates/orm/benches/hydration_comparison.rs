@@ -3,19 +3,19 @@
 //! Tests our JSON-based hydration vs direct sqlx access to understand
 //! the performance difference for model deserialization
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use chrono::Utc;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use elif_orm::models::mapping_tests::{MockDatabaseRow, TestUser};
 use serde_json::{json, Value};
 use uuid::Uuid;
-use chrono::Utc;
 
 fn bench_hydration_approaches(c: &mut Criterion) {
     let mut group = c.benchmark_group("hydration_comparison");
-    
+
     // Test data setup
     let user_id = Uuid::new_v4();
     let now = Utc::now();
-    
+
     // Our JSON-based approach
     let mock_row = MockDatabaseRow::new()
         .with_column("id", user_id.to_string())
@@ -25,7 +25,7 @@ fn bench_hydration_approaches(c: &mut Criterion) {
         .with_column("active", true)
         .with_column("created_at", now.to_rfc3339())
         .with_column("updated_at", Value::Null);
-    
+
     // Benchmark our current JSON-based hydration
     group.bench_function("json_based_hydration", |b| {
         b.iter(|| {
@@ -33,7 +33,7 @@ fn bench_hydration_approaches(c: &mut Criterion) {
             black_box(user)
         })
     });
-    
+
     // Simulate what direct access would look like
     group.bench_function("direct_field_access", |b| {
         b.iter(|| {
@@ -50,7 +50,7 @@ fn bench_hydration_approaches(c: &mut Criterion) {
             black_box(user)
         })
     });
-    
+
     // Test bulk hydration scenarios
     for &count in &[10, 100, 1000] {
         group.bench_with_input(
@@ -69,7 +69,7 @@ fn bench_hydration_approaches(c: &mut Criterion) {
                             .with_column("updated_at", Value::Null)
                     })
                     .collect();
-                
+
                 b.iter(|| {
                     let users: Result<Vec<TestUser>, _> = rows
                         .iter()
@@ -79,23 +79,21 @@ fn bench_hydration_approaches(c: &mut Criterion) {
                 })
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("bulk_direct_access", count),
             &count,
             |b, &count| {
                 b.iter(|| {
                     let users: Vec<TestUser> = (0..count)
-                        .map(|i| {
-                            TestUser {
-                                id: Uuid::new_v4(),
-                                name: format!("User {}", i),
-                                email: format!("user{}@example.com", i),
-                                age: Some(20 + (i % 50)),
-                                active: i % 2 == 0,
-                                created_at: now,
-                                updated_at: None,
-                            }
+                        .map(|i| TestUser {
+                            id: Uuid::new_v4(),
+                            name: format!("User {}", i),
+                            email: format!("user{}@example.com", i),
+                            age: Some(20 + (i % 50)),
+                            active: i % 2 == 0,
+                            created_at: now,
+                            updated_at: None,
                         })
                         .collect();
                     black_box(users)
@@ -103,20 +101,20 @@ fn bench_hydration_approaches(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_individual_field_access(c: &mut Criterion) {
     let mut group = c.benchmark_group("field_access_patterns");
-    
+
     let mock_row = MockDatabaseRow::new()
         .with_column("id", Uuid::new_v4().to_string())
         .with_column("name", "John Doe")
         .with_column("email", "john@example.com")
         .with_column("age", 30)
         .with_column("active", true);
-    
+
     // Test individual field access patterns
     group.bench_function("string_field_access", |b| {
         b.iter(|| {
@@ -124,47 +122,48 @@ fn bench_individual_field_access(c: &mut Criterion) {
             black_box(name)
         })
     });
-    
+
     group.bench_function("integer_field_access", |b| {
         b.iter(|| {
             let age: i32 = mock_row.get(black_box("age")).unwrap();
             black_box(age)
         })
     });
-    
+
     group.bench_function("boolean_field_access", |b| {
         b.iter(|| {
             let active: bool = mock_row.get(black_box("active")).unwrap();
             black_box(active)
         })
     });
-    
+
     group.bench_function("optional_field_access", |b| {
         b.iter(|| {
             let age: Option<i32> = mock_row.try_get(black_box("age")).unwrap();
             black_box(age)
         })
     });
-    
+
     group.finish();
 }
 
 fn bench_memory_allocation_patterns(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_allocation");
-    
+
     // Test memory allocation during hydration
     group.bench_function("json_conversion_overhead", |b| {
         let raw_value = json!("test_string");
-        
+
         b.iter(|| {
             // Simulate our JSON conversion path
-            let db_value = elif_orm::backends::DatabaseValue::from_json(black_box(raw_value.clone()));
+            let db_value =
+                elif_orm::backends::DatabaseValue::from_json(black_box(raw_value.clone()));
             let json_back = db_value.to_json();
             let final_value: String = serde_json::from_value(json_back).unwrap();
             black_box(final_value)
         })
     });
-    
+
     group.bench_function("direct_value_access", |b| {
         b.iter(|| {
             // Direct access without JSON conversion
@@ -172,14 +171,14 @@ fn bench_memory_allocation_patterns(c: &mut Criterion) {
             black_box(value)
         })
     });
-    
+
     group.finish();
 }
 
 criterion_group!(
     benches,
     bench_hydration_approaches,
-    bench_individual_field_access, 
+    bench_individual_field_access,
     bench_memory_allocation_patterns
 );
 criterion_main!(benches);
