@@ -442,7 +442,7 @@ pub async fn restore(backup_file: &str) -> Result<(), ElifError> {
     println!();
 
     // Check if backup file exists
-    if !std::path::Path::new(backup_file).exists() {
+    if !tokio::fs::try_exists(backup_file).await.unwrap_or(false) {
         return Err(ElifError::Database {
             message: format!("Backup file not found: {}", backup_file),
         });
