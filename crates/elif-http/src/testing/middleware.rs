@@ -4,15 +4,15 @@
 //! It includes test harnesses, mock middleware, and assertion helpers.
 
 use crate::middleware::v2::{Middleware, MiddlewarePipelineV2, Next, NextFuture};
-use crate::request::{ElifRequest, ElifMethod};
-use crate::response::{ElifResponse, headers::ElifHeaderMap};
+use crate::request::{ElifMethod, ElifRequest};
+use crate::response::{headers::ElifHeaderMap, ElifResponse};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use serde_json::Value;
 
 /// Test harness for middleware testing
-/// 
+///
 /// This provides a simple way to test middleware in isolation or as part of a pipeline
 pub struct MiddlewareTestHarness {
     pipeline: MiddlewarePipelineV2,
@@ -37,45 +37,45 @@ impl MiddlewareTestHarness {
             execution_stats: Arc::new(Mutex::new(ExecutionStats::default())),
         }
     }
-    
+
     /// Add middleware to the test pipeline
     pub fn add_middleware<M: Middleware + 'static>(mut self, middleware: M) -> Self {
         self.pipeline.add_mut(middleware);
         self
     }
-    
+
     /// Set a custom test handler (default returns 200 OK)
-    pub fn with_handler<F>(mut self, handler: F) -> Self 
+    pub fn with_handler<F>(mut self, handler: F) -> Self
     where
         F: Fn(ElifRequest) -> ElifResponse + Send + Sync + 'static,
     {
         self.test_handler = Some(Arc::new(handler));
         self
     }
-    
+
     /// Execute a test request through the middleware pipeline
     pub async fn execute(&self, request: ElifRequest) -> MiddlewareTestResult {
         let start_time = Instant::now();
         let stats = self.execution_stats.clone();
-        
+
         let response = if let Some(ref custom_handler) = self.test_handler {
             let custom_handler = custom_handler.clone();
-            self.pipeline.execute(request, move |req| {
-                let handler = custom_handler.clone();
-                Box::pin(async move {
-                    handler(req)
+            self.pipeline
+                .execute(request, move |req| {
+                    let handler = custom_handler.clone();
+                    Box::pin(async move { handler(req) })
                 })
-            }).await
+                .await
         } else {
-            self.pipeline.execute(request, |_req| {
-                Box::pin(async move {
-                    ElifResponse::ok().text("Test handler response")
+            self.pipeline
+                .execute(request, |_req| {
+                    Box::pin(async move { ElifResponse::ok().text("Test handler response") })
                 })
-            }).await
+                .await
         };
-        
+
         let execution_time = start_time.elapsed();
-        
+
         // Update stats
         {
             let mut stats = stats.lock().expect("Failed to lock stats");
@@ -83,7 +83,7 @@ impl MiddlewareTestHarness {
             stats.total_duration += execution_time;
             stats.last_execution_time = Some(execution_time);
         }
-        
+
         MiddlewareTestResult {
             response,
             execution_time,
@@ -91,12 +91,15 @@ impl MiddlewareTestHarness {
             stats: self.execution_stats.clone(),
         }
     }
-    
+
     /// Get execution statistics
     pub fn stats(&self) -> ExecutionStats {
-        self.execution_stats.lock().expect("Failed to lock stats").clone()
+        self.execution_stats
+            .lock()
+            .expect("Failed to lock stats")
+            .clone()
     }
-    
+
     /// Reset execution statistics
     pub fn reset_stats(&self) {
         let mut stats = self.execution_stats.lock().expect("Failed to lock stats");
@@ -130,14 +133,14 @@ impl MiddlewareTestResult {
         );
         self
     }
-    
+
     /// Assert that the response contains a specific header
     pub fn assert_header(&self, name: &str, expected_value: &str) -> &Self {
         // Create a temporary clone to check headers
         let temp_response = ElifResponse::ok(); // Create a dummy response for now
         let axum_response = temp_response.into_axum_response();
         let (parts, _body) = axum_response.into_parts();
-        
+
         match parts.headers.get(name) {
             Some(value) => {
                 let value_str = value.to_str().expect("Invalid header value");
@@ -155,17 +158,18 @@ impl MiddlewareTestResult {
         }
         self
     }
-    
+
     /// Assert that the execution time is within expected bounds
     pub fn assert_execution_time(&self, max_duration: Duration) -> &Self {
         assert!(
             self.execution_time <= max_duration,
             "Execution time {:?} exceeded maximum {:?}",
-            self.execution_time, max_duration
+            self.execution_time,
+            max_duration
         );
         self
     }
-    
+
     /// Assert that a specific number of middleware were executed
     pub fn assert_middleware_count(&self, expected: usize) -> &Self {
         assert_eq!(
@@ -190,22 +194,22 @@ impl TestRequestBuilder {
     pub fn get<P: AsRef<str>>(path: P) -> Self {
         Self::new(ElifMethod::GET, path)
     }
-    
+
     /// Create a POST request builder
     pub fn post<P: AsRef<str>>(path: P) -> Self {
         Self::new(ElifMethod::POST, path)
     }
-    
+
     /// Create a PUT request builder
     pub fn put<P: AsRef<str>>(path: P) -> Self {
         Self::new(ElifMethod::PUT, path)
     }
-    
+
     /// Create a DELETE request builder
     pub fn delete<P: AsRef<str>>(path: P) -> Self {
         Self::new(ElifMethod::DELETE, path)
     }
-    
+
     fn new<P: AsRef<str>>(method: ElifMethod, path: P) -> Self {
         Self {
             method,
@@ -214,7 +218,7 @@ impl TestRequestBuilder {
             body: None,
         }
     }
-    
+
     /// Add a header to the request
     pub fn header<K: AsRef<str>, V: AsRef<str>>(mut self, key: K, value: V) -> Self {
         let name = key.as_ref().parse().expect("Invalid header name");
@@ -222,39 +226,39 @@ impl TestRequestBuilder {
         self.headers.insert(name, value);
         self
     }
-    
+
     /// Add an authorization header
     pub fn auth_bearer<T: AsRef<str>>(self, token: T) -> Self {
         self.header("Authorization", format!("Bearer {}", token.as_ref()))
     }
-    
+
     /// Add a JSON content-type header
     pub fn json(self) -> Self {
         self.header("Content-Type", "application/json")
     }
-    
+
     /// Set the request body as JSON
     pub fn json_body(mut self, json: &Value) -> Self {
         let body = serde_json::to_vec(json).expect("Failed to serialize JSON");
         self.body = Some(body);
         self.json()
     }
-    
+
     /// Set the request body as raw bytes
     pub fn body(mut self, body: Vec<u8>) -> Self {
         self.body = Some(body);
         self
     }
-    
+
     /// Build the request
     pub fn build(self) -> ElifRequest {
         let uri = self.path.parse().expect("Invalid URI");
         let mut request = ElifRequest::new(self.method, uri, self.headers);
-        
+
         if let Some(body) = self.body {
             request = request.with_body(body.into());
         }
-        
+
         request
     }
 }
@@ -291,7 +295,7 @@ impl MockMiddleware {
             execution_count: Arc::new(Mutex::new(0)),
         }
     }
-    
+
     /// Create a mock that returns a specific response
     pub fn returns_response<S: Into<String>>(name: S, status: u16, body: S) -> Self {
         Self {
@@ -300,7 +304,7 @@ impl MockMiddleware {
             execution_count: Arc::new(Mutex::new(0)),
         }
     }
-    
+
     /// Create a mock that adds a header
     pub fn adds_header<S: Into<String>>(name: S, header_name: S, header_value: S) -> Self {
         Self {
@@ -309,7 +313,7 @@ impl MockMiddleware {
             execution_count: Arc::new(Mutex::new(0)),
         }
     }
-    
+
     /// Create a mock that delays execution
     pub fn delays<S: Into<String>>(name: S, delay: Duration) -> Self {
         Self {
@@ -318,15 +322,21 @@ impl MockMiddleware {
             execution_count: Arc::new(Mutex::new(0)),
         }
     }
-    
+
     /// Get the number of times this middleware has been executed
     pub fn execution_count(&self) -> u32 {
-        *self.execution_count.lock().expect("Failed to lock execution count")
+        *self
+            .execution_count
+            .lock()
+            .expect("Failed to lock execution count")
     }
-    
+
     /// Reset execution count
     pub fn reset_count(&self) {
-        let mut count = self.execution_count.lock().expect("Failed to lock execution count");
+        let mut count = self
+            .execution_count
+            .lock()
+            .expect("Failed to lock execution count");
         *count = 0;
     }
 }
@@ -335,18 +345,16 @@ impl Middleware for MockMiddleware {
     fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
         let behavior = self.behavior.clone();
         let count = self.execution_count.clone();
-        
+
         Box::pin(async move {
             // Increment execution count
             {
                 let mut count = count.lock().expect("Failed to lock execution count");
                 *count += 1;
             }
-            
+
             match behavior {
-                MockBehavior::PassThrough => {
-                    next.run(request).await
-                }
+                MockBehavior::PassThrough => next.run(request).await,
                 MockBehavior::ReturnResponse(status, body) => {
                     let status_code = match status {
                         200 => crate::response::status::ElifStatusCode::OK,
@@ -369,13 +377,12 @@ impl Middleware for MockMiddleware {
                 }
                 MockBehavior::Error(_error_msg) => {
                     // Simulate an error by returning a 500 response
-                    ElifResponse::internal_server_error()
-                        .text("Mock middleware error")
+                    ElifResponse::internal_server_error().text("Mock middleware error")
                 }
             }
         })
     }
-    
+
     fn name(&self) -> &'static str {
         // This is a limitation of the trait - we can't return the dynamic name
         // In a real implementation, you might use a different approach
@@ -388,17 +395,16 @@ pub struct MiddlewareAssertions;
 
 impl MiddlewareAssertions {
     /// Assert that middleware executes in the correct order
-    pub fn assert_execution_order(
-        pipeline: &MiddlewarePipelineV2, 
-        expected_order: &[&str]
-    ) {
+    pub fn assert_execution_order(pipeline: &MiddlewarePipelineV2, expected_order: &[&str]) {
         let names = pipeline.names();
         assert_eq!(
-            names.len(), expected_order.len(),
+            names.len(),
+            expected_order.len(),
             "Pipeline has {} middleware, expected {}",
-            names.len(), expected_order.len()
+            names.len(),
+            expected_order.len()
         );
-        
+
         for (i, expected_name) in expected_order.iter().enumerate() {
             assert_eq!(
                 names[i], *expected_name,
@@ -407,13 +413,15 @@ impl MiddlewareAssertions {
             );
         }
     }
-    
+
     /// Assert that a mock middleware was executed a specific number of times
     pub fn assert_mock_execution_count(mock: &MockMiddleware, expected_count: u32) {
         assert_eq!(
-            mock.execution_count(), expected_count,
+            mock.execution_count(),
+            expected_count,
             "Mock middleware was executed {} times, expected {}",
-            mock.execution_count(), expected_count
+            mock.execution_count(),
+            expected_count
         );
     }
 }
@@ -424,26 +432,26 @@ pub struct MiddlewareBenchmark;
 impl MiddlewareBenchmark {
     /// Run a simple benchmark on middleware
     pub async fn benchmark_middleware<M: Middleware + 'static>(
-        middleware: M, 
-        iterations: u32
+        middleware: M,
+        iterations: u32,
     ) -> BenchmarkResult {
         let harness = MiddlewareTestHarness::new().add_middleware(middleware);
-        
+
         let mut total_duration = Duration::ZERO;
         let mut min_duration = Duration::MAX;
         let mut max_duration = Duration::ZERO;
-        
+
         for _ in 0..iterations {
             let request = TestRequestBuilder::get("/test").build();
             let result = harness.execute(request).await;
-            
+
             total_duration += result.execution_time;
             min_duration = min_duration.min(result.execution_time);
             max_duration = max_duration.max(result.execution_time);
         }
-        
+
         let average_duration = total_duration / iterations;
-        
+
         BenchmarkResult {
             iterations,
             total_duration,
@@ -479,100 +487,97 @@ impl BenchmarkResult {
 mod tests {
     use super::*;
     use serde_json::json;
-    
+
     #[tokio::test]
     async fn test_middleware_harness_basic() {
-        let harness = MiddlewareTestHarness::new()
-            .add_middleware(MockMiddleware::new("test"));
-        
+        let harness = MiddlewareTestHarness::new().add_middleware(MockMiddleware::new("test"));
+
         let request = TestRequestBuilder::get("/test").build();
         let result = harness.execute(request).await;
-        
+
         result.assert_status(200);
         assert_eq!(result.middleware_count, 1);
     }
-    
+
     #[tokio::test]
     async fn test_mock_middleware_execution_count() {
         let mock = MockMiddleware::new("counter");
-        let harness = MiddlewareTestHarness::new()
-            .add_middleware(mock.clone());
-        
+        let harness = MiddlewareTestHarness::new().add_middleware(mock.clone());
+
         // Execute multiple requests
         for _ in 0..3 {
             let request = TestRequestBuilder::get("/test").build();
             harness.execute(request).await;
         }
-        
+
         // Verify execution count
         assert_eq!(mock.execution_count(), 3);
     }
-    
+
     #[tokio::test]
     async fn test_mock_middleware_returns_response() {
         let mock = MockMiddleware::returns_response("responder", 404, "Not found");
         let harness = MiddlewareTestHarness::new().add_middleware(mock);
-        
+
         let request = TestRequestBuilder::get("/test").build();
         let result = harness.execute(request).await;
-        
+
         result.assert_status(404);
     }
-    
+
     #[tokio::test]
     async fn test_mock_middleware_adds_header() {
         let mock = MockMiddleware::adds_header("header-adder", "X-Test", "test-value");
         let harness = MiddlewareTestHarness::new().add_middleware(mock);
-        
+
         let request = TestRequestBuilder::get("/test").build();
         let result = harness.execute(request).await;
-        
+
         result.assert_header("X-Test", "test-value");
     }
-    
+
     #[tokio::test]
     async fn test_request_builder() {
         let request = TestRequestBuilder::post("/api/users")
             .auth_bearer("test-token")
             .json_body(&json!({"name": "test"}))
             .build();
-        
+
         assert_eq!(request.method, ElifMethod::POST);
         assert_eq!(request.path(), "/api/users");
-        
+
         // Verify headers
         assert!(request.header("Authorization").is_some());
         assert!(request.header("Content-Type").is_some());
     }
-    
+
     #[tokio::test]
     async fn test_middleware_pipeline_execution_order() {
         let mock1 = MockMiddleware::new("first");
         let mock2 = MockMiddleware::new("second");
-        
+
         let harness = MiddlewareTestHarness::new()
             .add_middleware(mock1.clone())
             .add_middleware(mock2.clone());
-        
+
         let request = TestRequestBuilder::get("/test").build();
         harness.execute(request).await;
-        
+
         // Both middleware should have executed once
         assert_eq!(mock1.execution_count(), 1);
         assert_eq!(mock2.execution_count(), 1);
     }
-    
+
     #[tokio::test]
     async fn test_execution_stats() {
-        let harness = MiddlewareTestHarness::new()
-            .add_middleware(MockMiddleware::new("stats"));
-        
+        let harness = MiddlewareTestHarness::new().add_middleware(MockMiddleware::new("stats"));
+
         // Execute multiple requests
         for _ in 0..5 {
             let request = TestRequestBuilder::get("/test").build();
             harness.execute(request).await;
         }
-        
+
         let stats = harness.stats();
         assert_eq!(stats.request_count, 5);
         assert!(stats.total_duration > Duration::ZERO);

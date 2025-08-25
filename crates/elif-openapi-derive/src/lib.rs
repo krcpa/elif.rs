@@ -6,7 +6,7 @@ This crate provides derive macros for automatically implementing OpenAPI schema 
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Data, Fields};
+use syn::{parse_macro_input, Data, DeriveInput, Fields};
 
 /// Derive macro to automatically implement OpenApiSchema for structs and enums
 #[proc_macro_derive(OpenApiSchema)]
@@ -19,14 +19,14 @@ pub fn derive_openapi_schema(input: TokenStream) -> TokenStream {
 fn generate_openapi_schema_impl(input: &DeriveInput) -> Result<TokenStream, syn::Error> {
     let name = &input.ident;
     let name_str = name.to_string();
-    
+
     let schema_impl = match &input.data {
         Data::Struct(data_struct) => generate_struct_schema_impl(&name_str, &data_struct.fields)?,
         Data::Enum(data_enum) => generate_enum_schema_impl(&name_str, data_enum)?,
         Data::Union(_) => {
             return Err(syn::Error::new_spanned(
-                input, 
-                "OpenApiSchema cannot be derived for union types"
+                input,
+                "OpenApiSchema cannot be derived for union types",
             ));
         }
     };
@@ -36,7 +36,7 @@ fn generate_openapi_schema_impl(input: &DeriveInput) -> Result<TokenStream, syn:
             fn openapi_schema() -> ::elif_openapi::specification::Schema {
                 #schema_impl
             }
-            
+
             fn schema_name() -> String {
                 #name_str.to_string()
             }
@@ -47,7 +47,10 @@ fn generate_openapi_schema_impl(input: &DeriveInput) -> Result<TokenStream, syn:
 }
 
 /// Generate schema implementation for struct types
-fn generate_struct_schema_impl(type_name: &str, fields: &Fields) -> Result<proc_macro2::TokenStream, syn::Error> {
+fn generate_struct_schema_impl(
+    type_name: &str,
+    fields: &Fields,
+) -> Result<proc_macro2::TokenStream, syn::Error> {
     match fields {
         Fields::Named(named_fields) => {
             // Generate object schema with properties
@@ -57,10 +60,10 @@ fn generate_struct_schema_impl(type_name: &str, fields: &Fields) -> Result<proc_
             for field in &named_fields.named {
                 let field_name = field.ident.as_ref().unwrap().to_string();
                 let field_type = &field.ty;
-                
+
                 // Check if field is optional (Option<T>)
                 let is_optional = is_option_type(field_type);
-                
+
                 if !is_optional {
                     required.push(field_name.clone());
                 }
@@ -85,7 +88,7 @@ fn generate_struct_schema_impl(type_name: &str, fields: &Fields) -> Result<proc_
                 {
                     let mut properties = std::collections::HashMap::new();
                     #(#properties)*
-                    
+
                     ::elif_openapi::specification::Schema {
                         schema_type: Some("object".to_string()),
                         title: Some(#type_name.to_string()),
@@ -107,12 +110,14 @@ fn generate_struct_schema_impl(type_name: &str, fields: &Fields) -> Result<proc_
             } else {
                 // Multiple field tuple - use array with descriptive text
                 // OpenAPI 3.0 does not have good tuple support (OpenAPI 3.1 introduced prefixItems)
-                let type_descriptions: Vec<String> = unnamed_fields.unnamed.iter()
+                let type_descriptions: Vec<String> = unnamed_fields
+                    .unnamed
+                    .iter()
                     .map(|field| quote::quote!(#field.ty).to_string())
                     .collect();
-                
+
                 let field_count = unnamed_fields.unnamed.len();
-                
+
                 let description = format!(
                     "A tuple with {} fields in fixed order: ({}). Note: OpenAPI 3.0 cannot precisely represent tuple types - this is a generic array representation.",
                     field_count,
@@ -150,9 +155,14 @@ fn generate_struct_schema_impl(type_name: &str, fields: &Fields) -> Result<proc_
 }
 
 /// Generate schema implementation for enum types
-fn generate_enum_schema_impl(type_name: &str, data_enum: &syn::DataEnum) -> Result<proc_macro2::TokenStream, syn::Error> {
+fn generate_enum_schema_impl(
+    type_name: &str,
+    data_enum: &syn::DataEnum,
+) -> Result<proc_macro2::TokenStream, syn::Error> {
     // For now, generate simple string enum schema
-    let variants: Vec<String> = data_enum.variants.iter()
+    let variants: Vec<String> = data_enum
+        .variants
+        .iter()
         .map(|variant| variant.ident.to_string())
         .collect();
 

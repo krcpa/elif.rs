@@ -6,8 +6,8 @@
 //! ## Performance Design
 //!
 //! The extraction system is designed for optimal performance in request handling:
-//! 
-//! 1. **One-time validation**: Parameters are validated once during `ExtractedParams` 
+//!
+//! 1. **One-time validation**: Parameters are validated once during `ExtractedParams`
 //!    creation, not on every access.
 //! 2. **Zero-copy access**: `get_str()` returns `&str` references without allocation.
 //! 3. **Efficient type conversion**: Only string parsing overhead, no constraint re-checking.
@@ -43,7 +43,11 @@ pub enum ExtractionError {
     #[error("Type conversion failed for parameter '{param}': {error}")]
     ConversionFailed { param: String, error: String },
     #[error("Constraint violation for parameter '{param}': expected {constraint}, got '{value}'")]
-    ConstraintViolation { param: String, constraint: String, value: String },
+    ConstraintViolation {
+        param: String,
+        constraint: String,
+        value: String,
+    },
 }
 
 /// Extracted and validated route parameters
@@ -56,17 +60,19 @@ pub struct ExtractedParams {
 impl ExtractedParams {
     /// Create new extracted parameters from RouteMatch with validation
     pub fn from_route_match(
-        raw_params: HashMap<String, String>, 
-        pattern: RoutePattern
+        raw_params: HashMap<String, String>,
+        pattern: RoutePattern,
     ) -> Result<Self, ExtractionError> {
-        let extracted = Self { raw_params, pattern };
-        
+        let extracted = Self {
+            raw_params,
+            pattern,
+        };
+
         // Validate all parameters against their constraints upfront
         extracted.validate_all()?;
-        
+
         Ok(extracted)
     }
-
 
     /// Get a parameter as a raw string
     pub fn get_str(&self, name: &str) -> Option<&str> {
@@ -74,7 +80,7 @@ impl ExtractedParams {
     }
 
     /// Get a parameter converted to a specific type
-    /// 
+    ///
     /// Note: Parameters are pre-validated during ExtractedParams creation,
     /// so this method only handles type conversion.
     pub fn get<T>(&self, name: &str) -> Result<T, ExtractionError>
@@ -82,15 +88,18 @@ impl ExtractedParams {
         T: FromStr,
         T::Err: std::fmt::Display,
     {
-        let value = self.raw_params
+        let value = self
+            .raw_params
             .get(name)
             .ok_or_else(|| ExtractionError::Missing(name.to_string()))?;
 
         // Convert to target type (constraints already validated during creation)
-        value.parse::<T>().map_err(|e| ExtractionError::ConversionFailed {
-            param: name.to_string(),
-            error: e.to_string(),
-        })
+        value
+            .parse::<T>()
+            .map_err(|e| ExtractionError::ConversionFailed {
+                param: name.to_string(),
+                error: e.to_string(),
+            })
     }
 
     /// Get a parameter as an integer
@@ -145,7 +154,9 @@ impl ExtractedParams {
             // Find the corresponding segment in the pattern
             for segment in &self.pattern.segments {
                 match segment {
-                    super::pattern::PathSegment::Parameter { name, constraint } if name == param_name => {
+                    super::pattern::PathSegment::Parameter { name, constraint }
+                        if name == param_name =>
+                    {
                         if !constraint.validate(param_value) {
                             return Err(ExtractionError::ConstraintViolation {
                                 param: param_name.clone(),
@@ -165,7 +176,6 @@ impl ExtractedParams {
         }
         Ok(())
     }
-
 }
 
 /// Parameter extractor for route patterns
@@ -181,12 +191,15 @@ impl ParameterExtractor {
     }
 
     /// Extract and validate parameters from raw parameters (efficient - no re-matching)
-    pub fn extract_from_params(&self, raw_params: HashMap<String, String>) -> Result<ExtractedParams, ExtractionError> {
+    pub fn extract_from_params(
+        &self,
+        raw_params: HashMap<String, String>,
+    ) -> Result<ExtractedParams, ExtractionError> {
         ExtractedParams::from_route_match(raw_params, self.pattern.clone())
     }
 
     /// Extract parameters from a path that matches this pattern (legacy method - less efficient)
-    /// 
+    ///
     /// Note: This method performs pattern matching and parameter extraction.
     /// For better performance, use extract_from_params() when raw parameters are already available.
     pub fn extract(&self, path: &str) -> Result<ExtractedParams, ExtractionError> {
@@ -200,7 +213,7 @@ impl ParameterExtractor {
 
         // Extract raw parameters
         let raw_params = self.pattern.extract_params(path);
-        
+
         // Use the efficient method
         self.extract_from_params(raw_params)
     }
@@ -234,7 +247,8 @@ impl TypedExtractorBuilder {
 
     /// Add a custom constraint for a parameter
     pub fn constraint(mut self, param_name: &str, constraint: ParamConstraint) -> Self {
-        self.custom_constraints.insert(param_name.to_string(), constraint);
+        self.custom_constraints
+            .insert(param_name.to_string(), constraint);
         self
     }
 
@@ -298,16 +312,16 @@ macro_rules! extract_optional_params {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::pattern::RoutePattern;
+    use super::*;
 
     #[test]
     fn test_basic_parameter_extraction() {
         let pattern = RoutePattern::parse("/users/{id}/posts/{slug}").unwrap();
         let extractor = ParameterExtractor::new(pattern);
-        
+
         let extracted = extractor.extract("/users/123/posts/hello-world").unwrap();
-        
+
         assert_eq!(extracted.get_str("id"), Some("123"));
         assert_eq!(extracted.get_str("slug"), Some("hello-world"));
     }
@@ -317,15 +331,15 @@ mod tests {
         // Test the new efficient extraction method that avoids re-matching
         let pattern = RoutePattern::parse("/users/{id:int}/posts/{slug}").unwrap();
         let extractor = ParameterExtractor::new(pattern);
-        
+
         // Simulate what RouteMatcher would provide
         let mut raw_params = HashMap::new();
         raw_params.insert("id".to_string(), "456".to_string());
         raw_params.insert("slug".to_string(), "test-post".to_string());
-        
+
         // Use the efficient method (no path matching/extraction)
         let extracted = extractor.extract_from_params(raw_params).unwrap();
-        
+
         assert_eq!(extracted.get_str("id"), Some("456"));
         assert_eq!(extracted.get_str("slug"), Some("test-post"));
         assert_eq!(extracted.get_int("id").unwrap(), 456);
@@ -335,12 +349,12 @@ mod tests {
     fn test_typed_parameter_extraction() {
         let pattern = RoutePattern::parse("/users/{id:int}/posts/{slug}").unwrap();
         let extractor = ParameterExtractor::new(pattern);
-        
+
         let extracted = extractor.extract("/users/123/posts/hello-world").unwrap();
-        
+
         // Should extract as integer
         assert_eq!(extracted.get_int("id").unwrap(), 123);
-        
+
         // Should extract as string
         assert_eq!(extracted.get::<String>("slug").unwrap(), "hello-world");
     }
@@ -349,10 +363,10 @@ mod tests {
     fn test_uuid_parameter_extraction() {
         let pattern = RoutePattern::parse("/users/{id:uuid}").unwrap();
         let extractor = ParameterExtractor::new(pattern);
-        
+
         let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
         let extracted = extractor.extract(&format!("/users/{}", uuid_str)).unwrap();
-        
+
         let uuid = extracted.get_uuid("id").unwrap();
         assert_eq!(uuid.to_string(), uuid_str);
     }
@@ -361,24 +375,27 @@ mod tests {
     fn test_constraint_violations() {
         let pattern = RoutePattern::parse("/users/{id:int}").unwrap();
         let extractor = ParameterExtractor::new(pattern);
-        
+
         // Should fail with non-integer value
         let result = extractor.extract("/users/abc");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ExtractionError::ValidationFailed { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            ExtractionError::ValidationFailed { .. }
+        ));
     }
 
     #[test]
     fn test_optional_parameters() {
         let pattern = RoutePattern::parse("/users/{id}").unwrap();
         let extractor = ParameterExtractor::new(pattern);
-        
+
         let extracted = extractor.extract("/users/123").unwrap();
-        
+
         // Existing parameter
         let id: Option<i64> = extracted.get_optional("id").unwrap();
         assert_eq!(id, Some(123));
-        
+
         // Missing parameter
         let missing: Option<String> = extracted.get_optional("missing").unwrap();
         assert_eq!(missing, None);
@@ -388,13 +405,13 @@ mod tests {
     fn test_parameter_with_defaults() {
         let pattern = RoutePattern::parse("/users/{id}").unwrap();
         let extractor = ParameterExtractor::new(pattern);
-        
+
         let extracted = extractor.extract("/users/123").unwrap();
-        
+
         // Existing parameter
         let id = extracted.get_or("id", 0i64).unwrap();
         assert_eq!(id, 123);
-        
+
         // Missing parameter with default
         let page = extracted.get_or("page", 1i64).unwrap();
         assert_eq!(page, 1);
@@ -404,9 +421,9 @@ mod tests {
     fn test_catch_all_parameter() {
         let pattern = RoutePattern::parse("/files/*path").unwrap();
         let extractor = ParameterExtractor::new(pattern);
-        
+
         let extracted = extractor.extract("/files/docs/images/logo.png").unwrap();
-        
+
         let path: String = extracted.get("path").unwrap();
         assert_eq!(path, "docs/images/logo.png");
     }
@@ -418,9 +435,9 @@ mod tests {
             .slug_param("version")
             .int_param("id")
             .build();
-        
+
         let extracted = extractor.extract("/api/v1/users/123").unwrap();
-        
+
         assert_eq!(extracted.get::<String>("version").unwrap(), "v1");
         assert_eq!(extracted.get_int("id").unwrap(), 123);
     }
@@ -428,18 +445,18 @@ mod tests {
     #[test]
     fn test_custom_regex_constraint() {
         use regex::Regex;
-        
+
         let pattern = RoutePattern::parse("/posts/{slug}").unwrap();
         let regex = Regex::new(r"^[a-z0-9-]+$").unwrap();
-        
+
         let extractor = TypedExtractorBuilder::new(pattern)
             .constraint("slug", ParamConstraint::Custom(regex))
             .build();
-        
+
         // Should match valid slug
         let result = extractor.extract("/posts/hello-world-123");
         assert!(result.is_ok());
-        
+
         // Should fail with invalid characters
         let result = extractor.extract("/posts/Hello_World!");
         assert!(result.is_err());
@@ -450,17 +467,17 @@ mod tests {
         // Test all built-in constraint types
         assert!(ParamConstraint::Int.validate("123"));
         assert!(!ParamConstraint::Int.validate("abc"));
-        
+
         assert!(ParamConstraint::Alpha.validate("hello"));
         assert!(!ParamConstraint::Alpha.validate("hello123"));
-        
+
         assert!(ParamConstraint::Slug.validate("hello-world_123"));
         assert!(!ParamConstraint::Slug.validate("hello world!"));
-        
+
         let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
         assert!(ParamConstraint::Uuid.validate(uuid_str));
         assert!(!ParamConstraint::Uuid.validate("not-a-uuid"));
-        
+
         assert!(ParamConstraint::None.validate("anything"));
         assert!(!ParamConstraint::None.validate("")); // Empty not allowed
     }
@@ -469,36 +486,39 @@ mod tests {
     fn test_error_types() {
         let pattern = RoutePattern::parse("/users/{id:int}").unwrap();
         let extractor = ParameterExtractor::new(pattern);
-        
+
         let extracted = extractor.extract("/users/123").unwrap();
-        
+
         // Missing parameter error
         let result: Result<i64, _> = extracted.get("missing");
         assert!(matches!(result.unwrap_err(), ExtractionError::Missing(_)));
-        
+
         // Type conversion error (try to get string as different type)
         // First we need an actual string parameter
         let pattern2 = RoutePattern::parse("/users/{name}").unwrap();
         let extractor2 = ParameterExtractor::new(pattern2);
         let extracted2 = extractor2.extract("/users/john").unwrap();
-        
+
         let result: Result<i64, _> = extracted2.get("name");
-        assert!(matches!(result.unwrap_err(), ExtractionError::ConversionFailed { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            ExtractionError::ConversionFailed { .. }
+        ));
     }
 
     #[test]
     fn test_parameter_access_performance() {
         // Test that parameter access is fast (no redundant validation)
         let pattern = RoutePattern::parse("/users/{id:int}/posts/{slug:alpha}").unwrap();
-        
+
         let mut raw_params = HashMap::new();
         raw_params.insert("id".to_string(), "123".to_string());
         raw_params.insert("slug".to_string(), "helloworld".to_string());
-        
+
         let extracted = ExtractedParams::from_route_match(raw_params, pattern).unwrap();
-        
+
         let start = std::time::Instant::now();
-        
+
         // Perform many parameter accesses
         for _ in 0..10000 {
             let id: i64 = extracted.get("id").unwrap();
@@ -506,58 +526,76 @@ mod tests {
             assert_eq!(id, 123);
             assert_eq!(slug, "helloworld");
         }
-        
+
         let elapsed = start.elapsed();
-        
+
         // Should be very fast since no constraint validation is done on each access
-        assert!(elapsed.as_millis() < 50, "Parameter access took too long: {}ms", elapsed.as_millis());
-        
-        println!("20,000 parameter accesses completed in {}μs", elapsed.as_micros());
+        assert!(
+            elapsed.as_millis() < 50,
+            "Parameter access took too long: {}ms",
+            elapsed.as_millis()
+        );
+
+        println!(
+            "20,000 parameter accesses completed in {}μs",
+            elapsed.as_micros()
+        );
     }
 
     #[test]
     fn test_integration_with_route_matcher() {
         // Test the complete flow: RouteMatcher -> ParameterExtractor (efficient)
-        use super::super::{HttpMethod, compiler::RouteCompilerBuilder};
-        
+        use super::super::{compiler::RouteCompilerBuilder, HttpMethod};
+
         // Build a compiled routing system
         let compilation_result = RouteCompilerBuilder::new()
             .get("users_show".to_string(), "/users/{id:int}".to_string())
-            .get("posts_show".to_string(), "/posts/{slug:alpha}/comments/{id:uuid}".to_string())
+            .get(
+                "posts_show".to_string(),
+                "/posts/{slug:alpha}/comments/{id:uuid}".to_string(),
+            )
             .build()
             .unwrap();
-        
+
         // Simulate a request resolution
-        let route_match = compilation_result.matcher
+        let route_match = compilation_result
+            .matcher
             .resolve(&HttpMethod::GET, "/users/123")
             .unwrap();
-        
+
         assert_eq!(route_match.route_id, "users_show");
         assert_eq!(route_match.params.get("id"), Some(&"123".to_string()));
-        
+
         // Use the efficient extraction method (no re-matching!)
         let extractor = compilation_result.extractors.get("users_show").unwrap();
         let extracted = extractor.extract_from_params(route_match.params).unwrap();
-        
+
         // Type-safe parameter access
         let user_id: i64 = extracted.get("id").unwrap();
         assert_eq!(user_id, 123);
-        
+
         // Test complex route with multiple constraints
         // Use "helloworld" (no hyphens) to match the alpha constraint
-        let route_match = compilation_result.matcher
-            .resolve(&HttpMethod::GET, "/posts/helloworld/comments/550e8400-e29b-41d4-a716-446655440000")
+        let route_match = compilation_result
+            .matcher
+            .resolve(
+                &HttpMethod::GET,
+                "/posts/helloworld/comments/550e8400-e29b-41d4-a716-446655440000",
+            )
             .unwrap();
-        
+
         assert_eq!(route_match.route_id, "posts_show");
-        
+
         let extractor = compilation_result.extractors.get("posts_show").unwrap();
         let extracted = extractor.extract_from_params(route_match.params).unwrap();
-        
+
         let slug: String = extracted.get("slug").unwrap();
         let comment_id = extracted.get_uuid("id").unwrap();
-        
+
         assert_eq!(slug, "helloworld");
-        assert_eq!(comment_id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
+        assert_eq!(
+            comment_id.to_string(),
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
     }
 }

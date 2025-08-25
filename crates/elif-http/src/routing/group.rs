@@ -1,12 +1,12 @@
 //! Route groups for organizing related routes
 
-use super::{HttpMethod, RouteRegistry, RouteInfo};
-use service_builder::builder;
+use super::{HttpMethod, RouteInfo, RouteRegistry};
 use axum::{
-    Router as AxumRouter,
-    routing::{get, post, put, delete, patch},
     handler::Handler,
+    routing::{delete, get, patch, post, put},
+    Router as AxumRouter,
 };
+use service_builder::builder;
 use std::sync::{Arc, Mutex};
 
 /// Route group for organizing related routes with shared configuration
@@ -52,25 +52,31 @@ where
     fn register_route(&self, method: HttpMethod, path: &str, route_name: Option<String>) {
         let full_path = self.full_path(path);
         let params = self.extract_param_names(&full_path);
-        
+
         let final_name = route_name.or_else(|| {
             // Generate default name: group.method.path_segments
-            let path_segments: Vec<&str> = path.trim_matches('/')
+            let path_segments: Vec<&str> = path
+                .trim_matches('/')
                 .split('/')
                 .filter(|s| !s.is_empty() && !s.starts_with('{'))
                 .collect();
-            
+
             if path_segments.is_empty() {
-                Some(format!("{}.{}", self.name, method_to_string(&method).to_lowercase()))
+                Some(format!(
+                    "{}.{}",
+                    self.name,
+                    method_to_string(&method).to_lowercase()
+                ))
             } else {
-                Some(format!("{}.{}.{}", 
-                    self.name, 
+                Some(format!(
+                    "{}.{}.{}",
+                    self.name,
                     method_to_string(&method).to_lowercase(),
                     path_segments.join("_")
                 ))
             }
         });
-        
+
         let route_info = RouteInfo {
             name: final_name,
             path: full_path,
@@ -78,7 +84,7 @@ where
             params,
             group: Some(self.name.clone()),
         };
-        
+
         let route_id = format!("{}_{}", self.name, uuid::Uuid::new_v4());
         self.registry.lock().unwrap().register(route_id, route_info);
     }
@@ -88,7 +94,7 @@ where
         path.split('/')
             .filter_map(|segment| {
                 if segment.starts_with('{') && segment.ends_with('}') {
-                    Some(segment[1..segment.len()-1].to_string())
+                    Some(segment[1..segment.len() - 1].to_string())
                 } else {
                     None
                 }
@@ -158,7 +164,7 @@ where
         T: 'static,
     {
         self.register_route(method.clone(), path, Some(name.to_string()));
-        
+
         let axum_method = axum::http::Method::from(method);
         match axum_method {
             axum::http::Method::GET => self.router = self.router.route(path, get(handler)),
@@ -168,7 +174,7 @@ where
             axum::http::Method::PATCH => self.router = self.router.route(path, patch(handler)),
             _ => {} // TODO: Handle other methods
         }
-        
+
         self
     }
 
@@ -194,10 +200,10 @@ where
 pub struct GroupBuilderConfig {
     #[builder(getter)]
     pub name: String,
-    
+
     #[builder(default, getter)]
     pub prefix: String,
-    
+
     #[builder(default, getter)]
     pub middleware: Vec<String>,
 }
@@ -224,7 +230,7 @@ impl GroupBuilderConfigBuilder {
             middleware: Some(middlewares_vec),
         }
     }
-    
+
     /// Add multiple middlewares
     pub fn add_middlewares(self, new_middlewares: Vec<String>) -> Self {
         let mut middlewares_vec = self.middleware.unwrap_or_default();
@@ -235,7 +241,7 @@ impl GroupBuilderConfigBuilder {
             middleware: Some(middlewares_vec),
         }
     }
-    
+
     pub fn build_config(self) -> GroupBuilderConfig {
         self.build_with_defaults().unwrap()
     }
@@ -310,7 +316,7 @@ mod tests {
     fn test_group_creation() {
         let registry = Arc::new(Mutex::new(RouteRegistry::new()));
         let group = RouteGroup::<()>::new("api", "/api/v1", Arc::clone(&registry));
-        
+
         assert_eq!(group.name(), "api");
         assert_eq!(group.prefix(), "/api/v1");
     }
@@ -319,7 +325,7 @@ mod tests {
     fn test_group_path_generation() {
         let registry = Arc::new(Mutex::new(RouteRegistry::new()));
         let group = RouteGroup::<()>::new("api", "/api/v1", registry);
-        
+
         assert_eq!(group.full_path("users"), "/api/v1/users");
         assert_eq!(group.full_path("/users/{id}"), "/api/v1/users/{id}");
     }
@@ -333,7 +339,7 @@ mod tests {
             .build::<()>(registry)
             .get("/users", handler)
             .post("/users", handler);
-        
+
         assert_eq!(group.name(), "api");
         assert_eq!(group.prefix(), "/api/v1");
     }

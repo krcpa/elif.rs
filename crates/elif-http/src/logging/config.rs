@@ -3,14 +3,9 @@
 //! Complete structured logging system for the elif.rs framework with
 //! JSON output, tracing integration, and production-ready configuration.
 
-use std::io;
-use tracing_subscriber::{
-    fmt::Layer,
-    layer::SubscriberExt,
-    util::SubscriberInitExt,
-    EnvFilter,
-};
 use serde_json::{json, Value};
+use std::io;
+use tracing_subscriber::{fmt::Layer, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 /// Logging configuration for the elif.rs framework
 #[derive(Debug, Clone)]
@@ -70,7 +65,7 @@ impl LoggingConfig {
             service_version: None,
         }
     }
-    
+
     /// Create development logging configuration
     pub fn development() -> Self {
         Self {
@@ -89,7 +84,7 @@ impl LoggingConfig {
             service_version: None,
         }
     }
-    
+
     /// Create test logging configuration (minimal output)
     pub fn test() -> Self {
         Self {
@@ -108,7 +103,7 @@ impl LoggingConfig {
             service_version: None,
         }
     }
-    
+
     /// Add a global field to include in all log entries
     pub fn with_global_field<K, V>(mut self, key: K, value: V) -> Self
     where
@@ -118,14 +113,14 @@ impl LoggingConfig {
         self.global_fields.insert(key.into(), value.into());
         self
     }
-    
+
     /// Set service name and version
     pub fn with_service(mut self, name: &str, version: &str) -> Self {
         self.service_name = Some(name.to_string());
         self.service_version = Some(version.to_string());
         self
     }
-    
+
     /// Set environment filter
     pub fn with_env_filter<S: Into<String>>(mut self, filter: S) -> Self {
         self.env_filter = Some(filter.into());
@@ -135,14 +130,10 @@ impl LoggingConfig {
 
 /// Initialize structured logging for the application
 pub fn init_logging(config: LoggingConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let env_filter = config
-        .env_filter
-        .as_deref()
-        .unwrap_or(&config.level);
-    
-    let filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new(env_filter))?;
-    
+    let env_filter = config.env_filter.as_deref().unwrap_or(&config.level);
+
+    let filter = EnvFilter::try_from_default_env().or_else(|_| EnvFilter::try_new(env_filter))?;
+
     if config.json_format {
         // JSON structured logging
         tracing_subscriber::registry()
@@ -162,7 +153,7 @@ pub fn init_logging(config: LoggingConfig) -> Result<(), Box<dyn std::error::Err
             .with(Layer::new().with_writer(io::stdout))
             .init();
     }
-    
+
     // Log initialization message with global fields
     if !config.global_fields.is_empty() {
         let mut init_msg = json!({
@@ -175,7 +166,7 @@ pub fn init_logging(config: LoggingConfig) -> Result<(), Box<dyn std::error::Err
                 "include_timestamp": config.include_timestamp,
             }
         });
-        
+
         // Add service info if available
         if let Some(name) = config.service_name {
             init_msg["service_name"] = json!(name);
@@ -183,22 +174,22 @@ pub fn init_logging(config: LoggingConfig) -> Result<(), Box<dyn std::error::Err
         if let Some(version) = config.service_version {
             init_msg["service_version"] = json!(version);
         }
-        
+
         // Add global fields
         for (key, value) in config.global_fields {
             init_msg[key] = value;
         }
-        
+
         tracing::info!(target: "elif::logging", "{}", init_msg);
     } else {
         tracing::info!(
-            target: "elif::logging", 
+            target: "elif::logging",
             "Structured logging initialized (level: {}, format: {})",
             config.level,
             if config.json_format { "JSON" } else { "text" }
         );
     }
-    
+
     Ok(())
 }
 
@@ -246,7 +237,7 @@ pub fn log_startup_info(service_name: &str, service_version: &str) {
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
     });
-    
+
     tracing::info!(target: "elif::startup", "{}", startup_info);
 }
 
@@ -257,7 +248,7 @@ pub fn log_shutdown_info(service_name: &str) {
         "service": service_name,
         "timestamp": chrono::Utc::now().to_rfc3339(),
     });
-    
+
     tracing::info!(target: "elif::shutdown", "{}", shutdown_info);
 }
 
@@ -281,22 +272,22 @@ impl LoggingContext {
             custom_fields: serde_json::Map::new(),
         }
     }
-    
+
     pub fn with_request_id(mut self, request_id: String) -> Self {
         self.request_id = Some(request_id);
         self
     }
-    
+
     pub fn with_user_id(mut self, user_id: String) -> Self {
         self.user_id = Some(user_id);
         self
     }
-    
+
     pub fn with_session_id(mut self, session_id: String) -> Self {
         self.session_id = Some(session_id);
         self
     }
-    
+
     pub fn with_custom_field<K, V>(mut self, key: K, value: V) -> Self
     where
         K: Into<String>,
@@ -305,29 +296,29 @@ impl LoggingContext {
         self.custom_fields.insert(key.into(), value.into());
         self
     }
-    
+
     /// Create a JSON object with all context fields
     pub fn to_json(&self) -> Value {
         let mut context = json!({
             "correlation_id": self.correlation_id,
         });
-        
+
         if let Some(request_id) = &self.request_id {
             context["request_id"] = json!(request_id);
         }
-        
+
         if let Some(user_id) = &self.user_id {
             context["user_id"] = json!(user_id);
         }
-        
+
         if let Some(session_id) = &self.session_id {
             context["session_id"] = json!(session_id);
         }
-        
+
         for (key, value) in &self.custom_fields {
             context[key] = value.clone();
         }
-        
+
         context
     }
 }
@@ -335,8 +326,8 @@ impl LoggingContext {
 /// Structured logging utilities for common scenarios
 pub mod structured {
     use super::*;
-    use tracing::{info, warn, error, debug};
-    
+    use tracing::{debug, error, info, warn};
+
     /// Log an HTTP request
     pub fn log_http_request(
         context: &LoggingContext,
@@ -353,17 +344,17 @@ pub mod structured {
             "status": status,
             "duration_ms": duration_ms,
         });
-        
+
         // Add context
         let context_json = context.to_json();
         for (key, value) in context_json.as_object().unwrap() {
             log_data[key] = value.clone();
         }
-        
+
         if let Some(ua) = user_agent {
             log_data["user_agent"] = json!(ua);
         }
-        
+
         if status >= 500 {
             error!(target: "elif::http", "{}", log_data);
         } else if status >= 400 {
@@ -372,7 +363,7 @@ pub mod structured {
             info!(target: "elif::http", "{}", log_data);
         }
     }
-    
+
     /// Log a database query
     pub fn log_database_query(
         context: &LoggingContext,
@@ -385,24 +376,24 @@ pub mod structured {
             "query": query,
             "duration_ms": duration_ms,
         });
-        
+
         // Add context
         let context_json = context.to_json();
         for (key, value) in context_json.as_object().unwrap() {
             log_data[key] = value.clone();
         }
-        
+
         if let Some(rows) = affected_rows {
             log_data["affected_rows"] = json!(rows);
         }
-        
+
         if duration_ms > 1000 {
             warn!(target: "elif::database", "Slow query: {}", log_data);
         } else {
             debug!(target: "elif::database", "{}", log_data);
         }
     }
-    
+
     /// Log an application error
     pub fn log_application_error(
         context: &LoggingContext,
@@ -415,20 +406,20 @@ pub mod structured {
             "error_type": error_type,
             "error_message": error_message,
         });
-        
+
         // Add context
         let context_json = context.to_json();
         for (key, value) in context_json.as_object().unwrap() {
             log_data[key] = value.clone();
         }
-        
+
         if let Some(details) = error_details {
             log_data["error_details"] = json!(details);
         }
-        
+
         error!(target: "elif::error", "{}", log_data);
     }
-    
+
     /// Log a security event
     pub fn log_security_event(
         context: &LoggingContext,
@@ -443,17 +434,17 @@ pub mod structured {
             "severity": severity,
             "details": details,
         });
-        
+
         // Add context
         let context_json = context.to_json();
         for (key, value) in context_json.as_object().unwrap() {
             log_data[key] = value.clone();
         }
-        
+
         if let Some(ip) = ip_address {
             log_data["ip_address"] = json!(ip);
         }
-        
+
         match severity {
             "high" | "critical" => error!(target: "elif::security", "{}", log_data),
             "medium" => warn!(target: "elif::security", "{}", log_data),
@@ -465,7 +456,7 @@ pub mod structured {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_logging_config_presets() {
         let prod = LoggingConfig::production();
@@ -473,57 +464,68 @@ mod tests {
         assert!(!prod.pretty_print);
         assert_eq!(prod.level, "info");
         assert!(prod.global_fields.contains_key("env"));
-        
+
         let dev = LoggingConfig::development();
         assert!(!dev.json_format);
         assert!(dev.pretty_print);
         assert_eq!(dev.level, "debug");
         assert!(dev.include_location);
-        
+
         let test = LoggingConfig::test();
         assert_eq!(test.level, "error");
         assert!(!test.include_timestamp);
     }
-    
+
     #[test]
     fn test_logging_config_builder() {
         let config = LoggingConfig::default()
             .with_global_field("app", "test-app")
             .with_service("test-service", "1.0.0")
             .with_env_filter("debug");
-        
+
         assert_eq!(config.global_fields.get("app").unwrap(), "test-app");
         assert_eq!(config.service_name.unwrap(), "test-service");
         assert_eq!(config.service_version.unwrap(), "1.0.0");
         assert_eq!(config.env_filter.unwrap(), "debug");
     }
-    
+
     #[test]
     fn test_logging_context() {
         let context = LoggingContext::new("test-correlation-123".to_string())
             .with_request_id("req-456".to_string())
             .with_user_id("user-789".to_string())
             .with_custom_field("component", "test");
-        
+
         let json = context.to_json();
         assert_eq!(json["correlation_id"], "test-correlation-123");
         assert_eq!(json["request_id"], "req-456");
         assert_eq!(json["user_id"], "user-789");
         assert_eq!(json["component"], "test");
     }
-    
+
     #[test]
     fn test_structured_logging_utilities() {
         use structured::*;
-        
-        let context = LoggingContext::new("test-123".to_string())
-            .with_user_id("user-456".to_string());
-        
+
+        let context =
+            LoggingContext::new("test-123".to_string()).with_user_id("user-456".to_string());
+
         // These would normally output to the configured logger
         // In tests, we just verify they don't panic
         log_http_request(&context, "GET", "/api/users", 200, 150, Some("test-agent"));
         log_database_query(&context, "SELECT * FROM users", 25, Some(5));
-        log_application_error(&context, "ValidationError", "Invalid input", Some("Field 'email' is required"));
-        log_security_event(&context, "failed_login", "medium", "Multiple failed attempts", Some("192.168.1.100"));
+        log_application_error(
+            &context,
+            "ValidationError",
+            "Invalid input",
+            Some("Field 'email' is required"),
+        );
+        log_security_event(
+            &context,
+            "failed_login",
+            "medium",
+            "Multiple failed attempts",
+            Some("192.168.1.100"),
+        );
     }
 }

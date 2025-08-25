@@ -6,8 +6,8 @@ from an elif.rs project structure.
 */
 
 use crate::{
-    error::{OpenApiError, OpenApiResult},
     endpoints::{ControllerInfo, EndpointMetadata, EndpointParameter, ParameterSource},
+    error::{OpenApiError, OpenApiResult},
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -93,7 +93,7 @@ impl ProjectDiscovery {
     /// Discover project metadata from Cargo.toml using proper TOML parsing
     fn discover_project_metadata(&self) -> OpenApiResult<ProjectMetadata> {
         let cargo_toml_path = self.project_root.join("Cargo.toml");
-        
+
         if !cargo_toml_path.exists() {
             return Ok(ProjectMetadata {
                 name: "Unknown".to_string(),
@@ -103,42 +103,46 @@ impl ProjectDiscovery {
             });
         }
 
-        let cargo_content = fs::read_to_string(&cargo_toml_path)
-            .map_err(|e| OpenApiError::route_discovery_error(
-                format!("Failed to read Cargo.toml: {}", e)
-            ))?;
+        let cargo_content = fs::read_to_string(&cargo_toml_path).map_err(|e| {
+            OpenApiError::route_discovery_error(format!("Failed to read Cargo.toml: {}", e))
+        })?;
 
         // Parse TOML properly using toml crate
-        let toml_value: toml::Value = cargo_content.parse()
-            .map_err(|e| OpenApiError::route_discovery_error(
-                format!("Failed to parse Cargo.toml: {}", e)
-            ))?;
+        let toml_value: toml::Value = cargo_content.parse().map_err(|e| {
+            OpenApiError::route_discovery_error(format!("Failed to parse Cargo.toml: {}", e))
+        })?;
 
         // Extract package information from [package] table
-        let package = toml_value.get("package")
-            .ok_or_else(|| OpenApiError::route_discovery_error(
-                "No [package] section found in Cargo.toml".to_string()
-            ))?;
+        let package = toml_value.get("package").ok_or_else(|| {
+            OpenApiError::route_discovery_error(
+                "No [package] section found in Cargo.toml".to_string(),
+            )
+        })?;
 
-        let name = package.get("name")
+        let name = package
+            .get("name")
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown")
             .to_string();
-            
-        let version = package.get("version")
+
+        let version = package
+            .get("version")
             .and_then(|v| v.as_str())
             .unwrap_or("1.0.0")
             .to_string();
-            
-        let description = package.get("description")
+
+        let description = package
+            .get("description")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
         // Extract authors array
-        let authors = package.get("authors")
+        let authors = package
+            .get("authors")
             .and_then(|v| v.as_array())
             .map(|authors_array| {
-                authors_array.iter()
+                authors_array
+                    .iter()
                     .filter_map(|author| author.as_str())
                     .map(|s| s.to_string())
                     .collect()
@@ -156,22 +160,27 @@ impl ProjectDiscovery {
     /// Discover controllers from src/controllers directory
     fn discover_controllers(&self) -> OpenApiResult<Vec<ControllerInfo>> {
         let controllers_dir = self.project_root.join("src").join("controllers");
-        
+
         if !controllers_dir.exists() {
             return Ok(Vec::new());
         }
 
         let mut controllers = Vec::new();
 
-        let entries = fs::read_dir(&controllers_dir)
-            .map_err(|e| OpenApiError::route_discovery_error(
-                format!("Failed to read controllers directory: {}", e)
-            ))?;
+        let entries = fs::read_dir(&controllers_dir).map_err(|e| {
+            OpenApiError::route_discovery_error(format!(
+                "Failed to read controllers directory: {}",
+                e
+            ))
+        })?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| OpenApiError::route_discovery_error(
-                format!("Failed to read controller entry: {}", e)
-            ))?;
+            let entry = entry.map_err(|e| {
+                OpenApiError::route_discovery_error(format!(
+                    "Failed to read controller entry: {}",
+                    e
+                ))
+            })?;
 
             let path = entry.path();
             if path.extension().map(|ext| ext == "rs").unwrap_or(false) {
@@ -186,10 +195,13 @@ impl ProjectDiscovery {
 
     /// Analyze a controller file
     fn analyze_controller_file(&self, path: &Path) -> OpenApiResult<Option<ControllerInfo>> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| OpenApiError::route_discovery_error(
-                format!("Failed to read controller file {}: {}", path.display(), e)
-            ))?;
+        let content = fs::read_to_string(path).map_err(|e| {
+            OpenApiError::route_discovery_error(format!(
+                "Failed to read controller file {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
 
         let controller_name = path
             .file_stem()
@@ -198,7 +210,7 @@ impl ProjectDiscovery {
             .replace("_controller", "")
             .replace("_", " ")
             .split_whitespace()
-            .map(|word| capitalize(word))
+            .map(capitalize)
             .collect::<String>();
 
         let endpoints = self.extract_endpoints_from_content(&content)?;
@@ -216,12 +228,14 @@ impl ProjectDiscovery {
     }
 
     /// Extract endpoints from controller file content using AST parsing
-    fn extract_endpoints_from_content(&self, content: &str) -> OpenApiResult<Vec<EndpointMetadata>> {
+    fn extract_endpoints_from_content(
+        &self,
+        content: &str,
+    ) -> OpenApiResult<Vec<EndpointMetadata>> {
         // Parse the Rust source code into an AST
-        let ast = syn::parse_file(content)
-            .map_err(|e| OpenApiError::route_discovery_error(
-                format!("Failed to parse Rust file: {}", e)
-            ))?;
+        let ast = syn::parse_file(content).map_err(|e| {
+            OpenApiError::route_discovery_error(format!("Failed to parse Rust file: {}", e))
+        })?;
 
         let mut endpoints = Vec::new();
 
@@ -238,10 +252,13 @@ impl ProjectDiscovery {
     }
 
     /// Extract endpoint from a function using AST analysis
-    fn extract_endpoint_from_function(&self, func: &syn::ItemFn) -> OpenApiResult<Option<EndpointMetadata>> {
+    fn extract_endpoint_from_function(
+        &self,
+        func: &syn::ItemFn,
+    ) -> OpenApiResult<Option<EndpointMetadata>> {
         // Look for route attributes
         let mut route_info = None;
-        
+
         for attr in &func.attrs {
             if let Some((verb, path)) = self.parse_route_attribute_ast(attr)? {
                 route_info = Some((verb, path));
@@ -280,9 +297,15 @@ impl ProjectDiscovery {
     }
 
     /// Parse route attribute using AST
-    fn parse_route_attribute_ast(&self, attr: &syn::Attribute) -> OpenApiResult<Option<(String, String)>> {
+    fn parse_route_attribute_ast(
+        &self,
+        attr: &syn::Attribute,
+    ) -> OpenApiResult<Option<(String, String)>> {
         // Check if this is a route attribute
-        let path_segments: Vec<String> = attr.path().segments.iter()
+        let path_segments: Vec<String> = attr
+            .path()
+            .segments
+            .iter()
             .map(|seg| seg.ident.to_string())
             .collect();
 
@@ -316,7 +339,7 @@ impl ProjectDiscovery {
             syn::Meta::List(meta_list) => {
                 let tokens = &meta_list.tokens;
                 let token_str = tokens.to_string();
-                
+
                 // Simple parsing for now - can be enhanced
                 let parts: Vec<&str> = token_str.split(',').map(|s| s.trim()).collect();
                 if parts.len() >= 2 {
@@ -324,10 +347,14 @@ impl ProjectDiscovery {
                     let path = parts[1].trim_matches('"').to_string();
                     Ok((verb, path))
                 } else {
-                    Err(OpenApiError::route_discovery_error("Invalid route attribute format".to_string()))
+                    Err(OpenApiError::route_discovery_error(
+                        "Invalid route attribute format".to_string(),
+                    ))
                 }
             }
-            _ => Err(OpenApiError::route_discovery_error("Expected route attribute with arguments".to_string())),
+            _ => Err(OpenApiError::route_discovery_error(
+                "Expected route attribute with arguments".to_string(),
+            )),
         }
     }
 
@@ -339,12 +366,17 @@ impl ProjectDiscovery {
                 let path = tokens.to_string().trim_matches('"').to_string();
                 Ok(path)
             }
-            _ => Err(OpenApiError::route_discovery_error("Expected route attribute with path".to_string())),
+            _ => Err(OpenApiError::route_discovery_error(
+                "Expected route attribute with path".to_string(),
+            )),
         }
     }
 
     /// Extract function parameters using AST analysis
-    fn extract_function_parameters_ast(&self, sig: &syn::Signature) -> OpenApiResult<Vec<EndpointParameter>> {
+    fn extract_function_parameters_ast(
+        &self,
+        sig: &syn::Signature,
+    ) -> OpenApiResult<Vec<EndpointParameter>> {
         let mut parameters = Vec::new();
 
         for input in &sig.inputs {
@@ -381,7 +413,10 @@ impl ProjectDiscovery {
             (ParameterSource::Query, type_str.contains("Option<"))
         } else if type_str.contains("Header<") || type_str.contains("HeaderMap") {
             (ParameterSource::Header, type_str.contains("Option<"))
-        } else if type_str.contains("Json<") || type_str.contains("Form<") || type_str.contains("Request") {
+        } else if type_str.contains("Json<")
+            || type_str.contains("Form<")
+            || type_str.contains("Request")
+        {
             (ParameterSource::Body, false)
         } else {
             // Default to query parameter
@@ -401,7 +436,11 @@ impl ProjectDiscovery {
         for attr in attrs {
             if attr.path().is_ident("doc") {
                 if let syn::Meta::NameValue(meta) = &attr.meta {
-                    if let syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(lit_str), .. }) = &meta.value {
+                    if let syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(lit_str),
+                        ..
+                    }) = &meta.value
+                    {
                         doc_lines.push(lit_str.value().trim().to_string());
                     }
                 }
@@ -415,26 +454,24 @@ impl ProjectDiscovery {
         }
     }
 
-
     /// Discover models from src/models directory
     fn discover_models(&self) -> OpenApiResult<Vec<ModelInfo>> {
         let models_dir = self.project_root.join("src").join("models");
-        
+
         if !models_dir.exists() {
             return Ok(Vec::new());
         }
 
         let mut models = Vec::new();
 
-        let entries = fs::read_dir(&models_dir)
-            .map_err(|e| OpenApiError::route_discovery_error(
-                format!("Failed to read models directory: {}", e)
-            ))?;
+        let entries = fs::read_dir(&models_dir).map_err(|e| {
+            OpenApiError::route_discovery_error(format!("Failed to read models directory: {}", e))
+        })?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| OpenApiError::route_discovery_error(
-                format!("Failed to read model entry: {}", e)
-            ))?;
+            let entry = entry.map_err(|e| {
+                OpenApiError::route_discovery_error(format!("Failed to read model entry: {}", e))
+            })?;
 
             let path = entry.path();
             if path.extension().map(|ext| ext == "rs").unwrap_or(false) {
@@ -449,10 +486,13 @@ impl ProjectDiscovery {
 
     /// Analyze a model file using AST parsing
     fn analyze_model_file(&self, path: &Path) -> OpenApiResult<Option<ModelInfo>> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| OpenApiError::route_discovery_error(
-                format!("Failed to read model file {}: {}", path.display(), e)
-            ))?;
+        let content = fs::read_to_string(path).map_err(|e| {
+            OpenApiError::route_discovery_error(format!(
+                "Failed to read model file {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
 
         let model_name = path
             .file_stem()
@@ -461,10 +501,13 @@ impl ProjectDiscovery {
             .to_string();
 
         // Parse the Rust source code into an AST
-        let ast = syn::parse_file(&content)
-            .map_err(|e| OpenApiError::route_discovery_error(
-                format!("Failed to parse model file {}: {}", path.display(), e)
-            ))?;
+        let ast = syn::parse_file(&content).map_err(|e| {
+            OpenApiError::route_discovery_error(format!(
+                "Failed to parse model file {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
 
         // Extract struct definition using AST
         if let Some(model) = self.extract_struct_from_ast(&ast, &model_name)? {
@@ -475,20 +518,24 @@ impl ProjectDiscovery {
     }
 
     /// Extract struct definition from AST
-    fn extract_struct_from_ast(&self, ast: &syn::File, model_name: &str) -> OpenApiResult<Option<ModelInfo>> {
+    fn extract_struct_from_ast(
+        &self,
+        ast: &syn::File,
+        model_name: &str,
+    ) -> OpenApiResult<Option<ModelInfo>> {
         // Walk the AST to find struct definitions
         for item in &ast.items {
             if let syn::Item::Struct(item_struct) = item {
                 let struct_name = item_struct.ident.to_string();
-                
+
                 // Check if this is the struct we're looking for (case-insensitive)
                 if struct_name.to_lowercase() == model_name.to_lowercase() {
                     // Extract derive attributes
                     let derives = self.extract_derives_from_attrs(&item_struct.attrs);
-                    
+
                     // Extract documentation
                     let doc = self.extract_documentation_ast(&item_struct.attrs);
-                    
+
                     // Extract fields
                     let fields = self.extract_struct_fields_from_ast(&item_struct.fields)?;
 
@@ -518,7 +565,7 @@ impl ProjectDiscovery {
                         derive_tokens
                             .split(',')
                             .map(|d| d.trim().to_string())
-                            .filter(|d| !d.is_empty())
+                            .filter(|d| !d.is_empty()),
                     );
                 }
             }
@@ -528,7 +575,10 @@ impl ProjectDiscovery {
     }
 
     /// Extract struct fields from AST Fields
-    fn extract_struct_fields_from_ast(&self, fields: &syn::Fields) -> OpenApiResult<Vec<ModelField>> {
+    fn extract_struct_fields_from_ast(
+        &self,
+        fields: &syn::Fields,
+    ) -> OpenApiResult<Vec<ModelField>> {
         let mut model_fields = Vec::new();
 
         match fields {
@@ -537,8 +587,9 @@ impl ProjectDiscovery {
                     if let Some(field_name) = &field.ident {
                         let field_name = field_name.to_string();
                         let field_type = self.type_to_string(&field.ty);
-                        let optional = field_type.starts_with("Option<") || field_type.contains("Option <");
-                        
+                        let optional =
+                            field_type.starts_with("Option<") || field_type.contains("Option <");
+
                         // Extract field documentation
                         let documentation = self.extract_documentation_ast(&field.attrs);
 
@@ -556,9 +607,10 @@ impl ProjectDiscovery {
                 for (index, field) in fields_unnamed.unnamed.iter().enumerate() {
                     let field_name = format!("field_{}", index);
                     let field_type = self.type_to_string(&field.ty);
-                    let optional = field_type.starts_with("Option<") || field_type.contains("Option <");
-                    
-                    // Extract field documentation  
+                    let optional =
+                        field_type.starts_with("Option<") || field_type.contains("Option <");
+
+                    // Extract field documentation
                     let documentation = self.extract_documentation_ast(&field.attrs);
 
                     model_fields.push(ModelField {
@@ -577,12 +629,14 @@ impl ProjectDiscovery {
         Ok(model_fields)
     }
 
-
-
     /// Bridge function for old line-based documentation extraction (used by model parsing)
     /// TODO: Replace with AST-based model parsing
     #[allow(dead_code)]
-    fn extract_documentation_from_lines(&self, lines: &[&str], route_index: usize) -> Option<String> {
+    fn extract_documentation_from_lines(
+        &self,
+        lines: &[&str],
+        route_index: usize,
+    ) -> Option<String> {
         let mut doc_lines = Vec::new();
 
         // Look backwards for documentation comments
@@ -630,7 +684,7 @@ mod tests {
     #[test]
     fn test_ast_based_struct_parsing() {
         let discovery = ProjectDiscovery::new(".");
-        
+
         let test_code = r#"
             #[derive(Debug, Clone, Serialize)]
             /// A test user model
@@ -644,20 +698,23 @@ mod tests {
         "#;
 
         let ast = syn::parse_file(test_code).unwrap();
-        let model = discovery.extract_struct_from_ast(&ast, "user").unwrap().unwrap();
-        
+        let model = discovery
+            .extract_struct_from_ast(&ast, "user")
+            .unwrap()
+            .unwrap();
+
         assert_eq!(model.name, "User");
         assert_eq!(model.fields.len(), 3);
         assert!(model.derives.contains(&"Debug".to_string()));
         assert!(model.derives.contains(&"Clone".to_string()));
         assert!(model.derives.contains(&"Serialize".to_string()));
         assert!(model.documentation.is_some());
-        
+
         // Check fields
         let id_field = model.fields.iter().find(|f| f.name == "id").unwrap();
         assert_eq!(id_field.field_type, "i32");
         assert!(!id_field.optional);
-        
+
         let email_field = model.fields.iter().find(|f| f.name == "email").unwrap();
         assert_eq!(email_field.field_type, "Option < String >");
         assert!(email_field.optional);
@@ -668,7 +725,7 @@ mod tests {
         // Test with realistic Cargo.toml content including comments, tables, and various TOML features
         let temp_dir = TempDir::new().unwrap();
         let cargo_toml_path = temp_dir.path().join("Cargo.toml");
-        
+
         let complex_toml_content = r#"
 # This is a comment
 [package]
@@ -696,17 +753,24 @@ default = []
 
         assert_eq!(metadata.name, "test-project");
         assert_eq!(metadata.version, "1.2.3");
-        assert_eq!(metadata.description, Some("A test project with complex TOML structure".to_string()));
+        assert_eq!(
+            metadata.description,
+            Some("A test project with complex TOML structure".to_string())
+        );
         assert_eq!(metadata.authors.len(), 2);
-        assert!(metadata.authors.contains(&"John Doe <john@example.com>".to_string()));
-        assert!(metadata.authors.contains(&"Jane Smith <jane@example.com>".to_string()));
+        assert!(metadata
+            .authors
+            .contains(&"John Doe <john@example.com>".to_string()));
+        assert!(metadata
+            .authors
+            .contains(&"Jane Smith <jane@example.com>".to_string()));
     }
 
     #[test]
     fn test_toml_parsing_with_missing_package_section() {
         let temp_dir = TempDir::new().unwrap();
         let cargo_toml_path = temp_dir.path().join("Cargo.toml");
-        
+
         let invalid_toml_content = r#"
 # No package section
 [dependencies]
@@ -717,16 +781,19 @@ serde = "1.0"
 
         let discovery = ProjectDiscovery::new(temp_dir.path());
         let result = discovery.discover_project_metadata();
-        
+
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No [package] section found"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No [package] section found"));
     }
 
     #[test]
     fn test_toml_parsing_with_minimal_package() {
         let temp_dir = TempDir::new().unwrap();
         let cargo_toml_path = temp_dir.path().join("Cargo.toml");
-        
+
         let minimal_toml_content = r#"
 [package]
 name = "minimal-project"
@@ -748,7 +815,7 @@ version = "0.1.0"
     fn test_toml_parsing_with_different_key_ordering() {
         let temp_dir = TempDir::new().unwrap();
         let cargo_toml_path = temp_dir.path().join("Cargo.toml");
-        
+
         // Test with different key ordering than typical
         let reordered_toml_content = r#"
 [package]

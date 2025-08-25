@@ -153,13 +153,15 @@ impl ValidationRule for EmailValidator {
                     field,
                     format!("{} must be a string for email validation", field),
                     "invalid_type",
-                ).into());
+                )
+                .into());
             }
         };
 
         if !self.validate_email_format(email) {
             let message = self
-                .message.clone()
+                .message
+                .clone()
                 .unwrap_or_else(|| format!("{} must be a valid email address", field));
 
             return Err(ValidationError::with_code(field, message, "invalid_email").into());
@@ -174,7 +176,7 @@ impl ValidationRule for EmailValidator {
 
     fn parameters(&self) -> Option<Value> {
         let mut params = serde_json::Map::new();
-        
+
         if let Some(ref message) = self.message {
             params.insert("message".to_string(), Value::String(message.clone()));
         }
@@ -196,7 +198,7 @@ mod tests {
     #[tokio::test]
     async fn test_email_validator_valid_emails() {
         let validator = EmailValidator::new();
-        
+
         let valid_emails = vec![
             "test@example.com",
             "user.name@domain.co.uk",
@@ -206,7 +208,9 @@ mod tests {
         ];
 
         for email in valid_emails {
-            let result = validator.validate(&Value::String(email.to_string()), "email").await;
+            let result = validator
+                .validate(&Value::String(email.to_string()), "email")
+                .await;
             assert!(result.is_ok(), "Email '{}' should be valid", email);
         }
     }
@@ -214,22 +218,24 @@ mod tests {
     #[tokio::test]
     async fn test_email_validator_invalid_emails() {
         let validator = EmailValidator::new();
-        
+
         let toolong_email = format!("toolong{}@domain.com", "a".repeat(60));
         let invalid_emails = vec![
-            "",              // Empty
-            "plainaddress",  // No @
+            "",                   // Empty
+            "plainaddress",       // No @
             "@missingdomain.com", // No local part
-            "missing@.com",  // No domain name
+            "missing@.com",       // No domain name
             "double@@domain.com", // Double @
             "spaces @domain.com", // Spaces
-            &toolong_email, // Local part too long
-            "test@",         // No domain
-            "test@domain",   // No TLD (when required)
+            &toolong_email,       // Local part too long
+            "test@",              // No domain
+            "test@domain",        // No TLD (when required)
         ];
 
         for email in invalid_emails {
-            let result = validator.validate(&Value::String(email.to_string()), "email").await;
+            let result = validator
+                .validate(&Value::String(email.to_string()), "email")
+                .await;
             assert!(result.is_err(), "Email '{}' should be invalid", email);
         }
     }
@@ -237,21 +243,27 @@ mod tests {
     #[tokio::test]
     async fn test_email_validator_without_tld_requirement() {
         let validator = EmailValidator::new().require_tld(false);
-        
+
         // Should be valid without TLD requirement
-        let result = validator.validate(&Value::String("test@localhost".to_string()), "email").await;
+        let result = validator
+            .validate(&Value::String("test@localhost".to_string()), "email")
+            .await;
         assert!(result.is_ok());
-        
-        let result = validator.validate(&Value::String("admin@intranet".to_string()), "email").await;
+
+        let result = validator
+            .validate(&Value::String("admin@intranet".to_string()), "email")
+            .await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_email_validator_unicode_domain() {
         let validator = EmailValidator::new().allow_unicode(true);
-        
+
         // Should handle unicode domains when allowed
-        let result = validator.validate(&Value::String("test@тест.рф".to_string()), "email").await;
+        let result = validator
+            .validate(&Value::String("test@тест.рф".to_string()), "email")
+            .await;
         assert!(result.is_ok());
     }
 
@@ -259,35 +271,46 @@ mod tests {
     async fn test_email_validator_custom_pattern() {
         let custom_regex = Regex::new(r"^[a-z]+@company\.com$").unwrap();
         let validator = EmailValidator::new().custom_pattern(custom_regex);
-        
+
         // Should match custom pattern
-        let result = validator.validate(&Value::String("john@company.com".to_string()), "email").await;
+        let result = validator
+            .validate(&Value::String("john@company.com".to_string()), "email")
+            .await;
         assert!(result.is_ok());
-        
+
         // Should not match custom pattern
-        let result = validator.validate(&Value::String("john@otherdomain.com".to_string()), "email").await;
+        let result = validator
+            .validate(&Value::String("john@otherdomain.com".to_string()), "email")
+            .await;
         assert!(result.is_err());
-        
-        let result = validator.validate(&Value::String("John@company.com".to_string()), "email").await;
+
+        let result = validator
+            .validate(&Value::String("John@company.com".to_string()), "email")
+            .await;
         assert!(result.is_err()); // Uppercase not allowed in custom pattern
     }
 
     #[tokio::test]
     async fn test_email_validator_custom_message() {
         let validator = EmailValidator::new().message("Please enter a valid email address");
-        
-        let result = validator.validate(&Value::String("invalid-email".to_string()), "email").await;
+
+        let result = validator
+            .validate(&Value::String("invalid-email".to_string()), "email")
+            .await;
         assert!(result.is_err());
-        
+
         let errors = result.unwrap_err();
         let field_errors = errors.get_field_errors("email").unwrap();
-        assert_eq!(field_errors[0].message, "Please enter a valid email address");
+        assert_eq!(
+            field_errors[0].message,
+            "Please enter a valid email address"
+        );
     }
 
     #[tokio::test]
     async fn test_email_validator_with_null() {
         let validator = EmailValidator::new();
-        
+
         // Null values should be skipped
         let result = validator.validate(&Value::Null, "email").await;
         assert!(result.is_ok());
@@ -296,11 +319,13 @@ mod tests {
     #[tokio::test]
     async fn test_email_validator_invalid_type() {
         let validator = EmailValidator::new();
-        
+
         // Numbers should fail type validation
-        let result = validator.validate(&Value::Number(serde_json::Number::from(42)), "email").await;
+        let result = validator
+            .validate(&Value::Number(serde_json::Number::from(42)), "email")
+            .await;
         assert!(result.is_err());
-        
+
         let errors = result.unwrap_err();
         let field_errors = errors.get_field_errors("email").unwrap();
         assert_eq!(field_errors[0].code, "invalid_type");
@@ -309,16 +334,18 @@ mod tests {
     #[tokio::test]
     async fn test_email_validator_edge_cases() {
         let validator = EmailValidator::new();
-        
-        // Test some edge cases  
+
+        // Test some edge cases
         let edge_cases = vec![
-            ("aa@bb.cc", true),     // Minimal valid email
+            ("aa@bb.cc", true),            // Minimal valid email
             ("test@test@test.com", false), // Multiple @ symbols
-            ("test@domain.com", true), // Valid email
+            ("test@domain.com", true),     // Valid email
         ];
 
         for (email, should_be_valid) in edge_cases {
-            let result = validator.validate(&Value::String(email.to_string()), "email").await;
+            let result = validator
+                .validate(&Value::String(email.to_string()), "email")
+                .await;
             if should_be_valid {
                 assert!(result.is_ok(), "Email '{}' should be valid", email);
             } else {

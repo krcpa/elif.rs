@@ -34,7 +34,9 @@ impl HttpError {
             HttpError::RequestTooLarge { .. } => Some("Reduce request payload size"),
             HttpError::RequestTimeout => Some("Retry the request"),
             HttpError::BadRequest { .. } => Some("Check request format and parameters"),
-            HttpError::HealthCheckFailed { .. } => Some("Server may be starting up or experiencing issues"),
+            HttpError::HealthCheckFailed { .. } => {
+                Some("Server may be starting up or experiencing issues")
+            }
             _ => None,
         }
     }
@@ -51,8 +53,7 @@ impl IntoElifResponse for HttpError {
             }
         });
 
-        ElifResponse::with_status(self.status_code())
-            .json_value(body)
+        ElifResponse::with_status(self.status_code()).json_value(body)
     }
 }
 
@@ -78,14 +79,24 @@ mod tests {
 
     #[test]
     fn test_error_status_codes() {
-        assert_eq!(HttpError::bad_request("test").status_code(), crate::response::status::ElifStatusCode::BAD_REQUEST);
-        assert_eq!(HttpError::RequestTimeout.status_code(), crate::response::status::ElifStatusCode::REQUEST_TIMEOUT);
         assert_eq!(
-            HttpError::RequestTooLarge { size: 100, limit: 50 }.status_code(), 
+            HttpError::bad_request("test").status_code(),
+            crate::response::status::ElifStatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            HttpError::RequestTimeout.status_code(),
+            crate::response::status::ElifStatusCode::REQUEST_TIMEOUT
+        );
+        assert_eq!(
+            HttpError::RequestTooLarge {
+                size: 100,
+                limit: 50
+            }
+            .status_code(),
             crate::response::status::ElifStatusCode::PAYLOAD_TOO_LARGE
         );
         assert_eq!(
-            HttpError::health_check("Database unavailable").status_code(), 
+            HttpError::health_check("Database unavailable").status_code(),
             crate::response::status::ElifStatusCode::SERVICE_UNAVAILABLE
         );
     }
@@ -93,7 +104,10 @@ mod tests {
     #[test]
     fn test_validation_error_status_code() {
         let validation_error = HttpError::validation_error("Field is required");
-        assert_eq!(validation_error.status_code(), crate::response::status::ElifStatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            validation_error.status_code(),
+            crate::response::status::ElifStatusCode::UNPROCESSABLE_ENTITY
+        );
     }
 
     #[test]
@@ -101,8 +115,14 @@ mod tests {
         let timeout_error = HttpError::RequestTimeout;
         assert_eq!(timeout_error.error_hint(), Some("Retry the request"));
 
-        let large_request_error = HttpError::RequestTooLarge { size: 100, limit: 50 };
-        assert_eq!(large_request_error.error_hint(), Some("Reduce request payload size"));
+        let large_request_error = HttpError::RequestTooLarge {
+            size: 100,
+            limit: 50,
+        };
+        assert_eq!(
+            large_request_error.error_hint(),
+            Some("Reduce request payload size")
+        );
 
         let not_found_error = HttpError::not_found("User");
         assert_eq!(not_found_error.error_hint(), None);
@@ -111,10 +131,10 @@ mod tests {
     #[test]
     fn test_error_response_format_consistency() {
         use axum::response::IntoResponse as AxumIntoResponse;
-        
+
         let error = HttpError::not_found("User");
         let response = AxumIntoResponse::into_response(error);
-        
+
         assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
     }
 }

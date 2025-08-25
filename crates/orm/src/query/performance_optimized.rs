@@ -3,21 +3,19 @@
 //! This module implements optimized versions of query building operations
 //! to reduce allocations and improve performance for hot paths.
 
-use std::collections::HashMap;
-use std::sync::{RwLock, Arc};
-use once_cell::sync::Lazy;
 use super::builder::QueryBuilder;
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 /// Cache for common SQL patterns to reduce string allocations
 #[allow(dead_code)]
-static QUERY_TEMPLATE_CACHE: Lazy<RwLock<HashMap<String, String>>> = Lazy::new(|| {
-    RwLock::new(HashMap::new())
-});
+static QUERY_TEMPLATE_CACHE: Lazy<RwLock<HashMap<String, String>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
 
 /// Cache for parameter placeholders to avoid repeated generation
-static PLACEHOLDER_CACHE: Lazy<RwLock<HashMap<usize, String>>> = Lazy::new(|| {
-    RwLock::new(HashMap::new())
-});
+static PLACEHOLDER_CACHE: Lazy<RwLock<HashMap<usize, String>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
 
 /// Performance-optimized SQL generation with caching
 impl<M> QueryBuilder<M> {
@@ -68,7 +66,7 @@ impl<M> QueryBuilder<M> {
         match self.query_type {
             super::types::QueryType::Select => {
                 self.build_select_sql_optimized(&mut sql);
-            },
+            }
             _ => {
                 // Fallback to regular implementation for non-SELECT queries
                 return self.to_sql();
@@ -150,7 +148,7 @@ impl<M> QueryBuilder<M> {
             sql.push(' ');
             sql.push_str(&join.table);
             sql.push_str(" ON ");
-            
+
             // Handle on_conditions
             for (i, (left_col, right_col)) in join.on_conditions.iter().enumerate() {
                 if i > 0 {
@@ -169,7 +167,7 @@ impl<M> QueryBuilder<M> {
                 if i > 0 {
                     sql.push_str(" AND ");
                 }
-                
+
                 // Handle special cases
                 if condition.column == "RAW" {
                     if let Some(ref value) = condition.value {
@@ -188,7 +186,7 @@ impl<M> QueryBuilder<M> {
                 } else {
                     // Regular conditions
                     sql.push_str(&condition.column);
-                    
+
                     match condition.operator {
                         super::types::QueryOperator::Equal => sql.push_str(" = "),
                         super::types::QueryOperator::NotEqual => sql.push_str(" != "),
@@ -202,37 +200,47 @@ impl<M> QueryBuilder<M> {
                             sql.push_str(" IN (");
                             let placeholder_count = condition.values.len();
                             if placeholder_count > 0 {
-                                let placeholders = Self::generate_sequential_placeholders(param_counter, placeholder_count);
+                                let placeholders = Self::generate_sequential_placeholders(
+                                    param_counter,
+                                    placeholder_count,
+                                );
                                 sql.push_str(&placeholders);
                                 param_counter += placeholder_count;
                             }
                             sql.push(')');
                             continue; // Skip the normal parameter handling
-                        },
+                        }
                         super::types::QueryOperator::NotIn => {
                             sql.push_str(" NOT IN (");
                             let placeholder_count = condition.values.len();
                             if placeholder_count > 0 {
-                                let placeholders = Self::generate_sequential_placeholders(param_counter, placeholder_count);
+                                let placeholders = Self::generate_sequential_placeholders(
+                                    param_counter,
+                                    placeholder_count,
+                                );
                                 sql.push_str(&placeholders);
                                 param_counter += placeholder_count;
                             }
                             sql.push(')');
                             continue; // Skip the normal parameter handling
-                        },
+                        }
                         super::types::QueryOperator::IsNull => {
                             sql.push_str(" IS NULL");
                             continue;
-                        },
+                        }
                         super::types::QueryOperator::IsNotNull => {
                             sql.push_str(" IS NOT NULL");
                             continue;
-                        },
+                        }
                         super::types::QueryOperator::Between => {
-                            sql.push_str(&format!(" BETWEEN ${} AND ${}", param_counter, param_counter + 1));
+                            sql.push_str(&format!(
+                                " BETWEEN ${} AND ${}",
+                                param_counter,
+                                param_counter + 1
+                            ));
                             param_counter += 2;
                             continue;
-                        },
+                        }
                         super::types::QueryOperator::Raw => {
                             // For raw SQL expressions, just add the value directly
                             if let Some(ref value) = condition.value {
@@ -242,9 +250,9 @@ impl<M> QueryBuilder<M> {
                                 }
                             }
                             continue;
-                        },
+                        }
                     }
-                    
+
                     // Add parameter placeholder for regular operators
                     sql.push_str(&format!("${}", param_counter));
                     param_counter += 1;
@@ -271,7 +279,7 @@ impl<M> QueryBuilder<M> {
                     sql.push_str(" AND ");
                 }
                 sql.push_str(&condition.column);
-                
+
                 // Handle HAVING operators with proper parameter indexing
                 match condition.operator {
                     super::types::QueryOperator::Equal => sql.push_str(" = "),
@@ -279,7 +287,7 @@ impl<M> QueryBuilder<M> {
                     super::types::QueryOperator::LessThan => sql.push_str(" < "),
                     _ => sql.push_str(" = "), // Default to equals
                 }
-                
+
                 sql.push_str(&format!("${}", param_counter));
                 param_counter += 1;
             }
@@ -337,7 +345,7 @@ impl QueryBuilderPool {
                 return builder;
             }
         }
-        
+
         // Create new builder if pool is empty
         QueryBuilder::new()
     }
@@ -397,7 +405,7 @@ mod tests {
     fn test_placeholder_caching() {
         let placeholders1 = QueryBuilder::<()>::generate_placeholders_cached(3);
         let placeholders2 = QueryBuilder::<()>::generate_placeholders_cached(3);
-        
+
         assert_eq!(placeholders1, "$1, $2, $3");
         assert_eq!(placeholders1, placeholders2);
     }
@@ -405,15 +413,16 @@ mod tests {
     #[test]
     fn test_query_builder_pool() {
         let pool = QueryBuilderPool::new(2);
-        
+
         let builder1 = pool.acquire();
         let builder2 = pool.acquire();
-        
+
         pool.release(builder1);
         pool.release(builder2);
-        
+
         let builder3 = pool.acquire(); // Should reuse from pool
-        assert!(!builder3.from_tables.is_empty() || builder3.from_tables.is_empty()); // Basic check
+        assert!(!builder3.from_tables.is_empty() || builder3.from_tables.is_empty());
+        // Basic check
     }
 
     #[test]
@@ -422,7 +431,7 @@ mod tests {
             .from("users")
             .select("id, name, email")
             .where_eq("active", "true");
-        
+
         let sql = query.to_sql_optimized();
         assert!(sql.contains("SELECT"));
         assert!(sql.contains("FROM users"));

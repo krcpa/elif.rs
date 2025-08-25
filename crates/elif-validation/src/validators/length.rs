@@ -84,7 +84,10 @@ impl LengthValidator {
                 format!("{} must be exactly {} characters long", field, min)
             }
             (Some(min), Some(max)) => {
-                format!("{} must be between {} and {} characters long", field, min, max)
+                format!(
+                    "{} must be between {} and {} characters long",
+                    field, min, max
+                )
             }
             (Some(min), None) => {
                 format!("{} must be at least {} characters long", field, min)
@@ -120,7 +123,8 @@ impl ValidationRule for LengthValidator {
                     field,
                     format!("{} must be a string or array for length validation", field),
                     "invalid_type",
-                ).into());
+                )
+                .into());
             }
         };
 
@@ -131,7 +135,8 @@ impl ValidationRule for LengthValidator {
                     field,
                     self.create_error_message(field, length),
                     "length_exact",
-                ).into());
+                )
+                .into());
             }
             return Ok(());
         }
@@ -143,7 +148,8 @@ impl ValidationRule for LengthValidator {
                     field,
                     self.create_error_message(field, length),
                     "length_min",
-                ).into());
+                )
+                .into());
             }
         }
 
@@ -154,7 +160,8 @@ impl ValidationRule for LengthValidator {
                     field,
                     self.create_error_message(field, length),
                     "length_max",
-                ).into());
+                )
+                .into());
             }
         }
 
@@ -167,15 +174,24 @@ impl ValidationRule for LengthValidator {
 
     fn parameters(&self) -> Option<Value> {
         let mut params = serde_json::Map::new();
-        
+
         if let Some(min) = self.min {
-            params.insert("min".to_string(), Value::Number(serde_json::Number::from(min)));
+            params.insert(
+                "min".to_string(),
+                Value::Number(serde_json::Number::from(min)),
+            );
         }
         if let Some(max) = self.max {
-            params.insert("max".to_string(), Value::Number(serde_json::Number::from(max)));
+            params.insert(
+                "max".to_string(),
+                Value::Number(serde_json::Number::from(max)),
+            );
         }
         if let Some(exact) = self.exact {
-            params.insert("exact".to_string(), Value::Number(serde_json::Number::from(exact)));
+            params.insert(
+                "exact".to_string(),
+                Value::Number(serde_json::Number::from(exact)),
+            );
         }
         if let Some(ref message) = self.message {
             params.insert("message".to_string(), Value::String(message.clone()));
@@ -196,113 +212,156 @@ mod tests {
     #[tokio::test]
     async fn test_length_validator_min_constraint() {
         let validator = LengthValidator::new().min(3);
-        
+
         // Too short
-        let result = validator.validate(&Value::String("hi".to_string()), "name").await;
+        let result = validator
+            .validate(&Value::String("hi".to_string()), "name")
+            .await;
         assert!(result.is_err());
-        
+
         // Exact minimum
-        let result = validator.validate(&Value::String("bob".to_string()), "name").await;
+        let result = validator
+            .validate(&Value::String("bob".to_string()), "name")
+            .await;
         assert!(result.is_ok());
-        
+
         // Longer than minimum
-        let result = validator.validate(&Value::String("alice".to_string()), "name").await;
+        let result = validator
+            .validate(&Value::String("alice".to_string()), "name")
+            .await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_length_validator_max_constraint() {
         let validator = LengthValidator::new().max(5);
-        
+
         // Within limit
-        let result = validator.validate(&Value::String("hello".to_string()), "name").await;
+        let result = validator
+            .validate(&Value::String("hello".to_string()), "name")
+            .await;
         assert!(result.is_ok());
-        
+
         // Too long
-        let result = validator.validate(&Value::String("hello world".to_string()), "name").await;
+        let result = validator
+            .validate(&Value::String("hello world".to_string()), "name")
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_length_validator_exact_constraint() {
         let validator = LengthValidator::new().exact(4);
-        
+
         // Correct length
-        let result = validator.validate(&Value::String("test".to_string()), "code").await;
+        let result = validator
+            .validate(&Value::String("test".to_string()), "code")
+            .await;
         assert!(result.is_ok());
-        
+
         // Too short
-        let result = validator.validate(&Value::String("hi".to_string()), "code").await;
+        let result = validator
+            .validate(&Value::String("hi".to_string()), "code")
+            .await;
         assert!(result.is_err());
-        
+
         // Too long
-        let result = validator.validate(&Value::String("testing".to_string()), "code").await;
+        let result = validator
+            .validate(&Value::String("testing".to_string()), "code")
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_length_validator_range() {
         let validator = LengthValidator::new().range(3, 10);
-        
+
         // Too short
-        let result = validator.validate(&Value::String("hi".to_string()), "password").await;
+        let result = validator
+            .validate(&Value::String("hi".to_string()), "password")
+            .await;
         assert!(result.is_err());
-        
+
         // Within range
-        let result = validator.validate(&Value::String("secret".to_string()), "password").await;
+        let result = validator
+            .validate(&Value::String("secret".to_string()), "password")
+            .await;
         assert!(result.is_ok());
-        
+
         // Too long
-        let result = validator.validate(&Value::String("very_long_password".to_string()), "password").await;
+        let result = validator
+            .validate(&Value::String("very_long_password".to_string()), "password")
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_length_validator_with_arrays() {
         let validator = LengthValidator::new().min(2).max(4);
-        
+
         // Too few items
-        let result = validator.validate(&Value::Array(vec![Value::String("item1".to_string())]), "tags").await;
+        let result = validator
+            .validate(
+                &Value::Array(vec![Value::String("item1".to_string())]),
+                "tags",
+            )
+            .await;
         assert!(result.is_err());
-        
+
         // Within range
-        let result = validator.validate(&Value::Array(vec![
-            Value::String("tag1".to_string()),
-            Value::String("tag2".to_string()),
-        ]), "tags").await;
+        let result = validator
+            .validate(
+                &Value::Array(vec![
+                    Value::String("tag1".to_string()),
+                    Value::String("tag2".to_string()),
+                ]),
+                "tags",
+            )
+            .await;
         assert!(result.is_ok());
-        
+
         // Too many items
-        let result = validator.validate(&Value::Array(vec![
-            Value::String("tag1".to_string()),
-            Value::String("tag2".to_string()),
-            Value::String("tag3".to_string()),
-            Value::String("tag4".to_string()),
-            Value::String("tag5".to_string()),
-        ]), "tags").await;
+        let result = validator
+            .validate(
+                &Value::Array(vec![
+                    Value::String("tag1".to_string()),
+                    Value::String("tag2".to_string()),
+                    Value::String("tag3".to_string()),
+                    Value::String("tag4".to_string()),
+                    Value::String("tag5".to_string()),
+                ]),
+                "tags",
+            )
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_length_validator_unicode_support() {
         let validator = LengthValidator::new().max(5);
-        
+
         // Unicode characters should be counted correctly
-        let result = validator.validate(&Value::String("café".to_string()), "name").await;
+        let result = validator
+            .validate(&Value::String("café".to_string()), "name")
+            .await;
         assert!(result.is_ok());
-        
-        let result = validator.validate(&Value::String("🦀🚀✨".to_string()), "emoji").await;
+
+        let result = validator
+            .validate(&Value::String("🦀🚀✨".to_string()), "emoji")
+            .await;
         assert!(result.is_ok());
-        
+
         // This should be 6 characters, exceeding the max of 5
-        let result = validator.validate(&Value::String("🦀🚀✨🎉🔥💯".to_string()), "emoji").await;
+        let result = validator
+            .validate(&Value::String("🦀🚀✨🎉🔥💯".to_string()), "emoji")
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_length_validator_with_null() {
         let validator = LengthValidator::new().min(1);
-        
+
         // Null values should be skipped (not validated)
         let result = validator.validate(&Value::Null, "optional_field").await;
         assert!(result.is_ok());
@@ -311,11 +370,13 @@ mod tests {
     #[tokio::test]
     async fn test_length_validator_invalid_type() {
         let validator = LengthValidator::new().min(1);
-        
+
         // Numbers should fail type validation
-        let result = validator.validate(&Value::Number(serde_json::Number::from(42)), "age").await;
+        let result = validator
+            .validate(&Value::Number(serde_json::Number::from(42)), "age")
+            .await;
         assert!(result.is_err());
-        
+
         let errors = result.unwrap_err();
         let field_errors = errors.get_field_errors("age").unwrap();
         assert_eq!(field_errors[0].code, "invalid_type");
@@ -326,10 +387,12 @@ mod tests {
         let validator = LengthValidator::new()
             .min(8)
             .message("Password must be strong");
-        
-        let result = validator.validate(&Value::String("weak".to_string()), "password").await;
+
+        let result = validator
+            .validate(&Value::String("weak".to_string()), "password")
+            .await;
         assert!(result.is_err());
-        
+
         let errors = result.unwrap_err();
         let field_errors = errors.get_field_errors("password").unwrap();
         assert_eq!(field_errors[0].message, "Password must be strong");

@@ -32,6 +32,12 @@ pub struct BatchLoader {
     query_cache: Arc<RwLock<HashMap<String, Vec<JsonValue>>>>,
 }
 
+impl Default for BatchLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BatchLoader {
     /// Create a new batch loader with default configuration
     pub fn new() -> Self {
@@ -108,16 +114,17 @@ impl BatchLoader {
             };
         }
 
-        let rows = db_query.fetch_all(connection).await.map_err(|e| {
-            OrmError::Database(format!("Batch query failed: {}", e))
-        })?;
+        let rows = db_query
+            .fetch_all(connection)
+            .await
+            .map_err(|e| OrmError::Database(format!("Batch query failed: {}", e)))?;
 
         // Convert rows to JSON values
         let mut results = Vec::new();
         for row in rows {
-            let json_row = self.row_to_json(&row).map_err(|e| {
-                OrmError::Database(format!("Failed to convert row to JSON: {}", e))
-            })?;
+            let json_row = self
+                .row_to_json(&row)
+                .map_err(|e| OrmError::Database(format!("Failed to convert row to JSON: {}", e)))?;
             results.push(json_row);
         }
 
@@ -140,7 +147,7 @@ impl BatchLoader {
 
         // Check cache if deduplication is enabled
         let cache_key = format!("{}:{}:{:?}", parent_type, relationship_name, parent_ids);
-        
+
         if self.config.deduplicate_queries {
             let cache = self.query_cache.read().await;
             if let Some(cached_results) = cache.get(&cache_key) {
@@ -186,16 +193,17 @@ impl BatchLoader {
             };
         }
 
-        let rows = db_query.fetch_all(connection).await.map_err(|e| {
-            OrmError::Database(format!("Relationship batch query failed: {}", e))
-        })?;
+        let rows = db_query
+            .fetch_all(connection)
+            .await
+            .map_err(|e| OrmError::Database(format!("Relationship batch query failed: {}", e)))?;
 
         // Convert to JSON values
         let mut results = Vec::new();
         for row in rows {
-            let json_row = self.row_to_json(&row).map_err(|e| {
-                OrmError::Database(format!("Failed to convert row to JSON: {}", e))
-            })?;
+            let json_row = self
+                .row_to_json(&row)
+                .map_err(|e| OrmError::Database(format!("Failed to convert row to JSON: {}", e)))?;
             results.push(json_row);
         }
 
@@ -234,16 +242,18 @@ impl BatchLoader {
 
             // Determine table and foreign key based on relationship type
             let (related_table, foreign_key) = self.get_relationship_mapping(relation)?;
-            
+
             // Load current level relationships in optimized batches
-            let level_results = self.load_relationships_optimized(
-                &format!("level_{}", depth),
-                current_ids,
-                relation,
-                &foreign_key,
-                &related_table,
-                connection,
-            ).await?;
+            let level_results = self
+                .load_relationships_optimized(
+                    &format!("level_{}", depth),
+                    current_ids,
+                    relation,
+                    &foreign_key,
+                    &related_table,
+                    connection,
+                )
+                .await?;
 
             // Update current IDs for next level
             current_ids = level_results
@@ -275,18 +285,20 @@ impl BatchLoader {
 
         // Process in optimized chunks
         for chunk in parent_ids.chunks(optimal_batch_size) {
-            let chunk_results = self.load_relationships(
-                parent_type,
-                chunk.to_vec(),
-                relationship_name,
-                foreign_key,
-                related_table,
-                connection,
-            ).await?;
+            let chunk_results = self
+                .load_relationships(
+                    parent_type,
+                    chunk.to_vec(),
+                    relationship_name,
+                    foreign_key,
+                    related_table,
+                    connection,
+                )
+                .await?;
 
             // Merge chunk results
             for (parent_id, relations) in chunk_results {
-                all_results.entry(parent_id).or_insert_with(Vec::new).extend(relations);
+                all_results.entry(parent_id).or_default().extend(relations);
             }
         }
 
@@ -317,10 +329,13 @@ impl BatchLoader {
             if is_root {
                 // For root level, create the initial structure
                 let parent_id_copy = parent_id.clone();
-                target.insert(parent_id, serde_json::json!({
-                    "id": parent_id_copy,
-                    "relations": relations
-                }));
+                target.insert(
+                    parent_id,
+                    serde_json::json!({
+                        "id": parent_id_copy,
+                        "relations": relations
+                    }),
+                );
             } else {
                 // For nested levels, update existing structure
                 if let Some(existing) = target.get_mut(&parent_id) {
@@ -349,13 +364,9 @@ impl BatchLoader {
         // Group results by foreign key value
         for result in results {
             if let Some(fk_value) = result.get(foreign_key) {
-                let parent_id = serde_json::from_value(fk_value.clone())
-                    .unwrap_or(Value::Null);
-                
-                grouped
-                    .entry(parent_id)
-                    .or_insert_with(Vec::new)
-                    .push(result);
+                let parent_id = serde_json::from_value(fk_value.clone()).unwrap_or(Value::Null);
+
+                grouped.entry(parent_id).or_default().push(result);
             }
         }
 

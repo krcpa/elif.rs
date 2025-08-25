@@ -1,11 +1,11 @@
-pub mod fixtures;
 pub mod assertions;
 pub mod container;
-pub mod server;
+pub mod fixtures;
 pub mod middleware;
+pub mod server;
 
-pub use fixtures::*;
 pub use assertions::*;
 pub use container::*;
-pub use server::*;
+pub use fixtures::*;
 pub use middleware::*;
+pub use server::*;

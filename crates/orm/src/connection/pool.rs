@@ -3,31 +3,31 @@
 //! This module provides managed connection pools with statistics tracking,
 //! health monitoring, and comprehensive error handling.
 
+use super::health::PoolHealthReport;
+use super::statistics::ExtendedPoolStats;
+use crate::backends::{DatabasePool as DatabasePoolTrait, DatabasePoolConfig, DatabasePoolStats};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::sync::atomic::{AtomicU64, Ordering};
-use crate::backends::{DatabasePool as DatabasePoolTrait, DatabasePoolConfig, DatabasePoolStats};
-use super::statistics::ExtendedPoolStats;
-use super::health::PoolHealthReport;
 
 /// Database connection pool error types
 #[derive(Debug, thiserror::Error)]
 pub enum PoolError {
     #[error("Connection acquisition failed: {0}")]
     AcquisitionFailed(String),
-    
+
     #[error("Pool is closed")]
     PoolClosed,
-    
+
     #[error("Connection timeout after {timeout}s")]
     ConnectionTimeout { timeout: u64 },
-    
+
     #[error("Pool exhausted: all {max_connections} connections in use")]
     PoolExhausted { max_connections: u32 },
-    
+
     #[error("Health check failed: {reason}")]
     HealthCheckFailed { reason: String },
-    
+
     #[error("Configuration error: {message}")]
     ConfigurationError { message: String },
 }
@@ -36,24 +36,28 @@ pub enum PoolError {
 impl From<PoolError> for crate::error::ModelError {
     fn from(err: PoolError) -> Self {
         match err {
-            PoolError::AcquisitionFailed(err_msg) => {
-                crate::error::ModelError::Connection(format!("Database connection failed: {}", err_msg))
-            },
+            PoolError::AcquisitionFailed(err_msg) => crate::error::ModelError::Connection(format!(
+                "Database connection failed: {}",
+                err_msg
+            )),
             PoolError::PoolClosed => {
                 crate::error::ModelError::Connection("Database pool is closed".to_string())
-            },
-            PoolError::ConnectionTimeout { timeout } => {
-                crate::error::ModelError::Connection(format!("Database connection timeout after {}s", timeout))
-            },
+            }
+            PoolError::ConnectionTimeout { timeout } => crate::error::ModelError::Connection(
+                format!("Database connection timeout after {}s", timeout),
+            ),
             PoolError::PoolExhausted { max_connections } => {
-                crate::error::ModelError::Connection(format!("Database pool exhausted: {} connections in use", max_connections))
-            },
-            PoolError::HealthCheckFailed { reason } => {
-                crate::error::ModelError::Connection(format!("Database health check failed: {}", reason))
-            },
-            PoolError::ConfigurationError { message } => {
-                crate::error::ModelError::Connection(format!("Database configuration error: {}", message))
-            },
+                crate::error::ModelError::Connection(format!(
+                    "Database pool exhausted: {} connections in use",
+                    max_connections
+                ))
+            }
+            PoolError::HealthCheckFailed { reason } => crate::error::ModelError::Connection(
+                format!("Database health check failed: {}", reason),
+            ),
+            PoolError::ConfigurationError { message } => crate::error::ModelError::Connection(
+                format!("Database configuration error: {}", message),
+            ),
         }
     }
 }
@@ -86,14 +90,17 @@ impl ManagedPool {
     /// Acquire a connection from the pool with statistics tracking and enhanced error handling
     pub async fn acquire(&self) -> Result<Box<dyn crate::backends::DatabaseConnection>, PoolError> {
         self.acquire_count.fetch_add(1, Ordering::Relaxed);
-        
+
         match self.pool.acquire().await {
             Ok(conn) => {
                 let stats = self.pool.stats();
-                tracing::debug!("Database connection acquired successfully (total: {}, idle: {})", 
-                    stats.total_connections, stats.idle_connections);
+                tracing::debug!(
+                    "Database connection acquired successfully (total: {}, idle: {})",
+                    stats.total_connections,
+                    stats.idle_connections
+                );
                 Ok(conn)
-            },
+            }
             Err(e) => {
                 self.acquire_errors.fetch_add(1, Ordering::Relaxed);
                 let pool_error = PoolError::AcquisitionFailed(e.to_string());
@@ -104,20 +111,28 @@ impl ManagedPool {
     }
 
     /// Execute a query directly with the pool
-    pub async fn execute(&self, sql: &str, params: &[crate::backends::DatabaseValue]) -> Result<u64, PoolError> {
-        self.pool.execute(sql, params).await
+    pub async fn execute(
+        &self,
+        sql: &str,
+        params: &[crate::backends::DatabaseValue],
+    ) -> Result<u64, PoolError> {
+        self.pool
+            .execute(sql, params)
+            .await
             .map_err(|e| PoolError::AcquisitionFailed(e.to_string()))
     }
 
     /// Begin a database transaction with statistics tracking
-    pub async fn begin_transaction(&self) -> Result<Box<dyn crate::backends::DatabaseTransaction>, PoolError> {
+    pub async fn begin_transaction(
+        &self,
+    ) -> Result<Box<dyn crate::backends::DatabaseTransaction>, PoolError> {
         self.acquire_count.fetch_add(1, Ordering::Relaxed);
-        
+
         match self.pool.begin_transaction().await {
             Ok(tx) => {
                 tracing::debug!("Database transaction started successfully");
                 Ok(tx)
-            },
+            }
             Err(e) => {
                 self.acquire_errors.fetch_add(1, Ordering::Relaxed);
                 let pool_error = PoolError::AcquisitionFailed(e.to_string());
@@ -148,10 +163,10 @@ impl ManagedPool {
             Ok(duration) => {
                 tracing::debug!("Database health check passed in {:?}", duration);
                 Ok(duration)
-            },
+            }
             Err(e) => {
-                let pool_error = PoolError::HealthCheckFailed { 
-                    reason: e.to_string() 
+                let pool_error = PoolError::HealthCheckFailed {
+                    reason: e.to_string(),
                 };
                 tracing::error!("Database health check failed: {}", pool_error);
                 Err(pool_error)
@@ -163,13 +178,13 @@ impl ManagedPool {
     pub async fn detailed_health_check(&self) -> Result<PoolHealthReport, PoolError> {
         let start = Instant::now();
         let _initial_stats = self.extended_stats();
-        
+
         // Perform the actual health check
         let check_duration = self.health_check().await?;
-        
-        // Get updated statistics 
+
+        // Get updated statistics
         let final_stats = self.extended_stats();
-        
+
         let report = PoolHealthReport {
             check_duration,
             total_check_time: start.elapsed(),
@@ -185,7 +200,7 @@ impl ManagedPool {
             },
             created_at: final_stats.created_at,
         };
-        
+
         tracing::info!("Database pool health report: {:?}", report);
         Ok(report)
     }
@@ -197,8 +212,12 @@ impl ManagedPool {
 
     /// Close the connection pool
     pub async fn close(&self) -> Result<(), PoolError> {
-        self.pool.close().await
-            .map_err(|e| PoolError::ConfigurationError { message: e.to_string() })
+        self.pool
+            .close()
+            .await
+            .map_err(|e| PoolError::ConfigurationError {
+                message: e.to_string(),
+            })
     }
 }
 

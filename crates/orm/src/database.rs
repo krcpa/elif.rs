@@ -1,37 +1,37 @@
 //! Database Integration - Service providers for database connectivity
-//! 
+//!
 //! Provides service providers for database connection pooling and ORM integration
 //! with the DI container system using database abstractions.
 
+use crate::backends::{
+    DatabaseBackendRegistry, DatabaseBackendType, DatabasePool as DatabasePoolTrait,
+    DatabasePoolConfig, DatabasePoolStats,
+};
+use crate::error::ModelError;
+use elif_core::providers::ProviderError;
+use elif_core::{Container, ContainerBuilder, ServiceProvider};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::sync::atomic::{AtomicU64, Ordering};
-use elif_core::{ServiceProvider, Container, ContainerBuilder};
-use elif_core::providers::ProviderError;
-use crate::error::ModelError;
-use crate::backends::{
-    DatabasePool as DatabasePoolTrait, DatabaseBackendRegistry,
-    DatabasePoolConfig, DatabasePoolStats, DatabaseBackendType
-};
 
 /// Database connection pool error types
 #[derive(Debug, thiserror::Error)]
 pub enum PoolError {
     #[error("Connection acquisition failed: {0}")]
     AcquisitionFailed(String),
-    
+
     #[error("Pool is closed")]
     PoolClosed,
-    
+
     #[error("Connection timeout after {timeout}s")]
     ConnectionTimeout { timeout: u64 },
-    
+
     #[error("Pool exhausted: all {max_connections} connections in use")]
     PoolExhausted { max_connections: u32 },
-    
+
     #[error("Health check failed: {reason}")]
     HealthCheckFailed { reason: String },
-    
+
     #[error("Configuration error: {message}")]
     ConfigurationError { message: String },
 }
@@ -42,22 +42,21 @@ impl From<PoolError> for ModelError {
         match err {
             PoolError::AcquisitionFailed(err_msg) => {
                 ModelError::Connection(format!("Database connection failed: {}", err_msg))
-            },
-            PoolError::PoolClosed => {
-                ModelError::Connection("Database pool is closed".to_string())
-            },
+            }
+            PoolError::PoolClosed => ModelError::Connection("Database pool is closed".to_string()),
             PoolError::ConnectionTimeout { timeout } => {
                 ModelError::Connection(format!("Database connection timeout after {}s", timeout))
-            },
-            PoolError::PoolExhausted { max_connections } => {
-                ModelError::Connection(format!("Database pool exhausted: {} connections in use", max_connections))
-            },
+            }
+            PoolError::PoolExhausted { max_connections } => ModelError::Connection(format!(
+                "Database pool exhausted: {} connections in use",
+                max_connections
+            )),
             PoolError::HealthCheckFailed { reason } => {
                 ModelError::Connection(format!("Database health check failed: {}", reason))
-            },
+            }
             PoolError::ConfigurationError { message } => {
                 ModelError::Connection(format!("Database configuration error: {}", message))
-            },
+            }
         }
     }
 }
@@ -119,14 +118,17 @@ impl ManagedPool {
     /// Acquire a connection from the pool with statistics tracking and enhanced error handling
     pub async fn acquire(&self) -> Result<Box<dyn crate::backends::DatabaseConnection>, PoolError> {
         self.acquire_count.fetch_add(1, Ordering::Relaxed);
-        
+
         match self.pool.acquire().await {
             Ok(conn) => {
                 let stats = self.pool.stats();
-                tracing::debug!("Database connection acquired successfully (total: {}, idle: {})", 
-                    stats.total_connections, stats.idle_connections);
+                tracing::debug!(
+                    "Database connection acquired successfully (total: {}, idle: {})",
+                    stats.total_connections,
+                    stats.idle_connections
+                );
                 Ok(conn)
-            },
+            }
             Err(e) => {
                 self.acquire_errors.fetch_add(1, Ordering::Relaxed);
                 let pool_error = PoolError::AcquisitionFailed(e.to_string());
@@ -137,20 +139,28 @@ impl ManagedPool {
     }
 
     /// Execute a query directly with the pool
-    pub async fn execute(&self, sql: &str, params: &[crate::backends::DatabaseValue]) -> Result<u64, PoolError> {
-        self.pool.execute(sql, params).await
+    pub async fn execute(
+        &self,
+        sql: &str,
+        params: &[crate::backends::DatabaseValue],
+    ) -> Result<u64, PoolError> {
+        self.pool
+            .execute(sql, params)
+            .await
             .map_err(|e| PoolError::AcquisitionFailed(e.to_string()))
     }
 
     /// Begin a database transaction with statistics tracking
-    pub async fn begin_transaction(&self) -> Result<Box<dyn crate::backends::DatabaseTransaction>, PoolError> {
+    pub async fn begin_transaction(
+        &self,
+    ) -> Result<Box<dyn crate::backends::DatabaseTransaction>, PoolError> {
         self.acquire_count.fetch_add(1, Ordering::Relaxed);
-        
+
         match self.pool.begin_transaction().await {
             Ok(tx) => {
                 tracing::debug!("Database transaction started successfully");
                 Ok(tx)
-            },
+            }
             Err(e) => {
                 self.acquire_errors.fetch_add(1, Ordering::Relaxed);
                 let pool_error = PoolError::AcquisitionFailed(e.to_string());
@@ -181,10 +191,10 @@ impl ManagedPool {
             Ok(duration) => {
                 tracing::debug!("Database health check passed in {:?}", duration);
                 Ok(duration)
-            },
+            }
             Err(e) => {
-                let pool_error = PoolError::HealthCheckFailed { 
-                    reason: e.to_string() 
+                let pool_error = PoolError::HealthCheckFailed {
+                    reason: e.to_string(),
                 };
                 tracing::error!("Database health check failed: {}", pool_error);
                 Err(pool_error)
@@ -196,13 +206,13 @@ impl ManagedPool {
     pub async fn detailed_health_check(&self) -> Result<PoolHealthReport, PoolError> {
         let start = Instant::now();
         let _initial_stats = self.extended_stats();
-        
+
         // Perform the actual health check
         let check_duration = self.health_check().await?;
-        
-        // Get updated statistics 
+
+        // Get updated statistics
         let final_stats = self.extended_stats();
-        
+
         let report = PoolHealthReport {
             check_duration,
             total_check_time: start.elapsed(),
@@ -218,7 +228,7 @@ impl ManagedPool {
             },
             created_at: final_stats.created_at,
         };
-        
+
         tracing::info!("Database pool health report: {:?}", report);
         Ok(report)
     }
@@ -230,8 +240,12 @@ impl ManagedPool {
 
     /// Close the connection pool
     pub async fn close(&self) -> Result<(), PoolError> {
-        self.pool.close().await
-            .map_err(|e| PoolError::ConfigurationError { message: e.to_string() })
+        self.pool
+            .close()
+            .await
+            .map_err(|e| PoolError::ConfigurationError {
+                message: e.to_string(),
+            })
     }
 }
 
@@ -248,9 +262,9 @@ impl DatabaseServiceProvider {
         let mut registry = DatabaseBackendRegistry::new();
         registry.register(
             DatabaseBackendType::PostgreSQL,
-            Arc::new(crate::backends::PostgresBackend::new())
+            Arc::new(crate::backends::PostgresBackend::new()),
         );
-        
+
         Self {
             database_url,
             config: DatabasePoolConfig::default(),
@@ -258,7 +272,7 @@ impl DatabaseServiceProvider {
             backend_registry: Arc::new(registry),
         }
     }
-    
+
     pub fn with_registry(mut self, registry: Arc<DatabaseBackendRegistry>) -> Self {
         self.backend_registry = registry;
         self
@@ -306,7 +320,8 @@ impl DatabaseServiceProvider {
 
     /// Create a database pool using this provider's configuration
     pub async fn create_pool(&self) -> Result<Arc<dyn DatabasePoolTrait>, ModelError> {
-        self.backend_registry.create_pool(&self.database_url, self.config.clone())
+        self.backend_registry
+            .create_pool(&self.database_url, self.config.clone())
             .await
             .map_err(|e| ModelError::Connection(e.to_string()))
     }
@@ -337,15 +352,20 @@ impl ServiceProvider for DatabaseServiceProvider {
     fn name(&self) -> &'static str {
         "DatabaseServiceProvider"
     }
-    
+
     fn register(&self, builder: ContainerBuilder) -> Result<ContainerBuilder, ProviderError> {
         // Store database configuration for later pool creation
         // The actual pool will be created during boot phase
-        tracing::debug!("Registering database service with URL: {}", 
-            self.database_url.split('@').last().unwrap_or("unknown"));
+        tracing::debug!(
+            "Registering database service with URL: {}",
+            self.database_url
+                .split('@')
+                .next_back()
+                .unwrap_or("unknown")
+        );
         Ok(builder)
     }
-    
+
     fn boot(&self, _container: &Container) -> Result<(), ProviderError> {
         tracing::info!("✅ Database service provider booted successfully");
         tracing::debug!("Database pool configuration: max_connections={}, min_connections={}, acquire_timeout={}s, idle_timeout={:?}s, max_lifetime={:?}s, test_before_acquire={}", 
@@ -356,33 +376,39 @@ impl ServiceProvider for DatabaseServiceProvider {
 }
 
 /// Helper function to create a database pool directly with default configuration
-pub async fn create_database_pool(database_url: &str) -> Result<Arc<dyn DatabasePoolTrait>, ModelError> {
+pub async fn create_database_pool(
+    database_url: &str,
+) -> Result<Arc<dyn DatabasePoolTrait>, ModelError> {
     create_database_pool_with_config(database_url, &DatabasePoolConfig::default()).await
 }
 
 /// Helper function to create a database pool with custom configuration
 pub async fn create_database_pool_with_config(
     database_url: &str,
-    config: &DatabasePoolConfig
+    config: &DatabasePoolConfig,
 ) -> Result<Arc<dyn DatabasePoolTrait>, ModelError> {
     tracing::debug!("Creating database pool with config: max={}, min={}, timeout={}s, idle_timeout={:?}s, max_lifetime={:?}s, test_before_acquire={}", 
         config.max_connections, config.min_connections, config.acquire_timeout_seconds,
         config.idle_timeout_seconds, config.max_lifetime_seconds, config.test_before_acquire);
-    
+
     let mut registry = DatabaseBackendRegistry::new();
     registry.register(
         DatabaseBackendType::PostgreSQL,
-        Arc::new(crate::backends::PostgresBackend::new())
+        Arc::new(crate::backends::PostgresBackend::new()),
     );
-    
-    let pool = registry.create_pool(database_url, config.clone())
+
+    let pool = registry
+        .create_pool(database_url, config.clone())
         .await
         .map_err(|e| {
             tracing::error!("Failed to create database pool: {}", e);
             ModelError::Connection(format!("Failed to create database pool: {}", e))
         })?;
-    
-    tracing::info!("✅ Database pool created successfully with {} max connections", config.max_connections);
+
+    tracing::info!(
+        "✅ Database pool created successfully with {} max connections",
+        config.max_connections
+    );
     Ok(pool)
 }
 
@@ -431,14 +457,16 @@ impl PoolRegistry {
     }
 
     /// Perform health check on all pools
-    pub async fn health_check_all(&self) -> std::collections::HashMap<String, Result<Duration, PoolError>> {
+    pub async fn health_check_all(
+        &self,
+    ) -> std::collections::HashMap<String, Result<Duration, PoolError>> {
         let mut results = std::collections::HashMap::new();
-        
+
         for (name, pool) in &self.pools {
             let result = pool.health_check().await;
             results.insert(name.clone(), result);
         }
-        
+
         results
     }
 }
@@ -450,7 +478,9 @@ impl Default for PoolRegistry {
 }
 
 /// Helper function to get database pool from container (for future implementation)
-pub async fn get_database_pool(_container: &Container) -> Result<Arc<dyn DatabasePoolTrait>, String> {
+pub async fn get_database_pool(
+    _container: &Container,
+) -> Result<Arc<dyn DatabasePoolTrait>, String> {
     // For now, return an error since the container doesn't have service registry yet
     // In future phases, this will integrate with the DI container to retrieve registered pools
     Err("Database pool not yet integrated with current Container implementation - use PoolRegistry for now".to_string())
@@ -458,8 +488,8 @@ pub async fn get_database_pool(_container: &Container) -> Result<Arc<dyn Databas
 
 /// Helper function to get custom named database pool from container (for future implementation)  
 pub async fn get_named_database_pool(
-    _container: &Container, 
-    service_name: &str
+    _container: &Container,
+    service_name: &str,
 ) -> Result<Arc<dyn DatabasePoolTrait>, String> {
     // For now, return an error since the container doesn't have service registry yet
     // In future phases, this will integrate with the DI container to retrieve registered pools by name
@@ -469,31 +499,33 @@ pub async fn get_named_database_pool(
 /// Create a pool registry with a default database pool
 pub async fn create_default_pool_registry(database_url: &str) -> Result<PoolRegistry, ModelError> {
     let mut registry = PoolRegistry::new();
-    
+
     let provider = DatabaseServiceProvider::new(database_url.to_string());
     let managed_pool = provider.create_managed_pool().await?;
-    
+
     registry.register("database_pool".to_string(), Arc::new(managed_pool));
-    
+
     tracing::info!("Created default pool registry with database_pool");
     Ok(registry)
 }
 
 /// Create a pool registry with custom configuration
 pub async fn create_custom_pool_registry(
-    pools: Vec<(String, String, DatabasePoolConfig)>
+    pools: Vec<(String, String, DatabasePoolConfig)>,
 ) -> Result<PoolRegistry, ModelError> {
     let mut registry = PoolRegistry::new();
-    
+
     for (name, database_url, config) in pools {
-        let provider = DatabaseServiceProvider::new(database_url)
-            .with_config(config);
+        let provider = DatabaseServiceProvider::new(database_url).with_config(config);
         let managed_pool = provider.create_managed_pool().await?;
-        
+
         registry.register(name, Arc::new(managed_pool));
     }
-    
-    tracing::info!("Created custom pool registry with {} pools", registry.pool_names().len());
+
+    tracing::info!(
+        "Created custom pool registry with {} pools",
+        registry.pool_names().len()
+    );
     Ok(registry)
 }
 
@@ -552,15 +584,15 @@ mod tests {
     fn test_database_service_provider_accessors() {
         let provider = DatabaseServiceProvider::new("postgresql://test_db".to_string())
             .with_service_name("custom_service".to_string());
-        
+
         assert_eq!(provider.database_url(), "postgresql://test_db");
         assert_eq!(provider.service_name(), "custom_service");
     }
 
-    #[test] 
+    #[test]
     fn test_database_service_provider_defaults() {
         let provider = DatabaseServiceProvider::new("postgresql://test".to_string());
-        
+
         assert_eq!(provider.config().max_connections, 10);
         assert_eq!(provider.config().min_connections, 1);
         assert_eq!(provider.config().acquire_timeout_seconds, 30);
@@ -600,7 +632,7 @@ mod tests {
         assert!(config.test_before_acquire);
     }
 
-    #[test] 
+    #[test]
     fn test_managed_pool_config_access() {
         let config = DatabasePoolConfig {
             max_connections: 5,
@@ -610,7 +642,7 @@ mod tests {
             max_lifetime_seconds: Some(3600),
             test_before_acquire: false,
         };
-        
+
         // Verify the config values
         assert_eq!(config.max_connections, 5);
         assert_eq!(config.min_connections, 2);
@@ -630,10 +662,10 @@ mod tests {
             max_lifetime_seconds: Some(1200),
             test_before_acquire: false,
         };
-        
+
         let provider = DatabaseServiceProvider::new("postgresql://test".to_string())
             .with_config(config.clone());
-        
+
         assert_eq!(provider.config().max_connections, 20);
         assert_eq!(provider.config().min_connections, 2);
         assert_eq!(provider.config().acquire_timeout_seconds, 45);
@@ -647,7 +679,7 @@ mod tests {
         let registry = PoolRegistry::new();
         assert!(registry.get_default().is_none());
         assert!(registry.pool_names().is_empty());
-        
+
         // Test that registry methods don't panic on empty registry
         let stats = registry.get_all_stats();
         assert!(stats.is_empty());
@@ -657,8 +689,10 @@ mod tests {
     fn test_pool_error_types() {
         let timeout_error = PoolError::ConnectionTimeout { timeout: 30 };
         let pool_closed_error = PoolError::PoolClosed;
-        let exhausted_error = PoolError::PoolExhausted { max_connections: 10 };
-        
+        let exhausted_error = PoolError::PoolExhausted {
+            max_connections: 10,
+        };
+
         // Test error display
         assert!(timeout_error.to_string().contains("timeout"));
         assert!(pool_closed_error.to_string().contains("closed"));
@@ -669,7 +703,7 @@ mod tests {
     fn test_pool_error_model_conversion() {
         let pool_error = PoolError::PoolExhausted { max_connections: 5 };
         let model_error: ModelError = pool_error.into();
-        
+
         // Verify it converts to ModelError
         assert!(matches!(model_error, ModelError::Connection(_)));
     }

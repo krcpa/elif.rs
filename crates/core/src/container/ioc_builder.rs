@@ -1,6 +1,6 @@
+use crate::container::autowiring::Injectable;
 use crate::container::binding::{ServiceBinder, ServiceBindings};
 use crate::container::ioc_container::IocContainer;
-use crate::container::autowiring::Injectable;
 use crate::errors::CoreError;
 
 /// Builder for IoC container with fluent API
@@ -16,7 +16,7 @@ impl IocContainerBuilder {
             bindings: ServiceBindings::new(),
         }
     }
-    
+
     /// Build the IoC container
     pub fn build(self) -> Result<IocContainer, CoreError> {
         let mut container = IocContainer::from_bindings(self.bindings);
@@ -26,26 +26,35 @@ impl IocContainerBuilder {
 }
 
 impl ServiceBinder for IocContainerBuilder {
-    fn add_service_descriptor(&mut self, descriptor: crate::container::descriptor::ServiceDescriptor) -> Result<&mut Self, crate::errors::CoreError> {
+    fn add_service_descriptor(
+        &mut self,
+        descriptor: crate::container::descriptor::ServiceDescriptor,
+    ) -> Result<&mut Self, crate::errors::CoreError> {
         self.bindings.add_descriptor(descriptor);
         Ok(self)
     }
-    
-    fn bind<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self) -> &mut Self {
+
+    fn bind<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(
+        &mut self,
+    ) -> &mut Self {
         self.bindings.bind::<TInterface, TImpl>();
         self
     }
-    
-    fn bind_singleton<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self) -> &mut Self {
+
+    fn bind_singleton<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(
+        &mut self,
+    ) -> &mut Self {
         self.bindings.bind_singleton::<TInterface, TImpl>();
         self
     }
-    
-    fn bind_transient<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self) -> &mut Self {
+
+    fn bind_transient<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(
+        &mut self,
+    ) -> &mut Self {
         self.bindings.bind_transient::<TInterface, TImpl>();
         self
     }
-    
+
     fn bind_factory<TInterface: ?Sized + 'static, F, T>(&mut self, factory: F) -> &mut Self
     where
         F: Fn() -> Result<T, CoreError> + Send + Sync + 'static,
@@ -54,35 +63,47 @@ impl ServiceBinder for IocContainerBuilder {
         self.bindings.bind_factory::<TInterface, _, _>(factory);
         self
     }
-    
-    fn bind_instance<TInterface: ?Sized + 'static, TImpl: Send + Sync + Clone + 'static>(&mut self, instance: TImpl) -> &mut Self {
+
+    fn bind_instance<TInterface: ?Sized + 'static, TImpl: Send + Sync + Clone + 'static>(
+        &mut self,
+        instance: TImpl,
+    ) -> &mut Self {
         self.bindings.bind_instance::<TInterface, TImpl>(instance);
         self
     }
-    
-    fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, name: &str) -> &mut Self {
+
+    fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(
+        &mut self,
+        name: &str,
+    ) -> &mut Self {
         self.bindings.bind_named::<TInterface, TImpl>(name);
         self
     }
-    
+
     fn bind_injectable<T: Injectable>(&mut self) -> &mut Self {
         self.bindings.bind_injectable::<T>();
         self
     }
-    
+
     fn bind_injectable_singleton<T: Injectable>(&mut self) -> &mut Self {
         self.bindings.bind_injectable_singleton::<T>();
         self
     }
 
     // Advanced binding methods implementation
-    
-    fn bind_with<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self) -> crate::container::binding::AdvancedBindingBuilder<TInterface> {
+
+    fn bind_with<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(
+        &mut self,
+    ) -> crate::container::binding::AdvancedBindingBuilder<TInterface> {
         self.bindings.bind_with::<TInterface, TImpl>()
     }
 
-    fn with_implementation<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(&mut self, config: crate::container::binding::BindingConfig) -> &mut Self {
-        self.bindings.with_implementation::<TInterface, TImpl>(config);
+    fn with_implementation<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(
+        &mut self,
+        config: crate::container::binding::BindingConfig,
+    ) -> &mut Self {
+        self.bindings
+            .with_implementation::<TInterface, TImpl>(config);
         self
     }
 
@@ -95,13 +116,17 @@ impl ServiceBinder for IocContainerBuilder {
         self
     }
 
-    fn bind_parameterized_factory<TInterface: ?Sized + 'static, P, F, T>(&mut self, factory: F) -> &mut Self
+    fn bind_parameterized_factory<TInterface: ?Sized + 'static, P, F, T>(
+        &mut self,
+        factory: F,
+    ) -> &mut Self
     where
         F: Fn(P) -> Result<T, CoreError> + Send + Sync + 'static,
         T: Send + Sync + 'static,
         P: Send + Sync + 'static,
     {
-        self.bindings.bind_parameterized_factory::<TInterface, P, F, T>(factory);
+        self.bindings
+            .bind_parameterized_factory::<TInterface, P, F, T>(factory);
         self
     }
 
@@ -112,7 +137,6 @@ impl ServiceBinder for IocContainerBuilder {
         self.bindings.bind_collection::<TInterface, F>(configure);
         self
     }
-
 }
 
 impl Default for IocContainerBuilder {
@@ -131,7 +155,7 @@ mod tests {
 
     #[derive(Default)]
     struct TestServiceImpl;
-    
+
     unsafe impl Send for TestServiceImpl {}
     unsafe impl Sync for TestServiceImpl {}
 
@@ -146,7 +170,7 @@ mod tests {
         let mut builder = IocContainerBuilder::new();
         builder.bind::<TestServiceImpl, TestServiceImpl>();
         let container = builder.build().unwrap();
-        
+
         let service = container.resolve::<TestServiceImpl>().unwrap();
         assert_eq!(service.get_value(), "test_value");
     }
@@ -154,12 +178,12 @@ mod tests {
     #[test]
     fn test_builder_chaining() {
         let mut builder = IocContainerBuilder::new();
-        
+
         builder
             .bind::<TestServiceImpl, TestServiceImpl>()
             .bind_singleton::<TestServiceImpl, TestServiceImpl>()
             .bind_transient::<TestServiceImpl, TestServiceImpl>();
-        
+
         // Should have multiple bindings (will be deduplicated by service ID)
         assert!(builder.bindings.count() > 0);
     }

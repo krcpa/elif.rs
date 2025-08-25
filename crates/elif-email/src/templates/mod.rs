@@ -66,7 +66,11 @@ impl EmailTemplate {
     }
 
     /// Render template with context  
-    pub fn render(&self, engine: &TemplateEngine, context: &TemplateContext) -> Result<RenderedEmail, EmailError> {
+    pub fn render(
+        &self,
+        engine: &TemplateEngine,
+        context: &TemplateContext,
+    ) -> Result<RenderedEmail, EmailError> {
         engine.render_template(self, context)
     }
 }
@@ -117,9 +121,7 @@ impl<T: Serialize> IntoTemplateContext for T {
     fn into_context(self) -> Result<TemplateContext, EmailError> {
         let value = serde_json::to_value(self)?;
         match value {
-            serde_json::Value::Object(map) => {
-                Ok(map.into_iter().collect())
-            }
+            serde_json::Value::Object(map) => Ok(map.into_iter().collect()),
             _ => {
                 let mut context = TemplateContext::new();
                 context.insert("data".to_string(), value);
@@ -130,7 +132,9 @@ impl<T: Serialize> IntoTemplateContext for T {
 }
 
 /// Helper for TemplateContext to avoid blanket implementation conflict
-pub fn template_context_into_context(context: TemplateContext) -> Result<TemplateContext, EmailError> {
+pub fn template_context_into_context(
+    context: TemplateContext,
+) -> Result<TemplateContext, EmailError> {
     Ok(context)
 }
 
@@ -237,16 +241,16 @@ impl Email {
 }
 
 /// # Tera Template Engine Documentation
-/// 
+///
 /// This module provides email templating using the Tera template engine.
 /// Tera uses Jinja2-like syntax and provides powerful features for email templates.
-/// 
+///
 /// ## Quick Start
-/// 
+///
 /// ```rust,ignore
 /// use elif_email::templates::{TemplateEngine, EmailTemplate, TemplateContext};
 /// use elif_email::config::TemplateConfig;
-/// 
+///
 /// let config = TemplateConfig {
 ///     templates_dir: "templates".to_string(),
 ///     layouts_dir: "layouts".to_string(),
@@ -256,51 +260,51 @@ impl Email {
 ///     cache_size: Some(100),
 ///     watch_files: false,
 /// };
-/// 
+///
 /// let engine = TemplateEngine::new(config)?;
 /// let template = EmailTemplate::builder("welcome")
 ///     .html_template("<h1>Welcome {{ user.name }}!</h1>")
 ///     .subject_template("Welcome to {{ app_name }}")
 ///     .build();
 /// ```
-/// 
+///
 /// ## Available Filters
-/// 
+///
 /// ### Date/Time Filters
 /// - `{{ date_value | format_date(format="%Y-%m-%d") }}`
 /// - `{{ datetime_value | format_datetime(format="%Y-%m-%d %H:%M:%S") }}`
 /// - `{{ "" | now(format="%Y-%m-%d %H:%M:%S") }}`
-/// 
+///
 /// ### Tracking Filters
 /// - `{{ email_id | tracking_pixel(base_url="https://example.com") }}`
 /// - `{{ email_id | tracking_link(url="https://target.com", base_url="https://example.com") }}`
-/// 
+///
 /// ### Formatting Filters
 /// - `{{ amount | currency(currency="USD") }}`
 /// - `{{ phone_number | phone(country="US") }}`
 /// - `{{ address_obj | address }}`
-/// 
+///
 /// ### String Filters
 /// - `{{ text | url_encode }}`
 /// - `{{ text | truncate(length=100) }}` (use built-in)
 /// - `{{ text | title }}` (use built-in instead of capitalize)
-/// 
+///
 /// ## Template Syntax
-/// 
+///
 /// ### Conditionals
 /// Use Tera's native syntax instead of helpers:
 /// - `{% if value1 == value2 %}...{% endif %}` (instead of if_eq)
 /// - `{% if not condition %}...{% endif %}` (instead of unless)  
 /// - `{% if value1 > value2 %}...{% endif %}` (instead of if_gt)
 /// - `{% if value1 < value2 %}...{% endif %}` (instead of if_lt)
-/// 
+///
 /// ### Loops
 /// Use Tera's native loop syntax:
 /// - `{% for item in items %}{{ loop.index0 }}: {{ item }}{% endfor %}` (instead of each_with_index)
 /// - `{% for i in range(start=0, end=10) %}{{ i }}{% endfor %}` (instead of range helper)
-/// 
+///
 /// ### Migration from Handlebars
-/// 
+///
 /// | Handlebars | Tera Equivalent |
 /// |------------|-----------------|
 /// | `{{#if condition}}` | `{% if condition %}` |
@@ -309,7 +313,7 @@ impl Email {
 /// | `{{@index}}` | `{{ loop.index0 }}` |
 /// | `{{#if_eq a b}}` | `{% if a == b %}` |
 /// | `{{capitalize text}}` | `{{ text \| title }}` |
-/// 
+///
 /// All filters are registered in the TemplateEngine and available in templates.
 /// For full documentation, see [Tera docs](https://tera.netlify.app/docs/).
 pub struct TemplateDocumentation;

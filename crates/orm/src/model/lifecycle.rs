@@ -32,7 +32,11 @@ impl ModelLifecycle {
         Ok(())
     }
 
-    pub async fn trigger_update_flow<T: 'static>(&self, model: &mut T, original: &T) -> Result<(), EventError> {
+    pub async fn trigger_update_flow<T: 'static>(
+        &self,
+        model: &mut T,
+        original: &T,
+    ) -> Result<(), EventError> {
         if let Some(registry) = self.observer_manager.get_registry_for::<T>() {
             // updating -> saving -> saved -> updated
             registry.trigger_updating(model, original).await?;
@@ -66,8 +70,8 @@ impl Default for ModelLifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
     use async_trait::async_trait;
+    use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Clone, PartialEq)]
     struct TestUser {
@@ -137,13 +141,19 @@ mod tests {
             Ok(())
         }
 
-        async fn updating(&self, model: &mut TestUser, original: &TestUser) -> Result<(), EventError> {
-            self.tracker.track(&format!("updating: {} -> {}", original.name, model.name));
+        async fn updating(
+            &self,
+            model: &mut TestUser,
+            original: &TestUser,
+        ) -> Result<(), EventError> {
+            self.tracker
+                .track(&format!("updating: {} -> {}", original.name, model.name));
             Ok(())
         }
 
         async fn updated(&self, model: &TestUser, original: &TestUser) -> Result<(), EventError> {
-            self.tracker.track(&format!("updated: {} -> {}", original.name, model.name));
+            self.tracker
+                .track(&format!("updated: {} -> {}", original.name, model.name));
             Ok(())
         }
 
@@ -172,27 +182,27 @@ mod tests {
     async fn test_model_lifecycle_create_flow() {
         let tracker = LifecycleTracker::new();
         let observer = LifecycleObserver::new(tracker.clone());
-        
+
         let mut lifecycle = ModelLifecycle::new();
         lifecycle.register_observer::<TestUser>(Box::new(observer));
-        
+
         let mut user = TestUser {
             name: "John Doe".to_string(),
             email: "JOHN@EXAMPLE.COM".to_string(),
             ..Default::default()
         };
-        
+
         // Simulate create flow: creating -> saving -> saved -> created
         let result = lifecycle.trigger_create_flow(&mut user).await;
         assert!(result.is_ok());
-        
+
         let events = tracker.get_events();
         assert_eq!(events.len(), 4);
         assert_eq!(events[0], "creating: John Doe");
         assert_eq!(events[1], "saving: John Doe");
         assert_eq!(events[2], "saved: John Doe");
         assert_eq!(events[3], "created: John Doe");
-        
+
         // Check email was normalized
         assert_eq!(user.email, "john@example.com");
     }
@@ -201,20 +211,20 @@ mod tests {
     async fn test_model_lifecycle_update_flow() {
         let tracker = LifecycleTracker::new();
         let observer = LifecycleObserver::new(tracker.clone());
-        
+
         let mut lifecycle = ModelLifecycle::new();
         lifecycle.register_observer::<TestUser>(Box::new(observer));
-        
+
         let original = TestUser::default();
         let mut updated = TestUser {
             name: "Updated User".to_string(),
             ..original.clone()
         };
-        
+
         // Simulate update flow: updating -> saving -> saved -> updated
         let result = lifecycle.trigger_update_flow(&mut updated, &original).await;
         assert!(result.is_ok());
-        
+
         let events = tracker.get_events();
         assert_eq!(events.len(), 4);
         assert_eq!(events[0], "updating: Test User -> Updated User");
@@ -227,16 +237,16 @@ mod tests {
     async fn test_model_lifecycle_delete_flow() {
         let tracker = LifecycleTracker::new();
         let observer = LifecycleObserver::new(tracker.clone());
-        
+
         let mut lifecycle = ModelLifecycle::new();
         lifecycle.register_observer::<TestUser>(Box::new(observer));
-        
+
         let user = TestUser::default();
-        
+
         // Simulate delete flow: deleting -> deleted
         let result = lifecycle.trigger_delete_flow(&user).await;
         assert!(result.is_ok());
-        
+
         let events = tracker.get_events();
         assert_eq!(events.len(), 2);
         assert_eq!(events[0], "deleting: Test User");
@@ -246,22 +256,22 @@ mod tests {
     #[tokio::test]
     async fn test_model_lifecycle_error_stops_flow() {
         struct FailingObserver;
-        
+
         #[async_trait]
         impl ModelObserver<TestUser> for FailingObserver {
             async fn creating(&self, _model: &mut TestUser) -> Result<(), EventError> {
                 Err(EventError::validation("Creation not allowed"))
             }
         }
-        
+
         let mut lifecycle = ModelLifecycle::new();
         lifecycle.register_observer::<TestUser>(Box::new(FailingObserver));
-        
+
         let mut user = TestUser::default();
-        
+
         let result = lifecycle.trigger_create_flow(&mut user).await;
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             EventError::Validation { message, .. } => {
                 assert_eq!(message, "Creation not allowed");
@@ -274,25 +284,25 @@ mod tests {
     async fn test_model_lifecycle_multiple_observers() {
         let tracker1 = LifecycleTracker::new();
         let tracker2 = LifecycleTracker::new();
-        
+
         let observer1 = LifecycleObserver::new(tracker1.clone());
         let observer2 = LifecycleObserver::new(tracker2.clone());
-        
+
         let mut lifecycle = ModelLifecycle::new();
         lifecycle.register_observer::<TestUser>(Box::new(observer1));
         lifecycle.register_observer::<TestUser>(Box::new(observer2));
-        
+
         let mut user = TestUser::default();
         let result = lifecycle.trigger_create_flow(&mut user).await;
         assert!(result.is_ok());
-        
+
         // Both observers should have been called
         let events1 = tracker1.get_events();
         let events2 = tracker2.get_events();
-        
+
         assert_eq!(events1.len(), 4);
         assert_eq!(events2.len(), 4);
-        
+
         // Both should have same event sequence
         assert_eq!(events1[0], "creating: Test User");
         assert_eq!(events2[0], "creating: Test User");
@@ -301,7 +311,7 @@ mod tests {
     #[tokio::test]
     async fn test_model_lifecycle_observer_modification_persists() {
         struct NormalizingObserver;
-        
+
         #[async_trait]
         impl ModelObserver<TestUser> for NormalizingObserver {
             async fn creating(&self, model: &mut TestUser) -> Result<(), EventError> {
@@ -310,19 +320,19 @@ mod tests {
                 Ok(())
             }
         }
-        
+
         let mut lifecycle = ModelLifecycle::new();
         lifecycle.register_observer::<TestUser>(Box::new(NormalizingObserver));
-        
+
         let mut user = TestUser {
             name: "john doe".to_string(),
             email: "JOHN@EXAMPLE.COM".to_string(),
             ..Default::default()
         };
-        
+
         let result = lifecycle.trigger_create_flow(&mut user).await;
         assert!(result.is_ok());
-        
+
         // Check modifications persisted
         assert_eq!(user.name, "JOHN DOE");
         assert_eq!(user.email, "john@example.com");
@@ -331,20 +341,20 @@ mod tests {
     #[tokio::test]
     async fn test_model_lifecycle_event_propagation_control() {
         struct PropagationStoppingObserver;
-        
+
         #[async_trait]
         impl ModelObserver<TestUser> for PropagationStoppingObserver {
             async fn creating(&self, _model: &mut TestUser) -> Result<(), EventError> {
                 Err(EventError::propagation_stopped("User decided to cancel"))
             }
         }
-        
+
         let mut lifecycle = ModelLifecycle::new();
         lifecycle.register_observer::<TestUser>(Box::new(PropagationStoppingObserver));
-        
+
         let mut user = TestUser::default();
         let result = lifecycle.trigger_create_flow(&mut user).await;
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             EventError::PropagationStopped { reason, .. } => {

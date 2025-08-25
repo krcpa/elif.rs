@@ -1,6 +1,6 @@
-use std::any::{Any, TypeId};
 use crate::container::scope::ServiceScope;
 use crate::errors::CoreError;
+use std::any::{Any, TypeId};
 
 /// Service identifier combining type and optional name
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -19,7 +19,7 @@ impl ServiceId {
             name: None,
         }
     }
-    
+
     /// Create a named service ID for a type
     pub fn named<T: 'static + ?Sized>(name: impl Into<String>) -> Self {
         Self {
@@ -28,18 +28,17 @@ impl ServiceId {
             name: Some(name.into()),
         }
     }
-    
+
     /// Check if this ServiceId matches a type and name without allocating
     pub fn matches_named<T: 'static + ?Sized>(&self, name: &str) -> bool {
-        self.type_id == TypeId::of::<T>() && 
-        self.name.as_deref() == Some(name)
+        self.type_id == TypeId::of::<T>() && self.name.as_deref() == Some(name)
     }
-    
+
     /// Get the type name as a string
     pub fn type_name(&self) -> &'static str {
         self.type_name
     }
-    
+
     /// Create a service ID directly from type IDs and names
     pub fn by_ids(type_id: TypeId, type_name: &'static str) -> Self {
         Self {
@@ -48,7 +47,7 @@ impl ServiceId {
             name: None,
         }
     }
-    
+
     /// Create a named service ID directly from type IDs and names
     pub fn named_by_ids(type_id: TypeId, type_name: &'static str, name: String) -> Self {
         Self {
@@ -61,7 +60,8 @@ impl ServiceId {
 
 /// Factory function for creating service instances
 /// We use Any here to avoid circular references with Container
-pub type ServiceFactory = Box<dyn Fn() -> Result<Box<dyn Any + Send + Sync>, CoreError> + Send + Sync>;
+pub type ServiceFactory =
+    Box<dyn Fn() -> Result<Box<dyn Any + Send + Sync>, CoreError> + Send + Sync>;
 
 /// Strategy for activating/creating service instances
 pub enum ServiceActivationStrategy {
@@ -106,28 +106,32 @@ impl std::fmt::Debug for ServiceDescriptor {
     }
 }
 
-
 impl ServiceDescriptor {
     /// Create a new service descriptor with type binding
-    pub fn bind<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>() -> ServiceDescriptorBuilder<TInterface, TImpl> {
+    pub fn bind<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(
+    ) -> ServiceDescriptorBuilder<TInterface, TImpl> {
         ServiceDescriptorBuilder::new()
     }
-    
+
     /// Create a named service descriptor
-    pub fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(name: impl Into<String>) -> ServiceDescriptorBuilder<TInterface, TImpl> {
+    pub fn bind_named<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(
+        name: impl Into<String>,
+    ) -> ServiceDescriptorBuilder<TInterface, TImpl> {
         ServiceDescriptorBuilder::new().with_name(name)
     }
-    
+
     /// Create a singleton service descriptor
-    pub fn singleton<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>() -> ServiceDescriptorBuilder<TInterface, TImpl> {
+    pub fn singleton<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(
+    ) -> ServiceDescriptorBuilder<TInterface, TImpl> {
         ServiceDescriptorBuilder::new().with_lifetime(ServiceScope::Singleton)
     }
-    
+
     /// Create a transient service descriptor
-    pub fn transient<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>() -> ServiceDescriptorBuilder<TInterface, TImpl> {
+    pub fn transient<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>(
+    ) -> ServiceDescriptorBuilder<TInterface, TImpl> {
         ServiceDescriptorBuilder::new().with_lifetime(ServiceScope::Transient)
     }
-    
+
     /// Create an auto-wired service descriptor
     pub fn autowired<T: 'static>(dependencies: Vec<ServiceId>) -> ServiceDescriptor {
         ServiceDescriptor {
@@ -138,7 +142,7 @@ impl ServiceDescriptor {
             dependencies,
         }
     }
-    
+
     /// Create an auto-wired singleton service descriptor
     pub fn autowired_singleton<T: 'static>(dependencies: Vec<ServiceId>) -> ServiceDescriptor {
         ServiceDescriptor {
@@ -159,13 +163,16 @@ pub struct ServiceDescriptorBuilder<TInterface: ?Sized, TImpl> {
     _phantom: std::marker::PhantomData<(*const TInterface, TImpl)>,
 }
 
-impl<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static> Default for ServiceDescriptorBuilder<TInterface, TImpl> {
+impl<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static> Default
+    for ServiceDescriptorBuilder<TInterface, TImpl>
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static> ServiceDescriptorBuilder<TInterface, TImpl>
+impl<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static>
+    ServiceDescriptorBuilder<TInterface, TImpl>
 {
     /// Create a new service descriptor builder
     pub fn new() -> Self {
@@ -176,31 +183,31 @@ impl<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static> Servi
             _phantom: std::marker::PhantomData,
         }
     }
-    
+
     /// Set the service name
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
-    
+
     /// Set the service lifetime
     pub fn with_lifetime(mut self, lifetime: ServiceScope) -> Self {
         self.lifetime = lifetime;
         self
     }
-    
+
     /// Add a dependency
     pub fn depends_on<T: 'static>(mut self) -> Self {
         self.dependencies.push(ServiceId::of::<T>());
         self
     }
-    
+
     /// Add a named dependency
     pub fn depends_on_named<T: 'static>(mut self, name: impl Into<String>) -> Self {
         self.dependencies.push(ServiceId::named::<T>(name));
         self
     }
-    
+
     /// Build the service descriptor
     pub fn build(self) -> ServiceDescriptor {
         let service_id = if let Some(name) = self.name {
@@ -208,12 +215,12 @@ impl<TInterface: ?Sized + 'static, TImpl: Send + Sync + Default + 'static> Servi
         } else {
             ServiceId::of::<TInterface>()
         };
-        
+
         let factory: ServiceFactory = Box::new(move || {
             let instance = TImpl::default();
             Ok(Box::new(instance) as Box<dyn Any + Send + Sync>)
         });
-        
+
         ServiceDescriptor {
             service_id,
             implementation_id: TypeId::of::<TImpl>(),
@@ -250,19 +257,19 @@ impl<TInterface: ?Sized + 'static> ServiceDescriptorFactoryBuilder<TInterface> {
             _phantom: std::marker::PhantomData,
         }
     }
-    
+
     /// Set the service name
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
-    
+
     /// Set the service lifetime
     pub fn with_lifetime(mut self, lifetime: ServiceScope) -> Self {
         self.lifetime = lifetime;
         self
     }
-    
+
     /// Set the factory function
     pub fn with_factory<F, T>(mut self, factory: F) -> Self
     where
@@ -276,19 +283,21 @@ impl<TInterface: ?Sized + 'static> ServiceDescriptorFactoryBuilder<TInterface> {
         self.factory = Some(wrapped_factory);
         self
     }
-    
+
     /// Build the service descriptor
     pub fn build(self) -> Result<ServiceDescriptor, CoreError> {
-        let factory = self.factory.ok_or_else(|| CoreError::InvalidServiceDescriptor {
-            message: "Factory function is required".to_string(),
-        })?;
-        
+        let factory = self
+            .factory
+            .ok_or_else(|| CoreError::InvalidServiceDescriptor {
+                message: "Factory function is required".to_string(),
+            })?;
+
         let service_id = if let Some(name) = self.name {
             ServiceId::named::<TInterface>(name)
         } else {
             ServiceId::of::<TInterface>()
         };
-        
+
         Ok(ServiceDescriptor {
             service_id,
             implementation_id: TypeId::of::<()>(), // Unknown for factory-based services
@@ -310,7 +319,7 @@ mod tests {
 
     #[derive(Debug, Default)]
     struct TestImpl;
-    
+
     unsafe impl Send for TestImpl {}
     unsafe impl Sync for TestImpl {}
 
@@ -324,29 +333,29 @@ mod tests {
     fn test_service_id_creation() {
         let id1 = ServiceId::of::<TestImpl>();
         let id2 = ServiceId::named::<TestImpl>("test");
-        
+
         assert_eq!(id1.type_id, TypeId::of::<TestImpl>());
         assert_eq!(id1.name, None);
-        
+
         assert_eq!(id2.type_id, TypeId::of::<TestImpl>());
         assert_eq!(id2.name, Some("test".to_string()));
-        
+
         assert_ne!(id1, id2);
     }
-    
+
     #[test]
     fn test_type_name_capture() {
         let id1 = ServiceId::of::<TestImpl>();
         let id2 = ServiceId::named::<TestImpl>("test");
         let id3 = ServiceId::of::<dyn TestTrait>();
         let id4 = ServiceId::of::<String>();
-        
+
         // Verify that type names are actually captured, not "unknown"
         assert!(id1.type_name().contains("TestImpl"));
         assert!(id2.type_name().contains("TestImpl"));
         assert!(id3.type_name().contains("TestTrait"));
         assert_eq!(id4.type_name(), "alloc::string::String");
-        
+
         // Verify type_name() method returns the stored value
         assert_eq!(id1.type_name(), id1.type_name);
         assert_eq!(id2.type_name(), id2.type_name);
@@ -358,7 +367,7 @@ mod tests {
             .with_lifetime(ServiceScope::Singleton)
             .depends_on::<String>()
             .build();
-        
+
         assert_eq!(descriptor.lifetime, ServiceScope::Singleton);
         assert_eq!(descriptor.implementation_id, TypeId::of::<TestImpl>());
         assert_eq!(descriptor.dependencies.len(), 1);
@@ -369,12 +378,10 @@ mod tests {
     fn test_factory_service_descriptor() {
         let descriptor = ServiceDescriptorFactoryBuilder::<dyn TestTrait>::new()
             .with_lifetime(ServiceScope::Transient)
-            .with_factory(|| -> Result<TestImpl, CoreError> {
-                Ok(TestImpl)
-            })
+            .with_factory(|| -> Result<TestImpl, CoreError> { Ok(TestImpl) })
             .build()
             .unwrap();
-        
+
         assert_eq!(descriptor.lifetime, ServiceScope::Transient);
     }
 }

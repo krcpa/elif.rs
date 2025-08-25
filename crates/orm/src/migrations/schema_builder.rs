@@ -23,7 +23,7 @@ impl SchemaBuilder {
     {
         let mut table_builder = TableBuilder::new(table_name);
         callback(&mut table_builder);
-        
+
         let sql = table_builder.to_sql();
         self.statements.push(sql);
         self
@@ -31,12 +31,18 @@ impl SchemaBuilder {
 
     /// Drop a table
     pub fn drop_table(&mut self, table_name: &str) -> &mut Self {
-        self.statements.push(format!("DROP TABLE IF EXISTS {};", table_name));
+        self.statements
+            .push(format!("DROP TABLE IF EXISTS {};", table_name));
         self
     }
 
     /// Add a column to existing table
-    pub fn add_column(&mut self, table_name: &str, column_name: &str, column_type: &str) -> &mut Self {
+    pub fn add_column(
+        &mut self,
+        table_name: &str,
+        column_name: &str,
+        column_type: &str,
+    ) -> &mut Self {
         self.statements.push(format!(
             "ALTER TABLE {} ADD COLUMN {} {};",
             table_name, column_name, column_type
@@ -54,7 +60,12 @@ impl SchemaBuilder {
     }
 
     /// Create an index
-    pub fn create_index(&mut self, table_name: &str, column_names: &[&str], index_name: Option<&str>) -> &mut Self {
+    pub fn create_index(
+        &mut self,
+        table_name: &str,
+        column_names: &[&str],
+        index_name: Option<&str>,
+    ) -> &mut Self {
         let default_name = format!("idx_{}_{}", table_name, column_names.join("_"));
         let index_name = index_name.unwrap_or(&default_name);
         self.statements.push(format!(
@@ -68,7 +79,8 @@ impl SchemaBuilder {
 
     /// Drop an index
     pub fn drop_index(&mut self, index_name: &str) -> &mut Self {
-        self.statements.push(format!("DROP INDEX IF EXISTS {};", index_name));
+        self.statements
+            .push(format!("DROP INDEX IF EXISTS {};", index_name));
         self
     }
 
@@ -113,7 +125,8 @@ impl TableBuilder {
 
     /// Add a UUID column
     pub fn uuid(&mut self, name: &str) -> &mut Self {
-        self.columns.push(format!("{} UUID DEFAULT gen_random_uuid()", name));
+        self.columns
+            .push(format!("{} UUID DEFAULT gen_random_uuid()", name));
         self
     }
 
@@ -141,19 +154,27 @@ impl TableBuilder {
 
     /// Add timestamp columns
     pub fn timestamps(&mut self) -> &mut Self {
-        self.columns.push("created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP".to_string());
-        self.columns.push("updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP".to_string());
+        self.columns
+            .push("created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP".to_string());
+        self.columns
+            .push("updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP".to_string());
         self
     }
 
     /// Add a primary key constraint
     pub fn primary_key(&mut self, columns: &[&str]) -> &mut Self {
-        self.constraints.push(format!("PRIMARY KEY ({})", columns.join(", ")));
+        self.constraints
+            .push(format!("PRIMARY KEY ({})", columns.join(", ")));
         self
     }
 
     /// Add a foreign key constraint
-    pub fn foreign_key(&mut self, column: &str, references_table: &str, references_column: &str) -> &mut Self {
+    pub fn foreign_key(
+        &mut self,
+        column: &str,
+        references_table: &str,
+        references_column: &str,
+    ) -> &mut Self {
         self.constraints.push(format!(
             "FOREIGN KEY ({}) REFERENCES {} ({})",
             column, references_table, references_column
@@ -163,7 +184,8 @@ impl TableBuilder {
 
     /// Add a unique constraint
     pub fn unique(&mut self, columns: &[&str]) -> &mut Self {
-        self.constraints.push(format!("UNIQUE ({})", columns.join(", ")));
+        self.constraints
+            .push(format!("UNIQUE ({})", columns.join(", ")));
         self
     }
 
@@ -171,7 +193,7 @@ impl TableBuilder {
     pub fn to_sql(&self) -> String {
         let mut parts = self.columns.clone();
         parts.extend(self.constraints.clone());
-        
+
         format!(
             "CREATE TABLE {} (\n    {}\n);",
             self.table_name,
@@ -200,7 +222,7 @@ mod tests {
             table.timestamps();
             table.unique(&["email"]);
         });
-        
+
         let sql = builder.build();
         assert!(sql.contains("CREATE TABLE users"));
         assert!(sql.contains("id SERIAL PRIMARY KEY"));
@@ -219,7 +241,7 @@ mod tests {
         table.integer("user_id");
         table.timestamps();
         table.foreign_key("user_id", "users", "id");
-        
+
         let sql = table.to_sql();
         assert!(sql.contains("CREATE TABLE posts"));
         assert!(sql.contains("id SERIAL PRIMARY KEY"));

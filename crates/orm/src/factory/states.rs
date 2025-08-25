@@ -1,11 +1,11 @@
 //! Factory states for applying common model variations
 
-use std::collections::HashMap;
-use serde_json::{json, Value};
-use chrono::{DateTime, Utc};
-use crate::error::OrmResult;
-use super::traits::FactoryState;
 use super::fake_data::*;
+use super::traits::FactoryState;
+use crate::error::OrmResult;
+use chrono::{DateTime, Utc};
+use serde_json::{json, Value};
+use std::collections::HashMap;
 
 /// Common user states
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ impl<T> FactoryState<T> for ActiveState {
         attributes.insert("is_active".to_string(), json!(true));
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Active"
     }
@@ -34,7 +34,7 @@ impl<T> FactoryState<T> for InactiveState {
         attributes.insert("is_active".to_string(), json!(false));
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Inactive"
     }
@@ -51,7 +51,7 @@ impl<T> FactoryState<T> for PendingState {
         attributes.insert("verified_at".to_string(), Value::Null);
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Pending"
     }
@@ -65,10 +65,13 @@ impl<T> FactoryState<T> for VerifiedState {
     async fn apply(&self, attributes: &mut HashMap<String, Value>) -> OrmResult<()> {
         attributes.insert("status".to_string(), json!("verified"));
         attributes.insert("is_verified".to_string(), json!(true));
-        attributes.insert("verified_at".to_string(), json!(fake_datetime().to_rfc3339()));
+        attributes.insert(
+            "verified_at".to_string(),
+            json!(fake_datetime().to_rfc3339()),
+        );
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Verified"
     }
@@ -83,10 +86,13 @@ impl<T> FactoryState<T> for AdminState {
     async fn apply(&self, attributes: &mut HashMap<String, Value>) -> OrmResult<()> {
         attributes.insert("role".to_string(), json!("admin"));
         attributes.insert("is_admin".to_string(), json!(true));
-        attributes.insert("permissions".to_string(), json!(["read", "write", "delete", "admin"]));
+        attributes.insert(
+            "permissions".to_string(),
+            json!(["read", "write", "delete", "admin"]),
+        );
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Admin"
     }
@@ -101,10 +107,13 @@ impl<T> FactoryState<T> for ModeratorState {
     async fn apply(&self, attributes: &mut HashMap<String, Value>) -> OrmResult<()> {
         attributes.insert("role".to_string(), json!("moderator"));
         attributes.insert("is_admin".to_string(), json!(false));
-        attributes.insert("permissions".to_string(), json!(["read", "write", "moderate"]));
+        attributes.insert(
+            "permissions".to_string(),
+            json!(["read", "write", "moderate"]),
+        );
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Moderator"
     }
@@ -119,11 +128,14 @@ impl<T> FactoryState<T> for SuspendedState {
     async fn apply(&self, attributes: &mut HashMap<String, Value>) -> OrmResult<()> {
         attributes.insert("status".to_string(), json!("suspended"));
         attributes.insert("is_active".to_string(), json!(false));
-        attributes.insert("suspended_at".to_string(), json!(fake_datetime().to_rfc3339()));
+        attributes.insert(
+            "suspended_at".to_string(),
+            json!(fake_datetime().to_rfc3339()),
+        );
         attributes.insert("suspension_reason".to_string(), json!("Policy violation"));
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Suspended"
     }
@@ -138,10 +150,13 @@ impl<T> FactoryState<T> for PublishedState {
     async fn apply(&self, attributes: &mut HashMap<String, Value>) -> OrmResult<()> {
         attributes.insert("status".to_string(), json!("published"));
         attributes.insert("is_published".to_string(), json!(true));
-        attributes.insert("published_at".to_string(), json!(fake_datetime().to_rfc3339()));
+        attributes.insert(
+            "published_at".to_string(),
+            json!(fake_datetime().to_rfc3339()),
+        );
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Published"
     }
@@ -159,7 +174,7 @@ impl<T> FactoryState<T> for DraftState {
         attributes.insert("published_at".to_string(), Value::Null);
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Draft"
     }
@@ -174,10 +189,13 @@ impl<T> FactoryState<T> for ArchivedState {
     async fn apply(&self, attributes: &mut HashMap<String, Value>) -> OrmResult<()> {
         attributes.insert("status".to_string(), json!("archived"));
         attributes.insert("is_archived".to_string(), json!(true));
-        attributes.insert("archived_at".to_string(), json!(fake_datetime().to_rfc3339()));
+        attributes.insert(
+            "archived_at".to_string(),
+            json!(fake_datetime().to_rfc3339()),
+        );
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Archived"
     }
@@ -192,10 +210,13 @@ impl<T> FactoryState<T> for PremiumState {
     async fn apply(&self, attributes: &mut HashMap<String, Value>) -> OrmResult<()> {
         attributes.insert("account_type".to_string(), json!("premium"));
         attributes.insert("is_premium".to_string(), json!(true));
-        attributes.insert("premium_expires_at".to_string(), json!(fake_future_datetime().to_rfc3339()));
+        attributes.insert(
+            "premium_expires_at".to_string(),
+            json!(fake_future_datetime().to_rfc3339()),
+        );
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Premium"
     }
@@ -213,7 +234,7 @@ impl<T> FactoryState<T> for FreeState {
         attributes.insert("premium_expires_at".to_string(), Value::Null);
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Free"
     }
@@ -228,11 +249,14 @@ impl<T> FactoryState<T> for CompletedState {
     async fn apply(&self, attributes: &mut HashMap<String, Value>) -> OrmResult<()> {
         attributes.insert("status".to_string(), json!("completed"));
         attributes.insert("is_completed".to_string(), json!(true));
-        attributes.insert("completed_at".to_string(), json!(fake_datetime().to_rfc3339()));
+        attributes.insert(
+            "completed_at".to_string(),
+            json!(fake_datetime().to_rfc3339()),
+        );
         attributes.insert("progress".to_string(), json!(100));
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "Completed"
     }
@@ -247,11 +271,14 @@ impl<T> FactoryState<T> for InProgressState {
     async fn apply(&self, attributes: &mut HashMap<String, Value>) -> OrmResult<()> {
         attributes.insert("status".to_string(), json!("in_progress"));
         attributes.insert("is_completed".to_string(), json!(false));
-        attributes.insert("started_at".to_string(), json!(fake_datetime().to_rfc3339()));
+        attributes.insert(
+            "started_at".to_string(),
+            json!(fake_datetime().to_rfc3339()),
+        );
         attributes.insert("progress".to_string(), json!(random_range(1, 99)));
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         "InProgress"
     }
@@ -275,24 +302,24 @@ impl CustomState {
     pub fn name(&self) -> &str {
         &self.name
     }
-    
+
     pub fn with(mut self, key: impl Into<String>, value: Value) -> Self {
         self.modifications.insert(key.into(), value);
         self
     }
-    
+
     pub fn with_status(self, status: impl Into<String>) -> Self {
         self.with("status", json!(status.into()))
     }
-    
+
     pub fn with_bool_flag(self, flag: impl Into<String>, value: bool) -> Self {
         self.with(flag.into(), json!(value))
     }
-    
+
     pub fn with_timestamp(self, field: impl Into<String>, datetime: DateTime<Utc>) -> Self {
         self.with(field.into(), json!(datetime.to_rfc3339()))
     }
-    
+
     pub fn with_null(self, field: impl Into<String>) -> Self {
         self.with(field.into(), Value::Null)
     }
@@ -306,7 +333,7 @@ impl<T> FactoryState<T> for CustomState {
         }
         Ok(())
     }
-    
+
     fn state_name(&self) -> &'static str {
         // This is a bit of a hack since we need a static string
         // In practice, custom states should implement their own state struct
@@ -320,7 +347,7 @@ macro_rules! factory_state {
     ($name:ident { $($field:ident: $value:expr),* $(,)? }) => {
         #[derive(Debug, Clone)]
         pub struct $name;
-        
+
         #[async_trait::async_trait]
         impl<T> $crate::factory::FactoryState<T> for $name {
             async fn apply(&self, attributes: &mut std::collections::HashMap<String, serde_json::Value>) -> $crate::error::OrmResult<()> {
@@ -329,7 +356,7 @@ macro_rules! factory_state {
                 )*
                 Ok(())
             }
-            
+
             fn state_name(&self) -> &'static str {
                 stringify!($name)
             }
@@ -346,9 +373,11 @@ mod tests {
     async fn test_active_state() {
         let state = ActiveState;
         let mut attributes = HashMap::new();
-        
-        FactoryState::<()>::apply(&state, &mut attributes).await.unwrap();
-        
+
+        FactoryState::<()>::apply(&state, &mut attributes)
+            .await
+            .unwrap();
+
         assert_eq!(attributes.get("status").unwrap(), &json!("active"));
         assert_eq!(attributes.get("is_active").unwrap(), &json!(true));
         assert_eq!(FactoryState::<()>::state_name(&state), "Active");
@@ -358,9 +387,11 @@ mod tests {
     async fn test_admin_state() {
         let state = AdminState;
         let mut attributes = HashMap::new();
-        
-        FactoryState::<()>::apply(&state, &mut attributes).await.unwrap();
-        
+
+        FactoryState::<()>::apply(&state, &mut attributes)
+            .await
+            .unwrap();
+
         assert_eq!(attributes.get("role").unwrap(), &json!("admin"));
         assert_eq!(attributes.get("is_admin").unwrap(), &json!(true));
         assert!(attributes.get("permissions").unwrap().is_array());
@@ -370,9 +401,11 @@ mod tests {
     async fn test_verified_state() {
         let state = VerifiedState;
         let mut attributes = HashMap::new();
-        
-        FactoryState::<()>::apply(&state, &mut attributes).await.unwrap();
-        
+
+        FactoryState::<()>::apply(&state, &mut attributes)
+            .await
+            .unwrap();
+
         assert_eq!(attributes.get("status").unwrap(), &json!("verified"));
         assert_eq!(attributes.get("is_verified").unwrap(), &json!(true));
         assert!(attributes.get("verified_at").unwrap().is_string());
@@ -382,9 +415,11 @@ mod tests {
     async fn test_draft_state() {
         let state = DraftState;
         let mut attributes = HashMap::new();
-        
-        FactoryState::<()>::apply(&state, &mut attributes).await.unwrap();
-        
+
+        FactoryState::<()>::apply(&state, &mut attributes)
+            .await
+            .unwrap();
+
         assert_eq!(attributes.get("status").unwrap(), &json!("draft"));
         assert_eq!(attributes.get("is_published").unwrap(), &json!(false));
         assert!(attributes.get("published_at").unwrap().is_null());
@@ -397,28 +432,35 @@ mod tests {
             .with_status("custom_status")
             .with_bool_flag("custom_flag", true)
             .with_null("null_field");
-            
+
         let mut attributes = HashMap::new();
-        
-        FactoryState::<()>::apply(&state, &mut attributes).await.unwrap();
-        
-        assert_eq!(attributes.get("custom_field").unwrap(), &json!("custom_value"));
+
+        FactoryState::<()>::apply(&state, &mut attributes)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            attributes.get("custom_field").unwrap(),
+            &json!("custom_value")
+        );
         assert_eq!(attributes.get("status").unwrap(), &json!("custom_status"));
         assert_eq!(attributes.get("custom_flag").unwrap(), &json!(true));
         assert!(attributes.get("null_field").unwrap().is_null());
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_in_progress_state() {
         let state = InProgressState;
         let mut attributes = HashMap::new();
-        
-        FactoryState::<()>::apply(&state, &mut attributes).await.unwrap();
-        
+
+        FactoryState::<()>::apply(&state, &mut attributes)
+            .await
+            .unwrap();
+
         assert_eq!(attributes.get("status").unwrap(), &json!("in_progress"));
         assert_eq!(attributes.get("is_completed").unwrap(), &json!(false));
         assert!(attributes.get("started_at").unwrap().is_string());
-        
+
         let progress = attributes.get("progress").unwrap().as_i64().unwrap();
         assert!(progress >= 1 && progress <= 99);
     }
@@ -434,9 +476,11 @@ mod tests {
     async fn test_macro_generated_state() {
         let state = TestMacroState;
         let mut attributes = HashMap::new();
-        
-        FactoryState::<()>::apply(&state, &mut attributes).await.unwrap();
-        
+
+        FactoryState::<()>::apply(&state, &mut attributes)
+            .await
+            .unwrap();
+
         assert_eq!(attributes.get("test_field").unwrap(), &json!("test_value"));
         assert_eq!(attributes.get("test_bool").unwrap(), &json!(true));
         assert_eq!(attributes.get("test_number").unwrap(), &json!(42));

@@ -1,5 +1,5 @@
-pub mod traits;
 pub mod lifecycle;
+pub mod traits;
 
-pub use traits::*;
 pub use lifecycle::*;
+pub use traits::*;

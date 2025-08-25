@@ -1,16 +1,16 @@
 //! Focused SQL Injection Prevention Tests
-//! 
+//!
 //! This module contains tests to verify that the ORM prevents
-//! SQL injection attacks through proper identifier escaping and 
+//! SQL injection attacks through proper identifier escaping and
 //! parameter sanitization.
 
 #[cfg(test)]
 mod tests {
-    use crate::security::{
-        escape_identifier, validate_identifier, validate_parameter, 
-        validate_query_pattern, IdentifierWhitelist
-    };
     use crate::query::QueryBuilder;
+    use crate::security::{
+        escape_identifier, validate_identifier, validate_parameter, validate_query_pattern,
+        IdentifierWhitelist,
+    };
     use serde_json::json;
 
     // ===== IDENTIFIER ESCAPING TESTS =====
@@ -29,7 +29,10 @@ mod tests {
         // Identifiers with quotes should be escaped by doubling
         assert_eq!(escape_identifier("table\"name"), "\"table\"\"name\"");
         assert_eq!(escape_identifier("user's_table"), "\"user's_table\"");
-        assert_eq!(escape_identifier("col\"with\"quotes"), "\"col\"\"with\"\"quotes\"");
+        assert_eq!(
+            escape_identifier("col\"with\"quotes"),
+            "\"col\"\"with\"\"quotes\""
+        );
     }
 
     #[test]
@@ -38,9 +41,15 @@ mod tests {
         let malicious_inputs = vec![
             ("'; DROP TABLE users; --", "\"'; DROP TABLE users; --\""),
             ("table; DELETE FROM admin", "\"table; DELETE FROM admin\""),
-            ("users UNION SELECT * FROM secrets", "\"users UNION SELECT * FROM secrets\""),
+            (
+                "users UNION SELECT * FROM secrets",
+                "\"users UNION SELECT * FROM secrets\"",
+            ),
             ("table WHERE 1=1 OR 1=1", "\"table WHERE 1=1 OR 1=1\""),
-            ("'; INSERT INTO log VALUES ('hacked'); --", "\"'; INSERT INTO log VALUES ('hacked'); --\"")
+            (
+                "'; INSERT INTO log VALUES ('hacked'); --",
+                "\"'; INSERT INTO log VALUES ('hacked'); --\"",
+            ),
         ];
 
         for (input, expected) in malicious_inputs {
@@ -65,15 +74,15 @@ mod tests {
     fn test_identifier_validation_invalid_cases() {
         // Empty identifier
         assert!(validate_identifier("").is_err());
-        
+
         // Starts with number
         assert!(validate_identifier("1table").is_err());
-        
+
         // Contains invalid characters
         assert!(validate_identifier("table-name").is_err());
         assert!(validate_identifier("table name").is_err());
         assert!(validate_identifier("table@name").is_err());
-        
+
         // SQL keywords
         assert!(validate_identifier("SELECT").is_err());
         assert!(validate_identifier("select").is_err());
@@ -98,7 +107,7 @@ mod tests {
         // Should accept reasonably sized strings
         let medium_string = "a".repeat(1000);
         assert!(validate_parameter(&medium_string).is_ok());
-        
+
         // Should reject extremely large strings
         let huge_string = "a".repeat(100000);
         assert!(validate_parameter(&huge_string).is_err());
@@ -131,11 +140,11 @@ mod tests {
             .from("users")
             .where_eq("status", json!("active"))
             .to_sql_with_params();
-        
+
         // Identifiers should be escaped
         assert!(sql.contains("FROM \"users\""));
         assert!(sql.contains("WHERE \"status\" = $1"));
-        
+
         // Value should be parameterized
         assert_eq!(params.len(), 1);
         assert_eq!(params[0], "active");
@@ -148,11 +157,11 @@ mod tests {
             .set("name", json!("John Doe"))
             .set("email", json!("john@example.com"))
             .to_sql_with_params();
-        
+
         // Table and column names should be escaped
         assert!(sql.contains("INSERT INTO \"users\""));
         assert!(sql.contains("(\"name\", \"email\")"));
-        
+
         // Values should be parameterized
         assert!(sql.contains("VALUES ($1, $2)"));
         assert_eq!(params.len(), 2);
@@ -167,12 +176,12 @@ mod tests {
             .set("name", json!("Jane Doe"))
             .where_eq("id", json!(1))
             .to_sql_with_params();
-        
+
         // Table and column names should be escaped
         assert!(sql.contains("UPDATE \"users\""));
         assert!(sql.contains("SET \"name\" = $1"));
         assert!(sql.contains("WHERE \"id\" = $2"));
-        
+
         // Values should be parameterized
         assert_eq!(params.len(), 2);
         assert_eq!(params[0], "Jane Doe");
@@ -183,18 +192,21 @@ mod tests {
     fn test_delete_query_safety() {
         let (sql, params) = QueryBuilder::<()>::new()
             .delete_from("users; DROP DATABASE production")
-            .where_eq("name; INSERT INTO backdoor VALUES ('pwned')", json!("target"))
+            .where_eq(
+                "name; INSERT INTO backdoor VALUES ('pwned')",
+                json!("target"),
+            )
             .to_sql_with_params();
-        
+
         // Should properly escape dangerous identifiers (they appear within quotes, so they're safe)
         // The dangerous SQL is neutralized by being part of escaped identifier names
         assert!(sql.contains("DELETE FROM \"users; DROP DATABASE production\""));
         assert!(sql.contains("WHERE \"name; INSERT INTO backdoor VALUES ('pwned')\" = $1"));
-        
+
         // Value should be parameterized
         assert_eq!(params.len(), 1);
         assert_eq!(params[0], "target");
-        
+
         // Should not contain unescaped/unquoted dangerous SQL
         assert!(!sql.contains("DROP DATABASE production;"));
         assert!(!sql.contains("INSERT INTO backdoor;"));
@@ -206,7 +218,7 @@ mod tests {
             .select("*")
             .from("users")
             .where_eq("name", json!("test"));
-            
+
         // Should pass security validation with normal queries
         assert!(builder.to_sql_with_params_secure().is_ok());
     }
@@ -216,7 +228,7 @@ mod tests {
     #[test]
     fn test_identifier_whitelist_basic_usage() {
         let whitelist = IdentifierWhitelist::new(vec!["users", "posts", "comments"]);
-        
+
         assert!(whitelist.validate("users").is_ok());
         assert!(whitelist.validate("posts").is_ok());
         assert!(whitelist.validate("admin_table").is_err());
@@ -225,7 +237,7 @@ mod tests {
     #[test]
     fn test_identifier_whitelist_escaping() {
         let whitelist = IdentifierWhitelist::new(vec!["users", "posts", "comments"]);
-        
+
         assert_eq!(whitelist.escape_if_allowed("users").unwrap(), "\"users\"");
         assert!(whitelist.escape_if_allowed("hacker_table").is_err());
     }

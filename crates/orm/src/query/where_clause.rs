@@ -1,12 +1,12 @@
 //! Query Builder WHERE clause operations
 
-use serde_json::Value;
 use super::builder::QueryBuilder;
 use super::types::*;
+use serde_json::Value;
 
 impl<M> QueryBuilder<M> {
     /// Add WHERE condition with equality
-    pub fn where_eq<T>(mut self, column: &str, value: T) -> Self 
+    pub fn where_eq<T>(mut self, column: &str, value: T) -> Self
     where
         T: Into<Value>,
     {
@@ -97,7 +97,12 @@ impl<M> QueryBuilder<M> {
     }
 
     /// Add WHERE condition with custom operator
-    pub fn where_condition<T: Into<Value>>(mut self, column: &str, operator: &str, value: T) -> Self {
+    pub fn where_condition<T: Into<Value>>(
+        mut self,
+        column: &str,
+        operator: &str,
+        value: T,
+    ) -> Self {
         let query_operator = match operator {
             "=" => QueryOperator::Equal,
             "!=" | "<>" => QueryOperator::NotEqual,
@@ -109,7 +114,7 @@ impl<M> QueryBuilder<M> {
             "NOT LIKE" => QueryOperator::NotLike,
             _ => QueryOperator::Equal, // Default fallback
         };
-        
+
         self.where_conditions.push(WhereCondition {
             column: column.to_string(),
             operator: query_operator,
@@ -186,10 +191,15 @@ impl<M> QueryBuilder<M> {
     }
 
     /// Add a subquery in the WHERE clause
-    pub fn where_subquery<T>(mut self, column: &str, operator: QueryOperator, subquery: QueryBuilder<T>) -> Self {
+    pub fn where_subquery<T>(
+        mut self,
+        column: &str,
+        operator: QueryOperator,
+        subquery: QueryBuilder<T>,
+    ) -> Self {
         let subquery_sql = subquery.to_sql();
         let formatted_value = format!("({})", subquery_sql);
-        
+
         self.where_conditions.push(WhereCondition {
             column: column.to_string(),
             operator,
@@ -220,5 +230,4 @@ impl<M> QueryBuilder<M> {
         });
         self
     }
-
 }

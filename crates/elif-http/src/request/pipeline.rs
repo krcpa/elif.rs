@@ -7,10 +7,10 @@
 //! - Provides clean error handling throughout the pipeline
 //! - Supports route-specific middleware execution
 
-use crate::routing::{RouteMatcher, RouteMatch, HttpMethod};
 use crate::middleware::v2::{MiddlewarePipelineV2, NextFuture};
 use crate::request::ElifRequest;
 use crate::response::{ElifResponse, ElifStatusCode};
+use crate::routing::{HttpMethod, RouteMatch, RouteMatcher};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -20,19 +20,19 @@ use thiserror::Error;
 pub enum PipelineError {
     #[error("Route not found: {method} {path}")]
     RouteNotFound { method: HttpMethod, path: String },
-    
+
     #[error("Method not allowed: {method}")]
     MethodNotAllowed { method: String },
-    
+
     #[error("Parameter error: {0}")]
     Parameter(#[from] ParamError),
-    
+
     #[error("Middleware error: {0}")]
     Middleware(String),
-    
+
     #[error("Handler error: {0}")]
     Handler(String),
-    
+
     #[error("Internal pipeline error: {0}")]
     Internal(String),
 }
@@ -42,7 +42,7 @@ pub enum PipelineError {
 pub enum ParamError {
     #[error("Missing parameter: {0}")]
     Missing(String),
-    
+
     #[error("Failed to parse parameter '{param}' with value '{value}': {error}")]
     ParseError {
         param: String,
@@ -85,8 +85,8 @@ impl RequestPipeline {
     }
 
     /// Add global middleware that runs for all requests
-    pub fn add_global_middleware<M>(mut self, middleware: M) -> Self 
-    where 
+    pub fn add_global_middleware<M>(mut self, middleware: M) -> Self
+    where
         M: crate::middleware::v2::Middleware + 'static,
     {
         self.global_middleware = self.global_middleware.add(middleware);
@@ -94,14 +94,18 @@ impl RequestPipeline {
     }
 
     /// Add a named middleware group for route-specific execution
-    pub fn add_middleware_group<S: Into<String>>(mut self, name: S, pipeline: MiddlewarePipelineV2) -> Self {
+    pub fn add_middleware_group<S: Into<String>>(
+        mut self,
+        name: S,
+        pipeline: MiddlewarePipelineV2,
+    ) -> Self {
         self.middleware_groups.insert(name.into(), pipeline);
         self
     }
 
     /// Register a handler for a specific route ID
-    pub fn add_handler<S: Into<String>, F>(mut self, route_id: S, handler: F) -> Self 
-    where 
+    pub fn add_handler<S: Into<String>, F>(mut self, route_id: S, handler: F) -> Self
+    where
         F: Fn(ElifRequest) -> NextFuture<'static> + Send + Sync + 'static,
     {
         // We need to get mutable access to the HashMap inside the Arc
@@ -124,13 +128,13 @@ impl RequestPipeline {
     async fn process_internal(&self, request: ElifRequest) -> Result<ElifResponse, PipelineError> {
         // 1. Route resolution
         let route_match = self.resolve_route(&request)?;
-        
+
         // 2. Parameter injection
         let request_with_params = self.inject_params(request, &route_match);
-        
+
         // 3. Build complete middleware pipeline for this route
         let complete_pipeline = self.build_route_pipeline(&route_match)?;
-        
+
         // 4. Execute middleware + handler
         // Use Arc::clone for cheap reference counting instead of cloning the entire HashMap
         let route_id = route_match.route_id.clone();
@@ -153,7 +157,7 @@ impl RequestPipeline {
                 }
             })
         }).await;
-        
+
         Ok(response)
     }
 
@@ -174,7 +178,7 @@ impl RequestPipeline {
                 });
             }
         };
-        
+
         self.matcher
             .resolve(&http_method, request.path())
             .ok_or_else(|| PipelineError::RouteNotFound {
@@ -192,56 +196,57 @@ impl RequestPipeline {
     }
 
     /// Build the complete middleware pipeline for a specific route
-    fn build_route_pipeline(&self, _route_match: &RouteMatch) -> Result<MiddlewarePipelineV2, PipelineError> {
+    fn build_route_pipeline(
+        &self,
+        _route_match: &RouteMatch,
+    ) -> Result<MiddlewarePipelineV2, PipelineError> {
         let pipeline = self.global_middleware.clone();
-        
+
         // Add route-specific middleware groups
         // For now, we'll look for middleware group names in route metadata
         // This can be extended to support route definition with middleware specifications
-        
+
         Ok(pipeline)
     }
-
 
     /// Handle pipeline errors by converting them to appropriate HTTP responses
     fn handle_pipeline_error(&self, error: PipelineError) -> ElifResponse {
         match error {
             PipelineError::RouteNotFound { .. } => {
-                ElifResponse::not_found()
-                    .with_json(&serde_json::json!({
-                        "error": {
-                            "code": "not_found",
-                            "message": "The requested resource was not found"
-                        }
-                    }))
+                ElifResponse::not_found().with_json(&serde_json::json!({
+                    "error": {
+                        "code": "not_found",
+                        "message": "The requested resource was not found"
+                    }
+                }))
             }
-            PipelineError::MethodNotAllowed { method } => {
-                ElifResponse::with_status(ElifStatusCode::METHOD_NOT_ALLOWED)
-                    .with_json(&serde_json::json!({
-                        "error": {
-                            "code": "method_not_allowed",
-                            "message": format!("HTTP method '{}' is not supported", method),
-                            "hint": "Supported methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, TRACE"
-                        }
-                    }))
-            }
+            PipelineError::MethodNotAllowed { method } => ElifResponse::with_status(
+                ElifStatusCode::METHOD_NOT_ALLOWED,
+            )
+            .with_json(&serde_json::json!({
+                "error": {
+                    "code": "method_not_allowed",
+                    "message": format!("HTTP method '{}' is not supported", method),
+                    "hint": "Supported methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, TRACE"
+                }
+            })),
             PipelineError::Parameter(param_error) => {
-                ElifResponse::bad_request()
-                    .with_json(&serde_json::json!({
-                        "error": {
-                            "code": "parameter_error",
-                            "message": param_error.to_string()
-                        }
-                    }))
+                ElifResponse::bad_request().with_json(&serde_json::json!({
+                    "error": {
+                        "code": "parameter_error",
+                        "message": param_error.to_string()
+                    }
+                }))
             }
-            PipelineError::Middleware(msg) | PipelineError::Handler(msg) | PipelineError::Internal(msg) => {
-                ElifResponse::internal_server_error()
-                    .with_json(&serde_json::json!({
-                        "error": {
-                            "code": "internal_error",
-                            "message": msg
-                        }
-                    }))
+            PipelineError::Middleware(msg)
+            | PipelineError::Handler(msg)
+            | PipelineError::Internal(msg) => {
+                ElifResponse::internal_server_error().with_json(&serde_json::json!({
+                    "error": {
+                        "code": "internal_error",
+                        "message": msg
+                    }
+                }))
             }
         }
     }
@@ -318,8 +323,8 @@ impl RequestPipelineBuilder {
     }
 
     /// Add global middleware
-    pub fn global_middleware<M>(mut self, middleware: M) -> Self 
-    where 
+    pub fn global_middleware<M>(mut self, middleware: M) -> Self
+    where
         M: crate::middleware::v2::Middleware + 'static,
     {
         self.global_middleware = self.global_middleware.add(middleware);
@@ -327,14 +332,18 @@ impl RequestPipelineBuilder {
     }
 
     /// Add a middleware group
-    pub fn middleware_group<S: Into<String>>(mut self, name: S, pipeline: MiddlewarePipelineV2) -> Self {
+    pub fn middleware_group<S: Into<String>>(
+        mut self,
+        name: S,
+        pipeline: MiddlewarePipelineV2,
+    ) -> Self {
         self.middleware_groups.insert(name.into(), pipeline);
         self
     }
 
     /// Add a route handler
-    pub fn handler<S: Into<String>, F>(mut self, route_id: S, handler: F) -> Self 
-    where 
+    pub fn handler<S: Into<String>, F>(mut self, route_id: S, handler: F) -> Self
+    where
         F: Fn(ElifRequest) -> NextFuture<'static> + Send + Sync + 'static,
     {
         self.handlers.insert(route_id.into(), Arc::new(handler));
@@ -343,9 +352,9 @@ impl RequestPipelineBuilder {
 
     /// Build the request pipeline
     pub fn build(self) -> Result<RequestPipeline, PipelineError> {
-        let matcher = self.matcher.ok_or_else(|| {
-            PipelineError::Internal("Route matcher is required".to_string())
-        })?;
+        let matcher = self
+            .matcher
+            .ok_or_else(|| PipelineError::Internal("Route matcher is required".to_string()))?;
 
         Ok(RequestPipeline {
             matcher: Arc::new(matcher),
@@ -364,9 +373,9 @@ impl Default for RequestPipelineBuilder {
 
 /// Helper functions for parameter extraction with better error handling
 pub mod parameter_extraction {
-    use super::{ParamError, ElifRequest};
-    use std::str::FromStr;
+    use super::{ElifRequest, ParamError};
     use std::fmt::{Debug, Display};
+    use std::str::FromStr;
 
     /// Extract and parse a path parameter with type conversion
     pub fn extract_path_param<T>(request: &ElifRequest, name: &str) -> Result<T, ParamError>
@@ -374,30 +383,32 @@ pub mod parameter_extraction {
         T: FromStr,
         T::Err: Debug + Display,
     {
-        let param_value = request.path_param(name)
+        let param_value = request
+            .path_param(name)
             .ok_or_else(|| ParamError::Missing(name.to_string()))?;
 
-        param_value.parse()
-            .map_err(|e| ParamError::ParseError {
-                param: name.to_string(),
-                value: param_value.clone(),
-                error: format!("{}", e),
-            })
+        param_value.parse().map_err(|e| ParamError::ParseError {
+            param: name.to_string(),
+            value: param_value.clone(),
+            error: format!("{}", e),
+        })
     }
 
     /// Extract and parse a query parameter with type conversion
-    pub fn extract_query_param<T>(request: &ElifRequest, name: &str) -> Result<Option<T>, ParamError>
+    pub fn extract_query_param<T>(
+        request: &ElifRequest,
+        name: &str,
+    ) -> Result<Option<T>, ParamError>
     where
         T: FromStr,
         T::Err: Debug + Display,
     {
         if let Some(param_value) = request.query_param(name) {
-            let parsed = param_value.parse()
-                .map_err(|e| ParamError::ParseError {
-                    param: name.to_string(),
-                    value: param_value.clone(),
-                    error: format!("{}", e),
-                })?;
+            let parsed = param_value.parse().map_err(|e| ParamError::ParseError {
+                param: name.to_string(),
+                value: param_value.clone(),
+                error: format!("{}", e),
+            })?;
             Ok(Some(parsed))
         } else {
             Ok(None)
@@ -405,22 +416,24 @@ pub mod parameter_extraction {
     }
 
     /// Extract required query parameter with type conversion
-    pub fn extract_required_query_param<T>(request: &ElifRequest, name: &str) -> Result<T, ParamError>
+    pub fn extract_required_query_param<T>(
+        request: &ElifRequest,
+        name: &str,
+    ) -> Result<T, ParamError>
     where
         T: FromStr,
         T::Err: Debug + Display,
     {
-        extract_query_param(request, name)?
-            .ok_or_else(|| ParamError::Missing(name.to_string()))
+        extract_query_param(request, name)?.ok_or_else(|| ParamError::Missing(name.to_string()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::routing::{RouteMatcherBuilder};
-    use crate::middleware::v2::{MiddlewarePipelineV2, LoggingMiddleware};
+    use crate::middleware::v2::{LoggingMiddleware, MiddlewarePipelineV2};
     use crate::response::{ElifResponse, ElifStatusCode};
+    use crate::routing::RouteMatcherBuilder;
 
     #[tokio::test]
     async fn test_basic_pipeline_processing() {
@@ -435,9 +448,7 @@ mod tests {
         let pipeline = RequestPipelineBuilder::new()
             .matcher(matcher)
             .handler("home", |_req| {
-                Box::pin(async move {
-                    ElifResponse::ok().with_text("Welcome home!")
-                })
+                Box::pin(async move { ElifResponse::ok().with_text("Welcome home!") })
             })
             .handler("user_show", |req| {
                 Box::pin(async move {
@@ -486,9 +497,7 @@ mod tests {
             .matcher(matcher)
             .global_middleware(LoggingMiddleware)
             .handler("test", |_req| {
-                Box::pin(async move {
-                    ElifResponse::ok().with_text("Test response")
-                })
+                Box::pin(async move { ElifResponse::ok().with_text("Test response") })
             })
             .build()
             .unwrap();
@@ -545,7 +554,10 @@ mod tests {
         );
 
         let response = pipeline.process(request).await;
-        assert_eq!(response.status_code(), ElifStatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            response.status_code(),
+            ElifStatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[tokio::test]
@@ -566,11 +578,13 @@ mod tests {
         assert_eq!(user_id, 123);
 
         // Test query parameter extraction
-        let page: Option<u32> = parameter_extraction::extract_query_param(&request, "page").unwrap();
+        let page: Option<u32> =
+            parameter_extraction::extract_query_param(&request, "page").unwrap();
         assert_eq!(page, Some(2));
 
         // Test required query parameter extraction
-        let limit: u32 = parameter_extraction::extract_required_query_param(&request, "limit").unwrap();
+        let limit: u32 =
+            parameter_extraction::extract_required_query_param(&request, "limit").unwrap();
         assert_eq!(limit, 10);
 
         // Test missing parameter
@@ -599,12 +613,8 @@ mod tests {
             .matcher(matcher)
             .global_middleware(LoggingMiddleware)
             .middleware_group("auth", middleware_group)
-            .handler("route1", |_req| {
-                Box::pin(async move { ElifResponse::ok() })
-            })
-            .handler("route2", |_req| {
-                Box::pin(async move { ElifResponse::ok() })
-            })
+            .handler("route1", |_req| Box::pin(async move { ElifResponse::ok() }))
+            .handler("route2", |_req| Box::pin(async move { ElifResponse::ok() }))
             .build()
             .unwrap();
 
@@ -625,14 +635,14 @@ mod tests {
 
         // Create pipeline with many handlers to test Arc efficiency
         let mut builder = RequestPipelineBuilder::new().matcher(matcher);
-        
+
         // Add 100 handlers to test performance
         for i in 0..100 {
             builder = builder.handler(format!("handler_{}", i), |_req| {
                 Box::pin(async move { ElifResponse::ok() })
             });
         }
-        
+
         builder = builder.handler("test_route", |_req| {
             Box::pin(async move { ElifResponse::ok().with_text("Test response") })
         });
@@ -654,7 +664,7 @@ mod tests {
         // Verify we have many handlers
         let stats = pipeline.stats();
         assert_eq!(stats.registered_handlers, 101);
-        
+
         // The key optimization: Arc::clone is O(1) regardless of HashMap size
         // Previously this would have been O(n) for each request due to HashMap cloning
     }
@@ -669,9 +679,7 @@ mod tests {
         let pipeline = RequestPipelineBuilder::new()
             .matcher(matcher)
             .handler("test", |_req| {
-                Box::pin(async move {
-                    ElifResponse::ok().with_text("Test response")
-                })
+                Box::pin(async move { ElifResponse::ok().with_text("Test response") })
             })
             .build()
             .unwrap();
@@ -686,13 +694,13 @@ mod tests {
 
         let response = pipeline.process(request).await;
         assert_eq!(response.status_code(), ElifStatusCode::METHOD_NOT_ALLOWED);
-        
+
         // Verify error message structure
         // Note: We can't easily test JSON content without body reading capabilities,
         // but we can verify the status code which is the most important part
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_supported_methods_work() {
         let matcher = RouteMatcherBuilder::new()
             .get("get_test".to_string(), "/test".to_string())
@@ -722,7 +730,7 @@ mod tests {
         // Test all supported methods work correctly
         let methods = [
             (crate::request::ElifMethod::GET, "GET"),
-            (crate::request::ElifMethod::POST, "POST"), 
+            (crate::request::ElifMethod::POST, "POST"),
             (crate::request::ElifMethod::PUT, "PUT"),
             (crate::request::ElifMethod::DELETE, "DELETE"),
         ];

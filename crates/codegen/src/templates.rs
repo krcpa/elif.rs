@@ -1,14 +1,17 @@
 use elif_core::ElifError;
 use std::collections::HashMap;
 
-pub fn render_template(template: &str, context: &HashMap<&str, String>) -> Result<String, ElifError> {
+pub fn render_template(
+    template: &str,
+    context: &HashMap<&str, String>,
+) -> Result<String, ElifError> {
     let mut result = template.to_string();
-    
+
     for (key, value) in context {
         let placeholder = format!("{{{{{}}}}}", key);
         result = result.replace(&placeholder, value);
     }
-    
+
     Ok(result)
 }
 

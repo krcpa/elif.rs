@@ -1,12 +1,12 @@
 //! IOC Phase 5 Integration Demo
-//! 
+//!
 //! Demonstrates the key integration features implemented in Phase 5:
 //! - Enhanced #[inject] macro with IoC container support
-//! - Controller factory with dependency injection 
+//! - Controller factory with dependency injection
 //! - Middleware dependency injection
 
-use std::sync::Arc;
 use crate::container::{IocContainer, ServiceBinder};
+use std::sync::Arc;
 
 /// Demo service for IoC container integration
 #[derive(Default, Clone)]
@@ -20,7 +20,7 @@ impl DemoService {
             name: name.to_string(),
         }
     }
-    
+
     pub fn get_name(&self) -> &str {
         &self.name
     }
@@ -40,14 +40,18 @@ impl DemoController {
         container: &IocContainer,
         _scope: Option<&crate::container::ScopeId>,
     ) -> Result<Self, String> {
-        let service = container.resolve::<DemoService>()
+        let service = container
+            .resolve::<DemoService>()
             .map_err(|e| format!("Failed to inject DemoService: {}", e))?;
-        
+
         Ok(Self { service })
     }
-    
+
     pub fn handle_request(&self) -> String {
-        format!("Controller handled request with service: {}", self.service.get_name())
+        format!(
+            "Controller handled request with service: {}",
+            self.service.get_name()
+        )
     }
 }
 
@@ -61,84 +65,89 @@ impl DemoMiddleware {
         container: &IocContainer,
         _scope: Option<&crate::container::ScopeId>,
     ) -> Result<Self, String> {
-        let service = container.resolve::<DemoService>()
+        let service = container
+            .resolve::<DemoService>()
             .map_err(|e| format!("Failed to inject DemoService: {}", e))?;
-        
+
         Ok(Self { service })
     }
-    
+
     pub fn process_request(&self, request: &str) -> String {
-        format!("Middleware processed '{}' with service: {}", request, self.service.get_name())
+        format!(
+            "Middleware processed '{}' with service: {}",
+            request,
+            self.service.get_name()
+        )
     }
 }
 
 /// Demonstrate the complete Phase 5 integration
 pub async fn demonstrate_phase5_integration() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== IOC Phase 5 Integration Demo ===");
-    
+
     // 1. Setup IoC Container with services
     println!("\n1. Setting up IoC Container...");
     let mut container = IocContainer::new();
-    
+
     // Bind services using new IoC container API
     let demo_service = DemoService::new("Phase5Service");
     container.bind_instance::<DemoService, DemoService>(demo_service);
-    
+
     container.build()?;
     println!("   ✓ Container built successfully");
-    
+
     // 2. Demonstrate Controller Factory with Dependency Injection
     println!("\n2. Testing Controller with Dependency Injection...");
     let controller = DemoController::from_ioc_container(&container, None)?;
     let response = controller.handle_request();
     println!("   ✓ {}", response);
-    
+
     // 3. Demonstrate Middleware Dependency Injection
     println!("\n3. Testing Middleware with Dependency Injection...");
     let middleware = DemoMiddleware::from_ioc_container(&container, None)?;
     let processed = middleware.process_request("GET /api/users");
     println!("   ✓ {}", processed);
-    
+
     // 4. Demonstrate Scoped Services
     println!("\n4. Testing Scoped Services...");
     let scope_id = container.create_scope()?;
-    
+
     let scoped_service1 = container.resolve_scoped::<DemoService>(&scope_id)?;
     let scoped_service2 = container.resolve_scoped::<DemoService>(&scope_id)?;
-    
+
     if Arc::ptr_eq(&scoped_service1, &scoped_service2) {
         println!("   ✓ Scoped services are properly cached within scope");
     }
-    
+
     // Cleanup scope
     container.dispose_scope(&scope_id).await?;
     println!("   ✓ Scope disposed successfully");
-    
+
     // 5. Demonstrate Named Services
     println!("\n5. Testing Named Services...");
     let mut named_container = IocContainer::new();
-    
+
     let primary_service = DemoService::new("Primary");
     let _secondary_service = DemoService::new("Secondary");
-    
+
     named_container.bind_instance::<DemoService, DemoService>(primary_service);
     // Would bind named services like this (simplified for demo):
     // named_container.bind_named::<DemoService, DemoService>("secondary");
-    
+
     named_container.build()?;
-    
+
     let primary = named_container.resolve::<DemoService>()?;
     println!("   ✓ Named service resolved: {}", primary.get_name());
-    
+
     // 6. Demonstrate Container Statistics and Diagnostics
     println!("\n6. Container Statistics...");
     let stats = container.get_statistics();
     println!("   ✓ Total services: {}", stats.total_services);
     println!("   ✓ Cached instances: {}", stats.cached_instances);
-    
+
     println!("\n=== Phase 5 Integration Complete ===");
     println!("✅ All IoC Phase 5 features demonstrated successfully!");
-    
+
     Ok(())
 }
 
@@ -156,28 +165,28 @@ mod tests {
     #[test]
     fn test_controller_factory() {
         let mut container = IocContainer::new();
-        
+
         let service = DemoService::new("TestService");
         container.bind_instance::<DemoService, DemoService>(service);
         container.build().expect("Container build should succeed");
-        
+
         let controller = DemoController::from_ioc_container(&container, None)
             .expect("Controller creation should succeed");
-        
+
         assert_eq!(controller.service.get_name(), "TestService");
     }
 
     #[test]
     fn test_middleware_factory() {
         let mut container = IocContainer::new();
-        
+
         let service = DemoService::new("MiddlewareService");
         container.bind_instance::<DemoService, DemoService>(service);
         container.build().expect("Container build should succeed");
-        
+
         let middleware = DemoMiddleware::from_ioc_container(&container, None)
             .expect("Middleware creation should succeed");
-        
+
         assert_eq!(middleware.service.get_name(), "MiddlewareService");
     }
 }

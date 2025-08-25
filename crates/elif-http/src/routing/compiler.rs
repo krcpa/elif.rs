@@ -3,10 +3,10 @@
 //! This module provides compilation and optimization of route definitions
 //! into efficient runtime structures for high-performance route matching.
 
-use super::{HttpMethod, RouteInfo};
-use super::pattern::{RoutePattern, RoutePatternError};
-use super::matcher::{RouteMatcher, RouteDefinition, RouteMatchError};
 use super::extraction::ParameterExtractor;
+use super::matcher::{RouteDefinition, RouteMatchError, RouteMatcher};
+use super::pattern::{RoutePattern, RoutePatternError};
+use super::{HttpMethod, RouteInfo};
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
@@ -157,7 +157,7 @@ impl RouteCompiler {
 
         // Capture total route count before moving
         let total_route_count = self.routes.len();
-        
+
         // Check route count warning
         if total_route_count > self.config.max_routes_warning {
             warnings.push(format!(
@@ -175,7 +175,7 @@ impl RouteCompiler {
 
         for route in self.routes {
             let pattern = RoutePattern::parse(&route.path)?;
-            
+
             // Collect statistics
             if pattern.is_static() {
                 static_count += 1;
@@ -207,13 +207,13 @@ impl RouteCompiler {
         for (route, pattern) in parsed_routes {
             // Extract data we need to move/clone before consuming route
             let route_id = route.id;
-            let route_method = route.method; 
+            let route_method = route.method;
             let route_path = route.path;
             let route_name = route.name;
             let route_group = route.metadata.get("group").cloned();
             let is_pattern_static = pattern.is_static();
             let pattern_param_names = pattern.param_names.clone();
-            
+
             // Create route definition
             let route_def = RouteDefinition {
                 id: route_id.clone(),
@@ -233,7 +233,7 @@ impl RouteCompiler {
                     // Create route info for registry
                     let route_info = RouteInfo {
                         name: route_name,
-                        path: route_path,  
+                        path: route_path,
                         method: route_method,
                         params: pattern_param_names,
                         group: route_group,
@@ -245,7 +245,10 @@ impl RouteCompiler {
                         return Err(CompilationError::RouteConflict(source, target));
                     } else {
                         conflicts_detected += 1;
-                        warnings.push(format!("Route conflict detected: {} conflicts with {}", source, target));
+                        warnings.push(format!(
+                            "Route conflict detected: {} conflicts with {}",
+                            source, target
+                        ));
                     }
                 }
                 Err(e) => return Err(CompilationError::MatcherError(e)),
@@ -283,16 +286,18 @@ impl RouteCompiler {
     }
 
     /// Optimize route ordering for better performance
-    fn optimize_routes(mut routes: Vec<(CompilableRoute, RoutePattern)>) -> Vec<(CompilableRoute, RoutePattern)> {
+    fn optimize_routes(
+        mut routes: Vec<(CompilableRoute, RoutePattern)>,
+    ) -> Vec<(CompilableRoute, RoutePattern)> {
         // Sort routes by specificity (more specific routes first)
         // This improves matching performance for common cases
         routes.sort_by(|(_, pattern_a), (_, pattern_b)| {
             // Primary sort: static routes first
             let static_a = pattern_a.is_static();
             let static_b = pattern_b.is_static();
-            
+
             match (static_a, static_b) {
-                (true, false) => std::cmp::Ordering::Less,    // Static before dynamic
+                (true, false) => std::cmp::Ordering::Less, // Static before dynamic
                 (false, true) => std::cmp::Ordering::Greater, // Dynamic after static
                 _ => {
                     // Secondary sort: by priority (lower = more specific)
@@ -303,7 +308,6 @@ impl RouteCompiler {
 
         routes
     }
-
 }
 
 impl Default for RouteCompiler {
@@ -360,42 +364,47 @@ impl RouteCompilerBuilder {
 
     /// Add a GET route
     pub fn get(mut self, id: String, path: String) -> Self {
-        self.routes.push(CompilableRoute::new(id, HttpMethod::GET, path));
+        self.routes
+            .push(CompilableRoute::new(id, HttpMethod::GET, path));
         self
     }
 
     /// Add a POST route
     pub fn post(mut self, id: String, path: String) -> Self {
-        self.routes.push(CompilableRoute::new(id, HttpMethod::POST, path));
+        self.routes
+            .push(CompilableRoute::new(id, HttpMethod::POST, path));
         self
     }
 
     /// Add a PUT route
     pub fn put(mut self, id: String, path: String) -> Self {
-        self.routes.push(CompilableRoute::new(id, HttpMethod::PUT, path));
+        self.routes
+            .push(CompilableRoute::new(id, HttpMethod::PUT, path));
         self
     }
 
     /// Add a DELETE route
     pub fn delete(mut self, id: String, path: String) -> Self {
-        self.routes.push(CompilableRoute::new(id, HttpMethod::DELETE, path));
+        self.routes
+            .push(CompilableRoute::new(id, HttpMethod::DELETE, path));
         self
     }
 
     /// Add a PATCH route
     pub fn patch(mut self, id: String, path: String) -> Self {
-        self.routes.push(CompilableRoute::new(id, HttpMethod::PATCH, path));
+        self.routes
+            .push(CompilableRoute::new(id, HttpMethod::PATCH, path));
         self
     }
 
     /// Build and compile the routes
     pub fn build(self) -> Result<CompilationResult, CompilationError> {
         let mut compiler = RouteCompiler::with_config(self.config);
-        
+
         for route in self.routes {
             compiler.add_route(route)?;
         }
-        
+
         compiler.compile()
     }
 }
@@ -436,20 +445,26 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.stats.optimizations_applied, 1);
-        
+
         // Test that matching works correctly with optimized order
         let matcher = result.matcher;
-        
+
         // Static route should match first
-        let route_match = matcher.resolve(&HttpMethod::GET, "/files/config.json").unwrap();
+        let route_match = matcher
+            .resolve(&HttpMethod::GET, "/files/config.json")
+            .unwrap();
         assert_eq!(route_match.route_id, "specific");
-        
+
         // Parameter route should match next
-        let route_match = matcher.resolve(&HttpMethod::GET, "/files/readme.txt").unwrap();
+        let route_match = matcher
+            .resolve(&HttpMethod::GET, "/files/readme.txt")
+            .unwrap();
         assert_eq!(route_match.route_id, "param");
-        
+
         // Catch-all should match complex paths
-        let route_match = matcher.resolve(&HttpMethod::GET, "/files/docs/api.md").unwrap();
+        let route_match = matcher
+            .resolve(&HttpMethod::GET, "/files/docs/api.md")
+            .unwrap();
         assert_eq!(route_match.route_id, "catch_all");
     }
 
@@ -460,7 +475,7 @@ mod tests {
             .optimize(true)
             // Add routes in reverse priority order to test sorting
             .get("catch_all".to_string(), "/users/*path".to_string())
-            .get("unconstrained".to_string(), "/users/{name}".to_string()) 
+            .get("unconstrained".to_string(), "/users/{name}".to_string())
             .get("alpha_slug".to_string(), "/users/{slug:alpha}".to_string())
             .get("custom_regex".to_string(), "/users/{id:[0-9]+}".to_string())
             .get("int_id".to_string(), "/users/{id:int}".to_string())
@@ -468,38 +483,49 @@ mod tests {
             .get("static_me".to_string(), "/users/me".to_string())
             .build()
             .unwrap();
-        
+
         let matcher = result.matcher;
-        
+
         // Test that most specific routes match first
-        
+
         // Static route (highest priority)
         let route_match = matcher.resolve(&HttpMethod::GET, "/users/me").unwrap();
         assert_eq!(route_match.route_id, "static_me");
-        
+
         // UUID constraint (specific)
-        let route_match = matcher.resolve(&HttpMethod::GET, "/users/550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let route_match = matcher
+            .resolve(
+                &HttpMethod::GET,
+                "/users/550e8400-e29b-41d4-a716-446655440000",
+            )
+            .unwrap();
         assert_eq!(route_match.route_id, "uuid_id");
-        
-        // Integer constraint (specific)  
+
+        // Integer constraint (specific)
         let route_match = matcher.resolve(&HttpMethod::GET, "/users/123").unwrap();
         assert_eq!(route_match.route_id, "int_id");
-        
+
         // Custom regex constraint (medium-high priority)
         let route_match = matcher.resolve(&HttpMethod::GET, "/users/456").unwrap();
         // Note: This should match int_id since it has higher priority than custom regex
         assert_eq!(route_match.route_id, "int_id");
-        
+
         // Alpha constraint (general)
-        let route_match = matcher.resolve(&HttpMethod::GET, "/users/johnsmith").unwrap();
+        let route_match = matcher
+            .resolve(&HttpMethod::GET, "/users/johnsmith")
+            .unwrap();
         assert_eq!(route_match.route_id, "alpha_slug");
-        
+
         // Unconstrained parameter (contains characters that don't match any specific constraint)
-        let route_match = matcher.resolve(&HttpMethod::GET, "/users/user_with_underscores").unwrap();
+        let route_match = matcher
+            .resolve(&HttpMethod::GET, "/users/user_with_underscores")
+            .unwrap();
         assert_eq!(route_match.route_id, "unconstrained");
-        
+
         // Catch-all (lowest priority)
-        let route_match = matcher.resolve(&HttpMethod::GET, "/users/path/to/resource").unwrap();
+        let route_match = matcher
+            .resolve(&HttpMethod::GET, "/users/path/to/resource")
+            .unwrap();
         assert_eq!(route_match.route_id, "catch_all");
     }
 
@@ -512,7 +538,10 @@ mod tests {
             .build();
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), CompilationError::RouteConflict(_, _)));
+        assert!(matches!(
+            result.unwrap_err(),
+            CompilationError::RouteConflict(_, _)
+        ));
     }
 
     #[test]
@@ -533,7 +562,10 @@ mod tests {
     fn test_parameter_extractors() {
         let result = RouteCompilerBuilder::new()
             .get("users_show".to_string(), "/users/{id:int}".to_string())
-            .get("posts_show".to_string(), "/posts/{slug}/comments/{id:uuid}".to_string())
+            .get(
+                "posts_show".to_string(),
+                "/posts/{slug}/comments/{id:uuid}".to_string(),
+            )
             .build()
             .unwrap();
 
@@ -551,9 +583,15 @@ mod tests {
     #[test]
     fn test_route_registry() {
         let result = RouteCompilerBuilder::new()
-            .route(CompilableRoute::new("users_show".to_string(), HttpMethod::GET, "/users/{id}".to_string())
+            .route(
+                CompilableRoute::new(
+                    "users_show".to_string(),
+                    HttpMethod::GET,
+                    "/users/{id}".to_string(),
+                )
                 .with_name("users.show".to_string())
-                .with_metadata("group".to_string(), "users".to_string()))
+                .with_metadata("group".to_string(), "users".to_string()),
+            )
             .build()
             .unwrap();
 
@@ -585,22 +623,32 @@ mod tests {
     #[test]
     fn test_duplicate_route_id() {
         let mut compiler = RouteCompiler::new();
-        
-        let route1 = CompilableRoute::new("duplicate".to_string(), HttpMethod::GET, "/path1".to_string());
-        let route2 = CompilableRoute::new("duplicate".to_string(), HttpMethod::POST, "/path2".to_string());
-        
+
+        let route1 = CompilableRoute::new(
+            "duplicate".to_string(),
+            HttpMethod::GET,
+            "/path1".to_string(),
+        );
+        let route2 = CompilableRoute::new(
+            "duplicate".to_string(),
+            HttpMethod::POST,
+            "/path2".to_string(),
+        );
+
         compiler.add_route(route1).unwrap();
         let result = compiler.add_route(route2);
-        
+
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), CompilationError::DuplicateRouteId(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            CompilationError::DuplicateRouteId(_)
+        ));
     }
 
     #[test]
     fn test_performance_warnings() {
         // Create many routes to trigger performance warning
-        let mut builder = RouteCompilerBuilder::new()
-            .max_routes_warning(5);
+        let mut builder = RouteCompilerBuilder::new().max_routes_warning(5);
 
         for i in 0..10 {
             builder = builder.get(format!("route_{}", i), format!("/route_{}", i));
@@ -608,45 +656,55 @@ mod tests {
 
         let result = builder.build().unwrap();
         assert!(!result.warnings.is_empty());
-        assert!(result.warnings.iter().any(|w| w.contains("Large number of routes")));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.contains("Large number of routes")));
     }
 
     #[test]
     fn test_move_semantics_performance() {
         // Test that compilation uses move semantics efficiently
         let start = std::time::Instant::now();
-        
-        let mut builder = RouteCompilerBuilder::new()
-            .optimize(true);
+
+        let mut builder = RouteCompilerBuilder::new().optimize(true);
 
         // Create routes with complex metadata to test move optimization
         for i in 0..100 {
             let mut route = CompilableRoute::new(
-                format!("route_{}", i), 
-                HttpMethod::GET, 
-                format!("/api/v1/resources/{}/items", i)
+                format!("route_{}", i),
+                HttpMethod::GET,
+                format!("/api/v1/resources/{}/items", i),
             );
-            
+
             // Add metadata to make cloning more expensive
             route = route.with_metadata("group".to_string(), format!("group_{}", i));
-            route = route.with_metadata("description".to_string(), format!("Route for resource {}", i));
+            route = route.with_metadata(
+                "description".to_string(),
+                format!("Route for resource {}", i),
+            );
             route = route.with_metadata("version".to_string(), "v1".to_string());
-            
+
             builder = builder.route(route);
         }
 
         let result = builder.build().unwrap();
         let compilation_time = start.elapsed();
-        
+
         // Verify compilation succeeded
         assert_eq!(result.stats.total_routes, 100);
         assert!(result.stats.optimizations_applied > 0);
-        
+
         // Should compile reasonably fast with move semantics
-        assert!(compilation_time.as_millis() < 100, 
-            "Compilation took too long: {}ms", compilation_time.as_millis());
-        
-        println!("100 complex routes compiled in {}ms using move semantics", 
-                 compilation_time.as_millis());
+        assert!(
+            compilation_time.as_millis() < 100,
+            "Compilation took too long: {}ms",
+            compilation_time.as_millis()
+        );
+
+        println!(
+            "100 complex routes compiled in {}ms using move semantics",
+            compilation_time.as_millis()
+        );
     }
 }

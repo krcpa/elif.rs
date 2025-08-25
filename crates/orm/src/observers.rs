@@ -1,7 +1,7 @@
 use crate::event_error::EventError;
 use crate::events::ModelObserver;
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::any::{TypeId, Any};
 
 pub struct ObserverRegistry<T> {
     observers: Vec<Box<dyn ModelObserver<T>>>,
@@ -127,20 +127,23 @@ impl ObserverManager {
 
     pub fn register_for_model<T: 'static>(&mut self, observer: Box<dyn ModelObserver<T>>) {
         let type_id = TypeId::of::<T>();
-        
+
         if let Some(registry) = self.model_observers.get_mut(&type_id) {
             if let Some(registry) = registry.downcast_mut::<ObserverRegistry<T>>() {
                 registry.register(observer);
                 return;
             }
         }
-        
+
         let mut registry = ObserverRegistry::<T>::new();
         registry.register(observer);
         self.model_observers.insert(type_id, Box::new(registry));
     }
 
-    pub fn register_global<T: 'static>(&mut self, observer: Box<dyn ModelObserver<T> + Send + Sync>) {
+    pub fn register_global<T: 'static>(
+        &mut self,
+        observer: Box<dyn ModelObserver<T> + Send + Sync>,
+    ) {
         self.global_observers.register(observer);
     }
 
@@ -155,13 +158,15 @@ impl ObserverManager {
 
     pub fn get_registry_for<T: 'static>(&self) -> Option<&ObserverRegistry<T>> {
         let type_id = TypeId::of::<T>();
-        self.model_observers.get(&type_id)?
+        self.model_observers
+            .get(&type_id)?
             .downcast_ref::<ObserverRegistry<T>>()
     }
 
     pub fn get_registry_for_mut<T: 'static>(&mut self) -> Option<&mut ObserverRegistry<T>> {
         let type_id = TypeId::of::<T>();
-        self.model_observers.get_mut(&type_id)?
+        self.model_observers
+            .get_mut(&type_id)?
             .downcast_mut::<ObserverRegistry<T>>()
     }
 }
@@ -175,8 +180,8 @@ impl Default for ObserverManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
     use async_trait::async_trait;
+    use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Clone, PartialEq)]
     struct TestUser {
@@ -239,12 +244,14 @@ mod tests {
     #[async_trait]
     impl ModelObserver<TestUser> for TrackingObserver {
         async fn creating(&self, model: &mut TestUser) -> Result<(), EventError> {
-            self.tracker.track(&format!("{}: creating {}", self.name, model.name));
+            self.tracker
+                .track(&format!("{}: creating {}", self.name, model.name));
             Ok(())
         }
 
         async fn created(&self, model: &TestUser) -> Result<(), EventError> {
-            self.tracker.track(&format!("{}: created {}", self.name, model.name));
+            self.tracker
+                .track(&format!("{}: created {}", self.name, model.name));
             Ok(())
         }
     }
@@ -260,7 +267,7 @@ mod tests {
         let mut registry = ObserverRegistry::<TestUser>::new();
         let tracker = EventTracker::new();
         let observer = TrackingObserver::new("observer1", tracker.clone());
-        
+
         registry.register(Box::new(observer));
         assert_eq!(registry.observer_count(), 1);
     }
@@ -269,13 +276,13 @@ mod tests {
     async fn test_observer_registry_multiple_observers() {
         let mut registry = ObserverRegistry::<TestUser>::new();
         let tracker = EventTracker::new();
-        
+
         let observer1 = TrackingObserver::new("observer1", tracker.clone());
         let observer2 = TrackingObserver::new("observer2", tracker.clone());
-        
+
         registry.register(Box::new(observer1));
         registry.register(Box::new(observer2));
-        
+
         assert_eq!(registry.observer_count(), 2);
     }
 
@@ -284,14 +291,14 @@ mod tests {
         let mut registry = ObserverRegistry::<TestUser>::new();
         let tracker = EventTracker::new();
         let observer = TrackingObserver::new("observer1", tracker.clone());
-        
+
         registry.register(Box::new(observer));
-        
+
         let mut user = TestUser::default();
         let result = registry.trigger_creating(&mut user).await;
-        
+
         assert!(result.is_ok());
-        
+
         let events = tracker.get_events();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0], "observer1: creating Test User");
@@ -302,14 +309,14 @@ mod tests {
         let mut registry = ObserverRegistry::<TestUser>::new();
         let tracker = EventTracker::new();
         let observer = TrackingObserver::new("observer1", tracker.clone());
-        
+
         registry.register(Box::new(observer));
-        
+
         let user = TestUser::default();
         let result = registry.trigger_created(&user).await;
-        
+
         assert!(result.is_ok());
-        
+
         let events = tracker.get_events();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0], "observer1: created Test User");
@@ -319,18 +326,18 @@ mod tests {
     async fn test_observer_registry_multiple_observers_execution_order() {
         let mut registry = ObserverRegistry::<TestUser>::new();
         let tracker = EventTracker::new();
-        
+
         let observer1 = TrackingObserver::new("observer1", tracker.clone());
         let observer2 = TrackingObserver::new("observer2", tracker.clone());
-        
+
         registry.register(Box::new(observer1));
         registry.register(Box::new(observer2));
-        
+
         let mut user = TestUser::default();
         let result = registry.trigger_creating(&mut user).await;
-        
+
         assert!(result.is_ok());
-        
+
         let events = tracker.get_events();
         assert_eq!(events.len(), 2);
         assert_eq!(events[0], "observer1: creating Test User");
@@ -340,20 +347,20 @@ mod tests {
     #[tokio::test]
     async fn test_observer_registry_error_handling() {
         struct FailingObserver;
-        
+
         #[async_trait]
         impl ModelObserver<TestUser> for FailingObserver {
             async fn creating(&self, _model: &mut TestUser) -> Result<(), EventError> {
                 Err(EventError::validation("Observer failed"))
             }
         }
-        
+
         let mut registry = ObserverRegistry::<TestUser>::new();
         registry.register(Box::new(FailingObserver));
-        
+
         let mut user = TestUser::default();
         let result = registry.trigger_creating(&mut user).await;
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             EventError::Validation { message, .. } => {
@@ -367,7 +374,7 @@ mod tests {
     async fn test_observer_registry_error_propagation_stops_execution() {
         let mut registry = ObserverRegistry::<TestUser>::new();
         let tracker = EventTracker::new();
-        
+
         // First observer that fails
         struct FailingObserver;
         #[async_trait]
@@ -376,18 +383,18 @@ mod tests {
                 Err(EventError::validation("First observer failed"))
             }
         }
-        
+
         // Second observer that should not be executed
         let observer2 = TrackingObserver::new("observer2", tracker.clone());
-        
+
         registry.register(Box::new(FailingObserver));
         registry.register(Box::new(observer2));
-        
+
         let mut user = TestUser::default();
         let result = registry.trigger_creating(&mut user).await;
-        
+
         assert!(result.is_err());
-        
+
         // Second observer should not have been called
         let events = tracker.get_events();
         assert_eq!(events.len(), 0);
@@ -397,10 +404,10 @@ mod tests {
     async fn test_global_observer_registry() {
         let mut global_registry = GlobalObserverRegistry::new();
         assert_eq!(global_registry.observer_count(), 0);
-        
+
         let tracker = EventTracker::new();
         let observer = TrackingObserver::new("global", tracker.clone());
-        
+
         global_registry.register(Box::new(observer));
         // Simplified implementation returns 0 for now
         assert_eq!(global_registry.observer_count(), 0);
@@ -409,7 +416,7 @@ mod tests {
     #[tokio::test]
     async fn test_observer_manager_creation() {
         let manager = ObserverManager::new();
-        
+
         // Should have no model-specific observers initially
         assert!(!manager.has_observers_for::<TestUser>());
     }
@@ -419,9 +426,9 @@ mod tests {
         let mut manager = ObserverManager::new();
         let tracker = EventTracker::new();
         let observer = TrackingObserver::new("model_observer", tracker.clone());
-        
+
         manager.register_for_model::<TestUser>(Box::new(observer));
-        
+
         assert!(manager.has_observers_for::<TestUser>());
     }
 
@@ -430,9 +437,9 @@ mod tests {
         let mut manager = ObserverManager::new();
         let tracker = EventTracker::new();
         let observer = TrackingObserver::new("global_observer", tracker.clone());
-        
+
         manager.register_global(Box::new(observer));
-        
+
         // Global observers should be accessible (simplified implementation returns 0)
         assert_eq!(manager.global_observer_count(), 0);
     }

@@ -27,12 +27,10 @@ use std::collections::HashMap;
 
 /// Create a JSON response with 200 OK status
 pub fn json<T: Serialize>(data: &T) -> ElifResponse {
-    ElifResponse::ok()
-        .json(data)
-        .unwrap_or_else(|err| {
-            tracing::error!("JSON serialization failed in response helper: {}", err);
-            ElifResponse::internal_server_error()
-        })
+    ElifResponse::ok().json(data).unwrap_or_else(|err| {
+        tracing::error!("JSON serialization failed in response helper: {}", err);
+        ElifResponse::internal_server_error()
+    })
 }
 
 /// Create a JSON response with custom status code
@@ -46,44 +44,39 @@ pub fn json_status<T: Serialize>(data: &T, status: ElifStatusCode) -> ElifRespon
 }
 
 /// Create a JSON response with headers
-pub fn json_with_headers<T: Serialize>(
-    data: &T,
-    headers: &[(&str, &str)],
-) -> ElifResponse {
+pub fn json_with_headers<T: Serialize>(data: &T, headers: &[(&str, &str)]) -> ElifResponse {
     let mut response = ElifResponse::ok()
         .json(data)
         .unwrap_or_else(|_| ElifResponse::internal_server_error());
-    
+
     for (key, value) in headers {
-        response = response.header(key, value)
+        response = response
+            .header(key, value)
             .unwrap_or_else(|_| ElifResponse::internal_server_error());
     }
-    
+
     response
 }
 
 /// Create a temporary redirect response (302)
 pub fn redirect(url: &str) -> ElifResponse {
-    ElifResponse::redirect_temporary(url)
-        .unwrap_or_else(|_| ElifResponse::internal_server_error())
+    ElifResponse::redirect_temporary(url).unwrap_or_else(|_| ElifResponse::internal_server_error())
 }
 
 /// Create a permanent redirect response (301)
 pub fn redirect_permanent(url: &str) -> ElifResponse {
-    ElifResponse::redirect_permanent(url)
-        .unwrap_or_else(|_| ElifResponse::internal_server_error())
+    ElifResponse::redirect_permanent(url).unwrap_or_else(|_| ElifResponse::internal_server_error())
 }
 
 /// Create a plain text response
-/// 
+///
 /// Simple equivalent: `return response($text)`
 pub fn text<S: AsRef<str>>(content: S) -> ElifResponse {
-    ElifResponse::ok()
-        .text(content.as_ref())
+    ElifResponse::ok().text(content.as_ref())
 }
 
 /// Create an HTML response
-/// 
+///
 /// Simple equivalent: `return response($html)->header('Content-Type', 'text/html')`
 pub fn html<S: AsRef<str>>(content: S) -> ElifResponse {
     ElifResponse::ok()
@@ -92,83 +85,71 @@ pub fn html<S: AsRef<str>>(content: S) -> ElifResponse {
 }
 
 /// Create a no content response (204)
-/// 
+///
 /// Simple equivalent: `return response()->noContent()`
 pub fn no_content() -> ElifResponse {
     ElifResponse::no_content()
 }
 
 /// Create a created response (201) with JSON data
-/// 
+///
 /// Simple equivalent: `return response()->json($data, 201)`
 pub fn created<T: Serialize>(data: &T) -> ElifResponse {
     json_status(data, ElifStatusCode::CREATED)
 }
 
 /// Create an accepted response (202) with optional data
-/// 
+///
 /// Simple equivalent: `return response()->json($data, 202)`
 pub fn accepted<T: Serialize>(data: &T) -> ElifResponse {
     json_status(data, ElifStatusCode::ACCEPTED)
 }
 
 /// Create a bad request response (400) with error message
-/// 
+///
 /// Simple equivalent: `return response()->json(['error' => $message], 400)`
 pub fn bad_request<S: AsRef<str>>(message: S) -> ElifResponse {
-    let error = HashMap::from([
-        ("error", message.as_ref()),
-    ]);
+    let error = HashMap::from([("error", message.as_ref())]);
     json_status(&error, ElifStatusCode::BAD_REQUEST)
 }
 
 /// Create an unauthorized response (401) with error message
-/// 
+///
 /// Simple equivalent: `return response()->json(['error' => 'Unauthorized'], 401)`
 pub fn unauthorized<S: AsRef<str>>(message: S) -> ElifResponse {
-    let error = HashMap::from([
-        ("error", message.as_ref()),
-    ]);
+    let error = HashMap::from([("error", message.as_ref())]);
     json_status(&error, ElifStatusCode::UNAUTHORIZED)
 }
 
 /// Create a forbidden response (403) with error message
-/// 
+///
 /// Simple equivalent: `return response()->json(['error' => 'Forbidden'], 403)`
 pub fn forbidden<S: AsRef<str>>(message: S) -> ElifResponse {
-    let error = HashMap::from([
-        ("error", message.as_ref()),
-    ]);
+    let error = HashMap::from([("error", message.as_ref())]);
     json_status(&error, ElifStatusCode::FORBIDDEN)
 }
 
 /// Create a not found response (404) with error message
-/// 
+///
 /// Simple equivalent: `return response()->json(['error' => 'Not Found'], 404)`
 pub fn not_found<S: AsRef<str>>(message: S) -> ElifResponse {
-    let error = HashMap::from([
-        ("error", message.as_ref()),
-    ]);
+    let error = HashMap::from([("error", message.as_ref())]);
     json_status(&error, ElifStatusCode::NOT_FOUND)
 }
 
 /// Create an internal server error response (500) with error message
-/// 
+///
 /// Simple equivalent: `return response()->json(['error' => 'Internal Server Error'], 500)`
 pub fn server_error<S: AsRef<str>>(message: S) -> ElifResponse {
-    let error = HashMap::from([
-        ("error", message.as_ref()),
-    ]);
+    let error = HashMap::from([("error", message.as_ref())]);
     json_status(&error, ElifStatusCode::INTERNAL_SERVER_ERROR)
 }
 
 /// Create a validation error response (422) with field errors
-/// 
+///
 /// Simple equivalent: `return response()->json(['errors' => $errors], 422)`
 pub fn validation_error<T: Serialize>(errors: &T) -> ElifResponse {
-    let response_body = HashMap::from([
-        ("errors", errors),
-    ]);
+    let response_body = HashMap::from([("errors", errors)]);
     json_status(&response_body, ElifStatusCode::UNPROCESSABLE_ENTITY)
 }
 
@@ -228,7 +209,10 @@ mod tests {
         assert_eq!(bad_req.status_code(), ElifStatusCode::BAD_REQUEST);
 
         let unauthorized_resp = unauthorized("Please login");
-        assert_eq!(unauthorized_resp.status_code(), ElifStatusCode::UNAUTHORIZED);
+        assert_eq!(
+            unauthorized_resp.status_code(),
+            ElifStatusCode::UNAUTHORIZED
+        );
 
         let forbidden_resp = forbidden("Access denied");
         assert_eq!(forbidden_resp.status_code(), ElifStatusCode::FORBIDDEN);
@@ -237,7 +221,10 @@ mod tests {
         assert_eq!(not_found_resp.status_code(), ElifStatusCode::NOT_FOUND);
 
         let server_err = server_error("Database connection failed");
-        assert_eq!(server_err.status_code(), ElifStatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            server_err.status_code(),
+            ElifStatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]
@@ -246,7 +233,7 @@ mod tests {
             "name": ["The name field is required"],
             "email": ["The email must be a valid email address"]
         });
-        
+
         let response = validation_error(&errors);
         assert_eq!(response.status_code(), ElifStatusCode::UNPROCESSABLE_ENTITY);
     }

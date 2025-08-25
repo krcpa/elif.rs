@@ -119,12 +119,10 @@ impl From<tungstenite::Message> for WebSocketMessage {
             tungstenite::Message::Binary(data) => Self::Binary(data),
             tungstenite::Message::Ping(data) => Self::Ping(data),
             tungstenite::Message::Pong(data) => Self::Pong(data),
-            tungstenite::Message::Close(frame) => {
-                Self::Close(frame.map(|f| CloseFrame {
-                    code: f.code.into(),
-                    reason: f.reason.into(),
-                }))
-            }
+            tungstenite::Message::Close(frame) => Self::Close(frame.map(|f| CloseFrame {
+                code: f.code.into(),
+                reason: f.reason.into(),
+            })),
             tungstenite::Message::Frame(_) => {
                 // Raw frames are internal to tungstenite and should never reach application code
                 unreachable!("Raw frames should not be exposed by tungstenite's high-level API")
@@ -156,25 +154,25 @@ impl From<WebSocketMessage> for tungstenite::Message {
 pub enum WebSocketError {
     #[error("Connection error: {0}")]
     Connection(String),
-    
+
     #[error("Protocol error: {0}")]
     Protocol(String),
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(String),
-    
+
     #[error("Connection closed")]
     ConnectionClosed,
-    
+
     #[error("Invalid message type")]
     InvalidMessageType,
-    
+
     #[error("Send queue full")]
     SendQueueFull,
-    
+
     #[error("Connection not found: {0}")]
     ConnectionNotFound(ConnectionId),
 }
@@ -239,7 +237,7 @@ impl Default for WebSocketConfig {
             max_message_size: Some(64 * 1024 * 1024), // 64MB
             max_frame_size: Some(16 * 1024 * 1024),   // 16MB
             auto_pong: true,
-            ping_interval: Some(30), // 30 seconds
+            ping_interval: Some(30),   // 30 seconds
             connect_timeout: Some(10), // 10 seconds
         }
     }

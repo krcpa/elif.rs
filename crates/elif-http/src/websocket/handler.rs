@@ -34,21 +34,19 @@ impl WebSocketUpgrade {
 
     /// Upgrade an HTTP connection to WebSocket
     /// Simplified for foundation - full implementation in later iterations
-    pub fn upgrade<H, F>(
+    pub async fn upgrade<H, F>(
         self,
         ws: AxumWebSocketUpgrade,
         _handler: H,
-    ) -> impl std::future::Future<Output = axum::response::Response>
+    ) -> axum::response::Response
     where
         H: FnOnce(ConnectionId, Arc<WebSocketConnection>) -> F + Send + 'static,
         F: std::future::Future<Output = ()> + Send + 'static,
     {
-        async move {
-            ws.on_upgrade(|_socket| async move {
-                tracing::info!("WebSocket connection upgraded (foundation mode)");
-                // Full implementation will be added in later iterations
-            })
-        }
+        ws.on_upgrade(|_socket| async move {
+            tracing::info!("WebSocket connection upgraded (foundation mode)");
+            // Full implementation will be added in later iterations
+        })
     }
 }
 
@@ -101,8 +99,8 @@ where
 #[macro_export]
 macro_rules! websocket_handler {
     (|$id:ident: ConnectionId, $conn:ident: Arc<WebSocketConnection>| $body:expr) => {
-        SimpleWebSocketHandler::new(|$id: ConnectionId, $conn: Arc<WebSocketConnection>| async move {
-            $body
-        })
+        SimpleWebSocketHandler::new(
+            |$id: ConnectionId, $conn: Arc<WebSocketConnection>| async move { $body },
+        )
     };
 }

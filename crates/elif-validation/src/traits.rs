@@ -10,10 +10,10 @@ use std::collections::HashMap;
 pub trait ValidationRule: Send + Sync {
     /// Validate a single value
     async fn validate(&self, value: &Value, field: &str) -> ValidationResult<()>;
-    
+
     /// Get the validation rule name/type
     fn rule_name(&self) -> &'static str;
-    
+
     /// Get validation rule parameters/configuration as JSON
     fn parameters(&self) -> Option<Value> {
         None
@@ -28,7 +28,7 @@ pub trait ValidateField: Send + Sync {
 }
 
 /// Trait for validating entire requests/objects
-#[async_trait]  
+#[async_trait]
 pub trait ValidateRequest: Send + Sync {
     /// Validate the entire request data
     async fn validate_request(&self, data: &HashMap<String, Value>) -> ValidationResult<()>;
@@ -40,19 +40,19 @@ pub trait Validate: ValidateField + ValidateRequest + Send + Sync {
     /// Validate both individual fields and the entire request
     async fn validate(&self, data: &HashMap<String, Value>) -> ValidationResult<()> {
         let mut errors = ValidationErrors::new();
-        
+
         // First validate individual fields
         for (field, value) in data {
             if let Err(field_errors) = self.validate_field(field, value).await {
                 errors.merge(field_errors);
             }
         }
-        
+
         // Then validate the entire request for cross-field rules
         if let Err(request_errors) = self.validate_request(data).await {
             errors.merge(request_errors);
         }
-        
+
         if errors.is_empty() {
             Ok(())
         } else {
@@ -111,8 +111,8 @@ impl ToValidationValue for Value {
     }
 }
 
-impl<T> ToValidationValue for Option<T> 
-where 
+impl<T> ToValidationValue for Option<T>
+where
     T: ToValidationValue,
 {
     fn to_validation_value(&self) -> Value {
@@ -124,13 +124,11 @@ where
 }
 
 impl<T> ToValidationValue for Vec<T>
-where 
+where
     T: ToValidationValue,
 {
     fn to_validation_value(&self) -> Value {
-        let values: Vec<Value> = self.iter()
-            .map(|item| item.to_validation_value())
-            .collect();
+        let values: Vec<Value> = self.iter().map(|item| item.to_validation_value()).collect();
         Value::Array(values)
     }
 }
@@ -140,7 +138,7 @@ pub trait CreateValidationError {
     fn validation_error(field: &str, message: &str) -> ValidationError {
         ValidationError::new(field, message)
     }
-    
+
     fn validation_error_with_code(field: &str, message: &str, code: &str) -> ValidationError {
         ValidationError::with_code(field, message, code)
     }
@@ -159,9 +157,10 @@ mod tests {
     impl ValidateField for TestValidator {
         async fn validate_field(&self, field: &str, value: &Value) -> ValidationResult<()> {
             if field == "email" && value.as_str().map(|s| !s.contains('@')).unwrap_or(true) {
-                return Err(ValidationErrors::from_error(
-                    ValidationError::new(field, "Invalid email format")
-                ));
+                return Err(ValidationErrors::from_error(ValidationError::new(
+                    field,
+                    "Invalid email format",
+                )));
             }
             Ok(())
         }
@@ -171,9 +170,10 @@ mod tests {
     impl ValidateRequest for TestValidator {
         async fn validate_request(&self, data: &HashMap<String, Value>) -> ValidationResult<()> {
             if data.get("password").is_some() && data.get("password_confirmation").is_none() {
-                return Err(ValidationErrors::from_error(
-                    ValidationError::new("password_confirmation", "Password confirmation required")
-                ));
+                return Err(ValidationErrors::from_error(ValidationError::new(
+                    "password_confirmation",
+                    "Password confirmation required",
+                )));
             }
             Ok(())
         }
@@ -183,10 +183,10 @@ mod tests {
     async fn test_field_validation() {
         let validator = TestValidator;
         let value = Value::String("invalid-email".to_string());
-        
+
         let result = validator.validate_field("email", &value).await;
         assert!(result.is_err());
-        
+
         let errors = result.unwrap_err();
         assert!(errors.has_field_errors("email"));
     }
@@ -196,10 +196,10 @@ mod tests {
         let validator = TestValidator;
         let mut data = HashMap::new();
         data.insert("password".to_string(), Value::String("secret".to_string()));
-        
+
         let result = validator.validate_request(&data).await;
         assert!(result.is_err());
-        
+
         let errors = result.unwrap_err();
         assert!(errors.has_field_errors("password_confirmation"));
     }
@@ -208,12 +208,15 @@ mod tests {
     async fn test_combined_validation() {
         let validator = TestValidator;
         let mut data = HashMap::new();
-        data.insert("email".to_string(), Value::String("invalid-email".to_string()));
+        data.insert(
+            "email".to_string(),
+            Value::String("invalid-email".to_string()),
+        );
         data.insert("password".to_string(), Value::String("secret".to_string()));
-        
+
         let result = validator.validate(&data).await;
         assert!(result.is_err());
-        
+
         let errors = result.unwrap_err();
         assert!(errors.has_field_errors("email"));
         assert!(errors.has_field_errors("password_confirmation"));
@@ -222,13 +225,22 @@ mod tests {
 
     #[test]
     fn test_to_validation_value() {
-        assert_eq!("hello".to_validation_value(), Value::String("hello".to_string()));
-        assert_eq!(42i32.to_validation_value(), Value::Number(serde_json::Number::from(42)));
+        assert_eq!(
+            "hello".to_validation_value(),
+            Value::String("hello".to_string())
+        );
+        assert_eq!(
+            42i32.to_validation_value(),
+            Value::Number(serde_json::Number::from(42))
+        );
         assert_eq!(true.to_validation_value(), Value::Bool(true));
-        
+
         let opt_str: Option<String> = Some("test".to_string());
-        assert_eq!(opt_str.to_validation_value(), Value::String("test".to_string()));
-        
+        assert_eq!(
+            opt_str.to_validation_value(),
+            Value::String("test".to_string())
+        );
+
         let opt_none: Option<String> = None;
         assert_eq!(opt_none.to_validation_value(), Value::Null);
     }

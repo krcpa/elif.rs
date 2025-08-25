@@ -15,7 +15,7 @@ fn test_token_macro_compilation() {
 fn test_macro_accepts_token_syntax() {
     // This test primarily verifies that the macro parsing doesn't panic
     // on token reference syntax (&TokenType)
-    
+
     // Mock a simple struct that would use token injection
     let struct_def = r#"
         struct TestController {
@@ -23,7 +23,7 @@ fn test_macro_accepts_token_syntax() {
             token_service: &EmailToken,
         }
     "#;
-    
+
     // The fact that we can reference this syntax in a test string
     // indicates the basic parsing should work
     assert!(struct_def.contains("&EmailToken"));

@@ -1,18 +1,18 @@
 //! Type-Safe Eager Loading System - Efficient relationship loading with compile-time safety
 
-use std::collections::HashMap;
-use std::marker::PhantomData;
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Postgres};
+use std::collections::HashMap;
+use std::marker::PhantomData;
 
-use crate::error::{ModelError, ModelResult};
-use crate::model::Model;
-use crate::query::QueryBuilder;
+use super::constraints::RelationshipConstraintBuilder;
 use super::containers::*;
 use super::hydration::*;
 use super::inference::*;
 use super::metadata::{RelationshipMetadata, RelationshipType};
-use super::constraints::RelationshipConstraintBuilder;
+use crate::error::{ModelError, ModelResult};
+use crate::model::Model;
+use crate::query::QueryBuilder;
 
 /// Type-safe eager loading specification
 #[derive(Debug)]
@@ -23,19 +23,19 @@ where
 {
     /// Relationship name
     pub relation: String,
-    
+
     /// Relationship type
     pub relationship_type: RelationshipType,
-    
+
     /// Optional constraints for the relationship query
     pub constraints: Option<RelationshipConstraintBuilder>,
-    
+
     /// The hydrator for this relationship
     pub hydrator: RelationshipHydrator<Parent, Related>,
-    
+
     /// Whether to use type-safe containers
     pub use_type_safe: bool,
-    
+
     /// Phantom data for type safety
     _phantom_parent: PhantomData<Parent>,
     _phantom_related: PhantomData<Related>,
@@ -57,13 +57,13 @@ where
             _phantom_related: PhantomData,
         }
     }
-    
+
     /// Add constraints to the eager loading specification
     pub fn with_constraints(mut self, constraints: RelationshipConstraintBuilder) -> Self {
         self.constraints = Some(constraints);
         self
     }
-    
+
     /// Disable type-safe containers (fallback to legacy system)
     pub fn without_type_safety(mut self) -> Self {
         self.use_type_safe = false;
@@ -78,10 +78,10 @@ where
 {
     /// The parent model type
     _parent: PhantomData<Parent>,
-    
+
     /// Inference engine for automatic relationship discovery
     inference_engine: RelationshipInferenceEngine<Parent>,
-    
+
     /// Loaded relationship data organized by relationship name and parent key
     loaded_data: HashMap<String, HashMap<String, TypeSafeRelationshipData>>,
 }
@@ -91,10 +91,10 @@ where
 pub enum TypeSafeRelationshipData {
     /// Single optional related model
     Single(Option<serde_json::Value>),
-    
+
     /// Collection of related models
     Collection(Vec<serde_json::Value>),
-    
+
     /// Polymorphic relationship with type info
     Polymorphic {
         data: Option<serde_json::Value>,
@@ -115,32 +115,28 @@ where
             loaded_data: HashMap::new(),
         }
     }
-    
+
     /// Add a relationship to eagerly load with type safety
-    pub fn with_typed_relationship<Related>(
-        mut self, 
-        relation: &str
-    ) -> ModelResult<Self>
+    pub fn with_typed_relationship<Related>(mut self, relation: &str) -> ModelResult<Self>
     where
         Related: InferableModel + DeserializeOwned + Send + Sync,
     {
         // Infer the relationship type and metadata
         let relationship_type = self.infer_relationship_type::<Related>(relation)?;
-        let metadata = self.inference_engine.infer_relationship::<Related>(relation, relationship_type)?;
-        
+        let metadata = self
+            .inference_engine
+            .infer_relationship::<Related>(relation, relationship_type)?;
+
         // Store the relationship specification
         // For now, we'll just track that we want to load this relationship
         // In a full implementation, we would store the specification and use it during loading
         let _ = metadata; // Suppress unused warning
-        
+
         Ok(self)
     }
-    
+
     /// Add a relationship with explicit metadata
-    pub fn with_relationship_metadata<Related>(
-        self,
-        metadata: RelationshipMetadata,
-    ) -> Self
+    pub fn with_relationship_metadata<Related>(self, metadata: RelationshipMetadata) -> Self
     where
         Related: InferableModel + DeserializeOwned + Send + Sync,
     {
@@ -148,11 +144,11 @@ where
         let _ = metadata; // Suppress unused warning for now
         self
     }
-    
+
     /// Load relationships for a collection of models with type safety
     pub async fn load_for_models_typed<Related>(
-        &mut self, 
-        pool: &Pool<Postgres>, 
+        &mut self,
+        pool: &Pool<Postgres>,
         parents: &mut [Parent],
         relation: &str,
     ) -> ModelResult<()>
@@ -162,35 +158,44 @@ where
         if parents.is_empty() {
             return Ok(());
         }
-        
+
         // Infer relationship metadata
         let relationship_type = self.infer_relationship_type::<Related>(relation)?;
-        let metadata = self.inference_engine.infer_relationship::<Related>(relation, relationship_type)?;
-        
+        let metadata = self
+            .inference_engine
+            .infer_relationship::<Related>(relation, relationship_type)?;
+
         // Load the relationship data using the hydrator
         let hydrator = RelationshipHydrator::<Parent, Related>::new(metadata.clone());
-        
+
         match relationship_type {
             RelationshipType::HasOne => {
-                self.load_has_one_typed(pool, parents, relation, &hydrator).await?;
+                self.load_has_one_typed(pool, parents, relation, &hydrator)
+                    .await?;
             }
             RelationshipType::HasMany => {
-                self.load_has_many_typed(pool, parents, relation, &hydrator).await?;
+                self.load_has_many_typed(pool, parents, relation, &hydrator)
+                    .await?;
             }
             RelationshipType::BelongsTo => {
-                self.load_belongs_to_typed(pool, parents, relation, &hydrator).await?;
+                self.load_belongs_to_typed(pool, parents, relation, &hydrator)
+                    .await?;
             }
             RelationshipType::ManyToMany => {
-                self.load_many_to_many_typed(pool, parents, relation, &hydrator).await?;
+                self.load_many_to_many_typed(pool, parents, relation, &hydrator)
+                    .await?;
             }
-            RelationshipType::MorphOne | RelationshipType::MorphMany | RelationshipType::MorphTo => {
-                self.load_polymorphic_typed(pool, parents, relation, &hydrator, relationship_type).await?;
+            RelationshipType::MorphOne
+            | RelationshipType::MorphMany
+            | RelationshipType::MorphTo => {
+                self.load_polymorphic_typed(pool, parents, relation, &hydrator, relationship_type)
+                    .await?;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Load HasOne relationship with type safety
     async fn load_has_one_typed<Related>(
         &mut self,
@@ -207,21 +212,25 @@ where
             .iter()
             .filter_map(|p| p.primary_key().map(|pk| pk.to_string()))
             .collect();
-            
+
         if parent_keys.is_empty() {
             return Ok(());
         }
-        
+
         // Build query to load related models
-        let query = self.build_related_query::<Related>(&parent_keys, "user_id").await?; // TODO: Use proper foreign key
-        
+        let query = self
+            .build_related_query::<Related>(&parent_keys, "user_id")
+            .await?; // TODO: Use proper foreign key
+
         // Execute query
-        let rows = sqlx::query(&query).fetch_all(pool).await
+        let rows = sqlx::query(&query)
+            .fetch_all(pool)
+            .await
             .map_err(|e| ModelError::Database(e.to_string()))?;
-        
+
         // Group by parent key using the hydrator
         let grouped = hydrator.group_by_parent_key(&rows, "user_id")?; // TODO: Use proper foreign key
-        
+
         // Store as type-safe data
         let mut relationship_data = HashMap::new();
         for (parent_key, related_models) in grouped {
@@ -232,11 +241,12 @@ where
             };
             relationship_data.insert(parent_key, data);
         }
-        
-        self.loaded_data.insert(relation.to_string(), relationship_data);
+
+        self.loaded_data
+            .insert(relation.to_string(), relationship_data);
         Ok(())
     }
-    
+
     /// Load HasMany relationship with type safety
     async fn load_has_many_typed<Related>(
         &mut self,
@@ -253,21 +263,25 @@ where
             .iter()
             .filter_map(|p| p.primary_key().map(|pk| pk.to_string()))
             .collect();
-            
+
         if parent_keys.is_empty() {
             return Ok(());
         }
-        
+
         // Build query to load related models
-        let query = self.build_related_query::<Related>(&parent_keys, "user_id").await?; // TODO: Use proper foreign key
-        
+        let query = self
+            .build_related_query::<Related>(&parent_keys, "user_id")
+            .await?; // TODO: Use proper foreign key
+
         // Execute query
-        let rows = sqlx::query(&query).fetch_all(pool).await
+        let rows = sqlx::query(&query)
+            .fetch_all(pool)
+            .await
             .map_err(|e| ModelError::Database(e.to_string()))?;
-        
+
         // Group by parent key using the hydrator
         let grouped = hydrator.group_by_parent_key(&rows, "user_id")?; // TODO: Use proper foreign key
-        
+
         // Store as type-safe data
         let mut relationship_data = HashMap::new();
         for (parent_key, related_models) in grouped {
@@ -275,24 +289,25 @@ where
                 related_models
                     .into_iter()
                     .map(|model| serde_json::to_value(model))
-                    .collect::<Result<Vec<_>, _>>()?
+                    .collect::<Result<Vec<_>, _>>()?,
             );
             relationship_data.insert(parent_key, data);
         }
-        
+
         // Ensure all parents have an entry (even if empty)
         for parent in parents {
             if let Some(parent_key) = parent.primary_key().map(|pk| pk.to_string()) {
-                relationship_data.entry(parent_key).or_insert_with(|| {
-                    TypeSafeRelationshipData::Collection(Vec::new())
-                });
+                relationship_data
+                    .entry(parent_key)
+                    .or_insert_with(|| TypeSafeRelationshipData::Collection(Vec::new()));
             }
         }
-        
-        self.loaded_data.insert(relation.to_string(), relationship_data);
+
+        self.loaded_data
+            .insert(relation.to_string(), relationship_data);
         Ok(())
     }
-    
+
     /// Load BelongsTo relationship with type safety
     async fn load_belongs_to_typed<Related>(
         &mut self,
@@ -306,15 +321,15 @@ where
     {
         // For BelongsTo, we need to collect foreign key values from parents
         // and load the related models by their primary keys
-        
+
         // This is a simplified implementation
         // In practice, we'd need to extract the foreign key values from the parent models
         let _ = (pool, parents, relation, hydrator); // Suppress unused warnings
-        
+
         // TODO: Implement proper BelongsTo loading with foreign key extraction
         Ok(())
     }
-    
+
     /// Load ManyToMany relationship with type safety
     async fn load_many_to_many_typed<Related>(
         &mut self,
@@ -327,14 +342,14 @@ where
         Related: Model + DeserializeOwned + Send + Sync,
     {
         // For ManyToMany, we need to query through the pivot table
-        
+
         // This is a simplified implementation
         let _ = (pool, parents, relation, hydrator); // Suppress unused warnings
-        
+
         // TODO: Implement proper ManyToMany loading with pivot table queries
         Ok(())
     }
-    
+
     /// Load polymorphic relationships with type safety
     async fn load_polymorphic_typed<Related>(
         &mut self,
@@ -348,14 +363,14 @@ where
         Related: Model + DeserializeOwned + Send + Sync,
     {
         // For polymorphic relationships, we need to handle the morph_type and morph_id columns
-        
+
         // This is a simplified implementation
         let _ = (pool, parents, relation, hydrator, relationship_type); // Suppress unused warnings
-        
+
         // TODO: Implement proper polymorphic relationship loading
         Ok(())
     }
-    
+
     /// Build query for loading related models
     async fn build_related_query<Related>(
         &self,
@@ -366,15 +381,15 @@ where
         Related: Model,
     {
         let mut query = QueryBuilder::<Related>::new();
-        
+
         query = query
             .select("*")
             .from(Related::table_name())
             .where_in(foreign_key, parent_keys.to_vec());
-        
+
         Ok(query.to_sql())
     }
-    
+
     /// Infer relationship type for a given field
     fn infer_relationship_type<Related>(&self, field_name: &str) -> ModelResult<RelationshipType>
     where
@@ -393,24 +408,26 @@ where
             }
         }
     }
-    
+
     /// Get loaded relationship data for a parent
-    pub fn get_loaded_data(&self, relation: &str, parent_key: &str) -> Option<&TypeSafeRelationshipData> {
-        self.loaded_data
-            .get(relation)?
-            .get(parent_key)
+    pub fn get_loaded_data(
+        &self,
+        relation: &str,
+        parent_key: &str,
+    ) -> Option<&TypeSafeRelationshipData> {
+        self.loaded_data.get(relation)?.get(parent_key)
     }
-    
+
     /// Check if a relationship has been loaded
     pub fn is_loaded(&self, relation: &str) -> bool {
         self.loaded_data.contains_key(relation)
     }
-    
+
     /// Get all loaded relationship names
     pub fn loaded_relations(&self) -> Vec<&String> {
         self.loaded_data.keys().collect()
     }
-    
+
     /// Create a typed relationship container from loaded data
     pub fn create_typed_container<Related>(
         &self,
@@ -433,9 +450,9 @@ where
                 Related::table_name().to_string(),
             ),
         );
-        
+
         let mut container = TypeSafeRelationship::new(metadata);
-        
+
         // Try to load data if available
         if let Some(data) = self.get_loaded_data(relation, parent_key) {
             match data {
@@ -449,7 +466,7 @@ where
                         .iter()
                         .map(|json| serde_json::from_value(json.clone()))
                         .collect();
-                    
+
                     if let Ok(collection) = related_collection {
                         // This assumes T is Vec<Related> which might not always be true
                         // In a proper implementation, we'd handle this with proper typing
@@ -459,7 +476,7 @@ where
                 _ => {}
             }
         }
-        
+
         Ok(container)
     }
 }
@@ -480,14 +497,14 @@ pub trait QueryBuilderTypeSafeEagerLoading<M> {
     where
         Related: InferableModel + DeserializeOwned + Send + Sync,
         M: InferableModel + DeserializeOwned + Send + Sync;
-    
+
     /// Add a type-safe relationship with constraints
     fn with_typed_where<Related, F>(self, relation: &str, constraint: F) -> Self
     where
         Related: InferableModel + DeserializeOwned + Send + Sync,
         M: InferableModel + DeserializeOwned + Send + Sync,
         F: FnOnce(RelationshipConstraintBuilder) -> RelationshipConstraintBuilder;
-    
+
     /// Load relationship with specific type conversion
     fn with_typed_conversion<Related, Target>(self, relation: &str) -> Self
     where
@@ -501,39 +518,45 @@ pub trait QueryBuilderTypeSafeEagerLoading<M> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::metadata::*;
-    
+    use super::*;
+
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     struct TestUser {
         id: Option<i64>,
         name: String,
         email: String,
     }
-    
+
     impl Model for TestUser {
         type PrimaryKey = i64;
-        
+
         fn table_name() -> &'static str {
             "users"
         }
-        
+
         fn primary_key(&self) -> Option<Self::PrimaryKey> {
             self.id
         }
-        
+
         fn set_primary_key(&mut self, key: Self::PrimaryKey) {
             self.id = Some(key);
         }
-        
+
         fn to_fields(&self) -> std::collections::HashMap<String, serde_json::Value> {
             let mut fields = std::collections::HashMap::new();
             fields.insert("id".to_string(), serde_json::json!(self.id));
-            fields.insert("name".to_string(), serde_json::Value::String(self.name.clone()));
-            fields.insert("email".to_string(), serde_json::Value::String(self.email.clone()));
+            fields.insert(
+                "name".to_string(),
+                serde_json::Value::String(self.name.clone()),
+            );
+            fields.insert(
+                "email".to_string(),
+                serde_json::Value::String(self.email.clone()),
+            );
             fields
         }
-        
+
         fn from_row(row: &sqlx::postgres::PgRow) -> crate::error::ModelResult<Self> {
             use sqlx::Row;
             Ok(Self {
@@ -543,18 +566,16 @@ mod tests {
             })
         }
     }
-    
+
     impl InferableModel for TestUser {
         fn relationship_hints() -> Vec<RelationshipHint> {
-            vec![
-                RelationshipHint {
-                    field_name: "posts".to_string(),
-                    relationship_type: RelationshipType::HasMany,
-                    related_model: "Post".to_string(),
-                    custom_foreign_key: None,
-                    eager_load: false,
-                },
-            ]
+            vec![RelationshipHint {
+                field_name: "posts".to_string(),
+                relationship_type: RelationshipType::HasMany,
+                related_model: "Post".to_string(),
+                custom_foreign_key: None,
+                eager_load: false,
+            }]
         }
     }
 
@@ -564,30 +585,33 @@ mod tests {
         title: String,
         user_id: Option<i64>,
     }
-    
+
     impl Model for TestPost {
         type PrimaryKey = i64;
-        
+
         fn table_name() -> &'static str {
             "posts"
         }
-        
+
         fn primary_key(&self) -> Option<Self::PrimaryKey> {
             self.id
         }
-        
+
         fn set_primary_key(&mut self, key: Self::PrimaryKey) {
             self.id = Some(key);
         }
-        
+
         fn to_fields(&self) -> std::collections::HashMap<String, serde_json::Value> {
             let mut fields = std::collections::HashMap::new();
             fields.insert("id".to_string(), serde_json::json!(self.id));
-            fields.insert("title".to_string(), serde_json::Value::String(self.title.clone()));
+            fields.insert(
+                "title".to_string(),
+                serde_json::Value::String(self.title.clone()),
+            );
             fields.insert("user_id".to_string(), serde_json::json!(self.user_id));
             fields
         }
-        
+
         fn from_row(row: &sqlx::postgres::PgRow) -> crate::error::ModelResult<Self> {
             use sqlx::Row;
             Ok(Self {
@@ -597,17 +621,17 @@ mod tests {
             })
         }
     }
-    
+
     impl InferableModel for TestPost {}
-    
+
     #[test]
     fn test_type_safe_eager_loader_creation() {
         let loader = TypeSafeEagerLoader::<TestUser>::new();
-        
+
         assert!(loader.loaded_relations().is_empty());
         assert!(!loader.is_loaded("posts"));
     }
-    
+
     #[test]
     fn test_type_safe_eager_load_spec() -> ModelResult<()> {
         let metadata = RelationshipMetadata::new(
@@ -617,46 +641,46 @@ mod tests {
             "TestPost".to_string(),
             ForeignKeyConfig::simple("user_id".to_string(), "posts".to_string()),
         );
-        
+
         let spec = TypeSafeEagerLoadSpec::<TestUser, TestPost>::new("posts".to_string(), metadata);
-        
+
         assert_eq!(spec.relation, "posts");
         assert_eq!(spec.relationship_type, RelationshipType::HasMany);
         assert!(spec.use_type_safe);
-        
+
         Ok(())
     }
-    
+
     #[test]
     fn test_relationship_type_inference() -> ModelResult<()> {
         let loader = TypeSafeEagerLoader::<TestUser>::new();
-        
+
         let rt = loader.infer_relationship_type::<TestPost>("posts")?;
         assert_eq!(rt, RelationshipType::HasMany);
-        
+
         let rt = loader.infer_relationship_type::<TestPost>("post")?;
         assert_eq!(rt, RelationshipType::HasOne);
-        
+
         Ok(())
     }
-    
+
     #[test]
     fn test_type_safe_relationship_data() {
         let data = TypeSafeRelationshipData::Single(Some(serde_json::json!({
             "id": 1,
             "title": "Test Post"
         })));
-        
+
         match data {
             TypeSafeRelationshipData::Single(Some(_)) => assert!(true),
             _ => panic!("Expected single relationship data"),
         }
-        
+
         let data = TypeSafeRelationshipData::Collection(vec![
             serde_json::json!({"id": 1, "title": "Post 1"}),
             serde_json::json!({"id": 2, "title": "Post 2"}),
         ]);
-        
+
         match data {
             TypeSafeRelationshipData::Collection(ref items) => {
                 assert_eq!(items.len(), 2);

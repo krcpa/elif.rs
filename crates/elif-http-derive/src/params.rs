@@ -1,12 +1,12 @@
 //! Parameter and body validation macros
-//! 
+//!
 //! Provides #[param] and #[body] macros for type-safe parameter handling.
 
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, ItemFn, Signature, FnArg, Pat, PatIdent, Type, Ident,
-    parse::Parse, parse::ParseStream, Token
+    parse::Parse, parse::ParseStream, parse_macro_input, FnArg, Ident, ItemFn, Pat, PatIdent,
+    Signature, Token, Type,
 };
 
 /// Parameter specification for type validation
@@ -37,9 +37,9 @@ pub enum ParamType {
 /// Supported body parameter types for injection
 #[derive(Debug, Clone, PartialEq)]
 pub enum BodyParamType {
-    Custom(Box<Type>),  // Custom deserializable type (boxed to reduce enum size)
-    Form,               // HashMap<String, String> from form data
-    Bytes,              // Vec<u8> for raw bytes
+    Custom(Box<Type>), // Custom deserializable type (boxed to reduce enum size)
+    Form,              // HashMap<String, String> from form data
+    Bytes,             // Vec<u8> for raw bytes
 }
 
 impl std::fmt::Display for ParamType {
@@ -61,7 +61,7 @@ impl Parse for ParamSpec {
         input.parse::<Token![:]>()?;
         let type_ident: Ident = input.parse()?;
         let type_name = type_ident.to_string();
-        
+
         let param_type = match type_name.as_str() {
             "string" => ParamType::String,
             "int" => ParamType::Int,
@@ -82,7 +82,7 @@ impl Parse for ParamSpec {
                 ));
             }
         };
-        
+
         Ok(ParamSpec { name, param_type })
     }
 }
@@ -91,7 +91,7 @@ impl Parse for BodySpec {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let name: Ident = input.parse()?;
         input.parse::<Token![:]>()?;
-        
+
         // Check for special types first (form, bytes)
         if input.peek(syn::Ident) {
             let lookahead = input.fork();
@@ -99,22 +99,28 @@ impl Parse for BodySpec {
                 match type_ident.to_string().as_str() {
                     "form" => {
                         input.parse::<Ident>()?; // consume the 'form' ident
-                        return Ok(BodySpec { name, body_type: BodyParamType::Form });
+                        return Ok(BodySpec {
+                            name,
+                            body_type: BodyParamType::Form,
+                        });
                     }
                     "bytes" => {
                         input.parse::<Ident>()?; // consume the 'bytes' ident
-                        return Ok(BodySpec { name, body_type: BodyParamType::Bytes });
+                        return Ok(BodySpec {
+                            name,
+                            body_type: BodyParamType::Bytes,
+                        });
                     }
                     _ => {}
                 }
             }
         }
-        
+
         // Parse as custom type
         let custom_type: Type = input.parse()?;
-        Ok(BodySpec { 
-            name, 
-            body_type: BodyParamType::Custom(Box::new(custom_type)) 
+        Ok(BodySpec {
+            name,
+            body_type: BodyParamType::Custom(Box::new(custom_type)),
         })
     }
 }
@@ -122,7 +128,7 @@ impl Parse for BodySpec {
 /// Validate that parameter specification matches function signature
 pub fn validate_param_consistency(param_spec: &ParamSpec, sig: &Signature) -> Result<(), String> {
     let param_name = param_spec.name.to_string();
-    
+
     // Find the parameter in the function signature
     let mut found_param = None;
     for input in &sig.inputs {
@@ -135,7 +141,7 @@ pub fn validate_param_consistency(param_spec: &ParamSpec, sig: &Signature) -> Re
             }
         }
     }
-    
+
     let param_type = match found_param {
         Some(ty) => ty,
         None => return Err(format!(
@@ -144,12 +150,15 @@ pub fn validate_param_consistency(param_spec: &ParamSpec, sig: &Signature) -> Re
             param_name, param_name, param_name
         )),
     };
-    
+
     // Validate type compatibility
     let type_str = quote! { #param_type }.to_string().replace(" ", "");
     let expected_types = get_compatible_rust_types(&param_spec.param_type);
-    
-    if !expected_types.iter().any(|expected| type_str.contains(expected)) {
+
+    if !expected_types
+        .iter()
+        .any(|expected| type_str.contains(expected))
+    {
         return Err(format!(
             "Parameter '{}' has type '{}' but expected one of: {}. \
             Hint: Change the function parameter to match #[param({}: {})] or change the #[param] declaration to match the function parameter.",
@@ -160,7 +169,7 @@ pub fn validate_param_consistency(param_spec: &ParamSpec, sig: &Signature) -> Re
             get_recommended_param_type(&param_spec.param_type)
         ));
     }
-    
+
     Ok(())
 }
 
@@ -180,7 +189,7 @@ pub fn get_compatible_rust_types(param_type: &ParamType) -> Vec<&'static str> {
 pub fn get_recommended_param_type(param_type: &ParamType) -> &'static str {
     match param_type {
         ParamType::String => "string",
-        ParamType::Int => "int", 
+        ParamType::Int => "int",
         ParamType::UInt => "uint",
         ParamType::Float => "float",
         ParamType::Bool => "bool",
@@ -193,19 +202,20 @@ pub fn get_recommended_param_type(param_type: &ParamType) -> &'static str {
 #[allow(dead_code)]
 pub fn validate_body_compatibility(body_type: &Type, sig: &Signature) -> Result<(), String> {
     let body_type_str = quote! { #body_type }.to_string().replace(" ", "");
-    
+
     // Look for a parameter that could accept the body
     let mut found_body_param = false;
     for input in &sig.inputs {
         if let FnArg::Typed(pat_type) = input {
             let param_type_str = quote! { #pat_type.ty }.to_string().replace(" ", "");
-            
+
             // Check if this parameter could accept the body type
-            if param_type_str.contains("ElifJson") ||
-               param_type_str.contains("Json") ||
-               param_type_str.contains(&body_type_str) {
+            if param_type_str.contains("ElifJson")
+                || param_type_str.contains("Json")
+                || param_type_str.contains(&body_type_str)
+            {
                 found_body_param = true;
-                
+
                 // Validate that it's properly wrapped
                 if param_type_str.contains("ElifJson") {
                     // Check if the inner type matches
@@ -220,21 +230,24 @@ pub fn validate_body_compatibility(body_type: &Type, sig: &Signature) -> Result<
             }
         }
     }
-    
+
     if !found_body_param {
         return Err(format!(
             "No compatible body parameter found for type '{}'. Expected parameter like ElifJson<{}>",
             body_type_str, body_type_str
         ));
     }
-    
+
     Ok(())
 }
 
 /// Validate that body parameter specification matches function signature
-pub fn validate_body_param_consistency(body_spec: &BodySpec, sig: &Signature) -> Result<(), String> {
+pub fn validate_body_param_consistency(
+    body_spec: &BodySpec,
+    sig: &Signature,
+) -> Result<(), String> {
     let param_name = body_spec.name.to_string();
-    
+
     // Find the parameter in the function signature
     let mut found_param = None;
     for input in &sig.inputs {
@@ -247,15 +260,20 @@ pub fn validate_body_param_consistency(body_spec: &BodySpec, sig: &Signature) ->
             }
         }
     }
-    
+
     let param_type = match found_param {
         Some(ty) => ty,
-        None => return Err(format!("Body parameter '{}' not found in function signature", param_name)),
+        None => {
+            return Err(format!(
+                "Body parameter '{}' not found in function signature",
+                param_name
+            ))
+        }
     };
-    
+
     // Validate type compatibility based on body type
     let type_str = quote! { #param_type }.to_string().replace(" ", "");
-    
+
     match &body_spec.body_type {
         BodyParamType::Custom(expected_type) => {
             let expected_type_str = quote! { #expected_type }.to_string().replace(" ", "");
@@ -286,7 +304,7 @@ pub fn validate_body_param_consistency(body_spec: &BodySpec, sig: &Signature) ->
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -294,7 +312,7 @@ pub fn validate_body_param_consistency(body_spec: &BodySpec, sig: &Signature) ->
 /// Validates that the parameter type matches what's expected from the route path
 pub fn param_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(input as ItemFn);
-    
+
     // Parse parameter specification from args
     let param_spec = if !args.is_empty() {
         match syn::parse::<ParamSpec>(args) {
@@ -311,23 +329,23 @@ pub fn param_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     } else {
         None
     };
-    
+
     // Validate that function signature matches param specification
     if let Some(spec) = &param_spec {
         if let Err(msg) = validate_param_consistency(spec, &input_fn.sig) {
             return syn::Error::new_spanned(
                 &input_fn.sig,
-                format!("Parameter type mismatch: {}", msg)
+                format!("Parameter type mismatch: {}", msg),
             )
             .to_compile_error()
             .into();
         }
     }
-    
+
     let expanded = quote! {
         #input_fn
     };
-    
+
     TokenStream::from(expanded)
 }
 
@@ -335,7 +353,7 @@ pub fn param_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 /// Validates that the handler function can accept the specified body type
 pub fn body_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(input as ItemFn);
-    
+
     // Parse body parameter specification from args
     let body_spec = if !args.is_empty() {
         match syn::parse::<BodySpec>(args) {
@@ -357,7 +375,7 @@ pub fn body_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         .to_compile_error()
         .into();
     };
-    
+
     // Validate that function signature matches body specification
     if let Some(spec) = &body_spec {
         if let Err(msg) = validate_body_param_consistency(spec, &input_fn.sig) {
@@ -369,11 +387,11 @@ pub fn body_impl(args: TokenStream, input: TokenStream) -> TokenStream {
             .into();
         }
     }
-    
+
     let expanded = quote! {
         #input_fn
     };
-    
+
     TokenStream::from(expanded)
 }
 
@@ -381,7 +399,7 @@ pub fn body_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 /// Marks methods that should receive an ElifRequest parameter automatically
 pub fn request_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(input as ItemFn);
-    
+
     // Parse optional parameter name from args (for future extensibility)
     let req_param_name = if !args.is_empty() {
         match syn::parse::<Ident>(args) {
@@ -398,7 +416,7 @@ pub fn request_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     } else {
         "req".to_string()
     };
-    
+
     // Check if the function already has a parameter that conflicts with the request name
     for input in &input_fn.sig.inputs {
         if let FnArg::Typed(pat_type) = input {
@@ -421,12 +439,12 @@ pub fn request_impl(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
     }
-    
+
     // The actual signature modification will be handled by the HTTP method macros
     // This macro validates the function and marks it for request parameter injection
     let expanded = quote! {
         #input_fn
     };
-    
+
     TokenStream::from(expanded)
 }

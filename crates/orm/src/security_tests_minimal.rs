@@ -2,9 +2,9 @@
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-    use crate::security::{escape_identifier, validate_identifier, validate_parameter};
     use crate::query::QueryBuilder;
+    use crate::security::{escape_identifier, validate_identifier, validate_parameter};
+    use serde_json::json;
 
     #[test]
     fn test_identifier_escaping_basic() {
@@ -33,20 +33,20 @@ mod tests {
             .select("*")
             .from("users")
             .to_sql_with_params();
-        
+
         // Table name should be escaped
         assert!(sql.contains("FROM \"users\""));
         assert!(sql.contains("SELECT *"));
     }
 
-    #[test] 
+    #[test]
     fn test_sql_generation_prevents_basic_injection() {
         let (sql, params) = QueryBuilder::<()>::new()
             .select("*")
             .from("users")
             .where_eq("name", json!("'; DROP TABLE users; --"))
             .to_sql_with_params();
-        
+
         // Malicious input should be parameterized
         assert!(sql.contains("$1"));
         assert_eq!(params[0], "'; DROP TABLE users; --");

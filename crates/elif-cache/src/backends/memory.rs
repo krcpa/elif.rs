@@ -4,7 +4,7 @@ use crate::{CacheBackend, CacheConfig, CacheResult, CacheStats};
 use async_trait::async_trait;
 use dashmap::DashMap;
 use lru::LruCache;
-use parking_lot::{RwLock, Mutex};
+use parking_lot::{Mutex, RwLock};
 use std::{
     num::NonZeroUsize,
     sync::{
@@ -47,17 +47,17 @@ impl CacheEntry {
             last_accessed: RwLock::new(now),
         }
     }
-    
+
     fn is_expired(&self) -> bool {
-        self.expires_at.map_or(false, |exp| Instant::now() > exp)
+        self.expires_at.is_some_and(|exp| Instant::now() > exp)
     }
-    
+
     fn access(&self) -> Vec<u8> {
         self.access_count.fetch_add(1, Ordering::Relaxed);
         *self.last_accessed.write() = Instant::now();
         self.data.clone()
     }
-    
+
     fn size(&self) -> usize {
         self.data.len() + std::mem::size_of::<Self>()
     }
@@ -77,38 +77,38 @@ impl LruTracker {
             cache: RwLock::new(LruCache::new(capacity)),
         }
     }
-    
+
     /// Access a key, moving it to the front (most recently used)
     /// O(1) time complexity
     fn access(&self, key: &str) {
         let mut cache = self.cache.write();
-        
+
         // If the key is not in the cache and the cache is full, resize it first to avoid eviction
         if cache.peek(key).is_none() && cache.len() == cache.cap().get() {
             let new_capacity = NonZeroUsize::new(cache.cap().get() * 2)
                 .expect("doubled capacity should be non-zero");
             cache.resize(new_capacity);
         }
-        
+
         // Now, this put will not cause an eviction of an existing item
         // If key doesn't exist, it's inserted. If it exists, its position is updated.
         cache.put(key.to_string(), ());
     }
-    
+
     /// Remove a key from the tracker
     /// O(1) time complexity  
     fn remove(&self, key: &str) {
         let mut cache = self.cache.write();
         cache.pop(key);
     }
-    
+
     /// Get the least recently used key
     /// O(1) time complexity
     fn least_recently_used(&self) -> Option<String> {
         let cache = self.cache.read();
         cache.iter().next_back().map(|(key, _)| key.clone())
     }
-    
+
     /// Clear all entries from the tracker
     fn clear(&self) {
         let mut cache = self.cache.write();
@@ -134,12 +134,12 @@ impl MemoryBackend {
             stats: Arc::new(Mutex::new(CacheStats::default())),
         }
     }
-    
+
     /// Get current memory usage in bytes
     fn memory_usage(&self) -> usize {
         self.entries.iter().map(|entry| entry.value().size()).sum()
     }
-    
+
     /// Check if we need to evict entries
     fn should_evict(&self) -> bool {
         if let Some(max_entries) = self.config.get_max_entries() {
@@ -147,20 +147,21 @@ impl MemoryBackend {
                 return true;
             }
         }
-        
+
         if let Some(max_memory) = self.config.get_max_memory() {
             if self.memory_usage() >= *max_memory {
                 return true;
             }
         }
-        
+
         false
     }
-    
+
     /// Evict expired and least recently used entries
     async fn evict(&self) -> CacheResult<()> {
         // First, remove expired entries
-        let expired_keys: Vec<String> = self.entries
+        let expired_keys: Vec<String> = self
+            .entries
             .iter()
             .filter_map(|entry| {
                 if entry.value().is_expired() {
@@ -170,16 +171,18 @@ impl MemoryBackend {
                 }
             })
             .collect();
-        
+
         for key in expired_keys {
             if let Some((_, removed_entry)) = self.entries.remove(&key) {
                 self.lru.remove(&key);
                 let mut stats = self.stats.lock();
                 stats.total_keys = stats.total_keys.saturating_sub(1);
-                stats.memory_usage = stats.memory_usage.saturating_sub(removed_entry.size() as u64);
+                stats.memory_usage = stats
+                    .memory_usage
+                    .saturating_sub(removed_entry.size() as u64);
             }
         }
-        
+
         // Then, evict LRU entries if still over limits
         while self.should_evict() {
             if let Some(lru_key) = self.lru.least_recently_used() {
@@ -187,7 +190,9 @@ impl MemoryBackend {
                     self.lru.remove(&lru_key);
                     let mut stats = self.stats.lock();
                     stats.total_keys = stats.total_keys.saturating_sub(1);
-                    stats.memory_usage = stats.memory_usage.saturating_sub(removed_entry.size() as u64);
+                    stats.memory_usage = stats
+                        .memory_usage
+                        .saturating_sub(removed_entry.size() as u64);
                 } else {
                     break;
                 }
@@ -195,13 +200,14 @@ impl MemoryBackend {
                 break;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Clean up expired entries (background task)
     async fn cleanup_expired(&self) {
-        let expired_keys: Vec<String> = self.entries
+        let expired_keys: Vec<String> = self
+            .entries
             .iter()
             .filter_map(|entry| {
                 if entry.value().is_expired() {
@@ -211,13 +217,15 @@ impl MemoryBackend {
                 }
             })
             .collect();
-        
+
         for key in expired_keys {
             if let Some((_, removed_entry)) = self.entries.remove(&key) {
                 self.lru.remove(&key);
                 let mut stats = self.stats.lock();
                 stats.total_keys = stats.total_keys.saturating_sub(1);
-                stats.memory_usage = stats.memory_usage.saturating_sub(removed_entry.size() as u64);
+                stats.memory_usage = stats
+                    .memory_usage
+                    .saturating_sub(removed_entry.size() as u64);
             }
         }
     }
@@ -227,58 +235,59 @@ impl MemoryBackend {
 impl CacheBackend for MemoryBackend {
     async fn get(&self, key: &str) -> CacheResult<Option<Vec<u8>>> {
         // Clean up expired entries occasionally
-        if rand::random::<f64>() < 0.01 { // 1% chance
+        if rand::random::<f64>() < 0.01 {
+            // 1% chance
             self.cleanup_expired().await;
         }
-        
+
         if let Some(entry) = self.entries.get(key) {
             if entry.is_expired() {
                 // Get entry size before dropping
                 let entry_size = entry.size() as u64;
                 drop(entry);
-                
+
                 // Remove expired entry
                 if self.entries.remove(key).is_some() {
                     self.lru.remove(key);
-                    
+
                     // Update stats
                     let mut stats = self.stats.lock();
                     stats.misses += 1;
                     stats.total_keys = stats.total_keys.saturating_sub(1);
                     stats.memory_usage = stats.memory_usage.saturating_sub(entry_size);
                 }
-                
+
                 return Ok(None);
             }
-            
+
             // Access the entry (updates LRU and access count)
             let data = entry.access();
             self.lru.access(key);
-            
+
             // Update stats
             self.stats.lock().hits += 1;
-            
+
             Ok(Some(data))
         } else {
             // Update stats
             self.stats.lock().misses += 1;
-            
+
             Ok(None)
         }
     }
-    
+
     async fn put(&self, key: &str, value: Vec<u8>, ttl: Option<Duration>) -> CacheResult<()> {
         // Evict if necessary before adding
         if self.should_evict() {
             self.evict().await?;
         }
-        
+
         let entry = CacheEntry::new(value, ttl);
         let entry_size = entry.size() as u64;
-        
+
         // Insert or update entry
         let old_entry = self.entries.insert(key.to_string(), entry);
-        
+
         let mut stats = self.stats.lock();
         if let Some(old_entry) = old_entry {
             // Existing entry - update memory usage with size difference
@@ -289,44 +298,46 @@ impl CacheBackend for MemoryBackend {
             stats.total_keys += 1;
             stats.memory_usage += entry_size;
         }
-        
+
         // Update LRU
         self.lru.access(key);
-        
+
         Ok(())
     }
-    
+
     async fn forget(&self, key: &str) -> CacheResult<bool> {
         if let Some((_, removed_entry)) = self.entries.remove(key) {
             self.lru.remove(key);
-            
+
             // Update stats efficiently
             let mut stats = self.stats.lock();
             stats.total_keys = stats.total_keys.saturating_sub(1);
-            stats.memory_usage = stats.memory_usage.saturating_sub(removed_entry.size() as u64);
-            
+            stats.memory_usage = stats
+                .memory_usage
+                .saturating_sub(removed_entry.size() as u64);
+
             Ok(true)
         } else {
             Ok(false)
         }
     }
-    
+
     async fn exists(&self, key: &str) -> CacheResult<bool> {
         if let Some(entry) = self.entries.get(key) {
             if entry.is_expired() {
                 // Get entry size before dropping
                 let entry_size = entry.size() as u64;
                 drop(entry);
-                
+
                 // Clean up expired entry
                 if self.entries.remove(key).is_some() {
                     self.lru.remove(key);
-                    
+
                     let mut stats = self.stats.lock();
                     stats.total_keys = stats.total_keys.saturating_sub(1);
                     stats.memory_usage = stats.memory_usage.saturating_sub(entry_size);
                 }
-                
+
                 return Ok(false);
             }
             Ok(true)
@@ -334,43 +345,43 @@ impl CacheBackend for MemoryBackend {
             Ok(false)
         }
     }
-    
+
     async fn flush(&self) -> CacheResult<()> {
         self.entries.clear();
-        
+
         // Reset LRU tracker
         self.lru.clear();
-        
+
         // Reset stats
         let mut stats = self.stats.lock();
         stats.total_keys = 0;
         stats.memory_usage = 0;
-        
+
         Ok(())
     }
-    
+
     async fn get_many(&self, keys: &[&str]) -> CacheResult<Vec<Option<Vec<u8>>>> {
         let mut results = Vec::with_capacity(keys.len());
-        
+
         for key in keys {
             results.push(self.get(key).await?);
         }
-        
+
         Ok(results)
     }
-    
+
     async fn put_many(&self, entries: &[(&str, Vec<u8>, Option<Duration>)]) -> CacheResult<()> {
         for (key, value, ttl) in entries {
             self.put(key, value.clone(), *ttl).await?;
         }
-        
+
         Ok(())
     }
-    
+
     async fn forget_many(&self, keys: &[&str]) -> CacheResult<usize> {
         let mut removed_count = 0;
         let mut total_freed_memory = 0u64;
-        
+
         // Remove entries and track freed memory
         for key in keys {
             if let Some((_, removed_entry)) = self.entries.remove(*key) {
@@ -379,17 +390,17 @@ impl CacheBackend for MemoryBackend {
                 removed_count += 1;
             }
         }
-        
+
         // Update stats once for all removals
         if removed_count > 0 {
             let mut stats = self.stats.lock();
             stats.total_keys = stats.total_keys.saturating_sub(removed_count as u64);
             stats.memory_usage = stats.memory_usage.saturating_sub(total_freed_memory);
         }
-        
+
         Ok(removed_count)
     }
-    
+
     async fn stats(&self) -> CacheResult<CacheStats> {
         Ok(self.stats.lock().clone())
     }
@@ -400,141 +411,155 @@ mod tests {
     use super::*;
     use std::time::Duration;
     use tokio::time::sleep;
-    
+
     #[tokio::test]
     async fn test_memory_backend_basic_operations() {
         let backend = MemoryBackend::new(CacheConfig::default());
-        
+
         // Test put and get
-        backend.put("test", b"value".to_vec(), Some(Duration::from_secs(60))).await.unwrap();
+        backend
+            .put("test", b"value".to_vec(), Some(Duration::from_secs(60)))
+            .await
+            .unwrap();
         let result = backend.get("test").await.unwrap();
         assert_eq!(result, Some(b"value".to_vec()));
-        
+
         // Test exists
         assert!(backend.exists("test").await.unwrap());
         assert!(!backend.exists("nonexistent").await.unwrap());
-        
+
         // Test forget
         assert!(backend.forget("test").await.unwrap());
         assert!(!backend.exists("test").await.unwrap());
     }
-    
+
     #[tokio::test]
     async fn test_memory_backend_ttl() {
         let backend = MemoryBackend::new(CacheConfig::default());
-        
+
         // Put with very short TTL
-        backend.put("ttl_test", b"value".to_vec(), Some(Duration::from_millis(50))).await.unwrap();
-        
+        backend
+            .put(
+                "ttl_test",
+                b"value".to_vec(),
+                Some(Duration::from_millis(50)),
+            )
+            .await
+            .unwrap();
+
         // Should exist initially
         assert!(backend.exists("ttl_test").await.unwrap());
-        
+
         // Wait for expiration
         sleep(Duration::from_millis(100)).await;
-        
+
         // Should be expired
         assert!(!backend.exists("ttl_test").await.unwrap());
         let result = backend.get("ttl_test").await.unwrap();
         assert_eq!(result, None);
     }
-    
+
     #[tokio::test]
     async fn test_memory_backend_lru_eviction() {
-        let config = CacheConfig::builder()
-            .max_entries_limit(2)
-            .build_config();
+        let config = CacheConfig::builder().max_entries_limit(2).build_config();
         let backend = MemoryBackend::new(config);
-        
+
         // Fill cache to capacity
         backend.put("key1", b"value1".to_vec(), None).await.unwrap();
         backend.put("key2", b"value2".to_vec(), None).await.unwrap();
-        
+
         // Access key1 to make it more recently used
         backend.get("key1").await.unwrap();
-        
+
         // Add third key, should evict key2 (least recently used)
         backend.put("key3", b"value3".to_vec(), None).await.unwrap();
-        
+
         // key1 and key3 should exist, key2 should be evicted
         assert!(backend.exists("key1").await.unwrap());
         assert!(!backend.exists("key2").await.unwrap());
         assert!(backend.exists("key3").await.unwrap());
     }
-    
+
     #[tokio::test]
     async fn test_memory_backend_stats() {
         let backend = MemoryBackend::new(CacheConfig::default());
-        
+
         // Initial stats
         let stats = backend.stats().await.unwrap();
         assert_eq!(stats.hits, 0);
         assert_eq!(stats.misses, 0);
         assert_eq!(stats.total_keys, 0);
-        
+
         // Add some data
-        backend.put("test1", b"value1".to_vec(), None).await.unwrap();
-        backend.put("test2", b"value2".to_vec(), None).await.unwrap();
-        
+        backend
+            .put("test1", b"value1".to_vec(), None)
+            .await
+            .unwrap();
+        backend
+            .put("test2", b"value2".to_vec(), None)
+            .await
+            .unwrap();
+
         // Check stats after puts
         let stats = backend.stats().await.unwrap();
         assert_eq!(stats.total_keys, 2);
         assert!(stats.memory_usage > 0);
-        
+
         // Test cache hit
         backend.get("test1").await.unwrap();
         let stats = backend.stats().await.unwrap();
         assert_eq!(stats.hits, 1);
-        
+
         // Test cache miss
         backend.get("nonexistent").await.unwrap();
         let stats = backend.stats().await.unwrap();
         assert_eq!(stats.misses, 1);
-        
+
         // Check hit ratio
         assert_eq!(stats.hit_ratio(), 0.5);
     }
-    
+
     #[tokio::test]
     async fn test_memory_backend_forget_many() {
         let backend = MemoryBackend::new(CacheConfig::default());
-        
+
         // Add test data
         backend.put("key1", b"value1".to_vec(), None).await.unwrap();
         backend.put("key2", b"value2".to_vec(), None).await.unwrap();
         backend.put("key3", b"value3".to_vec(), None).await.unwrap();
         backend.put("key4", b"value4".to_vec(), None).await.unwrap();
-        
+
         // Verify all keys exist
         assert!(backend.exists("key1").await.unwrap());
         assert!(backend.exists("key2").await.unwrap());
         assert!(backend.exists("key3").await.unwrap());
         assert!(backend.exists("key4").await.unwrap());
-        
+
         // Get initial stats
         let initial_stats = backend.stats().await.unwrap();
         assert_eq!(initial_stats.total_keys, 4);
-        
+
         // Remove multiple keys at once
         let keys_to_remove = ["key1", "key2", "key3"];
         let removed_count = backend.forget_many(&keys_to_remove).await.unwrap();
         assert_eq!(removed_count, 3);
-        
+
         // Verify keys were removed
         assert!(!backend.exists("key1").await.unwrap());
         assert!(!backend.exists("key2").await.unwrap());
         assert!(!backend.exists("key3").await.unwrap());
         assert!(backend.exists("key4").await.unwrap());
-        
+
         // Check stats were updated correctly
         let final_stats = backend.stats().await.unwrap();
         assert_eq!(final_stats.total_keys, 1);
         assert!(final_stats.memory_usage < initial_stats.memory_usage);
-        
+
         // Test removing non-existent keys
         let nonexistent_keys = ["nonexistent1", "nonexistent2"];
         let removed_count = backend.forget_many(&nonexistent_keys).await.unwrap();
         assert_eq!(removed_count, 0);
-        
+
         // Test empty key array
         let empty_keys: Vec<&str> = vec![];
         let removed_count = backend.forget_many(&empty_keys).await.unwrap();
@@ -544,22 +569,28 @@ mod tests {
     #[tokio::test]
     async fn test_memory_backend_flush() {
         let backend = MemoryBackend::new(CacheConfig::default());
-        
+
         // Add some data
-        backend.put("test1", b"value1".to_vec(), None).await.unwrap();
-        backend.put("test2", b"value2".to_vec(), None).await.unwrap();
-        
+        backend
+            .put("test1", b"value1".to_vec(), None)
+            .await
+            .unwrap();
+        backend
+            .put("test2", b"value2".to_vec(), None)
+            .await
+            .unwrap();
+
         // Verify data exists
         assert!(backend.exists("test1").await.unwrap());
         assert!(backend.exists("test2").await.unwrap());
-        
+
         // Flush cache
         backend.flush().await.unwrap();
-        
+
         // Verify cache is empty
         assert!(!backend.exists("test1").await.unwrap());
         assert!(!backend.exists("test2").await.unwrap());
-        
+
         let stats = backend.stats().await.unwrap();
         assert_eq!(stats.total_keys, 0);
         assert_eq!(stats.memory_usage, 0);
@@ -569,7 +600,7 @@ mod tests {
     async fn test_lru_tracker_consistency() {
         // Create a backend that starts with small LRU capacity to test edge case
         let backend = MemoryBackend::new(CacheConfig::default());
-        
+
         // Fill the LRU tracker to its initial capacity (1000 items)
         // This tests that the LRU tracker properly resizes without evicting tracked items
         for i in 0..1200 {
@@ -577,25 +608,31 @@ mod tests {
             let value = format!("value_{}", i).into_bytes();
             backend.put(&key, value, None).await.unwrap();
         }
-        
+
         // All items should still be accessible (no premature LRU eviction)
         for i in 0..1200 {
             let key = format!("consistency_test_{}", i);
-            assert!(backend.exists(&key).await.unwrap(), 
-                   "Key {} should exist but was not found", key);
+            assert!(
+                backend.exists(&key).await.unwrap(),
+                "Key {} should exist but was not found",
+                key
+            );
         }
-        
+
         // Access some items to change LRU order
         for i in (0..100).rev() {
             let key = format!("consistency_test_{}", i);
             backend.get(&key).await.unwrap();
         }
-        
+
         // Verify LRU tracking is still consistent - all items should still be accessible
         for i in 0..1200 {
             let key = format!("consistency_test_{}", i);
-            assert!(backend.exists(&key).await.unwrap(), 
-                   "Key {} should still exist after LRU access", key);
+            assert!(
+                backend.exists(&key).await.unwrap(),
+                "Key {} should still exist after LRU access",
+                key
+            );
         }
     }
 }

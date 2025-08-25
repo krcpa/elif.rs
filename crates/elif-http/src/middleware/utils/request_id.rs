@@ -5,7 +5,7 @@
 
 use crate::middleware::v2::{Middleware, Next, NextFuture};
 use crate::request::ElifRequest;
-use crate::response::{ElifResponse, ElifHeaderName, ElifHeaderValue};
+use crate::response::{ElifHeaderName, ElifHeaderValue, ElifResponse};
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use uuid::Uuid;
@@ -124,72 +124,72 @@ impl RequestIdMiddleware {
             config: RequestIdConfig::default(),
         }
     }
-    
+
     /// Create request ID middleware with custom configuration
     pub fn with_config(config: RequestIdConfig) -> Self {
         Self { config }
     }
-    
+
     /// Set custom header name for request ID
     pub fn header_name(mut self, name: impl Into<String>) -> Self {
         self.config.header_name = name.into();
         self
     }
-    
+
     /// Set request ID generation strategy
     pub fn strategy(mut self, strategy: RequestIdStrategy) -> Self {
         self.config.strategy = strategy;
         self
     }
-    
+
     /// Use UUID v4 strategy (default)
     pub fn uuid_v4(mut self) -> Self {
         self.config.strategy = RequestIdStrategy::UuidV4;
         self
     }
-    
+
     /// Use UUID v1 strategy (timestamp-based)
     pub fn uuid_v1(mut self) -> Self {
         self.config.strategy = RequestIdStrategy::UuidV1;
         self
     }
-    
+
     /// Use counter strategy (not recommended for distributed systems)
     pub fn counter(mut self) -> Self {
         self.config.strategy = RequestIdStrategy::Counter(AtomicU64::new(0));
         self
     }
-    
+
     /// Use prefixed UUID strategy
     pub fn prefixed(mut self, prefix: impl Into<String>) -> Self {
         self.config.strategy = RequestIdStrategy::PrefixedUuid(prefix.into());
         self
     }
-    
+
     /// Use custom ID generation function
     pub fn custom_generator(mut self, generator: fn() -> String) -> Self {
         self.config.strategy = RequestIdStrategy::Custom(generator);
         self
     }
-    
+
     /// Override existing request ID if present
     pub fn override_existing(mut self) -> Self {
         self.config.override_existing = true;
         self
     }
-    
+
     /// Don't add request ID to response headers
     pub fn no_response_header(mut self) -> Self {
         self.config.add_to_response = false;
         self
     }
-    
+
     /// Disable request ID logging
     pub fn no_logging(mut self) -> Self {
         self.config.log_request_id = false;
         self
     }
-    
+
     /// Extract or generate request ID from request
     fn get_or_generate_request_id(&self, request: &ElifRequest) -> String {
         // Check if request already has a request ID
@@ -202,51 +202,53 @@ impl RequestIdMiddleware {
                 }
             }
         }
-        
+
         // Generate new request ID
         self.config.strategy.generate()
     }
-    
+
     /// Add request ID to request headers
     fn add_request_id_to_request(&self, mut request: ElifRequest, request_id: &str) -> ElifRequest {
         let header_name = match ElifHeaderName::from_str(&self.config.header_name) {
             Ok(name) => name,
             Err(_) => return request, // Invalid header name, skip
         };
-        
+
         let header_value = match ElifHeaderValue::from_str(request_id) {
             Ok(value) => value,
             Err(_) => return request, // Invalid header value, skip
         };
-        
+
         request.headers.insert(header_name, header_value);
         request
     }
-    
+
     /// Add request ID to response headers
     fn add_request_id_to_response(&self, response: ElifResponse, request_id: &str) -> ElifResponse {
         if !self.config.add_to_response {
             return response;
         }
-        
+
         let header_name = match self.config.header_name.as_str() {
             "x-request-id" => "x-request-id",
-            "request-id" => "request-id", 
+            "request-id" => "request-id",
             "x-trace-id" => "x-trace-id",
             _ => &self.config.header_name,
         };
-        
-        response.header(header_name, request_id).unwrap_or_else(|_| {
-            // If we can't add the header for some reason, return a new response with error
-            ElifResponse::internal_server_error().json_value(serde_json::json!({
-                "error": {
-                    "code": "internal_error",
-                    "message": "Failed to add request ID to response"
-                }
-            }))
-        })
+
+        response
+            .header(header_name, request_id)
+            .unwrap_or_else(|_| {
+                // If we can't add the header for some reason, return a new response with error
+                ElifResponse::internal_server_error().json_value(serde_json::json!({
+                    "error": {
+                        "code": "internal_error",
+                        "message": "Failed to add request ID to response"
+                    }
+                }))
+            })
     }
-    
+
     /// Log request ID if enabled
     fn log_request_id(&self, request_id: &str, method: &axum::http::Method, path: &str) {
         if self.config.log_request_id {
@@ -272,26 +274,26 @@ impl Middleware for RequestIdMiddleware {
         let request_id = self.get_or_generate_request_id(&request);
         let method = request.method.clone();
         let path = request.path().to_string();
-        
+
         // Log request ID
         self.log_request_id(&request_id, method.to_axum(), &path);
-        
+
         // Add request ID to request headers
         let updated_request = self.add_request_id_to_request(request, &request_id);
-        
+
         let config = self.config.clone();
         let request_id_clone = request_id.clone();
-        
+
         Box::pin(async move {
             // Execute next middleware/handler
             let response = next.run(updated_request).await;
-            
+
             // Add request ID to response headers
             let middleware = RequestIdMiddleware { config };
             middleware.add_request_id_to_response(response, &request_id_clone)
         })
     }
-    
+
     fn name(&self) -> &'static str {
         "RequestIdMiddleware"
     }
@@ -301,7 +303,7 @@ impl Middleware for RequestIdMiddleware {
 pub trait RequestIdExt {
     /// Get the request ID from the request headers
     fn request_id(&self) -> Option<String>;
-    
+
     /// Get the request ID with fallback header names
     fn request_id_with_fallbacks(&self) -> Option<String>;
 }
@@ -312,17 +314,17 @@ impl RequestIdExt for ElifRequest {
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string())
     }
-    
+
     fn request_id_with_fallbacks(&self) -> Option<String> {
         // Try common request ID header names
         let header_names = [
             "x-request-id",
-            "request-id", 
+            "request-id",
             "x-trace-id",
             "x-correlation-id",
             "x-session-id",
         ];
-        
+
         for header_name in &header_names {
             if let Some(value) = self.header(header_name) {
                 if let Ok(id_str) = value.to_str() {
@@ -332,7 +334,7 @@ impl RequestIdExt for ElifRequest {
                 }
             }
         }
-        
+
         None
     }
 }
@@ -340,9 +342,9 @@ impl RequestIdExt for ElifRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::response::{ElifResponse, ElifHeaderMap};
     use crate::request::ElifRequest;
-    
+    use crate::response::{ElifHeaderMap, ElifResponse};
+
     #[test]
     fn test_request_id_strategies() {
         // UUID v4
@@ -351,7 +353,7 @@ mod tests {
         let id2 = uuid_strategy.generate();
         assert_ne!(id1, id2);
         assert_eq!(id1.len(), 36); // Standard UUID length
-        
+
         // Counter
         let counter_strategy = RequestIdStrategy::Counter(AtomicU64::new(0));
         let id1 = counter_strategy.generate();
@@ -359,19 +361,19 @@ mod tests {
         assert_ne!(id1, id2);
         assert!(id1.starts_with("req-"));
         assert!(id2.starts_with("req-"));
-        
+
         // Prefixed UUID
         let prefixed_strategy = RequestIdStrategy::PrefixedUuid("api".to_string());
         let id = prefixed_strategy.generate();
         assert!(id.starts_with("api-"));
         assert_eq!(id.len(), 40); // "api-" + 36-char UUID
-        
+
         // Custom
         let custom_strategy = RequestIdStrategy::Custom(|| "custom-123".to_string());
         let id = custom_strategy.generate();
         assert_eq!(id, "custom-123");
     }
-    
+
     #[test]
     fn test_request_id_config() {
         let config = RequestIdConfig::default();
@@ -380,17 +382,17 @@ mod tests {
         assert!(config.add_to_response);
         assert!(config.log_request_id);
     }
-    
+
     #[tokio::test]
     async fn test_request_id_middleware_basic() {
         let middleware = RequestIdMiddleware::new();
-        
+
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
             ElifHeaderMap::new(),
         );
-        
+
         let next = Next::new(|req| {
             Box::pin(async move {
                 // Verify request has request ID
@@ -398,28 +400,34 @@ mod tests {
                 ElifResponse::ok().text("Success")
             })
         });
-        
+
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
-        
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
+
         // Check response has request ID header
         let axum_response = response.into_axum_response();
         let (parts, _) = axum_response.into_parts();
         assert!(parts.headers.contains_key("x-request-id"));
     }
-    
+
     #[tokio::test]
     async fn test_request_id_middleware_existing_id() {
         let middleware = RequestIdMiddleware::new();
-        
+
         let mut headers = crate::response::headers::ElifHeaderMap::new();
-        headers.insert(crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap(), "existing-123".parse().unwrap());
+        headers.insert(
+            crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap(),
+            "existing-123".parse().unwrap(),
+        );
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
             headers,
         );
-        
+
         let next = Next::new(|req| {
             Box::pin(async move {
                 // Should preserve existing request ID
@@ -427,30 +435,30 @@ mod tests {
                 ElifResponse::ok().text("Success")
             })
         });
-        
+
         let response = middleware.handle(request, next).await;
-        
+
         // Response should have the same request ID
         let axum_response = response.into_axum_response();
         let (parts, _) = axum_response.into_parts();
-        assert_eq!(
-            parts.headers.get("x-request-id").unwrap(),
-            "existing-123"
-        );
+        assert_eq!(parts.headers.get("x-request-id").unwrap(), "existing-123");
     }
-    
+
     #[tokio::test]
     async fn test_request_id_middleware_override() {
         let middleware = RequestIdMiddleware::new().override_existing();
-        
+
         let mut headers = ElifHeaderMap::new();
-        headers.insert(crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap(), "existing-123".parse().unwrap());
+        headers.insert(
+            crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap(),
+            "existing-123".parse().unwrap(),
+        );
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
             headers,
         );
-        
+
         let next = Next::new(|req| {
             Box::pin(async move {
                 // Should have new request ID, not the existing one
@@ -459,26 +467,26 @@ mod tests {
                 ElifResponse::ok().text("Success")
             })
         });
-        
+
         let response = middleware.handle(request, next).await;
-        
+
         // Response should have new request ID
         let axum_response = response.into_axum_response();
         let (parts, _) = axum_response.into_parts();
         let response_id = parts.headers.get("x-request-id").unwrap().to_str().unwrap();
         assert_ne!(response_id, "existing-123");
     }
-    
+
     #[tokio::test]
     async fn test_request_id_custom_header() {
         let middleware = RequestIdMiddleware::new().header_name("x-trace-id");
-        
+
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
             ElifHeaderMap::new(),
         );
-        
+
         let next = Next::new(|req| {
             Box::pin(async move {
                 // Check custom header name
@@ -486,24 +494,24 @@ mod tests {
                 ElifResponse::ok().text("Success")
             })
         });
-        
+
         let response = middleware.handle(request, next).await;
-        
+
         let axum_response = response.into_axum_response();
         let (parts, _) = axum_response.into_parts();
         assert!(parts.headers.contains_key("x-trace-id"));
     }
-    
-    #[tokio::test] 
+
+    #[tokio::test]
     async fn test_request_id_prefixed() {
         let middleware = RequestIdMiddleware::new().prefixed("api");
-        
+
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
             ElifHeaderMap::new(),
         );
-        
+
         let next = Next::new(|req| {
             Box::pin(async move {
                 let request_id = req.request_id().unwrap();
@@ -511,25 +519,25 @@ mod tests {
                 ElifResponse::ok().text("Success")
             })
         });
-        
+
         let response = middleware.handle(request, next).await;
-        
+
         let axum_response = response.into_axum_response();
         let (parts, _) = axum_response.into_parts();
         let response_id = parts.headers.get("x-request-id").unwrap().to_str().unwrap();
         assert!(response_id.starts_with("api-"));
     }
-    
+
     #[tokio::test]
     async fn test_request_id_counter() {
         let middleware = RequestIdMiddleware::new().counter();
-        
+
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
             ElifHeaderMap::new(),
         );
-        
+
         let next = Next::new(|req| {
             Box::pin(async move {
                 let request_id = req.request_id().unwrap();
@@ -537,58 +545,66 @@ mod tests {
                 ElifResponse::ok().text("Success")
             })
         });
-        
+
         let response = middleware.handle(request, next).await;
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
     }
-    
+
     #[tokio::test]
     async fn test_request_id_no_response_header() {
         let middleware = RequestIdMiddleware::new().no_response_header();
-        
+
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/api/test".parse().unwrap(),
             ElifHeaderMap::new(),
         );
-        
-        let next = Next::new(|_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("Success")
-            })
-        });
-        
+
+        let next = Next::new(|_req| Box::pin(async move { ElifResponse::ok().text("Success") }));
+
         let response = middleware.handle(request, next).await;
-        
+
         let axum_response = response.into_axum_response();
         let (parts, _) = axum_response.into_parts();
         assert!(!parts.headers.contains_key("x-request-id"));
     }
-    
+
     #[test]
     fn test_request_id_extension_trait() {
         let mut headers = ElifHeaderMap::new();
-        headers.insert(crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap(), "test-123".parse().unwrap());
+        headers.insert(
+            crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap(),
+            "test-123".parse().unwrap(),
+        );
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/test".parse().unwrap(),
             headers,
         );
-        
+
         assert_eq!(request.request_id(), Some("test-123".to_string()));
-        
+
         // Test with fallbacks
         let mut headers = ElifHeaderMap::new();
-        headers.insert(crate::response::headers::ElifHeaderName::from_str("x-trace-id").unwrap(), "trace-456".parse().unwrap());
+        headers.insert(
+            crate::response::headers::ElifHeaderName::from_str("x-trace-id").unwrap(),
+            "trace-456".parse().unwrap(),
+        );
         let request = ElifRequest::new(
             crate::request::ElifMethod::GET,
             "/test".parse().unwrap(),
             headers,
         );
-        
-        assert_eq!(request.request_id_with_fallbacks(), Some("trace-456".to_string()));
+
+        assert_eq!(
+            request.request_id_with_fallbacks(),
+            Some("trace-456".to_string())
+        );
     }
-    
+
     #[tokio::test]
     async fn test_builder_pattern() {
         let middleware = RequestIdMiddleware::new()
@@ -597,11 +613,14 @@ mod tests {
             .override_existing()
             .no_response_header()
             .no_logging();
-        
+
         assert_eq!(middleware.config.header_name, "x-custom-id");
         assert!(middleware.config.override_existing);
         assert!(!middleware.config.add_to_response);
         assert!(!middleware.config.log_request_id);
-        assert!(matches!(middleware.config.strategy, RequestIdStrategy::PrefixedUuid(_)));
+        assert!(matches!(
+            middleware.config.strategy,
+            RequestIdStrategy::PrefixedUuid(_)
+        ));
     }
 }

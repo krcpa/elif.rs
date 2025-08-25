@@ -1,14 +1,10 @@
 pub mod base;
-pub mod pagination;
 pub mod factory;
+pub mod pagination;
 
-pub use base::{
-    Controller, BaseController, 
-    ElifController, ControllerRoute, RouteParam
-};
-pub use pagination::{QueryParams, PaginationMeta};
+pub use base::{BaseController, Controller, ControllerRoute, ElifController, RouteParam};
 pub use factory::{
-    ControllerFactory, IocControllerFactory, IocControllable,
-    ControllerRegistry, ScopedControllerRegistry, RequestContext,
-    ControllerRegistryBuilder, ControllerScanner
+    ControllerFactory, ControllerRegistry, ControllerRegistryBuilder, ControllerScanner,
+    IocControllable, IocControllerFactory, RequestContext, ScopedControllerRegistry,
 };
+pub use pagination::{PaginationMeta, QueryParams};

@@ -13,7 +13,7 @@
 //! ```rust
 //! // Old (removed):
 //! // use elif_http::middleware::MiddlewarePipeline;
-//! 
+//!
 //! // New:
 //! use elif_http::middleware::v2::MiddlewarePipelineV2;
 //! ```

@@ -8,16 +8,16 @@
 
 pub mod definitions;
 pub mod manager;
-pub mod runner;
 pub mod rollback;
+pub mod runner;
 pub mod schema_builder;
 
 // Re-export commonly used types
 pub use definitions::{
-    Migration, MigrationRecord, MigrationConfig, MigrationRunResult, 
-    RollbackResult, MigrationDirection, MigrationStatus
+    Migration, MigrationConfig, MigrationDirection, MigrationRecord, MigrationRunResult,
+    MigrationStatus, RollbackResult,
 };
 pub use manager::MigrationManager;
-pub use runner::MigrationRunner;
 pub use rollback::MigrationRollback;
+pub use runner::MigrationRunner;
 pub use schema_builder::{SchemaBuilder, TableBuilder};

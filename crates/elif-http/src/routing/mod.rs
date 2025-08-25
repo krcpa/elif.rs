@@ -10,32 +10,37 @@
 //! - Parameter validation and constraints
 
 // Legacy modules (will be refactored to use new engine)
+pub mod group;
 pub mod params;
 pub mod router;
-pub mod group;
 pub mod versioned;
 
 // New framework-independent routing engine
-pub mod pattern;
-pub mod matcher;
-pub mod extraction;
 pub mod compiler;
+pub mod extraction;
+pub mod matcher;
+pub mod pattern;
 
 // Legacy exports (for backward compatibility)
-pub use router::{Router as ElifRouter, Router, RouteBuilder};
-pub use params::{PathParams, RouteParam, ParamError, ParamType};
-pub use group::{RouteGroup, GroupBuilder};
-pub use versioned::{VersionedRouter, VersionedRouteBuilder, versioned_router, path_versioned_router, header_versioned_router};
+pub use group::{GroupBuilder, RouteGroup};
+pub use params::{ParamError, ParamType, PathParams, RouteParam};
+pub use router::{RouteBuilder, Router as ElifRouter, Router};
+pub use versioned::{
+    header_versioned_router, path_versioned_router, versioned_router, VersionedRouteBuilder,
+    VersionedRouter,
+};
 
 // New engine exports
-pub use pattern::{RoutePattern, PathSegment, ParamConstraint, CompiledRoute, RouteMatch};
-pub use matcher::{RouteMatcher, RouteDefinition, MatcherStats, RouteMatcherBuilder};
-pub use extraction::{ParameterExtractor, ExtractedParams, TypedExtractorBuilder, ExtractionError};
-pub use compiler::{RouteCompiler, CompilableRoute, CompilationResult, CompilationStats, RouteCompilerBuilder};
+pub use compiler::{
+    CompilableRoute, CompilationResult, CompilationStats, RouteCompiler, RouteCompilerBuilder,
+};
+pub use extraction::{ExtractedParams, ExtractionError, ParameterExtractor, TypedExtractorBuilder};
+pub use matcher::{MatcherStats, RouteDefinition, RouteMatcher, RouteMatcherBuilder};
+pub use pattern::{CompiledRoute, ParamConstraint, PathSegment, RouteMatch, RoutePattern};
 
 use axum::http::Method;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 
 /// HTTP methods supported by the router
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -133,7 +138,8 @@ impl RouteRegistry {
     }
 
     pub fn get_by_name(&self, name: &str) -> Option<&RouteInfo> {
-        self.named_routes.get(name)
+        self.named_routes
+            .get(name)
             .and_then(|id| self.routes.get(id))
     }
 

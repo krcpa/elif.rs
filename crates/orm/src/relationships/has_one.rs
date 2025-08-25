@@ -87,13 +87,13 @@ where
 
     fn query(&self) -> QueryBuilder<Related> {
         let mut query = QueryBuilder::new();
-        
+
         if let Some(parent_key) = self.parent.primary_key() {
             query = query
                 .from(&self.meta.related_table)
                 .where_eq(&self.meta.foreign_key, parent_key.to_string());
         }
-        
+
         query
     }
 

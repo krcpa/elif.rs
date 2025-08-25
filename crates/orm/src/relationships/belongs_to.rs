@@ -64,7 +64,9 @@ where
 
     /// Get the foreign key value from the child model
     pub fn foreign_key_value(&self) -> Option<String> {
-        self.child.to_fields().get(&self.meta.foreign_key)
+        self.child
+            .to_fields()
+            .get(&self.meta.foreign_key)
             .and_then(|v| match v {
                 serde_json::Value::String(s) => Some(s.clone()),
                 serde_json::Value::Number(n) => Some(n.to_string()),
@@ -103,13 +105,13 @@ where
 
     fn query(&self) -> QueryBuilder<Parent> {
         let mut query = QueryBuilder::new();
-        
+
         if let Some(foreign_key_value) = self.foreign_key_value() {
             query = query
                 .from(&self.meta.related_table)
                 .where_eq(&self.meta.local_key, foreign_key_value);
         }
-        
+
         query
     }
 

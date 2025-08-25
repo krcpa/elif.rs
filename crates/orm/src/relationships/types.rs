@@ -1,27 +1,27 @@
 //! Relationship Types - Definitions and behaviors for different relationship types
 
-use std::marker::PhantomData;
 use async_trait::async_trait;
 use sqlx::Pool;
 use sqlx::Postgres;
+use std::marker::PhantomData;
 
+use super::metadata::{RelationshipMetadata, RelationshipType};
 use crate::error::ModelResult;
 use crate::model::Model;
 use crate::query::QueryBuilder;
-use super::metadata::{RelationshipMetadata, RelationshipType};
 
 /// A relationship container that holds metadata and loaded state
 #[derive(Debug, Clone)]
 pub struct Relationship<T> {
     /// The relationship metadata
     metadata: RelationshipMetadata,
-    
+
     /// Whether the relationship has been loaded
     loaded: bool,
-    
+
     /// The loaded data (if any)
     data: Option<T>,
-    
+
     /// Phantom data for type safety
     _phantom: PhantomData<T>,
 }
@@ -125,11 +125,7 @@ where
     Related: Model + Send + Sync,
 {
     /// Load the relationship data for a single parent instance
-    async fn load_for_instance(
-        &self,
-        parent: &Parent,
-        pool: &Pool<Postgres>,
-    ) -> ModelResult<()>;
+    async fn load_for_instance(&self, parent: &Parent, pool: &Pool<Postgres>) -> ModelResult<()>;
 
     /// Load the relationship data for multiple parent instances (eager loading)
     async fn load_for_instances(
@@ -150,10 +146,10 @@ where
 pub struct RelationshipQueryBuilder<T> {
     /// The base query builder
     query: QueryBuilder<T>,
-    
+
     /// The relationship metadata
     metadata: RelationshipMetadata,
-    
+
     /// Additional constraints applied to this query
     constraints: Vec<super::metadata::RelationshipConstraint>,
 }
@@ -165,14 +161,17 @@ where
     /// Create a new relationship query builder
     pub fn new(metadata: RelationshipMetadata) -> Self {
         let mut query = QueryBuilder::<T>::new();
-        
+
         // Apply relationship-specific constraints from metadata
         for constraint in &metadata.constraints {
-            query = query.where_raw(
-                &format!("{} {} '{}'", constraint.column, constraint.operator.to_sql(), constraint.value)
-            );
+            query = query.where_raw(&format!(
+                "{} {} '{}'",
+                constraint.column,
+                constraint.operator.to_sql(),
+                constraint.value
+            ));
         }
-        
+
         Self {
             query,
             constraints: metadata.constraints.clone(),
@@ -187,16 +186,17 @@ where
         operator: super::metadata::ConstraintOperator,
         value: String,
     ) -> Self {
-        self.constraints.push(super::metadata::RelationshipConstraint {
-            column: column.to_string(),
-            operator: operator.clone(),
-            value: value.clone(),
-        });
-        
-        self.query = self.query.where_raw(
-            &format!("{} {} '{}'", column, operator.to_sql(), value)
-        );
-        
+        self.constraints
+            .push(super::metadata::RelationshipConstraint {
+                column: column.to_string(),
+                operator: operator.clone(),
+                value: value.clone(),
+            });
+
+        self.query = self
+            .query
+            .where_raw(&format!("{} {} '{}'", column, operator.to_sql(), value));
+
         self
     }
 
@@ -230,15 +230,15 @@ where
 pub trait WithRelationships {
     /// Get metadata for a specific relationship by name
     fn relationship_metadata(name: &str) -> Option<&'static RelationshipMetadata>;
-    
+
     /// Get all relationship metadata for this model
     fn all_relationship_metadata() -> &'static [RelationshipMetadata];
-    
+
     /// Check if a relationship exists
     fn has_relationship(name: &str) -> bool {
         Self::relationship_metadata(name).is_some()
     }
-    
+
     /// Get all relationship names
     fn relationship_names() -> Vec<&'static str> {
         Self::all_relationship_metadata()
@@ -246,14 +246,14 @@ pub trait WithRelationships {
             .map(|meta| meta.name.as_str())
             .collect()
     }
-    
+
     /// Check if any relationships should be eagerly loaded
     fn has_eager_relationships() -> bool {
         Self::all_relationship_metadata()
             .iter()
             .any(|meta| meta.eager_load)
     }
-    
+
     /// Get all relationships that should be eagerly loaded
     fn eager_relationships() -> Vec<&'static RelationshipMetadata> {
         Self::all_relationship_metadata()
@@ -268,7 +268,9 @@ pub mod utils {
     use super::*;
 
     /// Detect the inverse relationship type for a given type
-    pub fn inverse_relationship_type(relationship_type: RelationshipType) -> Option<RelationshipType> {
+    pub fn inverse_relationship_type(
+        relationship_type: RelationshipType,
+    ) -> Option<RelationshipType> {
         match relationship_type {
             RelationshipType::HasOne => Some(RelationshipType::BelongsTo),
             RelationshipType::HasMany => Some(RelationshipType::BelongsTo),
@@ -288,7 +290,7 @@ pub mod utils {
 
     /// Generate a default pivot table name for many-to-many relationships
     pub fn default_pivot_table_name(local_table: &str, foreign_table: &str) -> String {
-        let mut tables = vec![local_table, foreign_table];
+        let mut tables = [local_table, foreign_table];
         tables.sort();
         tables.join("_")
     }
@@ -302,14 +304,16 @@ pub mod utils {
             RelationshipType::ManyToMany => {
                 if metadata.pivot_config.is_none() {
                     return Err(crate::error::ModelError::Configuration(
-                        "ManyToMany relationships require pivot configuration".to_string()
+                        "ManyToMany relationships require pivot configuration".to_string(),
                     ));
                 }
             }
-            RelationshipType::MorphOne | RelationshipType::MorphMany | RelationshipType::MorphTo => {
+            RelationshipType::MorphOne
+            | RelationshipType::MorphMany
+            | RelationshipType::MorphTo => {
                 if metadata.polymorphic_config.is_none() {
                     return Err(crate::error::ModelError::Configuration(
-                        "Polymorphic relationships require polymorphic configuration".to_string()
+                        "Polymorphic relationships require polymorphic configuration".to_string(),
                     ));
                 }
             }
@@ -321,8 +325,8 @@ pub mod utils {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::metadata::*;
+    use super::*;
 
     // Mock model for testing
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -333,26 +337,29 @@ mod tests {
 
     impl Model for MockModel {
         type PrimaryKey = i64;
-        
+
         fn table_name() -> &'static str {
             "mock_models"
         }
-        
+
         fn primary_key(&self) -> Option<Self::PrimaryKey> {
             self.id
         }
-        
+
         fn set_primary_key(&mut self, key: Self::PrimaryKey) {
             self.id = Some(key);
         }
-        
+
         fn to_fields(&self) -> std::collections::HashMap<String, serde_json::Value> {
             let mut fields = std::collections::HashMap::new();
             fields.insert("id".to_string(), serde_json::json!(self.id));
-            fields.insert("name".to_string(), serde_json::Value::String(self.name.clone()));
+            fields.insert(
+                "name".to_string(),
+                serde_json::Value::String(self.name.clone()),
+            );
             fields
         }
-        
+
         fn from_row(row: &sqlx::postgres::PgRow) -> crate::error::ModelResult<Self> {
             use sqlx::Row;
             Ok(Self {
@@ -373,7 +380,7 @@ mod tests {
         );
 
         let relationship: HasManyRelationship<MockModel> = Relationship::new(metadata);
-        
+
         assert!(!relationship.is_loaded());
         assert_eq!(relationship.relationship_type(), RelationshipType::HasMany);
         assert_eq!(relationship.name(), "posts");
@@ -392,18 +399,21 @@ mod tests {
         );
 
         let mut relationship: HasOneRelationship<MockModel> = Relationship::new(metadata);
-        
+
         // Initially not loaded
         assert!(!relationship.is_loaded());
         assert!(relationship.get().is_none());
-        
+
         // Load data
-        let mock_profile = MockModel { id: Some(1), name: "Profile".to_string() };
+        let mock_profile = MockModel {
+            id: Some(1),
+            name: "Profile".to_string(),
+        };
         relationship.set_loaded(Some(mock_profile));
-        
+
         assert!(relationship.is_loaded());
         assert!(relationship.get().is_some());
-        
+
         // Unload
         relationship.unload();
         assert!(!relationship.is_loaded());
@@ -421,9 +431,12 @@ mod tests {
         );
 
         let query_builder = RelationshipQueryBuilder::<MockModel>::new(metadata.clone());
-        
+
         assert_eq!(query_builder.metadata().name, "posts");
-        assert_eq!(query_builder.metadata().relationship_type, RelationshipType::HasMany);
+        assert_eq!(
+            query_builder.metadata().relationship_type,
+            RelationshipType::HasMany
+        );
     }
 
     #[test]
@@ -434,12 +447,12 @@ mod tests {
             inverse_relationship_type(RelationshipType::HasOne),
             Some(RelationshipType::BelongsTo)
         );
-        
+
         assert_eq!(
             inverse_relationship_type(RelationshipType::HasMany),
             Some(RelationshipType::BelongsTo)
         );
-        
+
         assert_eq!(
             inverse_relationship_type(RelationshipType::ManyToMany),
             Some(RelationshipType::ManyToMany)

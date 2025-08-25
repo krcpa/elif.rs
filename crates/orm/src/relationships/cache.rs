@@ -1,10 +1,10 @@
 //! Relationship Cache - Memory-efficient caching for loaded relationships
 
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use serde_json::Value;
 
 /// Configuration for relationship cache
 #[derive(Debug, Clone)]
@@ -23,7 +23,7 @@ impl Default for RelationshipCacheConfig {
     fn default() -> Self {
         Self {
             max_relationships_per_type: 1000,
-            max_memory_bytes: 50 * 1024 * 1024, // 50MB
+            max_memory_bytes: 50 * 1024 * 1024,  // 50MB
             ttl: Some(Duration::from_secs(300)), // 5 minutes
             enable_metrics: true,
         }
@@ -47,7 +47,7 @@ impl CacheEntry {
     fn new(data: Value) -> Self {
         let now = Instant::now();
         let size_bytes = estimate_json_size(&data);
-        
+
         Self {
             data,
             created_at: now,
@@ -55,11 +55,11 @@ impl CacheEntry {
             size_bytes,
         }
     }
-    
+
     fn is_expired(&self, ttl: Duration) -> bool {
         self.created_at.elapsed() > ttl
     }
-    
+
     fn touch(&mut self) {
         self.last_accessed = Instant::now();
     }
@@ -104,17 +104,23 @@ impl OptimizedRelationshipCache {
     }
 
     /// Store a relationship in the cache
-    pub async fn store(&self, model_type: &str, model_id: &str, relationship: &str, data: Value) -> bool {
+    pub async fn store(
+        &self,
+        model_type: &str,
+        model_id: &str,
+        relationship: &str,
+        data: Value,
+    ) -> bool {
         let key = CacheKey::new(model_type, model_id, relationship);
         let entry = CacheEntry::new(data);
-        
+
         // Check memory limits
         if self.config.max_memory_bytes > 0 {
             let current_memory = self.get_memory_usage().await;
             if current_memory + entry.size_bytes > self.config.max_memory_bytes {
                 // Evict some entries to make room
                 self.evict_by_memory().await;
-                
+
                 // Check again after eviction
                 let current_memory = self.get_memory_usage().await;
                 if current_memory + entry.size_bytes > self.config.max_memory_bytes {
@@ -141,36 +147,36 @@ impl OptimizedRelationshipCache {
     /// Retrieve a relationship from the cache
     pub async fn get(&self, model_type: &str, model_id: &str, relationship: &str) -> Option<Value> {
         let key = CacheKey::new(model_type, model_id, relationship);
-        
+
         let mut cache = self.cache.write().await;
-        
+
         if let Some(entry) = cache.get_mut(&key) {
             // Check if expired
             if let Some(ttl) = self.config.ttl {
                 if entry.is_expired(ttl) {
                     cache.remove(&key);
-                    
+
                     // Update metrics
                     if self.config.enable_metrics {
                         let mut metrics = self.metrics.write().await;
                         metrics.misses += 1;
                         metrics.expired += 1;
                     }
-                    
+
                     return None;
                 }
             }
-            
+
             // Touch the entry and return data
             entry.touch();
             let data = entry.data.clone();
-            
+
             // Update metrics
             if self.config.enable_metrics {
                 let mut metrics = self.metrics.write().await;
                 metrics.hits += 1;
             }
-            
+
             Some(data)
         } else {
             // Update metrics
@@ -178,7 +184,7 @@ impl OptimizedRelationshipCache {
                 let mut metrics = self.metrics.write().await;
                 metrics.misses += 1;
             }
-            
+
             None
         }
     }
@@ -191,7 +197,7 @@ impl OptimizedRelationshipCache {
     /// Remove a specific cached relationship
     pub async fn remove(&self, model_type: &str, model_id: &str, relationship: &str) -> bool {
         let key = CacheKey::new(model_type, model_id, relationship);
-        
+
         let mut cache = self.cache.write().await;
         cache.remove(&key).is_some()
     }
@@ -199,7 +205,7 @@ impl OptimizedRelationshipCache {
     /// Clear all cached relationships for a model instance
     pub async fn clear_model(&self, model_type: &str, model_id: &str) {
         let mut cache = self.cache.write().await;
-        
+
         // Collect keys to remove
         let keys_to_remove: Vec<CacheKey> = cache
             .iter()
@@ -211,7 +217,7 @@ impl OptimizedRelationshipCache {
                 }
             })
             .collect();
-        
+
         // Remove the keys
         for key in keys_to_remove {
             cache.remove(&key);
@@ -221,7 +227,7 @@ impl OptimizedRelationshipCache {
     /// Clear all cached relationships for a model type
     pub async fn clear_model_type(&self, model_type: &str) {
         let mut cache = self.cache.write().await;
-        
+
         // Collect keys to remove
         let keys_to_remove: Vec<CacheKey> = cache
             .iter()
@@ -233,7 +239,7 @@ impl OptimizedRelationshipCache {
                 }
             })
             .collect();
-        
+
         // Remove the keys
         for key in keys_to_remove {
             cache.remove(&key);
@@ -244,7 +250,7 @@ impl OptimizedRelationshipCache {
     pub async fn clear_all(&self) {
         let mut cache = self.cache.write().await;
         cache.clear();
-        
+
         // Reset metrics
         if self.config.enable_metrics {
             let mut metrics = self.metrics.write().await;
@@ -255,17 +261,17 @@ impl OptimizedRelationshipCache {
     /// Get current memory usage in bytes
     pub async fn get_memory_usage(&self) -> usize {
         let cache = self.cache.read().await;
-        cache.iter().map(|(_, entry)| entry.size_bytes).sum()
+        cache.values().map(|entry| entry.size_bytes).sum()
     }
 
     /// Get cache statistics
     pub async fn stats(&self) -> CacheStatistics {
         let cache = self.cache.read().await;
         let metrics = self.metrics.read().await;
-        
+
         let total_entries = cache.len();
-        let memory_usage = cache.iter().map(|(_, entry)| entry.size_bytes).sum();
-        
+        let memory_usage = cache.values().map(|entry| entry.size_bytes).sum();
+
         // Count by model type
         let mut model_type_counts = HashMap::new();
         for (key, _) in cache.iter() {
@@ -291,13 +297,13 @@ impl OptimizedRelationshipCache {
     /// Evict entries to free memory
     async fn evict_by_memory(&self) {
         let target_memory = (self.config.max_memory_bytes as f64 * 0.8) as usize; // Target 80% of max
-        
+
         let mut cache = self.cache.write().await;
-        
+
         // Simple eviction strategy: remove oldest entries
         let mut entries: Vec<(CacheKey, CacheEntry)> = cache.drain().collect();
         entries.sort_by_key(|(_, entry)| entry.created_at);
-        
+
         let mut current_memory = 0;
         for (key, entry) in entries {
             if current_memory + entry.size_bytes <= target_memory {
@@ -313,7 +319,7 @@ impl OptimizedRelationshipCache {
     pub async fn cleanup_expired(&self) {
         if let Some(ttl) = self.config.ttl {
             let mut cache = self.cache.write().await;
-            
+
             let keys_to_remove: Vec<CacheKey> = cache
                 .iter()
                 .filter_map(|(key, entry)| {
@@ -324,13 +330,13 @@ impl OptimizedRelationshipCache {
                     }
                 })
                 .collect();
-            
+
             let expired_count = keys_to_remove.len();
-            
+
             for key in keys_to_remove {
                 cache.remove(&key);
             }
-            
+
             // Update metrics
             if self.config.enable_metrics && expired_count > 0 {
                 let mut metrics = self.metrics.write().await;
@@ -396,7 +402,10 @@ fn estimate_json_size(value: &Value) -> usize {
             24 + arr.iter().map(estimate_json_size).sum::<usize>() // Vec overhead
         }
         Value::Object(obj) => {
-            48 + obj.iter().map(|(k, v)| k.len() + estimate_json_size(v)).sum::<usize>() // HashMap overhead
+            48 + obj
+                .iter()
+                .map(|(k, v)| k.len() + estimate_json_size(v))
+                .sum::<usize>() // HashMap overhead
         }
     }
 }
@@ -405,42 +414,42 @@ fn estimate_json_size(value: &Value) -> usize {
 mod tests {
     use super::*;
     use serde_json::json;
-    
+
     #[tokio::test]
     async fn test_cache_store_and_retrieve() {
         let cache = OptimizedRelationshipCache::default();
         let data = json!({"id": 1, "name": "Test"});
-        
+
         // Store data
         let stored = cache.store("User", "1", "posts", data.clone()).await;
         assert!(stored);
-        
+
         // Retrieve data
         let retrieved = cache.get("User", "1", "posts").await;
         assert_eq!(retrieved, Some(data));
     }
-    
+
     #[tokio::test]
     async fn test_cache_expiration() {
         let mut config = RelationshipCacheConfig::default();
         config.ttl = Some(Duration::from_millis(100));
-        
+
         let cache = OptimizedRelationshipCache::new(config);
         let data = json!({"id": 1, "name": "Test"});
-        
+
         // Store data
         cache.store("User", "1", "posts", data.clone()).await;
-        
+
         // Should be available immediately
         assert_eq!(cache.get("User", "1", "posts").await, Some(data));
-        
+
         // Wait for expiration
         tokio::time::sleep(Duration::from_millis(150)).await;
-        
+
         // Should be expired
         assert_eq!(cache.get("User", "1", "posts").await, None);
     }
-    
+
     #[tokio::test]
     async fn test_memory_estimation() {
         let data = json!({
@@ -448,7 +457,7 @@ mod tests {
             "name": "Test User",
             "email": "test@example.com"
         });
-        
+
         let size = estimate_json_size(&data);
         assert!(size > 50); // Should have reasonable size estimation
     }

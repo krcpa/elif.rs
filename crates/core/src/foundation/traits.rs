@@ -7,7 +7,7 @@ pub trait FrameworkComponent: Send + Sync + 'static {
     fn type_name(&self) -> &'static str {
         std::any::type_name::<Self>()
     }
-    
+
     /// Get the TypeId of this component
     fn type_id(&self) -> TypeId {
         TypeId::of::<Self>()
@@ -19,10 +19,10 @@ pub trait FrameworkComponent: Send + Sync + 'static {
 pub trait Initializable {
     type Config;
     type Error: std::error::Error + Send + Sync + 'static;
-    
+
     /// Initialize the component with given configuration
     async fn initialize(&mut self, config: Self::Config) -> Result<(), Self::Error>;
-    
+
     /// Check if the component is initialized
     fn is_initialized(&self) -> bool;
 }
@@ -31,7 +31,7 @@ pub trait Initializable {
 #[allow(async_fn_in_trait)]
 pub trait Finalizable {
     type Error: std::error::Error + Send + Sync + 'static;
-    
+
     /// Perform cleanup operations
     async fn finalize(&mut self) -> Result<(), Self::Error>;
 }
@@ -39,7 +39,7 @@ pub trait Finalizable {
 /// Trait for components that can be validated
 pub trait Validatable {
     type Error: std::error::Error + Send + Sync + 'static;
-    
+
     /// Validate the component's current state
     fn validate(&self) -> Result<(), Self::Error>;
 }
@@ -63,7 +63,7 @@ pub trait ServiceFactory: Send + Sync + 'static {
     type Service: Service;
     type Config;
     type Error: std::error::Error + Send + Sync + 'static;
-    
+
     /// Create a new service instance
     async fn create_service(&self, config: Self::Config) -> Result<Self::Service, Self::Error>;
 }

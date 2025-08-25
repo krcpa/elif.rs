@@ -12,7 +12,7 @@ impl<M> QueryBuilder<M> {
                 fields
                     .split(',')
                     .map(|f| f.trim().to_string())
-                    .collect::<Vec<String>>()
+                    .collect::<Vec<String>>(),
             );
         }
         self
@@ -40,7 +40,7 @@ impl<M> QueryBuilder<M> {
         self.select_fields.push(select_expr);
         self
     }
-    
+
     /// Add SUM aggregate
     pub fn select_sum(mut self, column: &str, alias: Option<&str>) -> Self {
         let select_expr = if let Some(alias) = alias {
@@ -51,7 +51,7 @@ impl<M> QueryBuilder<M> {
         self.select_fields.push(select_expr);
         self
     }
-    
+
     /// Add AVG aggregate
     pub fn select_avg(mut self, column: &str, alias: Option<&str>) -> Self {
         let select_expr = if let Some(alias) = alias {
@@ -62,7 +62,7 @@ impl<M> QueryBuilder<M> {
         self.select_fields.push(select_expr);
         self
     }
-    
+
     /// Add MIN aggregate
     pub fn select_min(mut self, column: &str, alias: Option<&str>) -> Self {
         let select_expr = if let Some(alias) = alias {
@@ -73,7 +73,7 @@ impl<M> QueryBuilder<M> {
         self.select_fields.push(select_expr);
         self
     }
-    
+
     /// Add MAX aggregate
     pub fn select_max(mut self, column: &str, alias: Option<&str>) -> Self {
         let select_expr = if let Some(alias) = alias {
@@ -84,7 +84,7 @@ impl<M> QueryBuilder<M> {
         self.select_fields.push(select_expr);
         self
     }
-    
+
     /// Add custom SELECT expression
     pub fn select_raw(mut self, expression: &str) -> Self {
         self.select_fields.push(expression.to_string());

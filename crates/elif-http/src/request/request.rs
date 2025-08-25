@@ -1,17 +1,14 @@
 //! Request abstraction for handling HTTP requests
-//! 
+//!
 //! Provides rich request parsing and data extraction capabilities.
 
-use std::collections::HashMap;
-use std::any::{Any, TypeId};
-use axum::{
-    http::Uri,
-    body::Bytes,
-};
-use serde::de::DeserializeOwned;
-use crate::errors::{HttpError, HttpResult};
 use super::ElifMethod;
+use crate::errors::{HttpError, HttpResult};
 use crate::response::ElifHeaderMap;
+use axum::{body::Bytes, http::Uri};
+use serde::de::DeserializeOwned;
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
 
 /// Request abstraction that wraps Axum's request types
 /// with additional parsing and extraction capabilities
@@ -28,11 +25,7 @@ pub struct ElifRequest {
 
 impl ElifRequest {
     /// Create new ElifRequest from Axum components
-    pub fn new(
-        method: ElifMethod,
-        uri: Uri,
-        headers: ElifHeaderMap,
-    ) -> Self {
+    pub fn new(method: ElifMethod, uri: Uri, headers: ElifHeaderMap) -> Self {
         Self {
             method,
             uri,
@@ -88,12 +81,12 @@ impl ElifRequest {
         V: AsRef<str>,
     {
         use crate::response::{ElifHeaderName, ElifHeaderValue};
-        
+
         let header_name = ElifHeaderName::from_str(key.as_ref())
             .map_err(|e| HttpError::bad_request(format!("Invalid header name: {}", e)))?;
         let header_value = ElifHeaderValue::from_str(value.as_ref())
             .map_err(|e| HttpError::bad_request(format!("Invalid header value: {}", e)))?;
-        
+
         self.headers.insert(header_name, header_value);
         Ok(())
     }
@@ -107,7 +100,7 @@ impl ElifRequest {
         self.path_params.insert(key.into(), value.into());
     }
 
-    /// Add query parameter (for middleware use) 
+    /// Add query parameter (for middleware use)
     pub fn add_query_param<K, V>(&mut self, key: K, value: V)
     where
         K: Into<String>,
@@ -127,10 +120,12 @@ impl ElifRequest {
         T: std::str::FromStr,
         T::Err: std::fmt::Display,
     {
-        let param = self.path_param(name)
+        let param = self
+            .path_param(name)
             .ok_or_else(|| HttpError::bad_request(format!("Missing path parameter: {}", name)))?;
-        
-        param.parse::<T>()
+
+        param
+            .parse::<T>()
             .map_err(|e| HttpError::bad_request(format!("Invalid path parameter {}: {}", name, e)))
     }
 
@@ -146,8 +141,9 @@ impl ElifRequest {
         T::Err: std::fmt::Display,
     {
         if let Some(param) = self.query_param(name) {
-            let parsed = param.parse::<T>()
-                .map_err(|e| HttpError::bad_request(format!("Invalid query parameter {}: {}", name, e)))?;
+            let parsed = param.parse::<T>().map_err(|e| {
+                HttpError::bad_request(format!("Invalid query parameter {}: {}", name, e))
+            })?;
             Ok(Some(parsed))
         } else {
             Ok(None)
@@ -160,8 +156,9 @@ impl ElifRequest {
         T: std::str::FromStr,
         T::Err: std::fmt::Display,
     {
-        self.query_param_parsed(name)?
-            .ok_or_else(|| HttpError::bad_request(format!("Missing required query parameter: {}", name)))
+        self.query_param_parsed(name)?.ok_or_else(|| {
+            HttpError::bad_request(format!("Missing required query parameter: {}", name))
+        })
     }
 
     /// Get header value by name
@@ -172,8 +169,9 @@ impl ElifRequest {
     /// Get header value as string
     pub fn header_string(&self, name: &str) -> HttpResult<Option<String>> {
         if let Some(value) = self.header(name) {
-            let str_value = value.to_str()
-                .map_err(|_| HttpError::bad_request(format!("Invalid header value for {}", name)))?;
+            let str_value = value.to_str().map_err(|_| {
+                HttpError::bad_request(format!("Invalid header value for {}", name))
+            })?;
             Ok(Some(str_value.to_string()))
         } else {
             Ok(None)
@@ -201,13 +199,14 @@ impl ElifRequest {
 
     /// Parse JSON body to specified type
     pub fn json<T: DeserializeOwned>(&self) -> HttpResult<T> {
-        let bytes = self.body_bytes()
+        let bytes = self
+            .body_bytes()
             .ok_or_else(|| HttpError::bad_request("No request body".to_string()))?;
-        
+
         serde_json::from_slice(bytes)
             .map_err(|e| HttpError::bad_request(format!("Invalid JSON body: {}", e)))
     }
-    
+
     /// Parse JSON body to specified type (async version for consistency)
     pub async fn json_async<T: DeserializeOwned>(&self) -> HttpResult<T> {
         self.json()
@@ -215,12 +214,13 @@ impl ElifRequest {
 
     /// Parse form data body to specified type
     pub fn form<T: DeserializeOwned>(&self) -> HttpResult<T> {
-        let bytes = self.body_bytes()
+        let bytes = self
+            .body_bytes()
             .ok_or_else(|| HttpError::bad_request("No request body".to_string()))?;
-        
+
         let body_str = std::str::from_utf8(bytes)
             .map_err(|_| HttpError::bad_request("Invalid UTF-8 in form body".to_string()))?;
-        
+
         serde_urlencoded::from_str(body_str)
             .map_err(|e| HttpError::bad_request(format!("Invalid form data: {}", e)))
     }
@@ -236,24 +236,28 @@ impl ElifRequest {
     pub fn path_params<T: DeserializeOwned>(&self) -> HttpResult<T> {
         let json_value = serde_json::to_value(&self.path_params)
             .map_err(|e| HttpError::internal(format!("Failed to serialize path params: {}", e)))?;
-        
+
         serde_json::from_value::<T>(json_value)
             .map_err(|e| HttpError::bad_request(format!("Invalid path parameters: {}", e)))
     }
-    
+
     /// Get a query parameter as a specific type
     pub fn query_param_as<T>(&self, name: &str) -> HttpResult<Option<T>>
-    where 
+    where
         T: std::str::FromStr,
         T::Err: std::fmt::Display,
     {
         match self.query_param(name) {
             Some(param) => {
-                let parsed = param.parse::<T>()
-                    .map_err(|e| HttpError::bad_request(format!("Invalid {} query parameter '{}': {}", name, param, e)))?;
+                let parsed = param.parse::<T>().map_err(|e| {
+                    HttpError::bad_request(format!(
+                        "Invalid {} query parameter '{}': {}",
+                        name, param, e
+                    ))
+                })?;
                 Ok(Some(parsed))
             }
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -289,18 +293,19 @@ impl ElifRequest {
                 return Some(ip.trim().to_string());
             }
         }
-        
+
         if let Ok(Some(real_ip)) = self.header_string("x-real-ip") {
             return Some(real_ip);
         }
-        
+
         // Could extend with connection info if available
         None
     }
 
     /// Check if request is HTTPS
     pub fn is_secure(&self) -> bool {
-        self.uri.scheme()
+        self.uri
+            .scheme()
             .map(|s| s == &axum::http::uri::Scheme::HTTPS)
             .unwrap_or(false)
     }
@@ -323,38 +328,33 @@ impl ElifRequest {
     /// Convert ElifRequest to Axum Request for backward compatibility
     pub(crate) fn into_axum_request(self) -> axum::extract::Request {
         use axum::body::Body;
-        
+
         let body = match self.body_bytes {
             Some(bytes) => Body::from(bytes),
             None => Body::empty(),
         };
-        
+
         let mut builder = axum::extract::Request::builder()
             .method(self.method.to_axum())
             .uri(self.uri);
-        
+
         // Add headers one by one
         for (key, value) in self.headers.iter() {
             builder = builder.header(key.to_axum(), value.to_axum());
         }
-        
-        builder.body(body)
+
+        builder
+            .body(body)
             .expect("Failed to construct Axum request")
     }
 
     /// Convert Axum Request to ElifRequest for backward compatibility
     pub(crate) async fn from_axum_request(request: axum::extract::Request) -> Self {
-        
-        
-        
         let (parts, body) = request.into_parts();
-        
+
         // Extract body bytes
-        let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
-            Ok(bytes) => Some(bytes),
-            Err(_) => None,
-        };
-        
+        let body_bytes = (axum::body::to_bytes(body, usize::MAX).await).ok();
+
         Self::extract_elif_request(
             ElifMethod::from_axum(parts.method),
             parts.uri,
@@ -389,7 +389,7 @@ impl ElifRequest {
 /// Enhanced parameter extraction methods with better error handling and type safety
 impl ElifRequest {
     /// Extract and parse a path parameter with proper error handling
-    /// 
+    ///
     /// This is the preferred method for extracting path parameters as it provides
     /// better error messages and type safety compared to the legacy methods.
     pub fn path_param_typed<T>(&self, name: &str) -> Result<T, crate::request::pipeline::ParamError>
@@ -421,12 +421,18 @@ impl ElifRequest {
     }
 
     /// Extract and parse a path parameter as UUID
-    pub fn path_param_uuid(&self, name: &str) -> Result<uuid::Uuid, crate::request::pipeline::ParamError> {
+    pub fn path_param_uuid(
+        &self,
+        name: &str,
+    ) -> Result<uuid::Uuid, crate::request::pipeline::ParamError> {
         self.path_param_typed(name)
     }
 
     /// Extract and parse a path parameter as String (validates non-empty)
-    pub fn path_param_string(&self, name: &str) -> Result<String, crate::request::pipeline::ParamError> {
+    pub fn path_param_string(
+        &self,
+        name: &str,
+    ) -> Result<String, crate::request::pipeline::ParamError> {
         let value: String = self.path_param_typed(name)?;
         if value.is_empty() {
             return Err(crate::request::pipeline::ParamError::ParseError {
@@ -439,7 +445,10 @@ impl ElifRequest {
     }
 
     /// Extract and parse an optional query parameter with proper error handling
-    pub fn query_param_typed_new<T>(&self, name: &str) -> Result<Option<T>, crate::request::pipeline::ParamError>
+    pub fn query_param_typed_new<T>(
+        &self,
+        name: &str,
+    ) -> Result<Option<T>, crate::request::pipeline::ParamError>
     where
         T: std::str::FromStr,
         T::Err: std::fmt::Debug + std::fmt::Display,
@@ -448,7 +457,10 @@ impl ElifRequest {
     }
 
     /// Extract and parse a required query parameter with proper error handling  
-    pub fn query_param_required_typed<T>(&self, name: &str) -> Result<T, crate::request::pipeline::ParamError>
+    pub fn query_param_required_typed<T>(
+        &self,
+        name: &str,
+    ) -> Result<T, crate::request::pipeline::ParamError>
     where
         T: std::str::FromStr,
         T::Err: std::fmt::Debug + std::fmt::Display,
@@ -457,50 +469,79 @@ impl ElifRequest {
     }
 
     /// Extract query parameter as optional i32
-    pub fn query_param_int_new(&self, name: &str) -> Result<Option<i32>, crate::request::pipeline::ParamError> {
+    pub fn query_param_int_new(
+        &self,
+        name: &str,
+    ) -> Result<Option<i32>, crate::request::pipeline::ParamError> {
         self.query_param_typed_new(name)
     }
 
     /// Extract query parameter as required i32
-    pub fn query_param_int_required(&self, name: &str) -> Result<i32, crate::request::pipeline::ParamError> {
+    pub fn query_param_int_required(
+        &self,
+        name: &str,
+    ) -> Result<i32, crate::request::pipeline::ParamError> {
         self.query_param_required_typed(name)
     }
 
     /// Extract query parameter as optional u32
-    pub fn query_param_u32_new(&self, name: &str) -> Result<Option<u32>, crate::request::pipeline::ParamError> {
+    pub fn query_param_u32_new(
+        &self,
+        name: &str,
+    ) -> Result<Option<u32>, crate::request::pipeline::ParamError> {
         self.query_param_typed_new(name)
     }
 
     /// Extract query parameter as required u32
-    pub fn query_param_u32_required(&self, name: &str) -> Result<u32, crate::request::pipeline::ParamError> {
+    pub fn query_param_u32_required(
+        &self,
+        name: &str,
+    ) -> Result<u32, crate::request::pipeline::ParamError> {
         self.query_param_required_typed(name)
     }
 
     /// Extract query parameter as optional bool
-    pub fn query_param_bool_new(&self, name: &str) -> Result<Option<bool>, crate::request::pipeline::ParamError> {
+    pub fn query_param_bool_new(
+        &self,
+        name: &str,
+    ) -> Result<Option<bool>, crate::request::pipeline::ParamError> {
         self.query_param_typed_new(name)
     }
 
     /// Extract query parameter as required bool
-    pub fn query_param_bool_required(&self, name: &str) -> Result<bool, crate::request::pipeline::ParamError> {
+    pub fn query_param_bool_required(
+        &self,
+        name: &str,
+    ) -> Result<bool, crate::request::pipeline::ParamError> {
         self.query_param_required_typed(name)
     }
 
     /// Extract query parameter as optional String
-    pub fn query_param_string_new(&self, name: &str) -> Result<Option<String>, crate::request::pipeline::ParamError> {
+    pub fn query_param_string_new(
+        &self,
+        name: &str,
+    ) -> Result<Option<String>, crate::request::pipeline::ParamError> {
         self.query_param_typed_new(name)
     }
 
     /// Extract query parameter as required String
-    pub fn query_param_string_required(&self, name: &str) -> Result<String, crate::request::pipeline::ParamError> {
+    pub fn query_param_string_required(
+        &self,
+        name: &str,
+    ) -> Result<String, crate::request::pipeline::ParamError> {
         self.query_param_required_typed(name)
     }
 
     /// Validate that path parameter exists and is not empty
-    pub fn validate_path_param(&self, name: &str) -> Result<&String, crate::request::pipeline::ParamError> {
-        let param = self.path_params.get(name)
+    pub fn validate_path_param(
+        &self,
+        name: &str,
+    ) -> Result<&String, crate::request::pipeline::ParamError> {
+        let param = self
+            .path_params
+            .get(name)
             .ok_or_else(|| crate::request::pipeline::ParamError::Missing(name.to_string()))?;
-        
+
         if param.is_empty() {
             return Err(crate::request::pipeline::ParamError::ParseError {
                 param: name.to_string(),
@@ -508,7 +549,7 @@ impl ElifRequest {
                 error: "Parameter cannot be empty".to_string(),
             });
         }
-        
+
         Ok(param)
     }
 
@@ -536,8 +577,8 @@ impl ElifRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::Uri;
     use crate::response::ElifHeaderMap;
+    use axum::http::Uri;
     use std::collections::HashMap;
 
     #[test]
@@ -561,14 +602,14 @@ mod tests {
         // Test typed path params (existing method)
         let id: u32 = request.path_param_parsed("id").unwrap();
         assert_eq!(id, 123);
-        
+
         let slug: String = request.path_param_parsed("slug").unwrap();
         assert_eq!(slug, "test-post");
-        
+
         // Test error on invalid type conversion
         assert!(request.path_param_parsed::<u32>("slug").is_err());
     }
-    
+
     #[test]
     fn test_query_param_methods() {
         let mut query_params = HashMap::new();
@@ -584,35 +625,46 @@ mod tests {
 
         // Test query param access
         assert_eq!(request.query_param("page"), Some(&"2".to_string()));
-        assert_eq!(request.query_param("search"), Some(&"hello world".to_string()));
+        assert_eq!(
+            request.query_param("search"),
+            Some(&"hello world".to_string())
+        );
         assert_eq!(request.query_param("nonexistent"), None);
 
         // Test typed query params
         let page: Option<u32> = request.query_param_as("page").unwrap();
         assert_eq!(page, Some(2));
-        
+
         let nonexistent: Option<u32> = request.query_param_as("nonexistent").unwrap();
         assert_eq!(nonexistent, None);
-        
+
         // Test error on invalid type conversion
         assert!(request.query_param_as::<u32>("search").is_err());
     }
-    
+
     #[test]
     fn test_header_method() {
         let mut headers = ElifHeaderMap::new();
-        headers.insert("Content-Type".parse().unwrap(), "application/json".parse().unwrap());
-        headers.insert("User-Agent".parse().unwrap(), "test-client/1.0".parse().unwrap());
-
-        let request = ElifRequest::new(
-            ElifMethod::POST,
-            "/api/test".parse().unwrap(),
-            headers,
+        headers.insert(
+            "Content-Type".parse().unwrap(),
+            "application/json".parse().unwrap(),
+        );
+        headers.insert(
+            "User-Agent".parse().unwrap(),
+            "test-client/1.0".parse().unwrap(),
         );
 
+        let request = ElifRequest::new(ElifMethod::POST, "/api/test".parse().unwrap(), headers);
+
         // Test header access
-        assert_eq!(request.header_string("content-type").unwrap(), Some("application/json".to_string()));
-        assert_eq!(request.header_string("user-agent").unwrap(), Some("test-client/1.0".to_string()));
+        assert_eq!(
+            request.header_string("content-type").unwrap(),
+            Some("application/json".to_string())
+        );
+        assert_eq!(
+            request.header_string("user-agent").unwrap(),
+            Some("test-client/1.0".to_string())
+        );
         assert_eq!(request.header_string("nonexistent").unwrap(), None);
     }
 
@@ -627,7 +679,8 @@ mod tests {
             ElifMethod::GET,
             "/posts?page=2&per_page=25&search=rust".parse().unwrap(),
             ElifHeaderMap::new(),
-        ).with_query_params(query_params);
+        )
+        .with_query_params(query_params);
 
         assert_eq!(request.query_param("page"), Some(&"2".to_string()));
         let page: u32 = request.query_param_required("page").unwrap();
@@ -646,11 +699,7 @@ mod tests {
         let header_value = crate::response::ElifHeaderValue::from_str("application/json").unwrap();
         headers.insert(header_name, header_value);
 
-        let request = ElifRequest::new(
-            ElifMethod::POST,
-            "/api/users".parse().unwrap(),
-            headers,
-        );
+        let request = ElifRequest::new(ElifMethod::POST, "/api/users".parse().unwrap(), headers);
 
         assert!(request.is_json());
     }
@@ -662,11 +711,7 @@ mod tests {
         let header_value = crate::response::ElifHeaderValue::from_str("Bearer abc123xyz").unwrap();
         headers.insert(header_name, header_value);
 
-        let request = ElifRequest::new(
-            ElifMethod::GET,
-            "/api/protected".parse().unwrap(),
-            headers,
-        );
+        let request = ElifRequest::new(ElifMethod::GET, "/api/protected".parse().unwrap(), headers);
 
         let token = request.bearer_token().unwrap();
         assert_eq!(token, "abc123xyz");
@@ -679,7 +724,12 @@ mod tests {
         let headers = ElifHeaderMap::new();
         let body = Some(Bytes::from("test body"));
 
-        let request = ElifRequest::extract_elif_request(method.clone(), uri.clone(), headers.clone(), body.clone());
+        let request = ElifRequest::extract_elif_request(
+            method.clone(),
+            uri.clone(),
+            headers.clone(),
+            body.clone(),
+        );
 
         assert_eq!(request.method, method);
         assert_eq!(request.uri, uri);
@@ -693,16 +743,25 @@ mod tests {
             "/test".parse().unwrap(),
             ElifHeaderMap::new(),
         );
-        
+
         // Test adding headers with borrowing API
         request.add_header("x-middleware", "processed").unwrap();
         request.add_header("x-custom", "value").unwrap();
-        
-        let middleware_header = crate::response::headers::ElifHeaderName::from_str("x-middleware").unwrap();
+
+        let middleware_header =
+            crate::response::headers::ElifHeaderName::from_str("x-middleware").unwrap();
         let custom_header = crate::response::headers::ElifHeaderName::from_str("x-custom").unwrap();
         assert!(request.headers.contains_key(&middleware_header));
         assert!(request.headers.contains_key(&custom_header));
-        assert_eq!(request.headers.get(&middleware_header).unwrap().to_str().unwrap(), "processed");
+        assert_eq!(
+            request
+                .headers
+                .get(&middleware_header)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "processed"
+        );
     }
 
     #[test]
@@ -712,13 +771,13 @@ mod tests {
             "/users/123?page=2".parse().unwrap(),
             ElifHeaderMap::new(),
         );
-        
+
         // Test adding parameters with borrowing API
         request.add_path_param("id", "123");
         request.add_path_param("section", "profile");
         request.add_query_param("page", "2");
         request.add_query_param("limit", "10");
-        
+
         assert_eq!(request.path_param("id"), Some(&"123".to_string()));
         assert_eq!(request.path_param("section"), Some(&"profile".to_string()));
         assert_eq!(request.query_param("page"), Some(&"2".to_string()));
@@ -732,10 +791,10 @@ mod tests {
             "/test".parse().unwrap(),
             ElifHeaderMap::new(),
         );
-        
+
         let body_data = Bytes::from("test body content");
         request.set_body(body_data.clone());
-        
+
         assert_eq!(request.body_bytes(), Some(&body_data));
     }
 
@@ -746,14 +805,15 @@ mod tests {
             "/api/users".parse().unwrap(),
             ElifHeaderMap::new(),
         );
-        
+
         // Simulate middleware adding context data
         request.add_header("x-request-id", "req-123").unwrap();
         request.add_path_param("user_id", "456");
         request.add_query_param("enriched", "true");
-        
+
         // Verify all modifications were applied
-        let request_id_header = crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap();
+        let request_id_header =
+            crate::response::headers::ElifHeaderName::from_str("x-request-id").unwrap();
         assert!(request.headers.contains_key(&request_id_header));
         assert_eq!(request.path_param("user_id"), Some(&"456".to_string()));
         assert_eq!(request.query_param("enriched"), Some(&"true".to_string()));

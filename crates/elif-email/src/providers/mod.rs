@@ -1,13 +1,12 @@
-pub mod smtp;
-pub mod sendgrid;
 pub mod mailgun;
+pub mod sendgrid;
+pub mod smtp;
 
-pub use smtp::*;
-pub use sendgrid::*;
 pub use mailgun::*;
+pub use sendgrid::*;
+pub use smtp::*;
 
-
-use crate::{Email, EmailError, EmailResult, EmailProvider};
+use crate::{Email, EmailError, EmailProvider, EmailResult};
 use std::sync::Arc;
 
 // Test providers for internal testing

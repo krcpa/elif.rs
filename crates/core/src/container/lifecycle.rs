@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use async_trait::async_trait;
+use std::sync::Arc;
 
 use crate::errors::CoreError;
 
@@ -8,7 +8,7 @@ use crate::errors::CoreError;
 pub trait AsyncInitializable: Send + Sync {
     /// Initialize the service asynchronously
     async fn initialize(&self) -> Result<(), CoreError>;
-    
+
     /// Check if the service is initialized
     fn is_initialized(&self) -> bool {
         true // Default implementation assumes immediate initialization
@@ -61,7 +61,10 @@ pub struct ServiceLifecycleManager {
 impl std::fmt::Debug for ServiceLifecycleManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ServiceLifecycleManager")
-            .field("initializable_services_count", &self.initializable_services.len())
+            .field(
+                "initializable_services_count",
+                &self.initializable_services.len(),
+            )
             .field("disposable_services_count", &self.disposable_services.len())
             .field("state", &self.state)
             .field("has_disposal_handle", &self.disposal_handle.is_some())
@@ -80,26 +83,28 @@ impl ServiceLifecycleManager {
             disposal_handle: None,
         }
     }
-    
+
     /// Add a service that needs async initialization
     pub fn add_initializable<T: AsyncInitializable + 'static>(&mut self, service: Arc<T>) {
         self.initializable_services.push(service);
-        self.initializable_service_types.push(std::any::type_name::<T>().to_string());
+        self.initializable_service_types
+            .push(std::any::type_name::<T>().to_string());
     }
-    
+
     /// Add a service that needs disposal
     pub fn add_disposable<T: Disposable + 'static>(&mut self, service: Arc<T>) {
         self.disposable_services.push(service);
     }
-    
+
     /// Add a service that needs both initialization and disposal
     pub fn add_lifecycle_managed<T: LifecycleManaged + 'static>(&mut self, service: Arc<T>) {
         let service_clone = service.clone();
         self.initializable_services.push(service_clone);
-        self.initializable_service_types.push(std::any::type_name::<T>().to_string());
+        self.initializable_service_types
+            .push(std::any::type_name::<T>().to_string());
         self.disposable_services.push(service);
     }
-    
+
     /// Initialize all registered services
     pub async fn initialize_all(&mut self) -> Result<(), CoreError> {
         if self.state != ServiceState::Registered {
@@ -107,33 +112,37 @@ impl ServiceLifecycleManager {
                 message: format!("Cannot initialize services in state: {:?}", self.state),
             });
         }
-        
+
         self.state = ServiceState::Created;
-        
+
         // Initialize services in registration order
         for (index, service) in self.initializable_services.iter().enumerate() {
-            let service_type = self.initializable_service_types
+            let service_type = self
+                .initializable_service_types
                 .get(index)
                 .map(|s| s.as_str())
                 .unwrap_or("unknown");
-            
-            service.initialize().await.map_err(|e| CoreError::ServiceInitializationFailed {
-                service_type: service_type.to_string(),
-                source: Box::new(e),
-            })?;
+
+            service
+                .initialize()
+                .await
+                .map_err(|e| CoreError::ServiceInitializationFailed {
+                    service_type: service_type.to_string(),
+                    source: Box::new(e),
+                })?;
         }
-        
+
         self.state = ServiceState::Initialized;
         Ok(())
     }
-    
+
     /// Initialize services with timeout
     pub async fn initialize_all_with_timeout(
-        &mut self, 
-        timeout: std::time::Duration
+        &mut self,
+        timeout: std::time::Duration,
     ) -> Result<(), CoreError> {
         let init_future = self.initialize_all();
-        
+
         match tokio::time::timeout(timeout, init_future).await {
             Ok(result) => result,
             Err(_) => Err(CoreError::ServiceInitializationFailed {
@@ -144,15 +153,15 @@ impl ServiceLifecycleManager {
             }),
         }
     }
-    
+
     /// Dispose all services in reverse order
     pub async fn dispose_all(&mut self) -> Result<(), CoreError> {
         if self.state == ServiceState::Disposed || self.state == ServiceState::Disposing {
             return Ok(()); // Already disposed or disposing
         }
-        
+
         self.state = ServiceState::Disposing;
-        
+
         // Dispose services in reverse order (LIFO)
         for service in self.disposable_services.iter().rev() {
             if let Err(e) = service.dispose().await {
@@ -160,23 +169,23 @@ impl ServiceLifecycleManager {
                 eprintln!("Error disposing service: {:?}", e);
             }
         }
-        
+
         self.state = ServiceState::Disposed;
         self.disposal_handle = None; // Clear any handle
         Ok(())
     }
-    
+
     /// Schedule disposal in the background (non-blocking)
     /// This is useful when you can't await in the current context (like Drop)
     pub fn schedule_disposal(&mut self) {
         if self.is_disposed() || self.disposal_handle.is_some() {
             return; // Already disposed or disposal scheduled
         }
-        
+
         // Take ownership of the services to dispose
         let services = std::mem::take(&mut self.disposable_services);
         self.state = ServiceState::Disposing;
-        
+
         // Spawn a background task to handle disposal
         let handle = tokio::spawn(async move {
             for service in services.iter().rev() {
@@ -185,10 +194,10 @@ impl ServiceLifecycleManager {
                 }
             }
         });
-        
+
         self.disposal_handle = Some(handle);
     }
-    
+
     /// Wait for any scheduled disposal to complete
     pub async fn wait_for_disposal(&mut self) -> Result<(), CoreError> {
         if let Some(handle) = self.disposal_handle.take() {
@@ -200,27 +209,27 @@ impl ServiceLifecycleManager {
         }
         Ok(())
     }
-    
+
     /// Get the current lifecycle state
     pub fn state(&self) -> ServiceState {
         self.state
     }
-    
+
     /// Check if all services are initialized
     pub fn is_initialized(&self) -> bool {
         self.state == ServiceState::Initialized
     }
-    
+
     /// Check if services are disposed
     pub fn is_disposed(&self) -> bool {
         self.state == ServiceState::Disposed
     }
-    
+
     /// Get the number of services requiring initialization
     pub fn initializable_count(&self) -> usize {
         self.initializable_services.len()
     }
-    
+
     /// Get the number of services requiring disposal
     pub fn disposable_count(&self) -> usize {
         self.disposable_services.len()
@@ -271,7 +280,7 @@ mod tests {
             self.initialized.store(true, Ordering::SeqCst);
             Ok(())
         }
-        
+
         fn is_initialized(&self) -> bool {
             self.initialized.load(Ordering::SeqCst)
         }
@@ -289,12 +298,12 @@ mod tests {
     async fn test_lifecycle_manager_initialization() {
         let mut manager = ServiceLifecycleManager::new();
         let service = Arc::new(TestService::default());
-        
+
         assert!(!service.is_initialized());
         manager.add_lifecycle_managed(service.clone());
-        
+
         manager.initialize_all().await.unwrap();
-        
+
         assert!(service.is_initialized());
         assert!(manager.is_initialized());
     }
@@ -303,14 +312,14 @@ mod tests {
     async fn test_lifecycle_manager_disposal() {
         let mut manager = ServiceLifecycleManager::new();
         let service = Arc::new(TestService::default());
-        
+
         manager.add_lifecycle_managed(service.clone());
         manager.initialize_all().await.unwrap();
-        
+
         assert!(!service.disposed.load(Ordering::SeqCst));
-        
+
         manager.dispose_all().await.unwrap();
-        
+
         assert!(service.disposed.load(Ordering::SeqCst));
         assert!(manager.is_disposed());
     }
@@ -331,53 +340,53 @@ mod tests {
 
         let mut manager = ServiceLifecycleManager::new();
         let service = Arc::new(SlowService::default());
-        
+
         manager.add_initializable(service);
-        
+
         // Should timeout
-        let result = manager.initialize_all_with_timeout(
-            std::time::Duration::from_millis(50)
-        ).await;
-        
+        let result = manager
+            .initialize_all_with_timeout(std::time::Duration::from_millis(50))
+            .await;
+
         assert!(result.is_err());
     }
-    
+
     #[tokio::test]
     async fn test_background_disposal() {
         let mut manager = ServiceLifecycleManager::new();
         let service = Arc::new(TestService::default());
-        
+
         manager.add_lifecycle_managed(service.clone());
         manager.initialize_all().await.unwrap();
-        
+
         assert!(!service.disposed.load(Ordering::SeqCst));
-        
+
         // Schedule disposal in background
         manager.schedule_disposal();
-        
+
         // Wait for it to complete
         manager.wait_for_disposal().await.unwrap();
-        
+
         assert!(service.disposed.load(Ordering::SeqCst));
         assert!(manager.is_disposed());
     }
-    
+
     #[tokio::test]
     async fn test_drop_with_runtime() {
         let service = Arc::new(TestService::default());
-        
+
         {
             let mut manager = ServiceLifecycleManager::new();
             manager.add_lifecycle_managed(service.clone());
             manager.initialize_all().await.unwrap();
-            
+
             // Drop the manager without calling dispose_all()
             // It should schedule disposal automatically
         }
-        
+
         // Give background task time to run
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        
+
         // Service should be disposed by Drop
         assert!(service.disposed.load(Ordering::SeqCst));
     }
@@ -398,21 +407,24 @@ mod tests {
 
         let mut manager = ServiceLifecycleManager::new();
         let service = Arc::new(FailingService::default());
-        
+
         manager.add_initializable(service);
-        
+
         // Should fail with proper service type name
         let result = manager.initialize_all().await;
-        
+
         assert!(result.is_err());
         let error = result.unwrap_err();
-        
+
         if let CoreError::ServiceInitializationFailed { service_type, .. } = error {
             // Check that it contains the actual service type name
             assert!(service_type.contains("FailingService"));
             assert!(!service_type.eq("unknown"));
         } else {
-            panic!("Expected ServiceInitializationFailed error, got: {:?}", error);
+            panic!(
+                "Expected ServiceInitializationFailed error, got: {:?}",
+                error
+            );
         }
     }
 }

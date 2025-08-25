@@ -85,10 +85,14 @@ impl OpenApiGenerator {
             components: None,
             security: self.convert_security_requirements(),
             tags: self.convert_tags(),
-            external_docs: self.config.external_docs.as_ref().map(|ed| ExternalDocumentation {
-                url: ed.url.clone(),
-                description: ed.description.clone(),
-            }),
+            external_docs: self
+                .config
+                .external_docs
+                .as_ref()
+                .map(|ed| ExternalDocumentation {
+                    url: ed.url.clone(),
+                    description: ed.description.clone(),
+                }),
         };
 
         // Generate paths from routes
@@ -104,21 +108,28 @@ impl OpenApiGenerator {
     }
 
     /// Process a single route and add to specification
-    fn process_route(&mut self, spec: &mut OpenApiSpec, route: &RouteMetadata) -> OpenApiResult<()> {
+    fn process_route(
+        &mut self,
+        spec: &mut OpenApiSpec,
+        route: &RouteMetadata,
+    ) -> OpenApiResult<()> {
         // Get or create path item
-        let path_item = spec.paths.entry(route.path.clone()).or_insert_with(|| PathItem {
-            summary: None,
-            description: None,
-            get: None,
-            put: None,
-            post: None,
-            delete: None,
-            options: None,
-            head: None,
-            patch: None,
-            trace: None,
-            parameters: Vec::new(),
-        });
+        let path_item = spec
+            .paths
+            .entry(route.path.clone())
+            .or_insert_with(|| PathItem {
+                summary: None,
+                description: None,
+                get: None,
+                put: None,
+                post: None,
+                delete: None,
+                options: None,
+                head: None,
+                patch: None,
+                trace: None,
+                parameters: Vec::new(),
+            });
 
         // Create operation
         let operation = self.create_operation(route)?;
@@ -134,9 +145,10 @@ impl OpenApiGenerator {
             "HEAD" => path_item.head = Some(operation),
             "TRACE" => path_item.trace = Some(operation),
             _ => {
-                return Err(OpenApiError::route_discovery_error(
-                    format!("Unsupported HTTP method: {}", route.method)
-                ));
+                return Err(OpenApiError::route_discovery_error(format!(
+                    "Unsupported HTTP method: {}",
+                    route.method
+                )));
             }
         }
 
@@ -146,7 +158,8 @@ impl OpenApiGenerator {
     /// Create operation from route metadata
     fn create_operation(&mut self, route: &RouteMetadata) -> OpenApiResult<Operation> {
         // Generate parameters
-        let parameters = route.parameters
+        let parameters = route
+            .parameters
             .iter()
             .map(|param| self.create_parameter(param))
             .collect::<OpenApiResult<Vec<_>>>()?;
@@ -165,7 +178,8 @@ impl OpenApiGenerator {
         let security = if route.security.is_empty() {
             Vec::new()
         } else {
-            route.security
+            route
+                .security
                 .iter()
                 .map(|scheme| {
                     let mut req = HashMap::new();
@@ -214,11 +228,14 @@ impl OpenApiGenerator {
         };
 
         let mut content = HashMap::new();
-        content.insert("application/json".to_string(), MediaType {
-            schema: Some(schema),
-            example: None,
-            examples: HashMap::new(),
-        });
+        content.insert(
+            "application/json".to_string(),
+            MediaType {
+                schema: Some(schema),
+                example: None,
+                examples: HashMap::new(),
+            },
+        );
 
         Ok(RequestBody {
             description: Some(format!("Request payload for {}", schema_name)),
@@ -228,17 +245,23 @@ impl OpenApiGenerator {
     }
 
     /// Create responses from schema mappings
-    fn create_responses(&mut self, response_schemas: &HashMap<String, String>) -> OpenApiResult<HashMap<String, Response>> {
+    fn create_responses(
+        &mut self,
+        response_schemas: &HashMap<String, String>,
+    ) -> OpenApiResult<HashMap<String, Response>> {
         let mut responses = HashMap::new();
 
         // Default success response if none specified
         if response_schemas.is_empty() {
-            responses.insert("200".to_string(), Response {
-                description: "Successful operation".to_string(),
-                headers: HashMap::new(),
-                content: HashMap::new(),
-                links: HashMap::new(),
-            });
+            responses.insert(
+                "200".to_string(),
+                Response {
+                    description: "Successful operation".to_string(),
+                    headers: HashMap::new(),
+                    content: HashMap::new(),
+                    links: HashMap::new(),
+                },
+            );
         } else {
             for (status_code, schema_name) in response_schemas {
                 let schema = Schema {
@@ -247,11 +270,14 @@ impl OpenApiGenerator {
                 };
 
                 let mut content = HashMap::new();
-                content.insert("application/json".to_string(), MediaType {
-                    schema: Some(schema),
-                    example: None,
-                    examples: HashMap::new(),
-                });
+                content.insert(
+                    "application/json".to_string(),
+                    MediaType {
+                        schema: Some(schema),
+                        example: None,
+                        examples: HashMap::new(),
+                    },
+                );
 
                 let description = match status_code.as_str() {
                     "200" => "OK",
@@ -266,12 +292,15 @@ impl OpenApiGenerator {
                     _ => "Response",
                 };
 
-                responses.insert(status_code.clone(), Response {
-                    description: description.to_string(),
-                    headers: HashMap::new(),
-                    content,
-                    links: HashMap::new(),
-                });
+                responses.insert(
+                    status_code.clone(),
+                    Response {
+                        description: description.to_string(),
+                        headers: HashMap::new(),
+                        content,
+                        links: HashMap::new(),
+                    },
+                );
             }
         }
 
@@ -320,18 +349,24 @@ impl OpenApiGenerator {
 
     /// Convert server configurations
     fn convert_servers(&self) -> Vec<Server> {
-        self.config.servers
+        self.config
+            .servers
             .iter()
             .map(|s| Server {
                 url: s.url.clone(),
                 description: s.description.clone(),
                 variables: s.variables.as_ref().map(|vars| {
                     vars.iter()
-                        .map(|(k, v)| (k.clone(), ServerVariable {
-                            default: v.default.clone(),
-                            enum_values: v.r#enum.clone(),
-                            description: v.description.clone(),
-                        }))
+                        .map(|(k, v)| {
+                            (
+                                k.clone(),
+                                ServerVariable {
+                                    default: v.default.clone(),
+                                    enum_values: v.r#enum.clone(),
+                                    description: v.description.clone(),
+                                },
+                            )
+                        })
                         .collect()
                 }),
             })
@@ -340,56 +375,60 @@ impl OpenApiGenerator {
 
     /// Convert security schemes
     fn convert_security_schemes(&self) -> HashMap<String, SecurityScheme> {
-        self.config.security_schemes
+        self.config
+            .security_schemes
             .iter()
             .map(|(name, scheme)| {
                 let security_scheme = match scheme {
-                    crate::config::SecurityScheme::Http { scheme, bearer_format } => {
-                        SecurityScheme::Http {
-                            scheme: scheme.clone(),
-                            bearer_format: bearer_format.clone(),
-                        }
+                    crate::config::SecurityScheme::Http {
+                        scheme,
+                        bearer_format,
+                    } => SecurityScheme::Http {
+                        scheme: scheme.clone(),
+                        bearer_format: bearer_format.clone(),
                     },
                     crate::config::SecurityScheme::ApiKey { name, r#in } => {
                         SecurityScheme::ApiKey {
                             name: name.clone(),
                             location: r#in.clone(),
                         }
+                    }
+                    crate::config::SecurityScheme::OAuth2 { flows } => SecurityScheme::OAuth2 {
+                        flows: OAuth2Flows {
+                            implicit: flows.implicit.as_ref().map(|f| OAuth2Flow {
+                                authorization_url: f.authorization_url.clone(),
+                                token_url: f.token_url.clone(),
+                                refresh_url: f.refresh_url.clone(),
+                                scopes: f.scopes.clone(),
+                            }),
+                            password: flows.password.as_ref().map(|f| OAuth2Flow {
+                                authorization_url: f.authorization_url.clone(),
+                                token_url: f.token_url.clone(),
+                                refresh_url: f.refresh_url.clone(),
+                                scopes: f.scopes.clone(),
+                            }),
+                            client_credentials: flows.client_credentials.as_ref().map(|f| {
+                                OAuth2Flow {
+                                    authorization_url: f.authorization_url.clone(),
+                                    token_url: f.token_url.clone(),
+                                    refresh_url: f.refresh_url.clone(),
+                                    scopes: f.scopes.clone(),
+                                }
+                            }),
+                            authorization_code: flows.authorization_code.as_ref().map(|f| {
+                                OAuth2Flow {
+                                    authorization_url: f.authorization_url.clone(),
+                                    token_url: f.token_url.clone(),
+                                    refresh_url: f.refresh_url.clone(),
+                                    scopes: f.scopes.clone(),
+                                }
+                            }),
+                        },
                     },
-                    crate::config::SecurityScheme::OAuth2 { flows } => {
-                        SecurityScheme::OAuth2 {
-                            flows: OAuth2Flows {
-                                implicit: flows.implicit.as_ref().map(|f| OAuth2Flow {
-                                    authorization_url: f.authorization_url.clone(),
-                                    token_url: f.token_url.clone(),
-                                    refresh_url: f.refresh_url.clone(),
-                                    scopes: f.scopes.clone(),
-                                }),
-                                password: flows.password.as_ref().map(|f| OAuth2Flow {
-                                    authorization_url: f.authorization_url.clone(),
-                                    token_url: f.token_url.clone(),
-                                    refresh_url: f.refresh_url.clone(),
-                                    scopes: f.scopes.clone(),
-                                }),
-                                client_credentials: flows.client_credentials.as_ref().map(|f| OAuth2Flow {
-                                    authorization_url: f.authorization_url.clone(),
-                                    token_url: f.token_url.clone(),
-                                    refresh_url: f.refresh_url.clone(),
-                                    scopes: f.scopes.clone(),
-                                }),
-                                authorization_code: flows.authorization_code.as_ref().map(|f| OAuth2Flow {
-                                    authorization_url: f.authorization_url.clone(),
-                                    token_url: f.token_url.clone(),
-                                    refresh_url: f.refresh_url.clone(),
-                                    scopes: f.scopes.clone(),
-                                }),
-                            },
-                        }
-                    },
-                    crate::config::SecurityScheme::OpenIdConnect { open_id_connect_url } => {
-                        SecurityScheme::OpenIdConnect {
-                            open_id_connect_url: open_id_connect_url.clone(),
-                        }
+                    crate::config::SecurityScheme::OpenIdConnect {
+                        open_id_connect_url,
+                    } => SecurityScheme::OpenIdConnect {
+                        open_id_connect_url: open_id_connect_url.clone(),
                     },
                 };
                 (name.clone(), security_scheme)
@@ -405,7 +444,8 @@ impl OpenApiGenerator {
 
     /// Convert tags
     fn convert_tags(&self) -> Vec<Tag> {
-        self.config.tags
+        self.config
+            .tags
             .iter()
             .map(|t| Tag {
                 name: t.name.clone(),
@@ -473,10 +513,10 @@ mod tests {
     fn test_empty_routes_generation() {
         let config = OpenApiConfig::new("Test API", "1.0.0");
         let mut generator = OpenApiGenerator::new(config);
-        
+
         let routes = vec![];
         let spec = generator.generate(&routes).unwrap();
-        
+
         assert_eq!(spec.info.title, "Test API");
         assert_eq!(spec.info.version, "1.0.0");
         assert!(spec.paths.is_empty());
@@ -486,7 +526,7 @@ mod tests {
     fn test_basic_route_generation() {
         let config = OpenApiConfig::new("Test API", "1.0.0");
         let mut generator = OpenApiGenerator::new(config);
-        
+
         let routes = vec![RouteMetadata {
             method: "GET".to_string(),
             path: "/users".to_string(),
@@ -500,15 +540,15 @@ mod tests {
             security: Vec::new(),
             deprecated: false,
         }];
-        
+
         let spec = generator.generate(&routes).unwrap();
-        
+
         assert_eq!(spec.paths.len(), 1);
         assert!(spec.paths.contains_key("/users"));
-        
+
         let path_item = &spec.paths["/users"];
         assert!(path_item.get.is_some());
-        
+
         let operation = path_item.get.as_ref().unwrap();
         assert_eq!(operation.summary, Some("List users".to_string()));
         assert_eq!(operation.tags, vec!["Users".to_string()]);

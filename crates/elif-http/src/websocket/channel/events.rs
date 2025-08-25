@@ -1,8 +1,8 @@
 //! Channel event system
 
 use super::super::types::ConnectionId;
-use super::types::{ChannelId, ChannelPermissions};
 use super::message::ChannelMessage;
+use super::types::{ChannelId, ChannelPermissions};
 
 /// Events that can occur in the channel system
 #[derive(Debug, Clone)]

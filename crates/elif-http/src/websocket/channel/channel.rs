@@ -1,8 +1,10 @@
 //! Core Channel implementation
 
 use super::super::types::{ConnectionId, WebSocketError, WebSocketResult};
-use super::types::{ChannelId, ChannelMember, ChannelMetadata, ChannelPermissions, ChannelStats, ChannelType};
 use super::message::ChannelMessage;
+use super::types::{
+    ChannelId, ChannelMember, ChannelMetadata, ChannelPermissions, ChannelStats, ChannelType,
+};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -43,7 +45,7 @@ impl Channel {
     /// Create a new channel with custom metadata
     pub fn with_metadata(metadata: ChannelMetadata) -> Self {
         let id = ChannelId::from_name(&metadata.name);
-        
+
         Self {
             id,
             metadata,
@@ -60,17 +62,21 @@ impl Channel {
         nickname: Option<String>,
     ) -> WebSocketResult<()> {
         let mut members = self.members.write().await;
-        
+
         // Check if channel is at capacity
         if let Some(max_members) = self.metadata.max_members {
             if members.len() >= max_members {
-                return Err(WebSocketError::Connection("Channel is at capacity".to_string()));
+                return Err(WebSocketError::Connection(
+                    "Channel is at capacity".to_string(),
+                ));
             }
         }
 
         // Check if member already exists
         if members.contains_key(&connection_id) {
-            return Err(WebSocketError::Connection("Connection already in channel".to_string()));
+            return Err(WebSocketError::Connection(
+                "Connection already in channel".to_string(),
+            ));
         }
 
         let member = ChannelMember {
@@ -82,7 +88,7 @@ impl Channel {
 
         members.insert(connection_id, member);
         info!("Added member {} to channel {}", connection_id, self.id);
-        
+
         Ok(())
     }
 
@@ -90,11 +96,11 @@ impl Channel {
     pub async fn remove_member(&self, connection_id: ConnectionId) -> Option<ChannelMember> {
         let mut members = self.members.write().await;
         let member = members.remove(&connection_id);
-        
+
         if member.is_some() {
             info!("Removed member {} from channel {}", connection_id, self.id);
         }
-        
+
         member
     }
 
@@ -141,14 +147,19 @@ impl Channel {
         new_permissions: ChannelPermissions,
     ) -> WebSocketResult<()> {
         let mut members = self.members.write().await;
-        
+
         match members.get_mut(&connection_id) {
             Some(member) => {
                 member.permissions = new_permissions;
-                debug!("Updated permissions for member {} in channel {}", connection_id, self.id);
+                debug!(
+                    "Updated permissions for member {} in channel {}",
+                    connection_id, self.id
+                );
                 Ok(())
             }
-            None => Err(WebSocketError::Connection("Member not found in channel".to_string())),
+            None => Err(WebSocketError::Connection(
+                "Member not found in channel".to_string(),
+            )),
         }
     }
 
@@ -159,24 +170,29 @@ impl Channel {
         nickname: Option<String>,
     ) -> WebSocketResult<()> {
         let mut members = self.members.write().await;
-        
+
         match members.get_mut(&connection_id) {
             Some(member) => {
                 member.nickname = nickname;
-                debug!("Updated nickname for member {} in channel {}", connection_id, self.id);
+                debug!(
+                    "Updated nickname for member {} in channel {}",
+                    connection_id, self.id
+                );
                 Ok(())
             }
-            None => Err(WebSocketError::Connection("Member not found in channel".to_string())),
+            None => Err(WebSocketError::Connection(
+                "Member not found in channel".to_string(),
+            )),
         }
     }
 
     /// Add a message to the channel history
     pub async fn add_message(&self, message: ChannelMessage) {
         let mut history = self.message_history.write().await;
-        
+
         // Add the message to the back (newest)
         history.push_back(message);
-        
+
         // Trim history if needed - remove from front (oldest) efficiently
         if let Some(limit) = self.metadata.message_history_limit {
             while history.len() > limit {
@@ -219,7 +235,7 @@ impl Channel {
     }
 
     /// Validate password for protected channels using secure Argon2 hashing
-    /// 
+    ///
     /// Returns true if the password is correct or if the channel doesn't require a password.
     /// Returns false if the password is incorrect or if password verification fails.
     pub fn validate_password(&self, password: &str) -> bool {
@@ -236,7 +252,7 @@ impl Channel {
     pub async fn stats(&self) -> ChannelStats {
         let members = self.members.read().await;
         let history = self.message_history.read().await;
-        
+
         ChannelStats {
             id: self.id,
             name: self.metadata.name.clone(),

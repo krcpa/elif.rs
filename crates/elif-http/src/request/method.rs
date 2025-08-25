@@ -1,8 +1,8 @@
 //! HTTP method utilities and wrappers
 
+use crate::errors::ParseError;
 use std::fmt;
 use std::str::FromStr;
-use crate::errors::ParseError;
 
 /// Framework-native HTTP method wrapper that hides Axum internals
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -34,15 +34,26 @@ impl ElifMethod {
 
     /// Check if method is safe (GET, HEAD, OPTIONS, TRACE)
     pub fn is_safe(&self) -> bool {
-        matches!(self.0, axum::http::Method::GET | axum::http::Method::HEAD | 
-                          axum::http::Method::OPTIONS | axum::http::Method::TRACE)
+        matches!(
+            self.0,
+            axum::http::Method::GET
+                | axum::http::Method::HEAD
+                | axum::http::Method::OPTIONS
+                | axum::http::Method::TRACE
+        )
     }
 
     /// Check if method is idempotent (GET, HEAD, PUT, DELETE, OPTIONS, TRACE)
     pub fn is_idempotent(&self) -> bool {
-        matches!(self.0, axum::http::Method::GET | axum::http::Method::HEAD | 
-                          axum::http::Method::PUT | axum::http::Method::DELETE |
-                          axum::http::Method::OPTIONS | axum::http::Method::TRACE)
+        matches!(
+            self.0,
+            axum::http::Method::GET
+                | axum::http::Method::HEAD
+                | axum::http::Method::PUT
+                | axum::http::Method::DELETE
+                | axum::http::Method::OPTIONS
+                | axum::http::Method::TRACE
+        )
     }
 
     /// Internal method to convert to axum Method (for framework internals only)

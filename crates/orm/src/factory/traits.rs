@@ -1,17 +1,17 @@
 //! Factory trait definitions and core abstractions
 
+use crate::error::OrmResult;
+use once_cell::sync::Lazy;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::RwLock;
-use serde_json::Value;
-use once_cell::sync::Lazy;
-use crate::error::OrmResult;
 
 /// Trait for factory states that can modify model attributes
 #[async_trait::async_trait]
 pub trait FactoryState<T>: Send + Sync {
     /// Apply state modifications to the attributes
     async fn apply(&self, attributes: &mut HashMap<String, Value>) -> OrmResult<()>;
-    
+
     /// Get the name of this state for debugging
     fn state_name(&self) -> &'static str;
 }
@@ -25,10 +25,10 @@ pub trait RelationshipFactory<Parent, Related>: Send + Sync {
         parent: &Parent,
         pool: &sqlx::Pool<sqlx::Postgres>,
     ) -> OrmResult<Vec<Related>>;
-    
+
     /// Make related models without saving
     async fn make_for_parent(&self, parent: &Parent) -> OrmResult<Vec<Related>>;
-    
+
     /// Get the relationship type
     fn relationship_type(&self) -> RelationshipType;
 }
@@ -46,7 +46,7 @@ pub enum RelationshipType {
 pub trait Factoryable: crate::model::Model {
     /// Get the factory type for this model
     type Factory: super::Factory<Self>;
-    
+
     /// Create a new factory instance
     fn factory() -> Self::Factory;
 }
@@ -60,10 +60,10 @@ pub trait BatchFactory<T>: Send + Sync {
         pool: &sqlx::Pool<sqlx::Postgres>,
         count: usize,
     ) -> OrmResult<Vec<T>>;
-    
+
     /// Make multiple instances efficiently
     async fn make_batch(&self, count: usize) -> OrmResult<Vec<T>>;
-    
+
     /// Get optimal batch size for this factory
     fn optimal_batch_size(&self) -> usize {
         100
@@ -98,7 +98,8 @@ impl Default for FactoryConfig {
 }
 
 /// Global factory configuration
-static FACTORY_CONFIG: Lazy<RwLock<FactoryConfig>> = Lazy::new(|| RwLock::new(FactoryConfig::default()));
+static FACTORY_CONFIG: Lazy<RwLock<FactoryConfig>> =
+    Lazy::new(|| RwLock::new(FactoryConfig::default()));
 
 /// Get a read guard for the global factory configuration.
 ///
@@ -127,23 +128,31 @@ macro_rules! impl_factory {
             fn new() -> Self {
                 Self::default()
             }
-            
-            async fn definition(&self) -> $crate::error::OrmResult<std::collections::HashMap<String, serde_json::Value>> {
+
+            async fn definition(
+                &self,
+            ) -> $crate::error::OrmResult<std::collections::HashMap<String, serde_json::Value>>
+            {
                 let $def_self = self;
                 Ok($definition)
             }
-            
+
             async fn make(&self) -> $crate::error::OrmResult<$model> {
                 let attributes = self.definition().await?;
                 // TODO: Convert attributes to model
-                Err($crate::error::OrmError::ValidationError("Factory make not implemented".to_string()))
+                Err($crate::error::OrmError::ValidationError(
+                    "Factory make not implemented".to_string(),
+                ))
             }
-            
-            async fn create(&self, pool: &sqlx::Pool<sqlx::Postgres>) -> $crate::error::OrmResult<$model> {
+
+            async fn create(
+                &self,
+                pool: &sqlx::Pool<sqlx::Postgres>,
+            ) -> $crate::error::OrmResult<$model> {
                 let model = self.make().await?;
                 <$model as $crate::model::Model>::create(pool, model).await
             }
-            
+
             async fn make_many(&self, count: usize) -> $crate::error::OrmResult<Vec<$model>> {
                 let mut models = Vec::with_capacity(count);
                 for _ in 0..count {
@@ -151,17 +160,21 @@ macro_rules! impl_factory {
                 }
                 Ok(models)
             }
-            
-            async fn create_many(&self, pool: &sqlx::Pool<sqlx::Postgres>, count: usize) -> $crate::error::OrmResult<Vec<$model>> {
+
+            async fn create_many(
+                &self,
+                pool: &sqlx::Pool<sqlx::Postgres>,
+                count: usize,
+            ) -> $crate::error::OrmResult<Vec<$model>> {
                 let models = self.make_many(count).await?;
                 let mut created_models = Vec::with_capacity(models.len());
-                
+
                 // TODO: Use batch operations for better performance
                 for model in models {
                     let created = <$model as $crate::model::Model>::create(pool, model).await?;
                     created_models.push(created);
                 }
-                
+
                 Ok(created_models)
             }
         }
@@ -195,12 +208,14 @@ mod tests {
         let state = TestState {
             name: "active".to_string(),
         };
-        
+
         let mut attributes = HashMap::new();
         attributes.insert("id".to_string(), json!(1));
-        
-        FactoryState::<()>::apply(&state, &mut attributes).await.unwrap();
-        
+
+        FactoryState::<()>::apply(&state, &mut attributes)
+            .await
+            .unwrap();
+
         assert_eq!(attributes.get("state").unwrap(), &json!("active"));
         assert_eq!(state.state_name(), "TestState");
     }
@@ -208,7 +223,7 @@ mod tests {
     #[test]
     fn test_factory_config_defaults() {
         let config = FactoryConfig::default();
-        
+
         assert!(config.validate_models);
         assert!(config.use_transactions);
         assert_eq!(config.max_batch_size, 1000);
@@ -224,7 +239,7 @@ mod tests {
             RelationshipType::BelongsTo,
             RelationshipType::BelongsToMany,
         ];
-        
+
         // Test that all variants exist and can be compared
         assert_eq!(types.len(), 4);
         assert!(types.contains(&RelationshipType::HasOne));

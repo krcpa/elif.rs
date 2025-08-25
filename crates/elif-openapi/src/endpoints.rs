@@ -7,7 +7,7 @@ components and extract their metadata for documentation generation.
 
 use crate::{
     error::{OpenApiError, OpenApiResult},
-    generator::{RouteMetadata, ParameterInfo},
+    generator::{ParameterInfo, RouteMetadata},
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -75,7 +75,10 @@ impl EndpointDiscovery {
     }
 
     /// Discover endpoints from controller metadata
-    pub fn discover_endpoints(&self, controllers: &[ControllerInfo]) -> OpenApiResult<Vec<RouteMetadata>> {
+    pub fn discover_endpoints(
+        &self,
+        controllers: &[ControllerInfo],
+    ) -> OpenApiResult<Vec<RouteMetadata>> {
         let mut routes = Vec::new();
 
         for controller in controllers {
@@ -96,14 +99,17 @@ impl EndpointDiscovery {
     ) -> OpenApiResult<RouteMetadata> {
         // Extract path parameters
         let path_params = self.extract_path_parameters(&endpoint.path)?;
-        
+
         // Build parameters list
         let mut parameters = Vec::new();
-        
+
         // Add path parameters
         for param_name in &path_params {
-            if let Some(endpoint_param) = endpoint.parameters.iter()
-                .find(|p| &p.name == param_name && p.source == ParameterSource::Path) {
+            if let Some(endpoint_param) = endpoint
+                .parameters
+                .iter()
+                .find(|p| &p.name == param_name && p.source == ParameterSource::Path)
+            {
                 parameters.push(ParameterInfo {
                     name: param_name.clone(),
                     location: "path".to_string(),
@@ -154,7 +160,9 @@ impl EndpointDiscovery {
         }
 
         // Determine request schema
-        let request_schema = endpoint.parameters.iter()
+        let request_schema = endpoint
+            .parameters
+            .iter()
             .find(|p| p.source == ParameterSource::Body)
             .map(|p| p.param_type.clone());
 
@@ -167,15 +175,20 @@ impl EndpointDiscovery {
         }
 
         // Extract attributes
-        let summary = endpoint.attributes.get("summary")
+        let summary = endpoint
+            .attributes
+            .get("summary")
             .or_else(|| endpoint.attributes.get("description"))
             .cloned();
-        
-        let description = endpoint.documentation.clone()
+
+        let description = endpoint
+            .documentation
+            .clone()
             .or_else(|| endpoint.attributes.get("description").cloned());
 
-        let operation_id = Some(format!("{}{}", 
-            controller.name.to_lowercase(), 
+        let operation_id = Some(format!(
+            "{}{}",
+            controller.name.to_lowercase(),
             capitalize(&endpoint.method)
         ));
 
@@ -188,7 +201,9 @@ impl EndpointDiscovery {
             Vec::new()
         };
 
-        let deprecated = endpoint.attributes.get("deprecated")
+        let deprecated = endpoint
+            .attributes
+            .get("deprecated")
             .map(|v| v == "true")
             .unwrap_or(false);
 
@@ -220,17 +235,17 @@ impl EndpointDiscovery {
                 } else {
                     format!("/{}", base)
                 };
-                
+
                 // Ensure endpoint path starts with /
                 let endpoint = if endpoint_path.starts_with('/') {
                     endpoint_path.to_string()
                 } else {
                     format!("/{}", endpoint_path)
                 };
-                
+
                 // Remove trailing slash from base if present
                 let base = base.trim_end_matches('/');
-                
+
                 // Combine paths, avoiding double slashes
                 if endpoint == "/" {
                     base.to_string()
@@ -267,7 +282,7 @@ impl EndpointDiscovery {
         // This is a simplified implementation
         // In a real implementation, you would parse the Rust AST
         let mut endpoints = Vec::new();
-        
+
         // Look for route attribute patterns
         let route_regex = Regex::new(r#"#\[route\((\w+),\s*"([^"]+)"\)\]"#).map_err(|e| {
             OpenApiError::route_discovery_error(format!("Failed to compile route regex: {}", e))
@@ -283,9 +298,10 @@ impl EndpointDiscovery {
                 // Find the next function after this route
                 let route_end = route_match.get(0).unwrap().end();
                 let remaining_code = &source_code[route_end..];
-                
+
                 if let Some(fn_match) = fn_regex.find(remaining_code) {
-                    let fn_name = fn_regex.captures(&remaining_code[fn_match.start()..])
+                    let fn_name = fn_regex
+                        .captures(&remaining_code[fn_match.start()..])
                         .and_then(|caps| caps.get(1))
                         .map(|m| m.as_str().to_string())
                         .unwrap_or_else(|| "unknown".to_string());
@@ -438,10 +454,12 @@ mod tests {
     #[test]
     fn test_path_parameter_extraction() {
         let discovery = EndpointDiscovery::new().unwrap();
-        
-        let params = discovery.extract_path_parameters("/users/{id}/posts/{post_id}").unwrap();
+
+        let params = discovery
+            .extract_path_parameters("/users/{id}/posts/{post_id}")
+            .unwrap();
         assert_eq!(params, vec!["id", "post_id"]);
-        
+
         let no_params = discovery.extract_path_parameters("/users").unwrap();
         assert!(no_params.is_empty());
     }
@@ -451,14 +469,19 @@ mod tests {
         let endpoint = EndpointMetadata::new("index", "GET", "/users")
             .with_return_type("Vec<User>")
             .with_attribute("summary", "List all users")
-            .with_parameter(EndpointParameter::new("limit", "Option<i32>", ParameterSource::Query).optional());
+            .with_parameter(
+                EndpointParameter::new("limit", "Option<i32>", ParameterSource::Query).optional(),
+            );
 
         assert_eq!(endpoint.method, "index");
         assert_eq!(endpoint.verb, "GET");
         assert_eq!(endpoint.path, "/users");
         assert_eq!(endpoint.return_type, Some("Vec<User>".to_string()));
         assert_eq!(endpoint.parameters.len(), 1);
-        assert_eq!(endpoint.attributes.get("summary"), Some(&"List all users".to_string()));
+        assert_eq!(
+            endpoint.attributes.get("summary"),
+            Some(&"List all users".to_string())
+        );
     }
 
     #[test]
@@ -476,15 +499,17 @@ mod tests {
     #[test]
     fn test_route_metadata_conversion() {
         let discovery = EndpointDiscovery::new().unwrap();
-        
+
         let controller = ControllerInfo::new("Users");
         let endpoint = EndpointMetadata::new("show", "GET", "/users/{id}")
             .with_return_type("User")
             .with_parameter(EndpointParameter::new("id", "i32", ParameterSource::Path))
             .with_attribute("summary", "Get user by ID");
 
-        let route = discovery.convert_endpoint_to_route(&controller, &endpoint).unwrap();
-        
+        let route = discovery
+            .convert_endpoint_to_route(&controller, &endpoint)
+            .unwrap();
+
         assert_eq!(route.method, "GET");
         assert_eq!(route.path, "/users/{id}");
         assert_eq!(route.summary, Some("Get user by ID".to_string()));
@@ -500,52 +525,77 @@ mod tests {
         let discovery = EndpointDiscovery::new().unwrap();
 
         // Test normal case: base with leading slash, endpoint with leading slash
-        assert_eq!(discovery.join_paths(Some("/api/v1"), "/users"), "/api/v1/users");
-        
+        assert_eq!(
+            discovery.join_paths(Some("/api/v1"), "/users"),
+            "/api/v1/users"
+        );
+
         // Test case: base without leading slash, endpoint with leading slash
-        assert_eq!(discovery.join_paths(Some("api/v1"), "/users"), "/api/v1/users");
-        
+        assert_eq!(
+            discovery.join_paths(Some("api/v1"), "/users"),
+            "/api/v1/users"
+        );
+
         // Test case: base with leading slash, endpoint without leading slash
-        assert_eq!(discovery.join_paths(Some("/api/v1"), "users"), "/api/v1/users");
-        
+        assert_eq!(
+            discovery.join_paths(Some("/api/v1"), "users"),
+            "/api/v1/users"
+        );
+
         // Test case: base without leading slash, endpoint without leading slash
-        assert_eq!(discovery.join_paths(Some("api/v1"), "users"), "/api/v1/users");
-        
+        assert_eq!(
+            discovery.join_paths(Some("api/v1"), "users"),
+            "/api/v1/users"
+        );
+
         // Test case: base with trailing slash, endpoint with leading slash
-        assert_eq!(discovery.join_paths(Some("/api/v1/"), "/users"), "/api/v1/users");
-        
+        assert_eq!(
+            discovery.join_paths(Some("/api/v1/"), "/users"),
+            "/api/v1/users"
+        );
+
         // Test case: base with trailing slash, endpoint without leading slash
-        assert_eq!(discovery.join_paths(Some("/api/v1/"), "users"), "/api/v1/users");
-        
+        assert_eq!(
+            discovery.join_paths(Some("/api/v1/"), "users"),
+            "/api/v1/users"
+        );
+
         // Test case: root endpoint path
         assert_eq!(discovery.join_paths(Some("/api/v1"), "/"), "/api/v1");
-        
+
         // Test case: no base path, endpoint with leading slash
         assert_eq!(discovery.join_paths(None, "/users"), "/users");
-        
+
         // Test case: no base path, endpoint without leading slash
         assert_eq!(discovery.join_paths(None, "users"), "/users");
-        
+
         // Test edge cases
         assert_eq!(discovery.join_paths(Some("/"), "/users"), "/users");
         assert_eq!(discovery.join_paths(Some("/api"), "/"), "/api");
-        
+
         // Test complex paths
-        assert_eq!(discovery.join_paths(Some("/api/v1"), "/users/{id}/posts"), "/api/v1/users/{id}/posts");
-        assert_eq!(discovery.join_paths(Some("api/v1/"), "/users/{id}"), "/api/v1/users/{id}");
+        assert_eq!(
+            discovery.join_paths(Some("/api/v1"), "/users/{id}/posts"),
+            "/api/v1/users/{id}/posts"
+        );
+        assert_eq!(
+            discovery.join_paths(Some("api/v1/"), "/users/{id}"),
+            "/api/v1/users/{id}"
+        );
     }
 
     #[test]
     fn test_route_metadata_conversion_with_base_path() {
         let discovery = EndpointDiscovery::new().unwrap();
-        
-        let controller = ControllerInfo::new("Users")
-            .with_base_path("/api/v1");
-        
+
+        let controller = ControllerInfo::new("Users").with_base_path("/api/v1");
+
         let endpoint = EndpointMetadata::new("show", "GET", "/users/{id}")
             .with_parameter(EndpointParameter::new("id", "i32", ParameterSource::Path));
 
-        let route = discovery.convert_endpoint_to_route(&controller, &endpoint).unwrap();
+        let route = discovery
+            .convert_endpoint_to_route(&controller, &endpoint)
+            .unwrap();
 
         // Verify path joining worked correctly
         assert_eq!(route.path, "/api/v1/users/{id}");

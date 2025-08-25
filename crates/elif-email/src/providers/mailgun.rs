@@ -1,6 +1,10 @@
 use crate::{config::MailgunConfig, Email, EmailError, EmailProvider, EmailResult};
 use async_trait::async_trait;
-use reqwest::{Client, multipart::{Form, Part}, header::{HeaderMap, HeaderValue, AUTHORIZATION}};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, AUTHORIZATION},
+    multipart::{Form, Part},
+    Client,
+};
 use serde::Deserialize;
 use std::time::Duration;
 use tracing::{debug, error};
@@ -25,7 +29,9 @@ impl MailgunProvider {
         let client = Client::builder()
             .timeout(Duration::from_secs(timeout))
             .build()
-            .map_err(|e| EmailError::configuration(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                EmailError::configuration(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         Ok(Self { config, client })
     }
@@ -34,7 +40,10 @@ impl MailgunProvider {
     fn get_endpoint(&self) -> String {
         let region = self.config.region.as_deref().unwrap_or("us");
         match region {
-            "eu" => format!("https://api.eu.mailgun.net/v3/{}/messages", self.config.domain),
+            "eu" => format!(
+                "https://api.eu.mailgun.net/v3/{}/messages",
+                self.config.domain
+            ),
             _ => format!("https://api.mailgun.net/v3/{}/messages", self.config.domain),
         }
     }
@@ -42,7 +51,7 @@ impl MailgunProvider {
     /// Build request headers
     fn build_headers(&self) -> Result<HeaderMap, EmailError> {
         let mut headers = HeaderMap::new();
-        
+
         let auth_string = format!("api:{}", self.config.api_key);
         let auth_header = format!("Basic {}", base64::encode(auth_string.as_bytes()));
         headers.insert(
@@ -97,7 +106,10 @@ impl MailgunProvider {
 
         // Validate that we have at least one body
         if email.text_body.is_none() && email.html_body.is_none() {
-            return Err(EmailError::validation("body", "Email must have either HTML or text body"));
+            return Err(EmailError::validation(
+                "body",
+                "Email must have either HTML or text body",
+            ));
         }
 
         // Custom headers
@@ -170,8 +182,12 @@ impl EmailProvider for MailgunProvider {
 
         if status.is_success() {
             // Try to parse the response to get the message ID
-            let message_id = if let Ok(mailgun_response) = serde_json::from_str::<MailgunResponse>(&response_text) {
-                mailgun_response.id.unwrap_or_else(|| format!("mailgun-{}", email.id))
+            let message_id = if let Ok(mailgun_response) =
+                serde_json::from_str::<MailgunResponse>(&response_text)
+            {
+                mailgun_response
+                    .id
+                    .unwrap_or_else(|| format!("mailgun-{}", email.id))
             } else {
                 format!("mailgun-{}", email.id)
             };
@@ -183,7 +199,9 @@ impl EmailProvider for MailgunProvider {
                 provider: "mailgun".to_string(),
             })
         } else {
-            let error_msg = if let Ok(mailgun_response) = serde_json::from_str::<MailgunResponse>(&response_text) {
+            let error_msg = if let Ok(mailgun_response) =
+                serde_json::from_str::<MailgunResponse>(&response_text)
+            {
                 mailgun_response.message
             } else {
                 format!("HTTP {}: {}", status, response_text)
@@ -195,17 +213,20 @@ impl EmailProvider for MailgunProvider {
     }
 
     async fn validate_config(&self) -> Result<(), EmailError> {
-        debug!("Validating Mailgun configuration for domain: {}", self.config.domain);
+        debug!(
+            "Validating Mailgun configuration for domain: {}",
+            self.config.domain
+        );
 
         let headers = self.build_headers()?;
-        
+
         // Test with domain info endpoint to validate the API key and domain
         let region = self.config.region.as_deref().unwrap_or("us");
         let test_endpoint = match region {
             "eu" => format!("https://api.eu.mailgun.net/v3/{}", self.config.domain),
             _ => format!("https://api.mailgun.net/v3/{}", self.config.domain),
         };
-        
+
         let response = self
             .client
             .get(&test_endpoint)
@@ -219,7 +240,10 @@ impl EmailProvider for MailgunProvider {
         } else {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            error!("Mailgun configuration validation failed: {} - {}", status, error_text);
+            error!(
+                "Mailgun configuration validation failed: {} - {}",
+                status, error_text
+            );
             Err(EmailError::configuration(format!(
                 "Mailgun configuration validation failed: {} - {}",
                 status, error_text

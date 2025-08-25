@@ -142,23 +142,34 @@ impl Middleware for BodyLimitMiddleware {
                                         config.max_size
                                     );
                                 }
-                                
-                                let mut response = ElifResponse::with_status(ElifStatusCode::PAYLOAD_TOO_LARGE)
-                                    .text(format!("Request body size {} bytes exceeds limit of {} bytes", 
-                                                content_length, config.max_size));
-                                
+
+                                let mut response =
+                                    ElifResponse::with_status(ElifStatusCode::PAYLOAD_TOO_LARGE)
+                                        .text(format!(
+                                            "Request body size {} bytes exceeds limit of {} bytes",
+                                            content_length, config.max_size
+                                        ));
+
                                 if config.include_headers {
-                                    if let Err(e) = response.add_header("X-Max-Body-Size", &config.max_size.to_string()) {
+                                    if let Err(e) = response
+                                        .add_header("X-Max-Body-Size", config.max_size.to_string())
+                                    {
                                         warn!("Failed to add X-Max-Body-Size header: {}", e);
                                     }
                                 }
-                                
+
                                 return response;
                             }
                             Some(content_length)
-                        } else { None }
-                    } else { None }
-                } else { None }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             };
 
             // For streaming bodies or cases where Content-Length is not reliable,
@@ -195,16 +206,16 @@ pub struct BodyLimitInfo {
 pub mod limits {
     /// 1KB limit
     pub const KB: usize = 1024;
-    
+
     /// 1MB limit
     pub const MB: usize = 1024 * 1024;
-    
+
     /// 10MB limit
     pub const MB_10: usize = 10 * MB;
-    
+
     /// 100MB limit
     pub const MB_100: usize = 100 * MB;
-    
+
     /// 1GB limit (use with caution)
     pub const GB: usize = 1024 * MB;
 
@@ -215,14 +226,12 @@ pub mod limits {
 
         /// Small API requests (1MB)
         pub fn small_api() -> BodyLimitMiddleware {
-            BodyLimitMiddleware::with_limit(MB)
-                .message("API request body too large (1MB limit)")
+            BodyLimitMiddleware::with_limit(MB).message("API request body too large (1MB limit)")
         }
 
         /// File uploads (10MB)
         pub fn file_upload() -> BodyLimitMiddleware {
-            BodyLimitMiddleware::with_limit(MB_10)
-                .message("File upload too large (10MB limit)")
+            BodyLimitMiddleware::with_limit(MB_10).message("File upload too large (10MB limit)")
         }
 
         /// Large file uploads (100MB)
@@ -233,8 +242,7 @@ pub mod limits {
 
         /// Tiny requests (64KB)
         pub fn tiny() -> BodyLimitMiddleware {
-            BodyLimitMiddleware::with_limit(64 * KB)
-                .message("Request body too large (64KB limit)")
+            BodyLimitMiddleware::with_limit(64 * KB).message("Request body too large (64KB limit)")
         }
     }
 }
@@ -243,7 +251,7 @@ pub mod limits {
 mod tests {
     use super::*;
     use crate::middleware::v2::MiddlewarePipelineV2;
-    use crate::request::{ElifRequest, ElifMethod};
+    use crate::request::{ElifMethod, ElifRequest};
     use crate::response::headers::ElifHeaderMap;
     use crate::response::{ElifResponse, ElifStatusCode};
 
@@ -251,20 +259,16 @@ mod tests {
     async fn test_body_limit_middleware_v2() {
         let middleware = BodyLimitMiddleware::new();
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
-        
-        let headers = ElifHeaderMap::new();
-        let request = ElifRequest::new(
-            ElifMethod::POST,
-            "/test".parse().unwrap(),
-            headers,
-        );
 
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("Success")
+        let headers = ElifHeaderMap::new();
+        let request = ElifRequest::new(ElifMethod::POST, "/test".parse().unwrap(), headers);
+
+        let response = pipeline
+            .execute(request, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("Success") })
             })
-        }).await;
-        
+            .await;
+
         assert_eq!(response.status_code(), ElifStatusCode::OK);
     }
 
@@ -280,7 +284,7 @@ mod tests {
             .max_size(512)
             .logging(false)
             .message("Too big!");
-        
+
         assert_eq!(middleware.config.max_size, 512);
         assert!(!middleware.config.log_oversized);
         assert_eq!(middleware.config.error_message, "Too big!");
@@ -290,22 +294,18 @@ mod tests {
     async fn test_content_length_check_within_limit() {
         let middleware = BodyLimitMiddleware::with_limit(1000);
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
-        
+
         let mut headers = ElifHeaderMap::new();
         headers.insert("content-length".parse().unwrap(), "500".parse().unwrap());
-        
-        let request = ElifRequest::new(
-            ElifMethod::POST,
-            "/test".parse().unwrap(),
-            headers,
-        );
 
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("Success")
+        let request = ElifRequest::new(ElifMethod::POST, "/test".parse().unwrap(), headers);
+
+        let response = pipeline
+            .execute(request, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("Success") })
             })
-        }).await;
-        
+            .await;
+
         assert_eq!(response.status_code(), ElifStatusCode::OK);
     }
 
@@ -313,22 +313,18 @@ mod tests {
     async fn test_content_length_check_exceeds_limit() {
         let middleware = BodyLimitMiddleware::with_limit(100);
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
-        
+
         let mut headers = ElifHeaderMap::new();
         headers.insert("content-length".parse().unwrap(), "200".parse().unwrap());
-        
-        let request = ElifRequest::new(
-            ElifMethod::POST,
-            "/test".parse().unwrap(),
-            headers,
-        );
 
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("Should not reach here")
+        let request = ElifRequest::new(ElifMethod::POST, "/test".parse().unwrap(), headers);
+
+        let response = pipeline
+            .execute(request, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("Should not reach here") })
             })
-        }).await;
-        
+            .await;
+
         assert_eq!(response.status_code(), ElifStatusCode::PAYLOAD_TOO_LARGE);
         assert!(response.has_header("X-Max-Body-Size"));
     }
@@ -341,7 +337,7 @@ mod tests {
             .with_headers(false);
 
         let middleware = BodyLimitMiddleware::with_config(config);
-        
+
         assert_eq!(middleware.config.max_size, 512);
         assert!(!middleware.config.log_oversized);
         assert_eq!(middleware.config.error_message, "Custom message");
@@ -382,23 +378,22 @@ mod tests {
     async fn test_invalid_content_length_header() {
         let middleware = BodyLimitMiddleware::with_limit(1000);
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
-        
+
         let mut headers = ElifHeaderMap::new();
-        headers.insert("content-length".parse().unwrap(), "not-a-number".parse().unwrap());
-        
-        let request = ElifRequest::new(
-            ElifMethod::POST,
-            "/test".parse().unwrap(),
-            headers,
+        headers.insert(
+            "content-length".parse().unwrap(),
+            "not-a-number".parse().unwrap(),
         );
 
+        let request = ElifRequest::new(ElifMethod::POST, "/test".parse().unwrap(), headers);
+
         // Should not error on invalid content-length, just ignore it
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().text("Success")
+        let response = pipeline
+            .execute(request, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("Success") })
             })
-        }).await;
-        
+            .await;
+
         assert_eq!(response.status_code(), ElifStatusCode::OK);
     }
 }

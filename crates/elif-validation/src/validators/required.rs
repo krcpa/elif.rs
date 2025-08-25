@@ -48,7 +48,8 @@ impl ValidationRule for RequiredValidator {
     async fn validate(&self, value: &Value, field: &str) -> ValidationResult<()> {
         if self.is_empty(value) {
             let message = self
-                .message.clone()
+                .message
+                .clone()
                 .unwrap_or_else(|| format!("{} is required", field));
 
             Err(ValidationError::with_code(field, message, "required").into())
@@ -78,7 +79,7 @@ mod tests {
     async fn test_required_validator_with_null() {
         let validator = RequiredValidator::new();
         let result = validator.validate(&Value::Null, "email").await;
-        
+
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.has_field_errors("email"));
@@ -87,24 +88,30 @@ mod tests {
     #[tokio::test]
     async fn test_required_validator_with_empty_string() {
         let validator = RequiredValidator::new();
-        let result = validator.validate(&Value::String("".to_string()), "name").await;
-        
+        let result = validator
+            .validate(&Value::String("".to_string()), "name")
+            .await;
+
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_required_validator_with_whitespace_string() {
         let validator = RequiredValidator::new();
-        let result = validator.validate(&Value::String("   ".to_string()), "name").await;
-        
+        let result = validator
+            .validate(&Value::String("   ".to_string()), "name")
+            .await;
+
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_required_validator_with_valid_string() {
         let validator = RequiredValidator::new();
-        let result = validator.validate(&Value::String("John".to_string()), "name").await;
-        
+        let result = validator
+            .validate(&Value::String("John".to_string()), "name")
+            .await;
+
         assert!(result.is_ok());
     }
 
@@ -112,18 +119,20 @@ mod tests {
     async fn test_required_validator_with_empty_array() {
         let validator = RequiredValidator::new();
         let result = validator.validate(&Value::Array(vec![]), "tags").await;
-        
+
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_required_validator_with_filled_array() {
         let validator = RequiredValidator::new();
-        let result = validator.validate(
-            &Value::Array(vec![Value::String("tag1".to_string())]),
-            "tags"
-        ).await;
-        
+        let result = validator
+            .validate(
+                &Value::Array(vec![Value::String("tag1".to_string())]),
+                "tags",
+            )
+            .await;
+
         assert!(result.is_ok());
     }
 
@@ -131,7 +140,7 @@ mod tests {
     async fn test_required_validator_with_custom_message() {
         let validator = RequiredValidator::with_message("This field cannot be empty");
         let result = validator.validate(&Value::Null, "email").await;
-        
+
         assert!(result.is_err());
         let errors = result.unwrap_err();
         let field_errors = errors.get_field_errors("email").unwrap();
@@ -141,18 +150,30 @@ mod tests {
     #[tokio::test]
     async fn test_required_validator_with_numbers() {
         let validator = RequiredValidator::new();
-        
+
         // Numbers are never considered empty (including 0)
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(0)), "count").await.is_ok());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(42)), "count").await.is_ok());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(0)), "count")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(42)), "count")
+            .await
+            .is_ok());
     }
 
     #[tokio::test]
     async fn test_required_validator_with_boolean() {
         let validator = RequiredValidator::new();
-        
+
         // Booleans are never considered empty (including false)
-        assert!(validator.validate(&Value::Bool(false), "active").await.is_ok());
-        assert!(validator.validate(&Value::Bool(true), "active").await.is_ok());
+        assert!(validator
+            .validate(&Value::Bool(false), "active")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::Bool(true), "active")
+            .await
+            .is_ok());
     }
 }

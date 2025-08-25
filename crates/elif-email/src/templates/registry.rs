@@ -32,13 +32,14 @@ impl TemplateRegistry {
         engine: Arc<TemplateEngine>,
     ) -> Result<(), EmailError> {
         let name = name.into();
-        
-        let mut engines = self.engines.write().map_err(|_| {
-            EmailError::template("Failed to acquire write lock on engines")
-        })?;
+
+        let mut engines = self
+            .engines
+            .write()
+            .map_err(|_| EmailError::template("Failed to acquire write lock on engines"))?;
 
         engines.insert(name.clone(), engine);
-        
+
         // Set as default if it's the first engine
         if engines.len() == 1 {
             let mut default_engine = self.default_engine.write().map_err(|_| {
@@ -59,53 +60,59 @@ impl TemplateRegistry {
     ) -> Result<Arc<TemplateEngine>, EmailError> {
         let engine = Arc::new(TemplateEngine::new(config)?);
         let name = name.into();
-        
+
         self.register_engine(&name, engine.clone())?;
-        
+
         info!("Created and registered template engine: {}", name);
         Ok(engine)
     }
 
     /// Get template engine by name
     pub fn get_engine(&self, name: &str) -> Result<Arc<TemplateEngine>, EmailError> {
-        let engines = self.engines.read().map_err(|_| {
-            EmailError::template("Failed to acquire read lock on engines")
-        })?;
+        let engines = self
+            .engines
+            .read()
+            .map_err(|_| EmailError::template("Failed to acquire read lock on engines"))?;
 
-        engines.get(name)
+        engines
+            .get(name)
             .cloned()
             .ok_or_else(|| EmailError::template(format!("Template engine '{}' not found", name)))
     }
 
     /// Get default template engine
     pub fn get_default_engine(&self) -> Result<Arc<TemplateEngine>, EmailError> {
-        let default_engine = self.default_engine.read().map_err(|_| {
-            EmailError::template("Failed to acquire read lock on default engine")
-        })?;
+        let default_engine = self
+            .default_engine
+            .read()
+            .map_err(|_| EmailError::template("Failed to acquire read lock on default engine"))?;
 
-        default_engine.clone()
+        default_engine
+            .clone()
             .ok_or_else(|| EmailError::template("No default template engine set"))
     }
 
     /// Set default template engine
     pub fn set_default_engine(&self, name: &str) -> Result<(), EmailError> {
         let engine = self.get_engine(name)?;
-        
-        let mut default_engine = self.default_engine.write().map_err(|_| {
-            EmailError::template("Failed to acquire write lock on default engine")
-        })?;
-        
+
+        let mut default_engine = self
+            .default_engine
+            .write()
+            .map_err(|_| EmailError::template("Failed to acquire write lock on default engine"))?;
+
         *default_engine = Some(engine);
-        
+
         debug!("Set default template engine: {}", name);
         Ok(())
     }
 
     /// List available template engines
     pub fn list_engines(&self) -> Result<Vec<String>, EmailError> {
-        let engines = self.engines.read().map_err(|_| {
-            EmailError::template("Failed to acquire read lock on engines")
-        })?;
+        let engines = self
+            .engines
+            .read()
+            .map_err(|_| EmailError::template("Failed to acquire read lock on engines"))?;
 
         Ok(engines.keys().cloned().collect())
     }
@@ -199,11 +206,11 @@ pub mod discovery {
         for entry in entries {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_dir() {
-                let template_name = path.file_name()
-                    .and_then(|s| s.to_str())
-                    .ok_or_else(|| EmailError::template(format!("Invalid template directory name: {:?}", path)))?;
+                let template_name = path.file_name().and_then(|s| s.to_str()).ok_or_else(|| {
+                    EmailError::template(format!("Invalid template directory name: {:?}", path))
+                })?;
 
                 let template = discover_template_from_directory(template_name, &path)?;
                 templates.push((template_name.to_string(), template));
@@ -222,15 +229,19 @@ pub mod discovery {
 
         // Look for different file variants
         let files = fs::read_dir(dir)?;
-        
+
         for file in files {
             let file = file?;
             let file_path = file.path();
-            
+
             if file_path.is_file() {
-                let file_name = file_path.file_name()
-                    .and_then(|s| s.to_str())
-                    .ok_or_else(|| EmailError::template(format!("Invalid file name: {:?}", file_path)))?;
+                let file_name =
+                    file_path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| {
+                            EmailError::template(format!("Invalid file name: {:?}", file_path))
+                        })?;
 
                 match file_name {
                     "html.hbs" | "html.handlebars" => {
@@ -277,7 +288,10 @@ pub mod discovery {
             count += 1;
         }
 
-        info!("Auto-discovered {} templates in engine '{}'", count, engine_name);
+        info!(
+            "Auto-discovered {} templates in engine '{}'",
+            count, engine_name
+        );
         Ok(count)
     }
 }
@@ -290,7 +304,7 @@ mod tests {
     #[test]
     fn test_template_registry() {
         let registry = TemplateRegistry::new();
-        
+
         let temp_dir = TempDir::new().unwrap();
         let config = TemplateConfig {
             templates_dir: temp_dir.path().to_string_lossy().to_string(),
@@ -312,7 +326,7 @@ mod tests {
     #[test]
     fn test_default_engine() {
         let registry = TemplateRegistry::new();
-        
+
         let temp_dir = TempDir::new().unwrap();
         let config = TemplateConfig {
             templates_dir: temp_dir.path().to_string_lossy().to_string(),
@@ -326,7 +340,7 @@ mod tests {
 
         let engine = registry.create_engine("default", config).unwrap();
         let default_engine = registry.get_default_engine().unwrap();
-        
+
         assert!(Arc::ptr_eq(&engine, &default_engine));
     }
 }

@@ -2,8 +2,8 @@
 
 use crate::config::HttpConfig;
 use elif_core::container::IocContainer;
-use std::sync::Arc;
 use serde_json::json;
+use std::sync::Arc;
 
 /// Default health check handler
 pub async fn health_check_handler(
@@ -70,7 +70,7 @@ mod tests {
     async fn test_health_check_handler() {
         let container = create_test_container();
         let config = HttpConfig::default();
-        
+
         let response = health_check_handler(container, config).await;
         // Test that response is properly formatted JSON
         assert!(response.0.get("status").is_some());

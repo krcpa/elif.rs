@@ -63,7 +63,9 @@ impl fmt::Display for EventError {
             }
             EventError::Database { message } => write!(f, "Database error: {}", message),
             EventError::Observer { message } => write!(f, "Observer error: {}", message),
-            EventError::PropagationStopped { reason } => write!(f, "Event propagation stopped: {}", reason),
+            EventError::PropagationStopped { reason } => {
+                write!(f, "Event propagation stopped: {}", reason)
+            }
         }
     }
 }
@@ -89,7 +91,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_error_validation() {
         let error = EventError::validation("Invalid email format");
-        
+
         match error {
             EventError::Validation { message, hint } => {
                 assert_eq!(message, "Invalid email format");
@@ -101,8 +103,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_event_error_validation_with_hint() {
-        let error = EventError::validation_with_hint("Invalid email format", "Use format user@domain.com");
-        
+        let error =
+            EventError::validation_with_hint("Invalid email format", "Use format user@domain.com");
+
         match error {
             EventError::Validation { message, hint } => {
                 assert_eq!(message, "Invalid email format");
@@ -115,7 +118,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_error_database() {
         let error = EventError::database("Connection timeout");
-        
+
         match error {
             EventError::Database { message, .. } => {
                 assert_eq!(message, "Connection timeout");
@@ -127,7 +130,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_error_observer() {
         let error = EventError::observer("Observer failed to execute");
-        
+
         match error {
             EventError::Observer { message, .. } => {
                 assert_eq!(message, "Observer failed to execute");
@@ -139,7 +142,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_error_propagation_stopped() {
         let error = EventError::propagation_stopped("User cancelled operation");
-        
+
         match error {
             EventError::PropagationStopped { reason, .. } => {
                 assert_eq!(reason, "User cancelled operation");
@@ -167,7 +170,7 @@ mod tests {
     async fn test_event_error_conversion_from_std_error() {
         let std_error = std::io::Error::new(std::io::ErrorKind::Other, "IO error");
         let event_error: EventError = std_error.into();
-        
+
         match event_error {
             EventError::Database { message, .. } => {
                 assert!(message.contains("IO error"));

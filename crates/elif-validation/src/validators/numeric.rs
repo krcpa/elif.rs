@@ -157,7 +157,8 @@ impl ValidationRule for NumericValidator {
                     field,
                     format!("{} must be a numeric value", field),
                     "invalid_type",
-                ).into());
+                )
+                .into());
             }
         };
 
@@ -167,7 +168,8 @@ impl ValidationRule for NumericValidator {
                 field,
                 format!("{} must be a finite number", field),
                 "invalid_number",
-            ).into());
+            )
+            .into());
         }
 
         // Check integer requirement
@@ -176,7 +178,8 @@ impl ValidationRule for NumericValidator {
                 field,
                 self.create_error_message(field, num),
                 "not_integer",
-            ).into());
+            )
+            .into());
         }
 
         // Check positive/negative requirements
@@ -185,7 +188,8 @@ impl ValidationRule for NumericValidator {
                 field,
                 self.create_error_message(field, num),
                 "not_positive",
-            ).into());
+            )
+            .into());
         }
 
         if self.negative_only && num >= 0.0 {
@@ -193,7 +197,8 @@ impl ValidationRule for NumericValidator {
                 field,
                 self.create_error_message(field, num),
                 "not_negative",
-            ).into());
+            )
+            .into());
         }
 
         // Check minimum value
@@ -203,7 +208,8 @@ impl ValidationRule for NumericValidator {
                     field,
                     self.create_error_message(field, num),
                     "below_minimum",
-                ).into());
+                )
+                .into());
             }
         }
 
@@ -214,7 +220,8 @@ impl ValidationRule for NumericValidator {
                     field,
                     self.create_error_message(field, num),
                     "above_maximum",
-                ).into());
+                )
+                .into());
             }
         }
 
@@ -227,21 +234,27 @@ impl ValidationRule for NumericValidator {
 
     fn parameters(&self) -> Option<Value> {
         let mut params = serde_json::Map::new();
-        
+
         if let Some(min) = self.min {
-            params.insert("min".to_string(), Value::Number(
-                serde_json::Number::from_f64(min).unwrap_or(serde_json::Number::from(0))
-            ));
+            params.insert(
+                "min".to_string(),
+                Value::Number(
+                    serde_json::Number::from_f64(min).unwrap_or(serde_json::Number::from(0)),
+                ),
+            );
         }
         if let Some(max) = self.max {
-            params.insert("max".to_string(), Value::Number(
-                serde_json::Number::from_f64(max).unwrap_or(serde_json::Number::from(0))
-            ));
+            params.insert(
+                "max".to_string(),
+                Value::Number(
+                    serde_json::Number::from_f64(max).unwrap_or(serde_json::Number::from(0)),
+                ),
+            );
         }
         params.insert("integer_only".to_string(), Value::Bool(self.integer_only));
         params.insert("positive_only".to_string(), Value::Bool(self.positive_only));
         params.insert("negative_only".to_string(), Value::Bool(self.negative_only));
-        
+
         if let Some(ref message) = self.message {
             params.insert("message".to_string(), Value::String(message.clone()));
         }
@@ -257,73 +270,157 @@ mod tests {
     #[tokio::test]
     async fn test_numeric_validator_basic() {
         let validator = NumericValidator::new();
-        
+
         // Valid numbers
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(42)), "age").await.is_ok());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(-10)), "temp").await.is_ok());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from_f64(3.14).unwrap()), "pi").await.is_ok());
-        
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(42)), "age")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(-10)), "temp")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(
+                &Value::Number(serde_json::Number::from_f64(3.14).unwrap()),
+                "pi"
+            )
+            .await
+            .is_ok());
+
         // String representations of numbers
-        assert!(validator.validate(&Value::String("42".to_string()), "age").await.is_ok());
-        assert!(validator.validate(&Value::String("3.14".to_string()), "pi").await.is_ok());
-        
+        assert!(validator
+            .validate(&Value::String("42".to_string()), "age")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::String("3.14".to_string()), "pi")
+            .await
+            .is_ok());
+
         // Invalid types
-        assert!(validator.validate(&Value::String("not-a-number".to_string()), "age").await.is_err());
+        assert!(validator
+            .validate(&Value::String("not-a-number".to_string()), "age")
+            .await
+            .is_err());
         assert!(validator.validate(&Value::Bool(true), "age").await.is_err());
     }
 
     #[tokio::test]
     async fn test_numeric_validator_min_max() {
         let validator = NumericValidator::new().range(0.0, 100.0);
-        
+
         // Within range
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(50)), "score").await.is_ok());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(0)), "score").await.is_ok());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(100)), "score").await.is_ok());
-        
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(50)), "score")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(0)), "score")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(100)), "score")
+            .await
+            .is_ok());
+
         // Out of range
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(-1)), "score").await.is_err());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(101)), "score").await.is_err());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(-1)), "score")
+            .await
+            .is_err());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(101)), "score")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn test_numeric_validator_integer_only() {
         let validator = NumericValidator::new().integer_only(true);
-        
+
         // Valid integers
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(42)), "count").await.is_ok());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(0)), "count").await.is_ok());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(-10)), "count").await.is_ok());
-        
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(42)), "count")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(0)), "count")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(-10)), "count")
+            .await
+            .is_ok());
+
         // Invalid decimals
-        assert!(validator.validate(&Value::Number(serde_json::Number::from_f64(3.14).unwrap()), "count").await.is_err());
-        assert!(validator.validate(&Value::String("2.5".to_string()), "count").await.is_err());
+        assert!(validator
+            .validate(
+                &Value::Number(serde_json::Number::from_f64(3.14).unwrap()),
+                "count"
+            )
+            .await
+            .is_err());
+        assert!(validator
+            .validate(&Value::String("2.5".to_string()), "count")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn test_numeric_validator_positive_only() {
         let validator = NumericValidator::new().positive_only(true);
-        
+
         // Valid positive numbers
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(1)), "amount").await.is_ok());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from_f64(0.1).unwrap()), "amount").await.is_ok());
-        
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(1)), "amount")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(
+                &Value::Number(serde_json::Number::from_f64(0.1).unwrap()),
+                "amount"
+            )
+            .await
+            .is_ok());
+
         // Invalid non-positive numbers
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(0)), "amount").await.is_err());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(-1)), "amount").await.is_err());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(0)), "amount")
+            .await
+            .is_err());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(-1)), "amount")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn test_numeric_validator_negative_only() {
         let validator = NumericValidator::new().negative_only(true);
-        
+
         // Valid negative numbers
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(-1)), "debt").await.is_ok());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from_f64(-0.1).unwrap()), "debt").await.is_ok());
-        
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(-1)), "debt")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(
+                &Value::Number(serde_json::Number::from_f64(-0.1).unwrap()),
+                "debt"
+            )
+            .await
+            .is_ok());
+
         // Invalid non-negative numbers
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(0)), "debt").await.is_err());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(1)), "debt").await.is_err());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(0)), "debt")
+            .await
+            .is_err());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(1)), "debt")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -332,46 +429,91 @@ mod tests {
             .range(1.0, 100.0)
             .integer_only(true)
             .positive_only(true);
-        
+
         // Valid: positive integer in range
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(42)), "level").await.is_ok());
-        
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(42)), "level")
+            .await
+            .is_ok());
+
         // Invalid: decimal
-        assert!(validator.validate(&Value::Number(serde_json::Number::from_f64(42.5).unwrap()), "level").await.is_err());
-        
+        assert!(validator
+            .validate(
+                &Value::Number(serde_json::Number::from_f64(42.5).unwrap()),
+                "level"
+            )
+            .await
+            .is_err());
+
         // Invalid: out of range
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(0)), "level").await.is_err());
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(101)), "level").await.is_err());
-        
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(0)), "level")
+            .await
+            .is_err());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(101)), "level")
+            .await
+            .is_err());
+
         // Invalid: negative
-        assert!(validator.validate(&Value::Number(serde_json::Number::from(-10)), "level").await.is_err());
+        assert!(validator
+            .validate(&Value::Number(serde_json::Number::from(-10)), "level")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn test_numeric_validator_string_parsing() {
         let validator = NumericValidator::new().range(0.0, 10.0);
-        
+
         // Valid string numbers
-        assert!(validator.validate(&Value::String("5".to_string()), "rating").await.is_ok());
-        assert!(validator.validate(&Value::String("7.5".to_string()), "rating").await.is_ok());
-        assert!(validator.validate(&Value::String("0".to_string()), "rating").await.is_ok());
-        
+        assert!(validator
+            .validate(&Value::String("5".to_string()), "rating")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::String("7.5".to_string()), "rating")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::String("0".to_string()), "rating")
+            .await
+            .is_ok());
+
         // Invalid string numbers (out of range)
-        assert!(validator.validate(&Value::String("-1".to_string()), "rating").await.is_err());
-        assert!(validator.validate(&Value::String("11".to_string()), "rating").await.is_err());
-        
+        assert!(validator
+            .validate(&Value::String("-1".to_string()), "rating")
+            .await
+            .is_err());
+        assert!(validator
+            .validate(&Value::String("11".to_string()), "rating")
+            .await
+            .is_err());
+
         // Invalid string (not a number)
-        assert!(validator.validate(&Value::String("not-a-number".to_string()), "rating").await.is_err());
+        assert!(validator
+            .validate(&Value::String("not-a-number".to_string()), "rating")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn test_numeric_validator_infinity_nan() {
         let validator = NumericValidator::new();
-        
+
         // Test with infinity and NaN strings (should be rejected)
-        assert!(validator.validate(&Value::String("inf".to_string()), "value").await.is_err());
-        assert!(validator.validate(&Value::String("infinity".to_string()), "value").await.is_err());
-        assert!(validator.validate(&Value::String("NaN".to_string()), "value").await.is_err());
+        assert!(validator
+            .validate(&Value::String("inf".to_string()), "value")
+            .await
+            .is_err());
+        assert!(validator
+            .validate(&Value::String("infinity".to_string()), "value")
+            .await
+            .is_err());
+        assert!(validator
+            .validate(&Value::String("NaN".to_string()), "value")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -379,10 +521,12 @@ mod tests {
         let validator = NumericValidator::new()
             .min(18.0)
             .message("Must be at least 18 years old");
-        
-        let result = validator.validate(&Value::Number(serde_json::Number::from(16)), "age").await;
+
+        let result = validator
+            .validate(&Value::Number(serde_json::Number::from(16)), "age")
+            .await;
         assert!(result.is_err());
-        
+
         let errors = result.unwrap_err();
         let field_errors = errors.get_field_errors("age").unwrap();
         assert_eq!(field_errors[0].message, "Must be at least 18 years old");
@@ -391,7 +535,7 @@ mod tests {
     #[tokio::test]
     async fn test_numeric_validator_with_null() {
         let validator = NumericValidator::new().min(0.0);
-        
+
         // Null values should be skipped
         let result = validator.validate(&Value::Null, "optional_number").await;
         assert!(result.is_ok());
@@ -403,21 +547,30 @@ mod tests {
             .range(0.0, 100.0)
             .integer_only(true)
             .positive_only(true);
-        
+
         // Test below minimum error code
-        let result = validator.validate(&Value::Number(serde_json::Number::from(-1)), "value").await;
+        let result = validator
+            .validate(&Value::Number(serde_json::Number::from(-1)), "value")
+            .await;
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert_eq!(errors.errors["value"][0].code, "not_positive");
-        
+
         // Test not integer error code
-        let result = validator.validate(&Value::Number(serde_json::Number::from_f64(1.5).unwrap()), "value").await;
+        let result = validator
+            .validate(
+                &Value::Number(serde_json::Number::from_f64(1.5).unwrap()),
+                "value",
+            )
+            .await;
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert_eq!(errors.errors["value"][0].code, "not_integer");
-        
+
         // Test above maximum error code
-        let result = validator.validate(&Value::Number(serde_json::Number::from(101)), "value").await;
+        let result = validator
+            .validate(&Value::Number(serde_json::Number::from(101)), "value")
+            .await;
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert_eq!(errors.errors["value"][0].code, "above_maximum");

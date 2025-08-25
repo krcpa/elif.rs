@@ -1,6 +1,6 @@
 //! Pagination utilities for controllers
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Query parameters for pagination and filtering
 #[derive(Debug, Serialize, Deserialize)]
@@ -44,7 +44,7 @@ impl PaginationMeta {
         } else {
             0
         };
-        
+
         Self {
             current_page: page,
             per_page,

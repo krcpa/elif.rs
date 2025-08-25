@@ -1,6 +1,6 @@
 //! Test fixtures and utilities
 
-use crate::{HttpConfig, ElifRequest, ElifResponse, HttpResult};
+use crate::{ElifRequest, ElifResponse, HttpConfig, HttpResult};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

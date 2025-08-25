@@ -11,7 +11,7 @@ pub struct QueryBuilder<M = ()> {
     pub(crate) select_fields: Vec<String>,
     pub(crate) from_tables: Vec<String>,
     pub(crate) insert_table: Option<String>,
-    pub(crate) update_table: Option<String>, 
+    pub(crate) update_table: Option<String>,
     pub(crate) delete_table: Option<String>,
     pub(crate) set_clauses: Vec<SetClause>,
     pub(crate) where_conditions: Vec<WhereCondition>,

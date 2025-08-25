@@ -2,16 +2,15 @@
 //!
 //! This module provides a bridge between elif types and Axum's handler system.
 
+use crate::errors::HttpResult;
 use crate::request::ElifRequest;
 use crate::response::{ElifResponse, IntoElifResponse};
-use crate::errors::HttpResult;
 use axum::{
-    extract::{Request as AxumRequest},
-    response::{Response as AxumResponse},
-    handler::Handler as AxumHandler,
+    extract::Request as AxumRequest, handler::Handler as AxumHandler,
+    response::Response as AxumResponse,
 };
-use std::future::Future;
 use std::collections::HashMap;
+use std::future::Future;
 
 /// Trait for elif handlers that work with ElifRequest/ElifResponse
 pub trait ElifHandler<T> {
@@ -37,7 +36,7 @@ where
 }
 
 /// Wrapper struct that implements the Handler trait
-pub struct ElifHandlerWrapper<F, Fut, R> 
+pub struct ElifHandlerWrapper<F, Fut, R>
 where
     F: Fn(ElifRequest) -> Fut + Send + Clone + 'static,
     Fut: Future<Output = HttpResult<R>> + Send + 'static,
@@ -72,28 +71,25 @@ where
         Box::pin(async move {
             // Convert Axum request to ElifRequest
             let (parts, body) = req.into_parts();
-            
+
             // Extract body bytes
-            let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
-                Ok(bytes) => Some(bytes),
-                Err(_) => None,
-            };
-            
+            let body_bytes = (axum::body::to_bytes(body, usize::MAX).await).ok();
+
             // Extract query parameters from URI
             let query_params = if let Some(query) = parts.uri.query() {
-                serde_urlencoded::from_str::<HashMap<String, String>>(query)
-                    .unwrap_or_default()
+                serde_urlencoded::from_str::<HashMap<String, String>>(query).unwrap_or_default()
             } else {
                 HashMap::new()
             };
-            
+
             let elif_request = ElifRequest::extract_elif_request(
                 crate::request::ElifMethod::from_axum(parts.method),
                 parts.uri,
                 crate::response::ElifHeaderMap::from_axum(parts.headers),
                 body_bytes,
-            ).with_query_params(query_params);
-            
+            )
+            .with_query_params(query_params);
+
             match (self.handler)(elif_request).await {
                 Ok(response) => {
                     let elif_response = response.into_response();
@@ -144,7 +140,7 @@ mod tests {
     #[test]
     fn test_elif_handler_conversion() {
         let _handler = elif_handler(test_handler);
-        
+
         // This test verifies the handler compiles and can be used
         // Full integration testing would require setting up Axum routing
         assert!(true);

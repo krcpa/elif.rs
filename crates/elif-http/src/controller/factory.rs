@@ -1,15 +1,15 @@
 //! Controller factory implementation for IoC container integration
-//! 
+//!
 //! Provides automatic controller instantiation with dependency injection
 //! using the new IoC container from elif-core.
 
-use std::sync::Arc;
-use std::collections::HashMap;
 use async_trait::async_trait;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::controller::base::ElifController;
-use crate::request::ElifRequest;
 use crate::errors::HttpError;
+use crate::request::ElifRequest;
 use elif_core::container::{IocContainer, ScopeId};
 
 /// Trait for creating controller instances from the IoC container
@@ -52,11 +52,11 @@ where
         container: &IocContainer,
         scope: Option<&ScopeId>,
     ) -> Result<Arc<dyn ElifController>, HttpError> {
-        let controller = T::from_ioc_container(container, scope)
-            .map_err(|e| HttpError::InternalError {
+        let controller =
+            T::from_ioc_container(container, scope).map_err(|e| HttpError::InternalError {
                 message: format!("Failed to create controller: {}", e),
             })?;
-        
+
         Ok(Arc::new(controller))
     }
 }
@@ -98,11 +98,7 @@ impl ControllerRegistry {
     }
 
     /// Register a custom factory for a controller
-    pub fn register_factory(
-        &mut self,
-        name: &str,
-        factory: Box<dyn ControllerFactory>,
-    ) {
+    pub fn register_factory(&mut self, name: &str, factory: Box<dyn ControllerFactory>) {
         self.factories.insert(name.to_string(), factory);
     }
 
@@ -112,7 +108,9 @@ impl ControllerRegistry {
         name: &str,
         scope: Option<&ScopeId>,
     ) -> Result<Arc<dyn ElifController>, HttpError> {
-        let factory = self.factories.get(name)
+        let factory = self
+            .factories
+            .get(name)
             .ok_or_else(|| HttpError::InternalError {
                 message: format!("Controller '{}' not registered", name),
             })?;
@@ -125,7 +123,9 @@ impl ControllerRegistry {
         &self,
         request: &ElifRequest,
     ) -> Result<ScopedControllerRegistry<'_>, HttpError> {
-        let scope_id = self.container.create_scope()
+        let scope_id = self
+            .container
+            .create_scope()
             .map_err(|e| HttpError::InternalError {
                 message: format!("Failed to create request scope: {}", e),
             })?;
@@ -159,7 +159,7 @@ impl<'a> ScopedControllerRegistry<'a> {
     ) -> Result<Arc<dyn ElifController>, HttpError> {
         // Register request context in scope for injection
         // TODO: Add request context to scope once request-scoped services are implemented
-        
+
         self.registry
             .create_controller(name, Some(&self.scope_id))
             .await
@@ -172,7 +172,8 @@ impl<'a> ScopedControllerRegistry<'a> {
 
     /// Dispose the scope when done
     pub async fn dispose(self) -> Result<(), HttpError> {
-        self.registry.container
+        self.registry
+            .container
             .dispose_scope(&self.scope_id)
             .await
             .map_err(|e| HttpError::InternalError {
@@ -197,7 +198,7 @@ impl RequestContext {
             method: request.method.to_string(),
             path: request.path().to_string(),
             query_params: HashMap::new(), // Simplified for now
-            headers: HashMap::new(), // Simplified for now
+            headers: HashMap::new(),      // Simplified for now
         }
     }
 }
@@ -234,24 +235,19 @@ impl ControllerRegistryBuilder {
     }
 
     /// Register a custom factory
-    pub fn register_factory(
-        mut self,
-        name: &str,
-        factory: Box<dyn ControllerFactory>,
-    ) -> Self {
+    pub fn register_factory(mut self, name: &str, factory: Box<dyn ControllerFactory>) -> Self {
         self.controllers.push((name.to_string(), factory));
         self
     }
 
     /// Build the controller registry
     pub fn build(self) -> Result<ControllerRegistry, HttpError> {
-        let container = self.container
-            .ok_or_else(|| HttpError::InternalError {
-                message: "IoC container is required for controller registry".to_string(),
-            })?;
+        let container = self.container.ok_or_else(|| HttpError::InternalError {
+            message: "IoC container is required for controller registry".to_string(),
+        })?;
 
         let mut registry = ControllerRegistry::new(container);
-        
+
         for (name, factory) in self.controllers {
             registry.register_factory(&name, factory);
         }
@@ -285,9 +281,9 @@ impl ControllerScanner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::controller::base::{ElifController, ControllerRoute};
-    use elif_core::ServiceBinder;
+    use crate::controller::base::{ControllerRoute, ElifController};
     use async_trait::async_trait;
+    use elif_core::ServiceBinder;
 
     // Test controller for factory tests
     pub struct TestController {
@@ -323,9 +319,10 @@ mod tests {
             container: &IocContainer,
             _scope: Option<&ScopeId>,
         ) -> Result<Self, String> {
-            let service = container.resolve::<TestService>()
+            let service = container
+                .resolve::<TestService>()
                 .map_err(|e| format!("Failed to resolve TestService: {}", e))?;
-            
+
             Ok(Self { service })
         }
     }
@@ -349,10 +346,12 @@ mod tests {
         let container_arc = Arc::new(container);
         let mut registry = ControllerRegistry::new(container_arc);
 
-        registry.register::<TestController>("test")
+        registry
+            .register::<TestController>("test")
             .expect("Failed to register controller");
 
-        let controller = registry.create_controller("test", None)
+        let controller = registry
+            .create_controller("test", None)
             .await
             .expect("Failed to create controller");
 

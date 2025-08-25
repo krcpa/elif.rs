@@ -1,14 +1,14 @@
 //! Response abstraction for building HTTP responses
-//! 
+//!
 //! Provides fluent response building with status codes, headers, and JSON serialization.
 
+use super::{ElifHeaderMap, ElifHeaderName, ElifHeaderValue, ElifStatusCode};
+use crate::errors::{HttpError, HttpResult};
 use axum::{
-    response::{Response, IntoResponse},
     body::{Body, Bytes},
+    response::{IntoResponse, Response},
 };
 use serde::Serialize;
-use crate::errors::{HttpError, HttpResult};
-use super::{ElifStatusCode, ElifHeaderMap, ElifHeaderName, ElifHeaderValue};
 
 /// Response builder for creating HTTP responses with fluent API
 #[derive(Debug)]
@@ -85,7 +85,7 @@ impl ElifResponse {
     // Simple panic-safe convenience methods for development ease
 
     /// Add header to response (Simple - never panics)
-    /// 
+    ///
     /// Simple equivalent: `$response->header('X-Custom', 'value')`
     /// Returns 500 error response on invalid header names/values
     pub fn with_header<K, V>(self, key: K, value: V) -> Self
@@ -93,27 +93,25 @@ impl ElifResponse {
         K: AsRef<str>,
         V: AsRef<str>,
     {
-        self.header(key, value)
-            .unwrap_or_else(|err| {
-                tracing::error!("Header creation failed in with_header: {}", err);
-                ElifResponse::internal_server_error()
-            })
+        self.header(key, value).unwrap_or_else(|err| {
+            tracing::error!("Header creation failed in with_header: {}", err);
+            ElifResponse::internal_server_error()
+        })
     }
 
     /// Set JSON body (Simple - never panics)
-    /// 
+    ///
     /// Simple equivalent: `$response->json($data)`
     /// Returns 500 error response on serialization failure
     pub fn with_json<T: Serialize>(self, data: &T) -> Self {
-        self.json(data)
-            .unwrap_or_else(|err| {
-                tracing::error!("JSON serialization failed in with_json: {}", err);
-                ElifResponse::internal_server_error()
-            })
+        self.json(data).unwrap_or_else(|err| {
+            tracing::error!("JSON serialization failed in with_json: {}", err);
+            ElifResponse::internal_server_error()
+        })
     }
 
     /// Set text body (Simple - never fails)
-    /// 
+    ///
     /// Simple equivalent: `response($text)`
     pub fn with_text<S: AsRef<str>>(mut self, content: S) -> Self {
         self.body = ResponseBody::Text(content.as_ref().to_string());
@@ -121,7 +119,7 @@ impl ElifResponse {
     }
 
     /// Set HTML body with content-type (Simple - never fails)
-    /// 
+    ///
     /// Simple equivalent: `response($html)->header('Content-Type', 'text/html')`
     pub fn with_html<S: AsRef<str>>(self, content: S) -> Self {
         self.with_text(content)
@@ -138,7 +136,7 @@ impl ElifResponse {
             .map_err(|e| HttpError::internal(format!("Invalid header name: {}", e)))?;
         let header_value = ElifHeaderValue::from_str(value.as_ref())
             .map_err(|e| HttpError::internal(format!("Invalid header value: {}", e)))?;
-        
+
         self.headers.insert(header_name, header_value);
         Ok(self)
     }
@@ -153,7 +151,7 @@ impl ElifResponse {
             .map_err(|e| HttpError::internal(format!("Invalid header name: {}", e)))?;
         let header_value = ElifHeaderValue::from_str(value.as_ref())
             .map_err(|e| HttpError::internal(format!("Invalid header value: {}", e)))?;
-        
+
         self.headers.insert(header_name, header_value);
         Ok(())
     }
@@ -242,21 +240,22 @@ impl ElifResponse {
             ResponseBody::Text(text) => Body::from(text),
             ResponseBody::Bytes(bytes) => Body::from(bytes),
             ResponseBody::Json(value) => {
-                let json_string = serde_json::to_string(&value)
-                    .map_err(|e| HttpError::internal(format!("JSON serialization failed: {}", e)))?;
+                let json_string = serde_json::to_string(&value).map_err(|e| {
+                    HttpError::internal(format!("JSON serialization failed: {}", e))
+                })?;
                 Body::from(json_string)
             }
         };
 
-        let mut response = Response::builder()
-            .status(self.status.to_axum());
-        
+        let mut response = Response::builder().status(self.status.to_axum());
+
         // Add headers
         for (key, value) in self.headers.iter() {
             response = response.header(key.to_axum(), value.to_axum());
         }
 
-        response.body(body)
+        response
+            .body(body)
             .map_err(|e| HttpError::internal(format!("Failed to build response: {}", e)))
     }
 
@@ -268,23 +267,24 @@ impl ElifResponse {
     /// Convert Axum Response to ElifResponse for backward compatibility
     pub(crate) async fn from_axum_response(response: Response<Body>) -> Self {
         let (parts, body) = response.into_parts();
-        
+
         // Extract body bytes
         let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
             Ok(bytes) => bytes,
             Err(_) => Bytes::new(),
         };
-        
+
         let mut elif_response = Self::with_status(ElifStatusCode::from_axum(parts.status));
         let headers = parts.headers.clone();
         elif_response.headers = ElifHeaderMap::from_axum(parts.headers);
-        
+
         // Try to determine body type based on content-type header
         if let Some(content_type) = headers.get("content-type") {
             if let Ok(content_type_str) = content_type.to_str() {
                 if content_type_str.contains("application/json") {
                     // Try to parse as JSON
-                    if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                    if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(&body_bytes)
+                    {
                         elif_response.body = ResponseBody::Json(json_value);
                     } else {
                         elif_response.body = ResponseBody::Bytes(body_bytes);
@@ -306,7 +306,7 @@ impl ElifResponse {
         } else {
             elif_response.body = ResponseBody::Bytes(body_bytes);
         }
-        
+
         elif_response
     }
 }
@@ -377,10 +377,8 @@ impl ElifResponse {
                 "message": message
             }
         });
-        
-        Self::with_status(status)
-            .json_value(error_data)
-            .build()
+
+        Self::with_status(status).json_value(error_data).build()
     }
 
     /// Create validation error response
@@ -392,10 +390,8 @@ impl ElifResponse {
                 "details": errors
             }
         });
-        
-        Self::unprocessable_entity()
-            .json_value(error_data)
-            .build()
+
+        Self::unprocessable_entity().json_value(error_data).build()
     }
 }
 
@@ -435,7 +431,11 @@ impl IntoResponse for ElifResponse {
             Ok(response) => response,
             Err(e) => {
                 // Fallback error response
-                (ElifStatusCode::INTERNAL_SERVER_ERROR.to_axum(), format!("Response build failed: {}", e)).into_response()
+                (
+                    ElifStatusCode::INTERNAL_SERVER_ERROR.to_axum(),
+                    format!("Response build failed: {}", e),
+                )
+                    .into_response()
             }
         }
     }
@@ -445,20 +445,17 @@ impl IntoResponse for ElifResponse {
 impl ElifResponse {
     /// Create 301 Moved Permanently redirect
     pub fn redirect_permanent(location: &str) -> HttpResult<Self> {
-        Ok(Self::with_status(ElifStatusCode::MOVED_PERMANENTLY)
-            .header("location", location)?)
+        Self::with_status(ElifStatusCode::MOVED_PERMANENTLY).header("location", location)
     }
 
     /// Create 302 Found (temporary) redirect
     pub fn redirect_temporary(location: &str) -> HttpResult<Self> {
-        Ok(Self::with_status(ElifStatusCode::FOUND)
-            .header("location", location)?)
+        Self::with_status(ElifStatusCode::FOUND).header("location", location)
     }
 
     /// Create 303 See Other redirect
     pub fn redirect_see_other(location: &str) -> HttpResult<Self> {
-        Ok(Self::with_status(ElifStatusCode::SEE_OTHER)
-            .header("location", location)?)
+        Self::with_status(ElifStatusCode::SEE_OTHER).header("location", location)
     }
 }
 
@@ -467,7 +464,7 @@ impl ElifResponse {
     /// Create file download response
     pub fn download(filename: &str, content: Bytes) -> HttpResult<Self> {
         let content_disposition = format!("attachment; filename=\"{}\"", filename);
-        
+
         Ok(Self::ok()
             .header("content-disposition", content_disposition)?
             .header("content-type", "application/octet-stream")?
@@ -477,7 +474,7 @@ impl ElifResponse {
     /// Create inline file response (display in browser)
     pub fn file_inline(filename: &str, content_type: &str, content: Bytes) -> HttpResult<Self> {
         let content_disposition = format!("inline; filename=\"{}\"", filename);
-        
+
         Ok(Self::ok()
             .header("content-disposition", content_disposition)?
             .header("content-type", content_type)?
@@ -489,14 +486,14 @@ impl ElifResponse {
         let path = path.as_ref();
         let content = std::fs::read(path)
             .map_err(|e| HttpError::internal(format!("Failed to read file: {}", e)))?;
-        
+
         let mime_type = Self::guess_mime_type(path);
-        
+
         Ok(Self::ok()
             .header("content-type", mime_type)?
             .bytes(Bytes::from(content)))
     }
-    
+
     /// Guess MIME type from file extension
     fn guess_mime_type(path: &std::path::Path) -> &'static str {
         match path.extension().and_then(|ext| ext.to_str()) {
@@ -573,8 +570,7 @@ impl ElifResponse {
 
     /// Create streaming response with chunked transfer encoding
     pub fn stream() -> HttpResult<Self> {
-        Self::ok()
-            .header("transfer-encoding", "chunked")
+        Self::ok().header("transfer-encoding", "chunked")
     }
 
     /// Create Server-Sent Events (SSE) response
@@ -589,9 +585,9 @@ impl ElifResponse {
     pub fn jsonp<T: Serialize>(callback: &str, data: &T) -> HttpResult<Self> {
         let json_data = serde_json::to_string(data)
             .map_err(|e| HttpError::internal(format!("JSON serialization failed: {}", e)))?;
-        
+
         let jsonp_content = format!("{}({});", callback, json_data);
-        
+
         Self::ok()
             .text(jsonp_content)
             .header("content-type", "application/javascript; charset=utf-8")
@@ -614,17 +610,15 @@ impl ElifResponse {
 
     /// Create binary response with custom MIME type
     pub fn binary(content: Bytes, mime_type: &str) -> HttpResult<Self> {
-        Ok(Self::ok()
-            .header("content-type", mime_type)?
-            .bytes(content))
+        Ok(Self::ok().header("content-type", mime_type)?.bytes(content))
     }
 
     /// Create CORS preflight response
     pub fn cors_preflight(
         allowed_origins: &[&str],
-        allowed_methods: &[&str], 
+        allowed_methods: &[&str],
         allowed_headers: &[&str],
-        max_age: Option<u32>
+        max_age: Option<u32>,
     ) -> HttpResult<Self> {
         let mut response = Self::no_content()
             .header("access-control-allow-origin", allowed_origins.join(","))?
@@ -643,18 +637,18 @@ impl ElifResponse {
         mut self,
         origin: &str,
         credentials: bool,
-        exposed_headers: Option<&[&str]>
+        exposed_headers: Option<&[&str]>,
     ) -> HttpResult<Self> {
         self = self.header("access-control-allow-origin", origin)?;
-        
+
         if credentials {
             self = self.header("access-control-allow-credentials", "true")?;
         }
-        
+
         if let Some(headers) = exposed_headers {
             self = self.header("access-control-expose-headers", headers.join(","))?;
         }
-        
+
         Ok(self)
     }
 
@@ -665,13 +659,13 @@ impl ElifResponse {
         } else {
             format!("private, max-age={}", max_age)
         };
-        
+
         self = self.header("cache-control", cache_control)?;
-        
+
         // Add ETag for cache validation (simple content-based)
         let etag = format!("\"{}\"", self.generate_etag());
         self = self.header("etag", etag)?;
-        
+
         Ok(self)
     }
 
@@ -679,10 +673,10 @@ impl ElifResponse {
     fn generate_etag(&self) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         self.status.as_u16().hash(&mut hasher);
-        
+
         // Hash header keys and values for ETag generation
         for (key, value) in self.headers.iter() {
             key.as_str().hash(&mut hasher);
@@ -690,7 +684,7 @@ impl ElifResponse {
                 value_str.hash(&mut hasher);
             }
         }
-        
+
         // Hash the response body for a correct content-based ETag
         match &self.body {
             ResponseBody::Empty => "empty".hash(&mut hasher),
@@ -706,7 +700,7 @@ impl ElifResponse {
                 }
             }
         }
-        
+
         format!("{:x}", hasher.finish())
     }
 
@@ -715,7 +709,7 @@ impl ElifResponse {
         if let Some(request_etag) = request_etag {
             let response_etag = self.generate_etag();
             let response_etag_quoted = format!("\"{}\"", response_etag);
-            
+
             if request_etag == response_etag_quoted || request_etag == "*" {
                 return ElifResponse::with_status(ElifStatusCode::NOT_MODIFIED);
             }
@@ -754,7 +748,7 @@ pub enum ImageFormat {
 /// Response transformation helpers
 impl ElifResponse {
     /// Transform response body with a closure
-    pub fn transform_body<F>(mut self, transform: F) -> Self 
+    pub fn transform_body<F>(mut self, transform: F) -> Self
     where
         F: FnOnce(ResponseBody) -> ResponseBody,
     {
@@ -781,8 +775,11 @@ impl ElifResponse {
             Ok(response) => response,
             Err(e) => {
                 // Fallback error response
-                (ElifStatusCode::INTERNAL_SERVER_ERROR.to_axum(), 
-                 format!("Response build failed: {}", e)).into_response()
+                (
+                    ElifStatusCode::INTERNAL_SERVER_ERROR.to_axum(),
+                    format!("Response build failed: {}", e),
+                )
+                    .into_response()
             }
         }
     }
@@ -795,13 +792,13 @@ impl ElifResponse {
     /// Check if response is successful (2xx status)
     pub fn is_success(&self) -> bool {
         let status_code = self.status.as_u16();
-        status_code >= 200 && status_code < 300
+        (200..300).contains(&status_code)
     }
 
     /// Check if response is a redirect (3xx status)
     pub fn is_redirect(&self) -> bool {
         let status_code = self.status.as_u16();
-        status_code >= 300 && status_code < 400
+        (300..400).contains(&status_code)
     }
 
     /// Get response body size estimate
@@ -812,9 +809,7 @@ impl ElifResponse {
             ResponseBody::Bytes(bytes) => bytes.len(),
             ResponseBody::Json(value) => {
                 // Estimate JSON serialization size
-                serde_json::to_string(value)
-                    .map(|s| s.len())
-                    .unwrap_or(0)
+                serde_json::to_string(value).map(|s| s.len()).unwrap_or(0)
             }
         }
     }
@@ -827,8 +822,7 @@ mod tests {
 
     #[test]
     fn test_basic_response_building() {
-        let response = ElifResponse::ok()
-            .text("Hello, World!");
+        let response = ElifResponse::ok().text("Hello, World!");
 
         assert_eq!(response.status, ElifStatusCode::OK);
         match response.body {
@@ -844,8 +838,7 @@ mod tests {
             "age": 30
         });
 
-        let response = ElifResponse::ok()
-            .json_value(data.clone());
+        let response = ElifResponse::ok().json_value(data.clone());
 
         match response.body {
             ResponseBody::Json(value) => assert_eq!(value, data),
@@ -857,7 +850,10 @@ mod tests {
     fn test_status_codes() {
         assert_eq!(ElifResponse::created().status, ElifStatusCode::CREATED);
         assert_eq!(ElifResponse::not_found().status, ElifStatusCode::NOT_FOUND);
-        assert_eq!(ElifResponse::internal_server_error().status, ElifStatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            ElifResponse::internal_server_error().status,
+            ElifStatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]
@@ -866,7 +862,8 @@ mod tests {
             .header("x-custom-header", "test-value")
             .unwrap();
 
-        let custom_header = crate::response::headers::ElifHeaderName::from_str("x-custom-header").unwrap();
+        let custom_header =
+            crate::response::headers::ElifHeaderName::from_str("x-custom-header").unwrap();
         assert!(response.headers.contains_key(&custom_header));
         assert_eq!(
             response.headers.get(&custom_header).unwrap(),
@@ -878,7 +875,9 @@ mod tests {
     fn test_redirect_responses() {
         let redirect = ElifResponse::redirect_permanent("/new-location").unwrap();
         assert_eq!(redirect.status, ElifStatusCode::MOVED_PERMANENTLY);
-        assert!(redirect.headers.contains_key(&crate::response::headers::ElifHeaderName::from_str("location").unwrap()));
+        assert!(redirect.headers.contains_key(
+            &crate::response::headers::ElifHeaderName::from_str("location").unwrap()
+        ));
     }
 
     #[test]
@@ -890,14 +889,16 @@ mod tests {
     #[test]
     fn test_borrowing_api_headers() {
         let mut response = ElifResponse::ok();
-        
+
         // Test borrowing header methods
-        response.add_header("x-custom-header", "test-value").unwrap();
+        response
+            .add_header("x-custom-header", "test-value")
+            .unwrap();
         response.set_content_type("application/json").unwrap();
-        
+
         let built_response = response.build().unwrap();
         let headers = built_response.headers();
-        
+
         assert!(headers.contains_key("x-custom-header"));
         assert_eq!(headers.get("x-custom-header").unwrap(), "test-value");
         assert_eq!(headers.get("content-type").unwrap(), "application/json");
@@ -906,7 +907,7 @@ mod tests {
     #[test]
     fn test_borrowing_api_body() {
         let mut response = ElifResponse::ok();
-        
+
         // Test borrowing text body method
         response.set_text("Hello World");
         assert_eq!(response.status_code(), ElifStatusCode::OK);
@@ -914,7 +915,7 @@ mod tests {
             ResponseBody::Text(text) => assert_eq!(text, "Hello World"),
             _ => panic!("Expected text body after calling set_text"),
         }
-        
+
         // Test borrowing bytes body method
         let bytes_data = Bytes::from("binary data");
         response.set_bytes(bytes_data.clone());
@@ -922,11 +923,11 @@ mod tests {
             ResponseBody::Bytes(bytes) => assert_eq!(bytes, &bytes_data),
             _ => panic!("Expected bytes body after calling set_bytes"),
         }
-        
+
         // Test borrowing JSON body method
         let data = json!({"message": "Hello"});
         response.set_json_value(data.clone());
-        
+
         // Verify the body was set correctly
         match &response.body {
             ResponseBody::Json(value) => assert_eq!(*value, data),
@@ -937,135 +938,159 @@ mod tests {
     #[test]
     fn test_borrowing_api_status() {
         let mut response = ElifResponse::ok();
-        
+
         // Test borrowing status method
         response.set_status(ElifStatusCode::CREATED);
         assert_eq!(response.status_code(), ElifStatusCode::CREATED);
-        
+
         // Test multiple modifications
         response.set_status(ElifStatusCode::ACCEPTED);
         response.set_text("Updated");
-        
+
         assert_eq!(response.status_code(), ElifStatusCode::ACCEPTED);
     }
 
-    #[test] 
+    #[test]
     fn test_borrowing_api_middleware_pattern() {
         // Test the pattern that caused issues in middleware v2
         let mut response = ElifResponse::ok().text("Original");
-        
+
         // Simulate middleware adding headers iteratively
         let headers = vec![
             ("x-middleware-1", "executed"),
-            ("x-middleware-2", "processed"), 
+            ("x-middleware-2", "processed"),
             ("x-custom", "value"),
         ];
-        
+
         for (name, value) in headers {
             // This should work without ownership issues
             response.add_header(name, value).unwrap();
         }
-        
+
         let built = response.build().unwrap();
         let response_headers = built.headers();
-        
+
         assert!(response_headers.contains_key("x-middleware-1"));
-        assert!(response_headers.contains_key("x-middleware-2")); 
+        assert!(response_headers.contains_key("x-middleware-2"));
         assert!(response_headers.contains_key("x-custom"));
     }
 
     #[test]
     fn test_etag_generation_includes_body_content() {
         // Test that ETag generation properly includes response body content
-        
+
         // Same status and headers, different text bodies
         let response1 = ElifResponse::ok().with_text("Hello World");
         let response2 = ElifResponse::ok().with_text("Different Content");
-        
+
         let etag1 = response1.generate_etag();
         let etag2 = response2.generate_etag();
-        
-        assert_ne!(etag1, etag2, "ETags should be different for different text content");
-        
+
+        assert_ne!(
+            etag1, etag2,
+            "ETags should be different for different text content"
+        );
+
         // Same status and headers, different JSON bodies
         let json1 = serde_json::json!({"name": "Alice", "age": 30});
         let json2 = serde_json::json!({"name": "Bob", "age": 25});
-        
+
         let response3 = ElifResponse::ok().with_json(&json1);
         let response4 = ElifResponse::ok().with_json(&json2);
-        
+
         let etag3 = response3.generate_etag();
         let etag4 = response4.generate_etag();
-        
-        assert_ne!(etag3, etag4, "ETags should be different for different JSON content");
-        
+
+        assert_ne!(
+            etag3, etag4,
+            "ETags should be different for different JSON content"
+        );
+
         // Same content should produce same ETag
         let response5 = ElifResponse::ok().with_text("Hello World");
         let etag5 = response5.generate_etag();
-        
-        assert_eq!(etag1, etag5, "ETags should be identical for identical content");
-        
+
+        assert_eq!(
+            etag1, etag5,
+            "ETags should be identical for identical content"
+        );
+
         // Different response types with same logical content should be different
         let response6 = ElifResponse::ok().with_json(&serde_json::json!("Hello World"));
         let etag6 = response6.generate_etag();
-        
-        assert_ne!(etag1, etag6, "ETags should be different for different body types even with same content");
+
+        assert_ne!(
+            etag1, etag6,
+            "ETags should be different for different body types even with same content"
+        );
     }
 
     #[test]
     fn test_etag_generation_different_body_types() {
         // Test ETag generation for all body types
-        
+
         let empty_response = ElifResponse::ok();
         let text_response = ElifResponse::ok().with_text("test content");
         let bytes_response = ElifResponse::ok().bytes(Bytes::from("test content"));
         let json_response = ElifResponse::ok().with_json(&serde_json::json!({"key": "value"}));
-        
+
         let empty_etag = empty_response.generate_etag();
         let text_etag = text_response.generate_etag();
         let bytes_etag = bytes_response.generate_etag();
         let json_etag = json_response.generate_etag();
-        
+
         // All ETags should be different
         let etags = vec![&empty_etag, &text_etag, &bytes_etag, &json_etag];
         for i in 0..etags.len() {
             for j in (i + 1)..etags.len() {
-                assert_ne!(etags[i], etags[j], 
-                    "ETags should be unique for different body types: {} vs {}", etags[i], etags[j]);
+                assert_ne!(
+                    etags[i], etags[j],
+                    "ETags should be unique for different body types: {} vs {}",
+                    etags[i], etags[j]
+                );
             }
         }
-        
+
         // ETags should be consistent for same content
         let text_response2 = ElifResponse::ok().with_text("test content");
         let text_etag2 = text_response2.generate_etag();
-        assert_eq!(text_etag, text_etag2, "ETags should be consistent for identical text content");
+        assert_eq!(
+            text_etag, text_etag2,
+            "ETags should be consistent for identical text content"
+        );
     }
 
     #[test]
     fn test_etag_generation_with_status_and_headers() {
         // Verify that status codes and headers still affect ETag generation
-        
+
         let base_content = "same content";
-        
+
         // Different status codes should produce different ETags
         let response_200 = ElifResponse::ok().with_text(base_content);
         let response_201 = ElifResponse::created().with_text(base_content);
-        
+
         let etag_200 = response_200.generate_etag();
         let etag_201 = response_201.generate_etag();
-        
-        assert_ne!(etag_200, etag_201, "ETags should be different for different status codes");
-        
+
+        assert_ne!(
+            etag_200, etag_201,
+            "ETags should be different for different status codes"
+        );
+
         // Different headers should produce different ETags
         let response_no_header = ElifResponse::ok().with_text(base_content);
         let response_with_header = ElifResponse::ok()
             .with_text(base_content)
             .with_header("x-custom", "value");
-        
+
         let etag_no_header = response_no_header.generate_etag();
         let etag_with_header = response_with_header.generate_etag();
-        
-        assert_ne!(etag_no_header, etag_with_header, "ETags should be different when headers differ");
+
+        assert_ne!(
+            etag_no_header, etag_with_header,
+            "ETags should be different when headers differ"
+        );
     }
 
     #[test]
@@ -1073,19 +1098,27 @@ mod tests {
         let response = ElifResponse::ok().with_text("Test content");
         let etag = response.generate_etag();
         let etag_quoted = format!("\"{}\"", etag);
-        
+
         // Test If-None-Match with matching ETag (should return 304)
         let conditional_response = response.conditional(Some(&etag_quoted));
-        assert_eq!(conditional_response.status_code(), ElifStatusCode::NOT_MODIFIED);
-        
+        assert_eq!(
+            conditional_response.status_code(),
+            ElifStatusCode::NOT_MODIFIED
+        );
+
         // Test If-None-Match with non-matching ETag (should return original response)
         let response2 = ElifResponse::ok().with_text("Test content");
         let different_etag = "\"different_etag_value\"";
         let conditional_response2 = response2.conditional(Some(different_etag));
         assert_eq!(conditional_response2.status_code(), ElifStatusCode::OK);
-        
+
         // Test wildcard match
-        let wildcard_response = ElifResponse::ok().with_text("Test content").conditional(Some("*"));
-        assert_eq!(wildcard_response.status_code(), ElifStatusCode::NOT_MODIFIED);
+        let wildcard_response = ElifResponse::ok()
+            .with_text("Test content")
+            .conditional(Some("*"));
+        assert_eq!(
+            wildcard_response.status_code(),
+            ElifStatusCode::NOT_MODIFIED
+        );
     }
 }

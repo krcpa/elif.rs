@@ -22,7 +22,7 @@ pub struct CustomValidator {
 
 impl CustomValidator {
     /// Create a new custom validator with a sync function
-    pub fn new<F>(name: impl Into<String>, validator: F) -> Self 
+    pub fn new<F>(name: impl Into<String>, validator: F) -> Self
     where
         F: Fn(&Value, &str) -> ValidationResult<()> + Send + Sync + 'static,
     {
@@ -71,7 +71,8 @@ impl ValidationRule for CustomValidator {
                 field,
                 "Custom validator has no validation function",
                 "no_validator",
-            ).into());
+            )
+            .into());
         };
 
         // If validation failed and we have a custom message, replace the error message
@@ -95,9 +96,9 @@ impl ValidationRule for CustomValidator {
 
     fn parameters(&self) -> Option<Value> {
         let mut params = serde_json::Map::new();
-        
+
         params.insert("name".to_string(), Value::String(self.name.clone()));
-        
+
         if let Some(ref message) = self.message {
             params.insert("message".to_string(), Value::String(message.clone()));
         }
@@ -120,14 +121,16 @@ impl CustomValidator {
                         field,
                         format!("{} must be one of: {}", field, allowed.join(", ")),
                         "not_in_list",
-                    ).into())
+                    )
+                    .into())
                 }
             } else {
                 Err(ValidationError::with_code(
                     field,
                     format!("{} must be a string", field),
                     "invalid_type",
-                ).into())
+                )
+                .into())
             }
         })
     }
@@ -142,7 +145,8 @@ impl CustomValidator {
                         field,
                         format!("{} cannot be one of: {}", field, forbidden.join(", ")),
                         "in_forbidden_list",
-                    ).into())
+                    )
+                    .into())
                 } else {
                     Ok(())
                 }
@@ -163,14 +167,16 @@ impl CustomValidator {
                         field,
                         format!("{} must contain '{}'", field, substring),
                         "missing_substring",
-                    ).into())
+                    )
+                    .into())
                 }
             } else {
                 Err(ValidationError::with_code(
                     field,
                     format!("{} must be a string", field),
                     "invalid_type",
-                ).into())
+                )
+                .into())
             }
         })
     }
@@ -186,7 +192,8 @@ impl CustomValidator {
                         field,
                         format!("{} must not contain '{}'", field, substring),
                         "forbidden_substring",
-                    ).into())
+                    )
+                    .into())
                 }
             } else {
                 Ok(()) // Allow non-string values through
@@ -205,14 +212,16 @@ impl CustomValidator {
                         field,
                         format!("{} must start with '{}'", field, prefix),
                         "invalid_prefix",
-                    ).into())
+                    )
+                    .into())
                 }
             } else {
                 Err(ValidationError::with_code(
                     field,
                     format!("{} must be a string", field),
                     "invalid_type",
-                ).into())
+                )
+                .into())
             }
         })
     }
@@ -228,14 +237,16 @@ impl CustomValidator {
                         field,
                         format!("{} must end with '{}'", field, suffix),
                         "invalid_suffix",
-                    ).into())
+                    )
+                    .into())
                 }
             } else {
                 Err(ValidationError::with_code(
                     field,
                     format!("{} must be a string", field),
                     "invalid_type",
-                ).into())
+                )
+                .into())
             }
         })
     }
@@ -251,20 +262,22 @@ impl CustomValidator {
                         field,
                         format!("{} must have exactly {} items", field, expected_length),
                         "invalid_array_length",
-                    ).into())
+                    )
+                    .into())
                 }
             } else {
                 Err(ValidationError::with_code(
                     field,
                     format!("{} must be an array", field),
                     "invalid_type",
-                ).into())
+                )
+                .into())
             }
         })
     }
 
     /// Create a validator that checks if all array elements pass a condition
-    pub fn array_all<F>(name: impl Into<String>, condition: F) -> Self 
+    pub fn array_all<F>(name: impl Into<String>, condition: F) -> Self
     where
         F: Fn(&Value) -> bool + Send + Sync + 'static,
     {
@@ -274,9 +287,13 @@ impl CustomValidator {
                     if !condition(item) {
                         return Err(ValidationError::with_code(
                             field,
-                            format!("{} item at index {} does not meet the required condition", field, index),
+                            format!(
+                                "{} item at index {} does not meet the required condition",
+                                field, index
+                            ),
                             "array_condition_failed",
-                        ).into());
+                        )
+                        .into());
                     }
                 }
                 Ok(())
@@ -285,7 +302,8 @@ impl CustomValidator {
                     field,
                     format!("{} must be an array", field),
                     "invalid_type",
-                ).into())
+                )
+                .into())
             }
         })
     }
@@ -313,11 +331,15 @@ mod tests {
         });
 
         // Even number should pass
-        let result = validator.validate(&Value::Number(serde_json::Number::from(4)), "count").await;
+        let result = validator
+            .validate(&Value::Number(serde_json::Number::from(4)), "count")
+            .await;
         assert!(result.is_ok());
 
         // Odd number should fail
-        let result = validator.validate(&Value::Number(serde_json::Number::from(5)), "count").await;
+        let result = validator
+            .validate(&Value::Number(serde_json::Number::from(5)), "count")
+            .await;
         assert!(result.is_err());
     }
 
@@ -327,31 +349,60 @@ mod tests {
     async fn test_custom_validator_one_of() {
         let validator = CustomValidator::one_of(
             "status_validator",
-            vec!["active".to_string(), "inactive".to_string(), "pending".to_string()]
+            vec![
+                "active".to_string(),
+                "inactive".to_string(),
+                "pending".to_string(),
+            ],
         );
 
         // Valid status
-        assert!(validator.validate(&Value::String("active".to_string()), "status").await.is_ok());
-        assert!(validator.validate(&Value::String("pending".to_string()), "status").await.is_ok());
+        assert!(validator
+            .validate(&Value::String("active".to_string()), "status")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::String("pending".to_string()), "status")
+            .await
+            .is_ok());
 
         // Invalid status
-        assert!(validator.validate(&Value::String("unknown".to_string()), "status").await.is_err());
+        assert!(validator
+            .validate(&Value::String("unknown".to_string()), "status")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn test_custom_validator_not_one_of() {
         let validator = CustomValidator::not_one_of(
             "username_validator",
-            vec!["admin".to_string(), "root".to_string(), "system".to_string()]
+            vec![
+                "admin".to_string(),
+                "root".to_string(),
+                "system".to_string(),
+            ],
         );
 
         // Valid username
-        assert!(validator.validate(&Value::String("john".to_string()), "username").await.is_ok());
-        assert!(validator.validate(&Value::String("alice".to_string()), "username").await.is_ok());
+        assert!(validator
+            .validate(&Value::String("john".to_string()), "username")
+            .await
+            .is_ok());
+        assert!(validator
+            .validate(&Value::String("alice".to_string()), "username")
+            .await
+            .is_ok());
 
         // Forbidden username
-        assert!(validator.validate(&Value::String("admin".to_string()), "username").await.is_err());
-        assert!(validator.validate(&Value::String("root".to_string()), "username").await.is_err());
+        assert!(validator
+            .validate(&Value::String("admin".to_string()), "username")
+            .await
+            .is_err());
+        assert!(validator
+            .validate(&Value::String("root".to_string()), "username")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -359,10 +410,16 @@ mod tests {
         let validator = CustomValidator::contains("email_domain", "@company.com".to_string());
 
         // Valid email with company domain
-        assert!(validator.validate(&Value::String("john@company.com".to_string()), "email").await.is_ok());
+        assert!(validator
+            .validate(&Value::String("john@company.com".to_string()), "email")
+            .await
+            .is_ok());
 
         // Invalid email without company domain
-        assert!(validator.validate(&Value::String("john@gmail.com".to_string()), "email").await.is_err());
+        assert!(validator
+            .validate(&Value::String("john@gmail.com".to_string()), "email")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -370,10 +427,16 @@ mod tests {
         let validator = CustomValidator::starts_with("api_key", "sk_".to_string());
 
         // Valid API key
-        assert!(validator.validate(&Value::String("sk_1234567890".to_string()), "api_key").await.is_ok());
+        assert!(validator
+            .validate(&Value::String("sk_1234567890".to_string()), "api_key")
+            .await
+            .is_ok());
 
         // Invalid API key
-        assert!(validator.validate(&Value::String("pk_1234567890".to_string()), "api_key").await.is_err());
+        assert!(validator
+            .validate(&Value::String("pk_1234567890".to_string()), "api_key")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -381,10 +444,16 @@ mod tests {
         let validator = CustomValidator::ends_with("image_file", ".jpg".to_string());
 
         // Valid image file
-        assert!(validator.validate(&Value::String("photo.jpg".to_string()), "filename").await.is_ok());
+        assert!(validator
+            .validate(&Value::String("photo.jpg".to_string()), "filename")
+            .await
+            .is_ok());
 
         // Invalid file extension
-        assert!(validator.validate(&Value::String("photo.png".to_string()), "filename").await.is_err());
+        assert!(validator
+            .validate(&Value::String("photo.png".to_string()), "filename")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -409,9 +478,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_custom_validator_array_all() {
-        let validator = CustomValidator::array_all("numbers", |value| {
-            value.as_i64().map_or(false, |n| n > 0)
-        });
+        let validator =
+            CustomValidator::array_all("numbers", |value| value.as_i64().map_or(false, |n| n > 0));
 
         // Valid array with all positive numbers
         let array = Value::Array(vec![
@@ -436,9 +504,12 @@ mod tests {
     async fn test_custom_validator_with_custom_message() {
         let validator = CustomValidator::new("always_fail", |_value, field| {
             Err(ValidationError::new(field, "Original message").into())
-        }).message("Custom error message");
+        })
+        .message("Custom error message");
 
-        let result = validator.validate(&Value::String("test".to_string()), "field").await;
+        let result = validator
+            .validate(&Value::String("test".to_string()), "field")
+            .await;
         assert!(result.is_err());
 
         let errors = result.unwrap_err();

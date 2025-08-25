@@ -1,19 +1,21 @@
 //! Query Builder ORDER BY, GROUP BY, HAVING operations
 
-use serde_json::Value;
 use super::builder::QueryBuilder;
 use super::types::*;
+use serde_json::Value;
 
 impl<M> QueryBuilder<M> {
     /// Add ORDER BY clause (ascending)
     pub fn order_by(mut self, column: &str) -> Self {
-        self.order_by.push((column.to_string(), OrderDirection::Asc));
+        self.order_by
+            .push((column.to_string(), OrderDirection::Asc));
         self
     }
 
     /// Add ORDER BY clause (descending)
     pub fn order_by_desc(mut self, column: &str) -> Self {
-        self.order_by.push((column.to_string(), OrderDirection::Desc));
+        self.order_by
+            .push((column.to_string(), OrderDirection::Desc));
         self
     }
 
@@ -33,9 +35,14 @@ impl<M> QueryBuilder<M> {
         });
         self
     }
-    
+
     /// Add HAVING clause with custom operator and value  
-    pub fn having<T: Into<Value>>(mut self, column: &str, operator: QueryOperator, value: T) -> Self {
+    pub fn having<T: Into<Value>>(
+        mut self,
+        column: &str,
+        operator: QueryOperator,
+        value: T,
+    ) -> Self {
         self.having_conditions.push(WhereCondition {
             column: column.to_string(),
             operator,
@@ -44,7 +51,7 @@ impl<M> QueryBuilder<M> {
         });
         self
     }
-    
+
     /// Add raw HAVING clause
     pub fn having_raw(mut self, raw_condition: &str) -> Self {
         self.having_conditions.push(WhereCondition {

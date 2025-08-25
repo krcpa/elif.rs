@@ -1,8 +1,8 @@
 //! Validation error types and handling
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub type ValidationResult<T> = Result<T, ValidationErrors>;
@@ -32,7 +32,11 @@ impl ValidationError {
     }
 
     /// Create a validation error with a specific code
-    pub fn with_code(field: impl Into<String>, message: impl Into<String>, code: impl Into<String>) -> Self {
+    pub fn with_code(
+        field: impl Into<String>,
+        message: impl Into<String>,
+        code: impl Into<String>,
+    ) -> Self {
         Self {
             field: field.into(),
             message: message.into(),
@@ -42,7 +46,11 @@ impl ValidationError {
     }
 
     /// Create a validation error with additional context
-    pub fn with_context(field: impl Into<String>, message: impl Into<String>, context: serde_json::Value) -> Self {
+    pub fn with_context(
+        field: impl Into<String>,
+        message: impl Into<String>,
+        context: serde_json::Value,
+    ) -> Self {
         Self {
             field: field.into(),
             message: message.into(),
@@ -96,10 +104,7 @@ impl ValidationErrors {
     /// Add multiple validation errors for a field
     pub fn add_errors(&mut self, field: impl Into<String>, errors: Vec<ValidationError>) {
         let field = field.into();
-        self.errors
-            .entry(field)
-            .or_default()
-            .extend(errors);
+        self.errors.entry(field).or_default().extend(errors);
     }
 
     /// Add a simple validation error with field and message
@@ -136,10 +141,7 @@ impl ValidationErrors {
     /// Merge another ValidationErrors into this one
     pub fn merge(&mut self, other: ValidationErrors) {
         for (field, errors) in other.errors {
-            self.errors
-                .entry(field)
-                .or_default()
-                .extend(errors);
+            self.errors.entry(field).or_default().extend(errors);
         }
     }
 
@@ -212,7 +214,7 @@ mod tests {
     #[test]
     fn test_validation_errors_collection() {
         let mut errors = ValidationErrors::new();
-        
+
         errors.add_error("email", "Invalid format");
         errors.add_error("age", "Must be positive");
         errors.add_error("email", "Already exists");

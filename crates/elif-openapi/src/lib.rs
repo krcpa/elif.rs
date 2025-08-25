@@ -9,7 +9,7 @@ with support for interactive Swagger UI and multiple export formats.
 ## Features
 
 - Automatic OpenAPI 3.0 specification generation
-- Route and endpoint discovery from framework types  
+- Route and endpoint discovery from framework types
 - Request/response schema extraction from Rust structs
 - Authentication scheme documentation
 - Interactive Swagger UI integration
@@ -21,7 +21,7 @@ with support for interactive Swagger UI and multiple export formats.
 use elif_openapi::{OpenApiGenerator, OpenApiConfig};
 
 let mut generator = OpenApiGenerator::new(OpenApiConfig::default());
-let routes = vec![]; // Your route metadata here  
+let routes = vec![]; // Your route metadata here
 let spec = generator.generate(&routes).unwrap();
 ```
 */
@@ -42,19 +42,19 @@ pub use elif_openapi_derive::OpenApiSchema;
 
 // Core modules
 pub mod config;
-pub mod error;  
+pub mod error;
 pub mod generator;
 pub mod specification;
 
 // Schema generation
-pub mod schema;
 pub mod macros;
+pub mod schema;
 
 // Route and endpoint discovery
-pub mod endpoints;
 pub mod discovery;
+pub mod endpoints;
 
-// Export functionality  
+// Export functionality
 pub mod export;
 
 // Interactive documentation

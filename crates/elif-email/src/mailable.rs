@@ -1,4 +1,4 @@
-use crate::{Email, EmailError, templates::TemplateEngine};
+use crate::{templates::TemplateEngine, Email, EmailError};
 use async_trait::async_trait;
 use serde::Serialize;
 
@@ -7,17 +7,17 @@ use serde::Serialize;
 pub trait Mailable: Send + Sync {
     /// Build the email from this mailable object
     async fn build(&self) -> Result<Email, EmailError>;
-    
+
     /// Get the template name (optional)
     fn template_name(&self) -> Option<&str> {
         None
     }
-    
+
     /// Get template context data (optional)
     fn template_context(&self) -> Result<Option<serde_json::Value>, EmailError> {
         Ok(None)
     }
-    
+
     /// Customize the email after template rendering (optional)
     async fn customize_email(&self, email: Email) -> Result<Email, EmailError> {
         Ok(email)
@@ -80,22 +80,22 @@ impl BaseMailable {
 impl Mailable for BaseMailable {
     async fn build(&self) -> Result<Email, EmailError> {
         let mut email = Email::new().to(self.to.clone());
-        
+
         if let Some(ref from) = self.from {
             email = email.from(from.clone());
         }
-        
+
         if let Some(ref subject) = self.subject {
             email = email.subject(subject.clone());
         }
-        
+
         Ok(email)
     }
-    
+
     fn template_name(&self) -> Option<&str> {
         self.template.as_deref()
     }
-    
+
     fn template_context(&self) -> Result<Option<serde_json::Value>, EmailError> {
         if self.context.is_null() {
             Ok(None)
@@ -137,16 +137,18 @@ impl<'a> MailableBuilder<'a> {
     /// Build the email
     pub async fn build(self) -> Result<Email, EmailError> {
         let mut email = self.mailable.build().await?;
-        
+
         // Set default from if not already set
         if email.from.is_empty() {
             if let Some(default_from) = self.default_from {
                 email = email.from(default_from);
             }
         }
-        
+
         // Apply template if available
-        if let (Some(template_name), Some(engine)) = (self.mailable.template_name(), self.template_engine) {
+        if let (Some(template_name), Some(engine)) =
+            (self.mailable.template_name(), self.template_engine)
+        {
             if let Some(context_value) = self.mailable.template_context()? {
                 let context = match context_value {
                     serde_json::Value::Object(map) => map.into_iter().collect(),
@@ -156,14 +158,14 @@ impl<'a> MailableBuilder<'a> {
                         ctx
                     }
                 };
-                
+
                 email = email.with_template(engine, template_name, context)?;
             }
         }
-        
+
         // Apply custom modifications
         email = self.mailable.customize_email(email).await?;
-        
+
         Ok(email)
     }
 }
@@ -200,11 +202,11 @@ impl Mailable for WelcomeEmail {
             .to(self.to.clone())
             .subject(format!("Welcome {}!", self.user_name)))
     }
-    
+
     fn template_name(&self) -> Option<&str> {
         Some("welcome")
     }
-    
+
     fn template_context(&self) -> Result<Option<serde_json::Value>, EmailError> {
         Ok(Some(serde_json::to_value(self)?))
     }
@@ -242,11 +244,11 @@ impl Mailable for PasswordResetEmail {
             .to(self.to.clone())
             .subject("Password Reset Request"))
     }
-    
+
     fn template_name(&self) -> Option<&str> {
         Some("password_reset")
     }
-    
+
     fn template_context(&self) -> Result<Option<serde_json::Value>, EmailError> {
         Ok(Some(serde_json::to_value(self)?))
     }
@@ -290,26 +292,28 @@ impl InvoiceEmail {
 #[async_trait]
 impl Mailable for InvoiceEmail {
     async fn build(&self) -> Result<Email, EmailError> {
-        let mut email = Email::new()
-            .to(self.to.clone())
-            .subject(format!("Invoice {} - ${:.2}", self.invoice_number, self.amount));
+        let mut email = Email::new().to(self.to.clone()).subject(format!(
+            "Invoice {} - ${:.2}",
+            self.invoice_number, self.amount
+        ));
 
         // Add PDF attachment if provided
         if let Some(ref pdf_data) = self.pdf_attachment {
             let attachment = crate::Attachment::new(
                 format!("invoice_{}.pdf", self.invoice_number),
-                pdf_data.clone()
-            ).with_content_type("application/pdf");
+                pdf_data.clone(),
+            )
+            .with_content_type("application/pdf");
             email = email.attach(attachment);
         }
 
         Ok(email)
     }
-    
+
     fn template_name(&self) -> Option<&str> {
         Some("invoice")
     }
-    
+
     fn template_context(&self) -> Result<Option<serde_json::Value>, EmailError> {
         Ok(Some(serde_json::to_value(self)?))
     }
@@ -345,8 +349,7 @@ mod tests {
     #[tokio::test]
     async fn test_mailable_builder() {
         let mailable = Box::new(BaseMailable::new("test@example.com"));
-        let builder = MailableBuilder::new(mailable)
-            .with_default_from("default@example.com");
+        let builder = MailableBuilder::new(mailable).with_default_from("default@example.com");
 
         let email = builder.build().await.unwrap();
         assert_eq!(email.from, "default@example.com");

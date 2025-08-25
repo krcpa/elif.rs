@@ -1,7 +1,7 @@
-pub mod server;
-pub mod lifecycle;
 pub mod health;
+pub mod lifecycle;
+pub mod server;
 
-pub use server::*;
-pub use lifecycle::*;
 pub use health::*;
+pub use lifecycle::*;
+pub use server::*;

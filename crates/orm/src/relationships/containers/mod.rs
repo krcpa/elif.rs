@@ -12,29 +12,17 @@
 //! - `utils` - Utility functions for container collections
 
 pub mod core;
-pub mod specialized_types;
-pub mod polymorphic;
 pub mod loaders;
+pub mod polymorphic;
+pub mod specialized_types;
 pub mod utils;
 
 // Re-export main types
-pub use core::{
-    RelationshipLoadingState,
-    RelationshipContainer,
-    TypeSafeRelationship,
-};
+pub use core::{RelationshipContainer, RelationshipLoadingState, TypeSafeRelationship};
 
-pub use specialized_types::{
-    HasOne,
-    HasMany,
-    BelongsTo,
-    ManyToMany,
-};
+pub use specialized_types::{BelongsTo, HasMany, HasOne, ManyToMany};
 
-pub use polymorphic::{
-    MorphOne,
-    MorphMany,
-};
+pub use polymorphic::{MorphMany, MorphOne};
 
 pub use loaders::TypeSafeRelationshipLoader;
 

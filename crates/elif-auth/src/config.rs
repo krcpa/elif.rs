@@ -3,20 +3,20 @@
 use serde::{Deserialize, Serialize};
 
 /// Main authentication configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthConfig {
     /// JWT configuration
     pub jwt: JwtConfig,
-    
+
     /// Session configuration
     pub session: SessionConfig,
-    
+
     /// Password policy configuration
     pub password: PasswordConfig,
-    
+
     /// Multi-factor authentication configuration
     pub mfa: MfaConfig,
-    
+
     /// Rate limiting for authentication attempts
     pub rate_limit: AuthRateLimitConfig,
 }
@@ -26,26 +26,26 @@ pub struct AuthConfig {
 pub struct JwtConfig {
     /// Secret key for JWT signing (HS256) or path to private key (RS256)
     pub secret: String,
-    
+
     /// JWT signing algorithm (HS256, HS384, HS512, RS256, RS384, RS512)
     #[serde(default = "default_jwt_algorithm")]
     pub algorithm: String,
-    
+
     /// Access token expiration time in seconds
     #[serde(default = "default_access_token_expiry")]
     pub access_token_expiry: u64,
-    
+
     /// Refresh token expiration time in seconds  
     #[serde(default = "default_refresh_token_expiry")]
     pub refresh_token_expiry: u64,
-    
+
     /// JWT issuer
     #[serde(default = "default_jwt_issuer")]
     pub issuer: String,
-    
+
     /// JWT audience
     pub audience: Option<String>,
-    
+
     /// Allow token refresh
     #[serde(default = "default_true")]
     pub allow_refresh: bool,
@@ -57,34 +57,34 @@ pub struct SessionConfig {
     /// Session storage backend (memory, database, redis)
     #[serde(default = "default_session_storage")]
     pub storage: String,
-    
+
     /// Session expiration time in seconds
     #[serde(default = "default_session_expiry")]
     pub expiry: u64,
-    
+
     /// Session cookie name
     #[serde(default = "default_session_cookie_name")]
     pub cookie_name: String,
-    
+
     /// Session cookie domain
     pub cookie_domain: Option<String>,
-    
+
     /// Session cookie path
     #[serde(default = "default_session_cookie_path")]
     pub cookie_path: String,
-    
+
     /// Session cookie secure flag
     #[serde(default = "default_false")]
     pub cookie_secure: bool,
-    
+
     /// Session cookie HTTP-only flag
     #[serde(default = "default_true")]
     pub cookie_http_only: bool,
-    
+
     /// Session cookie SameSite policy
     #[serde(default = "default_session_cookie_same_site")]
     pub cookie_same_site: String,
-    
+
     /// Session cleanup interval in seconds
     #[serde(default = "default_session_cleanup_interval")]
     pub cleanup_interval: u64,
@@ -96,43 +96,43 @@ pub struct PasswordConfig {
     /// Minimum password length
     #[serde(default = "default_min_password_length")]
     pub min_length: usize,
-    
+
     /// Maximum password length
     #[serde(default = "default_max_password_length")]
     pub max_length: usize,
-    
+
     /// Require uppercase letters
     #[serde(default = "default_true")]
     pub require_uppercase: bool,
-    
+
     /// Require lowercase letters  
     #[serde(default = "default_true")]
     pub require_lowercase: bool,
-    
+
     /// Require numbers
     #[serde(default = "default_true")]
     pub require_numbers: bool,
-    
+
     /// Require special characters
     #[serde(default = "default_false")]
     pub require_special: bool,
-    
+
     /// Password hashing algorithm (argon2, bcrypt)
     #[serde(default = "default_hash_algorithm")]
     pub hash_algorithm: String,
-    
+
     /// Bcrypt cost factor (if using bcrypt)
     #[serde(default = "default_bcrypt_cost")]
     pub bcrypt_cost: u32,
-    
+
     /// Argon2 memory cost in KB (if using argon2)
     #[serde(default = "default_argon2_memory")]
     pub argon2_memory: u32,
-    
+
     /// Argon2 time cost (iterations)
     #[serde(default = "default_argon2_iterations")]
     pub argon2_iterations: u32,
-    
+
     /// Argon2 parallelism factor
     #[serde(default = "default_argon2_parallelism")]
     pub argon2_parallelism: u32,
@@ -144,27 +144,27 @@ pub struct MfaConfig {
     /// Enable MFA
     #[serde(default = "default_false")]
     pub enabled: bool,
-    
+
     /// TOTP issuer name
     #[serde(default = "default_totp_issuer")]
     pub totp_issuer: String,
-    
+
     /// TOTP time step in seconds
     #[serde(default = "default_totp_step")]
     pub totp_step: u64,
-    
+
     /// TOTP code length
     #[serde(default = "default_totp_digits")]
     pub totp_digits: usize,
-    
+
     /// TOTP time window tolerance
     #[serde(default = "default_totp_window")]
     pub totp_window: u8,
-    
+
     /// Number of backup codes to generate
     #[serde(default = "default_backup_codes_count")]
     pub backup_codes_count: usize,
-    
+
     /// Backup code length
     #[serde(default = "default_backup_code_length")]
     pub backup_code_length: usize,
@@ -176,56 +176,100 @@ pub struct AuthRateLimitConfig {
     /// Maximum login attempts per IP
     #[serde(default = "default_max_attempts")]
     pub max_attempts: u32,
-    
+
     /// Time window for rate limiting in seconds
     #[serde(default = "default_rate_limit_window")]
     pub window_seconds: u64,
-    
+
     /// Lockout duration in seconds after max attempts
     #[serde(default = "default_lockout_duration")]
     pub lockout_duration: u64,
 }
 
 // Default value functions
-fn default_jwt_algorithm() -> String { "HS256".to_string() }
-fn default_access_token_expiry() -> u64 { 15 * 60 } // 15 minutes
-fn default_refresh_token_expiry() -> u64 { 7 * 24 * 60 * 60 } // 7 days
-fn default_jwt_issuer() -> String { "elif.rs".to_string() }
-fn default_session_storage() -> String { "memory".to_string() }
-fn default_session_expiry() -> u64 { 24 * 60 * 60 } // 24 hours
-fn default_session_cookie_name() -> String { "elif_session".to_string() }
-fn default_session_cookie_path() -> String { "/".to_string() }
-fn default_session_cookie_same_site() -> String { "Lax".to_string() }
-fn default_session_cleanup_interval() -> u64 { 60 * 60 } // 1 hour
-fn default_min_password_length() -> usize { 8 }
-fn default_max_password_length() -> usize { 128 }
-fn default_hash_algorithm() -> String { "argon2".to_string() }
-fn default_bcrypt_cost() -> u32 { 12 }
-fn default_argon2_memory() -> u32 { 65536 } // 64MB
-fn default_argon2_iterations() -> u32 { 3 }
-fn default_argon2_parallelism() -> u32 { 4 }
-fn default_totp_issuer() -> String { "elif.rs".to_string() }
-fn default_totp_step() -> u64 { 30 }
-fn default_totp_digits() -> usize { 6 }
-fn default_totp_window() -> u8 { 1 }
-fn default_backup_codes_count() -> usize { 10 }
-fn default_backup_code_length() -> usize { 8 }
-fn default_max_attempts() -> u32 { 5 }
-fn default_rate_limit_window() -> u64 { 15 * 60 } // 15 minutes
-fn default_lockout_duration() -> u64 { 30 * 60 } // 30 minutes
-fn default_true() -> bool { true }
-fn default_false() -> bool { false }
-
-impl Default for AuthConfig {
-    fn default() -> Self {
-        Self {
-            jwt: JwtConfig::default(),
-            session: SessionConfig::default(),
-            password: PasswordConfig::default(),
-            mfa: MfaConfig::default(),
-            rate_limit: AuthRateLimitConfig::default(),
-        }
-    }
+fn default_jwt_algorithm() -> String {
+    "HS256".to_string()
+}
+fn default_access_token_expiry() -> u64 {
+    15 * 60
+} // 15 minutes
+fn default_refresh_token_expiry() -> u64 {
+    7 * 24 * 60 * 60
+} // 7 days
+fn default_jwt_issuer() -> String {
+    "elif.rs".to_string()
+}
+fn default_session_storage() -> String {
+    "memory".to_string()
+}
+fn default_session_expiry() -> u64 {
+    24 * 60 * 60
+} // 24 hours
+fn default_session_cookie_name() -> String {
+    "elif_session".to_string()
+}
+fn default_session_cookie_path() -> String {
+    "/".to_string()
+}
+fn default_session_cookie_same_site() -> String {
+    "Lax".to_string()
+}
+fn default_session_cleanup_interval() -> u64 {
+    60 * 60
+} // 1 hour
+fn default_min_password_length() -> usize {
+    8
+}
+fn default_max_password_length() -> usize {
+    128
+}
+fn default_hash_algorithm() -> String {
+    "argon2".to_string()
+}
+fn default_bcrypt_cost() -> u32 {
+    12
+}
+fn default_argon2_memory() -> u32 {
+    65536
+} // 64MB
+fn default_argon2_iterations() -> u32 {
+    3
+}
+fn default_argon2_parallelism() -> u32 {
+    4
+}
+fn default_totp_issuer() -> String {
+    "elif.rs".to_string()
+}
+fn default_totp_step() -> u64 {
+    30
+}
+fn default_totp_digits() -> usize {
+    6
+}
+fn default_totp_window() -> u8 {
+    1
+}
+fn default_backup_codes_count() -> usize {
+    10
+}
+fn default_backup_code_length() -> usize {
+    8
+}
+fn default_max_attempts() -> u32 {
+    5
+}
+fn default_rate_limit_window() -> u64 {
+    15 * 60
+} // 15 minutes
+fn default_lockout_duration() -> u64 {
+    30 * 60
+} // 30 minutes
+fn default_true() -> bool {
+    true
+}
+fn default_false() -> bool {
+    false
 }
 
 impl Default for JwtConfig {
@@ -328,7 +372,9 @@ impl AuthConfig {
             return Err("JWT secret must be at least 32 characters".to_string());
         }
 
-        if !["HS256", "HS384", "HS512", "RS256", "RS384", "RS512"].contains(&self.jwt.algorithm.as_str()) {
+        if !["HS256", "HS384", "HS512", "RS256", "RS384", "RS512"]
+            .contains(&self.jwt.algorithm.as_str())
+        {
             return Err("Invalid JWT algorithm".to_string());
         }
 

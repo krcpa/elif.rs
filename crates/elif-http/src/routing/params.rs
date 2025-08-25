@@ -48,20 +48,18 @@ impl RouteParam {
     pub fn validate(&self) -> Result<(), ParamError> {
         match &self.param_type {
             ParamType::String => Ok(()), // Strings are always valid
-            ParamType::Integer => {
-                self.value.parse::<i64>()
-                    .map(|_| ())
-                    .map_err(|_| ParamError::ValidationFailed(
-                        format!("Parameter '{}' must be an integer", self.name)
-                    ))
-            }
-            ParamType::Uuid => {
-                uuid::Uuid::parse_str(&self.value)
-                    .map(|_| ())
-                    .map_err(|_| ParamError::ValidationFailed(
-                        format!("Parameter '{}' must be a valid UUID", self.name)
-                    ))
-            }
+            ParamType::Integer => self.value.parse::<i64>().map(|_| ()).map_err(|_| {
+                ParamError::ValidationFailed(format!(
+                    "Parameter '{}' must be an integer",
+                    self.name
+                ))
+            }),
+            ParamType::Uuid => uuid::Uuid::parse_str(&self.value).map(|_| ()).map_err(|_| {
+                ParamError::ValidationFailed(format!(
+                    "Parameter '{}' must be a valid UUID",
+                    self.name
+                ))
+            }),
             ParamType::Custom(_pattern) => {
                 // TODO: Implement regex validation for custom patterns
                 Ok(())
@@ -70,14 +68,18 @@ impl RouteParam {
     }
 
     /// Get the typed value as T
-    pub fn as_typed<T>(&self) -> Result<T, ParamError> 
+    pub fn as_typed<T>(&self) -> Result<T, ParamError>
     where
         T: std::str::FromStr,
         T::Err: std::fmt::Display,
     {
         self.validate()?;
-        self.value.parse::<T>()
-            .map_err(|e| ParamError::InvalidFormat(format!("Cannot convert '{}' to target type: {}", self.value, e)))
+        self.value.parse::<T>().map_err(|e| {
+            ParamError::InvalidFormat(format!(
+                "Cannot convert '{}' to target type: {}",
+                self.value, e
+            ))
+        })
     }
 }
 
@@ -134,7 +136,7 @@ impl PathParams {
 }
 
 /// Extract path parameters from axum Path
-impl<T> From<Path<T>> for PathParams 
+impl<T> From<Path<T>> for PathParams
 where
     T: DeserializeOwned + Send + 'static,
 {
@@ -165,35 +167,40 @@ impl ParamExtractor {
     }
 
     /// Extract and validate parameters from a path
-    pub fn extract_from_path(&self, path: &str, route_pattern: &str) -> Result<PathParams, ParamError> {
+    pub fn extract_from_path(
+        &self,
+        path: &str,
+        route_pattern: &str,
+    ) -> Result<PathParams, ParamError> {
         let mut params = PathParams::new();
-        
+
         // Parse route pattern to find parameter names
         let pattern_parts: Vec<&str> = route_pattern.split('/').collect();
         let path_parts: Vec<&str> = path.split('/').collect();
-        
+
         if pattern_parts.len() != path_parts.len() {
-            return Err(ParamError::InvalidFormat("Path structure mismatch".to_string()));
+            return Err(ParamError::InvalidFormat(
+                "Path structure mismatch".to_string(),
+            ));
         }
-        
+
         for (pattern_part, path_part) in pattern_parts.iter().zip(path_parts.iter()) {
             if pattern_part.starts_with('{') && pattern_part.ends_with('}') {
-                let param_name = &pattern_part[1..pattern_part.len()-1];
-                let param_type = self.param_specs.get(param_name)
+                let param_name = &pattern_part[1..pattern_part.len() - 1];
+                let param_type = self
+                    .param_specs
+                    .get(param_name)
                     .cloned()
                     .unwrap_or(ParamType::String);
-                
-                let param = RouteParam::new(
-                    param_name.to_string(),
-                    path_part.to_string(),
-                    param_type,
-                );
-                
+
+                let param =
+                    RouteParam::new(param_name.to_string(), path_part.to_string(), param_type);
+
                 param.validate()?;
                 params.add_param(param);
             }
         }
-        
+
         Ok(params)
     }
 }
@@ -212,8 +219,9 @@ mod tests {
     fn test_route_param_validation() {
         let param = RouteParam::new("id".to_string(), "123".to_string(), ParamType::Integer);
         assert!(param.validate().is_ok());
-        
-        let invalid_param = RouteParam::new("id".to_string(), "abc".to_string(), ParamType::Integer);
+
+        let invalid_param =
+            RouteParam::new("id".to_string(), "abc".to_string(), ParamType::Integer);
         assert!(invalid_param.validate().is_err());
     }
 
@@ -222,9 +230,11 @@ mod tests {
         let extractor = ParamExtractor::new()
             .param("id", ParamType::Integer)
             .param("slug", ParamType::String);
-        
-        let params = extractor.extract_from_path("/users/123/posts/hello", "/users/{id}/posts/{slug}").unwrap();
-        
+
+        let params = extractor
+            .extract_from_path("/users/123/posts/hello", "/users/{id}/posts/{slug}")
+            .unwrap();
+
         assert_eq!(params.get_str("id"), Some("123"));
         assert_eq!(params.get_str("slug"), Some("hello"));
         assert_eq!(params.get_typed::<i64>("id").unwrap(), 123);

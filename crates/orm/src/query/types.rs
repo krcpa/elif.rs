@@ -1,7 +1,7 @@
 //! Query Builder Types - Core types and enums for query building
 
-use std::fmt;
 use serde_json::Value;
+use std::fmt;
 
 /// Query operator types
 #[derive(Debug, Clone, Copy, PartialEq)]

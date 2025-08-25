@@ -1,7 +1,7 @@
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use std::fmt::Write;
 
 use crate::container::ioc_container::IocContainer;
 
@@ -22,12 +22,12 @@ impl ContainerInspector {
             performance_profiler: Arc::new(Mutex::new(PerformanceProfiler::new())),
         }
     }
-    
+
     /// Get basic container information
     pub fn get_container_info(&self) -> ContainerInfo {
         let stats = self.container.get_statistics();
         let services = self.container.get_registered_services();
-        
+
         ContainerInfo {
             is_built: self.container.is_built(),
             service_count: stats.total_services,
@@ -38,20 +38,22 @@ impl ContainerInspector {
             registered_services: services,
         }
     }
-    
+
     /// Get detailed service information
     pub fn inspect_service<T: 'static>(&self) -> Option<ServiceInfo> {
-        self.container.get_service_info::<T>()
+        self.container
+            .get_service_info::<T>()
             .map(|info| ServiceInfo {
                 type_name: std::any::type_name::<T>().to_string(),
                 registration_info: info,
                 is_registered: self.container.contains::<T>(),
                 resolution_count: self.get_resolution_count(std::any::type_name::<T>()),
                 last_resolved: self.get_last_resolution_time(std::any::type_name::<T>()),
-                average_resolution_time: self.get_average_resolution_time(std::any::type_name::<T>()),
+                average_resolution_time: self
+                    .get_average_resolution_time(std::any::type_name::<T>()),
             })
     }
-    
+
     /// Get resolution statistics for all services
     pub fn get_resolution_stats(&self) -> HashMap<String, ResolutionStats> {
         if let Ok(tracer) = self.resolution_tracer.lock() {
@@ -60,7 +62,7 @@ impl ContainerInspector {
             HashMap::new()
         }
     }
-    
+
     /// Get performance metrics
     pub fn get_performance_metrics(&self) -> PerformanceMetrics {
         if let Ok(profiler) = self.performance_profiler.lock() {
@@ -69,21 +71,21 @@ impl ContainerInspector {
             PerformanceMetrics::default()
         }
     }
-    
+
     /// Enable/disable resolution tracing
     pub fn set_tracing_enabled(&self, enabled: bool) {
         if let Ok(mut tracer) = self.resolution_tracer.lock() {
             tracer.set_enabled(enabled);
         }
     }
-    
+
     /// Enable/disable performance profiling
     pub fn set_profiling_enabled(&self, enabled: bool) {
         if let Ok(mut profiler) = self.performance_profiler.lock() {
             profiler.set_enabled(enabled);
         }
     }
-    
+
     /// Clear all tracing and profiling data
     pub fn clear_debug_data(&self) {
         if let Ok(mut tracer) = self.resolution_tracer.lock() {
@@ -93,16 +95,16 @@ impl ContainerInspector {
             profiler.clear();
         }
     }
-    
+
     /// Generate a comprehensive debug report
     pub fn generate_debug_report(&self) -> String {
         let mut report = String::new();
-        
+
         writeln!(report, "Container Debug Report").unwrap();
         writeln!(report, "====================").unwrap();
         writeln!(report, "Generated at: {:?}", std::time::SystemTime::now()).unwrap();
         writeln!(report).unwrap();
-        
+
         // Container info
         let info = self.get_container_info();
         writeln!(report, "Container Information:").unwrap();
@@ -114,49 +116,68 @@ impl ContainerInspector {
         writeln!(report, "  - Transient: {}", info.transient_count).unwrap();
         writeln!(report, "Cached Instances: {}", info.cached_instances).unwrap();
         writeln!(report).unwrap();
-        
+
         // Resolution statistics
         let stats = self.get_resolution_stats();
         if !stats.is_empty() {
             writeln!(report, "Resolution Statistics:").unwrap();
             writeln!(report, "---------------------").unwrap();
-            
+
             let mut sorted_stats: Vec<_> = stats.iter().collect();
             sorted_stats.sort_by_key(|(_, stat)| std::cmp::Reverse(stat.total_resolutions));
-            
+
             for (service, stat) in sorted_stats.iter().take(10) {
-                writeln!(report, "{}: {} resolutions, avg {:.2}ms", 
-                    service, 
-                    stat.total_resolutions,
-                    stat.average_duration_ms
-                ).unwrap();
+                writeln!(
+                    report,
+                    "{}: {} resolutions, avg {:.2}ms",
+                    service, stat.total_resolutions, stat.average_duration_ms
+                )
+                .unwrap();
             }
             writeln!(report).unwrap();
         }
-        
+
         // Performance metrics
         let metrics = self.get_performance_metrics();
         writeln!(report, "Performance Metrics:").unwrap();
         writeln!(report, "-------------------").unwrap();
-        writeln!(report, "Total Resolution Time: {:.2}ms", metrics.total_resolution_time_ms).unwrap();
-        writeln!(report, "Average Resolution Time: {:.2}ms", metrics.average_resolution_time_ms).unwrap();
-        writeln!(report, "Slowest Resolution: {:.2}ms ({})", 
-            metrics.slowest_resolution_ms, 
+        writeln!(
+            report,
+            "Total Resolution Time: {:.2}ms",
+            metrics.total_resolution_time_ms
+        )
+        .unwrap();
+        writeln!(
+            report,
+            "Average Resolution Time: {:.2}ms",
+            metrics.average_resolution_time_ms
+        )
+        .unwrap();
+        writeln!(
+            report,
+            "Slowest Resolution: {:.2}ms ({})",
+            metrics.slowest_resolution_ms,
             metrics.slowest_service.as_deref().unwrap_or("Unknown")
-        ).unwrap();
-        writeln!(report, "Memory Usage (estimated): {} bytes", metrics.estimated_memory_usage).unwrap();
+        )
+        .unwrap();
+        writeln!(
+            report,
+            "Memory Usage (estimated): {} bytes",
+            metrics.estimated_memory_usage
+        )
+        .unwrap();
         writeln!(report).unwrap();
-        
+
         // Registered services
         writeln!(report, "Registered Services:").unwrap();
         writeln!(report, "-------------------").unwrap();
         for (i, service) in info.registered_services.iter().enumerate() {
             writeln!(report, "{}. {}", i + 1, service).unwrap();
         }
-        
+
         report
     }
-    
+
     /// Get resolution count for a service
     fn get_resolution_count(&self, service_name: &str) -> usize {
         if let Ok(tracer) = self.resolution_tracer.lock() {
@@ -165,7 +186,7 @@ impl ContainerInspector {
             0
         }
     }
-    
+
     /// Get last resolution time for a service
     fn get_last_resolution_time(&self, service_name: &str) -> Option<Instant> {
         if let Ok(tracer) = self.resolution_tracer.lock() {
@@ -174,7 +195,7 @@ impl ContainerInspector {
             None
         }
     }
-    
+
     /// Get average resolution time for a service
     fn get_average_resolution_time(&self, service_name: &str) -> Option<Duration> {
         if let Ok(tracer) = self.resolution_tracer.lock() {
@@ -225,33 +246,38 @@ impl ResolutionTracer {
             stats: HashMap::new(),
         }
     }
-    
+
     /// Enable or disable tracing
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
     }
-    
+
     /// Record the start of a service resolution
     pub fn start_resolution(&mut self, service_name: &str) -> Option<ResolutionToken> {
         if !self.enabled {
             return None;
         }
-        
+
         Some(ResolutionToken {
             service_name: service_name.to_string(),
             start_time: Instant::now(),
             depth: 0, // This would be calculated based on call stack
         })
     }
-    
+
     /// Record the completion of a service resolution
-    pub fn complete_resolution(&mut self, token: ResolutionToken, success: bool, error: Option<String>) {
+    pub fn complete_resolution(
+        &mut self,
+        token: ResolutionToken,
+        success: bool,
+        error: Option<String>,
+    ) {
         if !self.enabled {
             return;
         }
-        
+
         let duration = token.start_time.elapsed();
-        
+
         // Record trace
         let trace = ResolutionTrace {
             service_name: token.service_name.clone(),
@@ -261,58 +287,65 @@ impl ResolutionTracer {
             error,
             depth: token.depth,
         };
-        
-        self.traces.entry(token.service_name.clone())
+
+        self.traces
+            .entry(token.service_name.clone())
             .or_default()
             .push(trace);
-        
+
         // Update statistics
-        let stats = self.stats.entry(token.service_name.clone())
+        let stats = self
+            .stats
+            .entry(token.service_name.clone())
             .or_insert_with(|| ResolutionStats::new(token.service_name.clone()));
-        
+
         stats.record_resolution(duration, success);
     }
-    
+
     /// Get resolution traces for a service
     pub fn get_traces(&self, service_name: &str) -> Vec<&ResolutionTrace> {
-        self.traces.get(service_name)
+        self.traces
+            .get(service_name)
             .map(|traces| traces.iter().collect())
             .unwrap_or_default()
     }
-    
+
     /// Get resolution statistics for a service
     pub fn get_stats(&self, service_name: &str) -> Option<&ResolutionStats> {
         self.stats.get(service_name)
     }
-    
+
     /// Get all resolution statistics
     pub fn get_all_stats(&self) -> HashMap<String, ResolutionStats> {
         self.stats.clone()
     }
-    
+
     /// Clear all tracing data
     pub fn clear(&mut self) {
         self.traces.clear();
         self.stats.clear();
     }
-    
+
     /// Get resolution count for a service
     pub fn get_resolution_count(&self, service_name: &str) -> usize {
-        self.stats.get(service_name)
+        self.stats
+            .get(service_name)
             .map(|s| s.total_resolutions)
             .unwrap_or(0)
     }
-    
+
     /// Get last resolution time
     pub fn get_last_resolution_time(&self, service_name: &str) -> Option<Instant> {
-        self.traces.get(service_name)?
+        self.traces
+            .get(service_name)?
             .last()
             .map(|trace| trace.start_time)
     }
-    
+
     /// Get average resolution time
     pub fn get_average_resolution_time(&self, service_name: &str) -> Option<Duration> {
-        self.stats.get(service_name)
+        self.stats
+            .get(service_name)
             .map(|s| Duration::from_nanos((s.average_duration_ms * 1_000_000.0) as u64))
     }
 }
@@ -370,23 +403,23 @@ impl ResolutionStats {
             last_resolution: None,
         }
     }
-    
+
     pub fn record_resolution(&mut self, duration: Duration, success: bool) {
         let duration_ms = duration.as_secs_f64() * 1000.0;
-        
+
         self.total_resolutions += 1;
         if success {
             self.successful_resolutions += 1;
         } else {
             self.failed_resolutions += 1;
         }
-        
+
         self.total_duration_ms += duration_ms;
         self.average_duration_ms = self.total_duration_ms / self.total_resolutions as f64;
-        
+
         self.min_duration_ms = self.min_duration_ms.min(duration_ms);
         self.max_duration_ms = self.max_duration_ms.max(duration_ms);
-        
+
         self.last_resolution = Some(Instant::now());
     }
 }
@@ -410,7 +443,7 @@ impl PerformanceProfiler {
             start_time: None,
         }
     }
-    
+
     /// Enable or disable profiling
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
@@ -418,42 +451,49 @@ impl PerformanceProfiler {
             self.start_time = Some(Instant::now());
         }
     }
-    
+
     /// Record a service resolution time
     pub fn record_resolution_time(&mut self, service_name: &str, duration: Duration) {
         if self.enabled {
-            self.resolution_times.push((service_name.to_string(), duration));
+            self.resolution_times
+                .push((service_name.to_string(), duration));
         }
     }
-    
+
     /// Record a memory snapshot
     pub fn record_memory_snapshot(&mut self, memory_usage: usize) {
         if self.enabled {
             self.memory_snapshots.push((Instant::now(), memory_usage));
         }
     }
-    
+
     /// Get performance metrics
     pub fn get_metrics(&self) -> PerformanceMetrics {
         if self.resolution_times.is_empty() {
             return PerformanceMetrics::default();
         }
-        
-        let total_time: Duration = self.resolution_times.iter()
+
+        let total_time: Duration = self
+            .resolution_times
+            .iter()
             .map(|(_, duration)| *duration)
             .sum();
-        
+
         let avg_time = total_time / self.resolution_times.len() as u32;
-        
-        let (slowest_service, slowest_time) = self.resolution_times.iter()
+
+        let (slowest_service, slowest_time) = self
+            .resolution_times
+            .iter()
             .max_by_key(|(_, duration)| *duration)
             .map(|(name, duration)| (name.clone(), *duration))
             .unwrap_or_else(|| ("Unknown".to_string(), Duration::default()));
-        
-        let estimated_memory = self.memory_snapshots.last()
+
+        let estimated_memory = self
+            .memory_snapshots
+            .last()
             .map(|(_, memory)| *memory)
             .unwrap_or(0);
-        
+
         PerformanceMetrics {
             total_resolution_time_ms: total_time.as_secs_f64() * 1000.0,
             average_resolution_time_ms: avg_time.as_secs_f64() * 1000.0,
@@ -464,32 +504,36 @@ impl PerformanceProfiler {
             profiling_duration: self.start_time.map(|start| start.elapsed()),
         }
     }
-    
+
     /// Get slowest resolutions
     pub fn get_slowest_resolutions(&self, count: usize) -> Vec<(String, Duration)> {
         let mut sorted = self.resolution_times.clone();
         sorted.sort_by_key(|(_, duration)| std::cmp::Reverse(*duration));
         sorted.into_iter().take(count).collect()
     }
-    
+
     /// Get most frequent resolutions
     pub fn get_most_frequent(&self, count: usize) -> Vec<(String, usize)> {
         let mut frequency: HashMap<String, usize> = HashMap::new();
-        
+
         for (service_name, _) in &self.resolution_times {
             *frequency.entry(service_name.clone()).or_insert(0) += 1;
         }
-        
+
         let mut sorted: Vec<_> = frequency.into_iter().collect();
         sorted.sort_by_key(|(_, freq)| std::cmp::Reverse(*freq));
         sorted.into_iter().take(count).collect()
     }
-    
+
     /// Clear all profiling data
     pub fn clear(&mut self) {
         self.resolution_times.clear();
         self.memory_snapshots.clear();
-        self.start_time = if self.enabled { Some(Instant::now()) } else { None };
+        self.start_time = if self.enabled {
+            Some(Instant::now())
+        } else {
+            None
+        };
     }
 }
 
@@ -538,40 +582,40 @@ impl ContainerHealthChecker {
             container,
             checks: Vec::new(),
         };
-        
+
         // Add default health checks
         checker.add_check(Box::new(CircularDependencyCheck));
         checker.add_check(Box::new(MemoryUsageCheck { max_memory_mb: 512 }));
         checker.add_check(Box::new(SingletonHealthCheck));
-        
+
         checker
     }
-    
+
     /// Add a custom health check
     pub fn add_check(&mut self, check: Box<dyn HealthCheck>) {
         self.checks.push(check);
     }
-    
+
     /// Run all health checks
     pub async fn check_health(&self) -> HealthReport {
         let mut results = Vec::new();
         let mut overall_status = HealthStatus::Healthy;
-        
+
         for check in &self.checks {
             let result = check.check(&self.container).await;
-            
+
             // Update overall status
             match result.status {
                 HealthStatus::Unhealthy => overall_status = HealthStatus::Unhealthy,
                 HealthStatus::Warning if overall_status == HealthStatus::Healthy => {
                     overall_status = HealthStatus::Warning;
-                },
+                }
                 _ => {}
             }
-            
+
             results.push(result);
         }
-        
+
         HealthReport {
             overall_status,
             checks: results,
@@ -583,11 +627,14 @@ impl ContainerHealthChecker {
 /// Health check trait
 pub trait HealthCheck: Send + Sync {
     /// Run the health check
-    fn check(&self, container: &IocContainer) -> std::pin::Pin<Box<dyn std::future::Future<Output = HealthCheckResult> + Send + '_>>;
-    
+    fn check(
+        &self,
+        container: &IocContainer,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HealthCheckResult> + Send + '_>>;
+
     /// Get the name of this health check
     fn name(&self) -> &str;
-    
+
     /// Get the description of what this check does
     fn description(&self) -> &str;
 }
@@ -625,34 +672,42 @@ impl std::fmt::Display for HealthReport {
         writeln!(f, "Timestamp: {:?}", self.timestamp)?;
         writeln!(f, "Overall Status: {:?}", self.overall_status)?;
         writeln!(f)?;
-        
+
         let status_symbol = match self.overall_status {
             HealthStatus::Healthy => "✅",
             HealthStatus::Warning => "⚠️ ",
             HealthStatus::Unhealthy => "❌",
         };
-        
-        writeln!(f, "{} Container is {:?}", status_symbol, self.overall_status)?;
+
+        writeln!(
+            f,
+            "{} Container is {:?}",
+            status_symbol, self.overall_status
+        )?;
         writeln!(f)?;
-        
+
         writeln!(f, "Individual Checks:")?;
         writeln!(f, "------------------")?;
-        
+
         for check in &self.checks {
             let symbol = match check.status {
                 HealthStatus::Healthy => "✅",
                 HealthStatus::Warning => "⚠️ ",
                 HealthStatus::Unhealthy => "❌",
             };
-            
+
             writeln!(f, "{} {}: {}", symbol, check.name, check.message)?;
             if let Some(details) = &check.details {
                 writeln!(f, "   Details: {}", details)?;
             }
-            writeln!(f, "   Duration: {:.2}ms", check.duration.as_secs_f64() * 1000.0)?;
+            writeln!(
+                f,
+                "   Duration: {:.2}ms",
+                check.duration.as_secs_f64() * 1000.0
+            )?;
             writeln!(f)?;
         }
-        
+
         Ok(())
     }
 }
@@ -661,10 +716,13 @@ impl std::fmt::Display for HealthReport {
 struct CircularDependencyCheck;
 
 impl HealthCheck for CircularDependencyCheck {
-    fn check(&self, container: &IocContainer) -> std::pin::Pin<Box<dyn std::future::Future<Output = HealthCheckResult> + Send + '_>> {
+    fn check(
+        &self,
+        container: &IocContainer,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HealthCheckResult> + Send + '_>> {
         let start = Instant::now();
         let name = self.name().to_string();
-        
+
         match container.validate() {
             Ok(()) => Box::pin(async move {
                 HealthCheckResult {
@@ -686,11 +744,11 @@ impl HealthCheck for CircularDependencyCheck {
             }),
         }
     }
-    
+
     fn name(&self) -> &str {
         "Circular Dependency Check"
     }
-    
+
     fn description(&self) -> &str {
         "Checks for circular dependencies in the service graph"
     }
@@ -702,16 +760,19 @@ struct MemoryUsageCheck {
 }
 
 impl HealthCheck for MemoryUsageCheck {
-    fn check(&self, _container: &IocContainer) -> std::pin::Pin<Box<dyn std::future::Future<Output = HealthCheckResult> + Send + '_>> {
+    fn check(
+        &self,
+        _container: &IocContainer,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HealthCheckResult> + Send + '_>> {
         let start = Instant::now();
         let name = self.name().to_string();
         let max_memory_mb = self.max_memory_mb;
-        
+
         Box::pin(async move {
             // This is a simplified memory check - in a real implementation,
             // you'd get actual memory usage from the system
             let estimated_memory = 64; // MB
-            
+
             let status = if estimated_memory > max_memory_mb {
                 HealthStatus::Unhealthy
             } else if estimated_memory > max_memory_mb / 2 {
@@ -719,7 +780,7 @@ impl HealthCheck for MemoryUsageCheck {
             } else {
                 HealthStatus::Healthy
             };
-            
+
             HealthCheckResult {
                 name,
                 status,
@@ -729,11 +790,11 @@ impl HealthCheck for MemoryUsageCheck {
             }
         })
     }
-    
+
     fn name(&self) -> &str {
         "Memory Usage Check"
     }
-    
+
     fn description(&self) -> &str {
         "Monitors container memory usage"
     }
@@ -743,11 +804,14 @@ impl HealthCheck for MemoryUsageCheck {
 struct SingletonHealthCheck;
 
 impl HealthCheck for SingletonHealthCheck {
-    fn check(&self, container: &IocContainer) -> std::pin::Pin<Box<dyn std::future::Future<Output = HealthCheckResult> + Send + '_>> {
+    fn check(
+        &self,
+        container: &IocContainer,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HealthCheckResult> + Send + '_>> {
         let start = Instant::now();
         let stats = container.get_statistics();
         let name = self.name().to_string();
-        
+
         Box::pin(async move {
             // Check if there are too many singletons (potential memory issues)
             let singleton_ratio = if stats.total_services > 0 {
@@ -755,28 +819,30 @@ impl HealthCheck for SingletonHealthCheck {
             } else {
                 0.0
             };
-            
+
             let status = if singleton_ratio > 0.8 {
                 HealthStatus::Warning
             } else {
                 HealthStatus::Healthy
             };
-            
+
             HealthCheckResult {
                 name,
                 status,
                 message: format!("Singleton ratio: {:.1}%", singleton_ratio * 100.0),
-                details: Some(format!("{} singletons out of {} total services", 
-                    stats.singleton_services, stats.total_services)),
+                details: Some(format!(
+                    "{} singletons out of {} total services",
+                    stats.singleton_services, stats.total_services
+                )),
                 duration: start.elapsed(),
             }
         })
     }
-    
+
     fn name(&self) -> &str {
         "Singleton Health Check"
     }
-    
+
     fn description(&self) -> &str {
         "Monitors singleton service ratio"
     }
@@ -792,11 +858,11 @@ mod tests {
     fn test_resolution_tracer() {
         let mut tracer = ResolutionTracer::new();
         tracer.set_enabled(true);
-        
+
         let token = tracer.start_resolution("TestService").unwrap();
         std::thread::sleep(Duration::from_millis(1)); // Small delay for testing
         tracer.complete_resolution(token, true, None);
-        
+
         let stats = tracer.get_stats("TestService").unwrap();
         assert_eq!(stats.total_resolutions, 1);
         assert_eq!(stats.successful_resolutions, 1);
@@ -807,20 +873,20 @@ mod tests {
     fn test_performance_profiler() {
         let mut profiler = PerformanceProfiler::new();
         profiler.set_enabled(true);
-        
+
         profiler.record_resolution_time("Service1", Duration::from_millis(10));
         profiler.record_resolution_time("Service2", Duration::from_millis(5));
         profiler.record_resolution_time("Service1", Duration::from_millis(15));
-        
+
         let metrics = profiler.get_metrics();
         assert_eq!(metrics.total_resolutions, 3);
         assert_eq!(metrics.total_resolution_time_ms, 30.0);
         assert_eq!(metrics.average_resolution_time_ms, 10.0);
-        
+
         let slowest = profiler.get_slowest_resolutions(2);
         assert_eq!(slowest.len(), 2);
         assert_eq!(slowest[0].1, Duration::from_millis(15));
-        
+
         let frequent = profiler.get_most_frequent(2);
         assert_eq!(frequent.len(), 2);
         assert_eq!(frequent[0].1, 2); // Service1 appears twice
@@ -830,11 +896,11 @@ mod tests {
     fn test_container_inspector() {
         let container = IocContainer::new();
         let inspector = ContainerInspector::new(Arc::new(container));
-        
+
         let info = inspector.get_container_info();
         assert_eq!(info.service_count, 0);
         assert!(!info.is_built);
-        
+
         let report = inspector.generate_debug_report();
         assert!(report.contains("Container Debug Report"));
         assert!(report.contains("Container Information"));
@@ -844,12 +910,12 @@ mod tests {
     async fn test_health_checker() {
         let container = IocContainer::new();
         let health_checker = ContainerHealthChecker::new(Arc::new(container));
-        
+
         let report = health_checker.check_health().await;
-        
+
         // Should have at least the default health checks
         assert!(!report.checks.is_empty());
-        
+
         let report_str = report.to_string();
         assert!(report_str.contains("Container Health Report"));
         assert!(report_str.contains("Overall Status"));
@@ -858,11 +924,11 @@ mod tests {
     #[test]
     fn test_resolution_stats() {
         let mut stats = ResolutionStats::new("TestService".to_string());
-        
+
         stats.record_resolution(Duration::from_millis(10), true);
         stats.record_resolution(Duration::from_millis(20), true);
         stats.record_resolution(Duration::from_millis(5), false);
-        
+
         assert_eq!(stats.total_resolutions, 3);
         assert_eq!(stats.successful_resolutions, 2);
         assert_eq!(stats.failed_resolutions, 1);

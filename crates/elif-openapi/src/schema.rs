@@ -71,7 +71,7 @@ impl SchemaGenerator {
                 schema_type: Some("string".to_string()),
                 ..Default::default()
             }),
-            
+
             // Numeric types
             "i8" | "i16" | "i32" => Ok(Schema {
                 schema_type: Some("integer".to_string()),
@@ -105,20 +105,20 @@ impl SchemaGenerator {
                 format: Some("double".to_string()),
                 ..Default::default()
             }),
-            
+
             // Boolean type
             "bool" => Ok(Schema {
                 schema_type: Some("boolean".to_string()),
                 ..Default::default()
             }),
-            
+
             // UUID type
             "Uuid" => Ok(Schema {
                 schema_type: Some("string".to_string()),
                 format: Some("uuid".to_string()),
                 ..Default::default()
             }),
-            
+
             // DateTime types
             "DateTime" | "DateTime<Utc>" => Ok(Schema {
                 schema_type: Some("string".to_string()),
@@ -130,7 +130,7 @@ impl SchemaGenerator {
                 format: Some("date".to_string()),
                 ..Default::default()
             }),
-            
+
             // Handle generic types
             type_name if type_name.starts_with("Option<") => {
                 let inner_type = self.extract_generic_type(type_name, "Option")?;
@@ -139,7 +139,7 @@ impl SchemaGenerator {
                     schema.nullable = Some(true);
                 }
                 Ok(schema)
-            },
+            }
             type_name if type_name.starts_with("Vec<") => {
                 let inner_type = self.extract_generic_type(type_name, "Vec")?;
                 let items_schema = self.generate_schema_for_type(&inner_type)?;
@@ -148,7 +148,7 @@ impl SchemaGenerator {
                     items: Some(Box::new(items_schema)),
                     ..Default::default()
                 })
-            },
+            }
             type_name if type_name.starts_with("HashMap<") => {
                 // For simplicity, assume HashMap<String, V>
                 let value_type = self.extract_hashmap_value_type(type_name)?;
@@ -158,8 +158,8 @@ impl SchemaGenerator {
                     additional_properties: Some(Box::new(value_schema)),
                     ..Default::default()
                 })
-            },
-            
+            }
+
             // Custom types - create reference
             _ => Ok(Schema {
                 reference: Some(format!("#/components/schemas/{}", type_name)),
@@ -172,31 +172,35 @@ impl SchemaGenerator {
     fn extract_generic_type(&self, type_name: &str, wrapper: &str) -> OpenApiResult<String> {
         let start = wrapper.len() + 1; // +1 for '<'
         let end = type_name.len() - 1; // -1 for '>'
-        
+
         if start >= end {
-            return Err(OpenApiError::schema_error(
-                format!("Invalid generic type: {}", type_name)
-            ));
+            return Err(OpenApiError::schema_error(format!(
+                "Invalid generic type: {}",
+                type_name
+            )));
         }
-        
+
         Ok(type_name[start..end].to_string())
     }
 
     /// Extract value type from HashMap<K, V>
     fn extract_hashmap_value_type(&self, type_name: &str) -> OpenApiResult<String> {
         // Simple implementation - assumes HashMap<String, ValueType>
-        let inner = type_name.strip_prefix("HashMap<").and_then(|s| s.strip_suffix(">"))
-            .ok_or_else(|| OpenApiError::schema_error(
-                format!("Invalid HashMap type: {}", type_name)
-            ))?;
-        
+        let inner = type_name
+            .strip_prefix("HashMap<")
+            .and_then(|s| s.strip_suffix(">"))
+            .ok_or_else(|| {
+                OpenApiError::schema_error(format!("Invalid HashMap type: {}", type_name))
+            })?;
+
         let parts: Vec<&str> = inner.split(',').collect();
         if parts.len() != 2 {
-            return Err(OpenApiError::schema_error(
-                format!("Invalid HashMap type: {}", type_name)
-            ));
+            return Err(OpenApiError::schema_error(format!(
+                "Invalid HashMap type: {}",
+                type_name
+            )));
         }
-        
+
         Ok(parts[1].trim().to_string())
     }
 
@@ -212,7 +216,7 @@ impl SchemaGenerator {
 
         for (field_name, field_type, description) in fields {
             let mut field_schema = self.generate_schema(field_type)?;
-            
+
             if let Some(desc) = description {
                 field_schema.description = Some(desc.clone());
             }
@@ -223,7 +227,7 @@ impl SchemaGenerator {
             }
 
             properties.insert(field_name.clone(), field_schema);
-            
+
             // Track dependencies
             if !self.is_primitive_type(field_type) {
                 dependencies.push(field_type.clone());
@@ -247,10 +251,7 @@ impl SchemaGenerator {
         enum_name: &str,
         variants: &[String],
     ) -> OpenApiResult<Schema> {
-        let enum_values: Vec<Value> = variants
-            .iter()
-            .map(|v| Value::String(v.clone()))
-            .collect();
+        let enum_values: Vec<Value> = variants.iter().map(|v| Value::String(v.clone())).collect();
 
         let schema = Schema {
             schema_type: Some("string".to_string()),
@@ -264,13 +265,29 @@ impl SchemaGenerator {
 
     /// Check if a type is primitive
     fn is_primitive_type(&self, type_name: &str) -> bool {
-        matches!(type_name, 
-            "String" | "str" | "&str" | "i8" | "i16" | "i32" | "i64" | 
-            "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" |
-            "Uuid" | "DateTime" | "DateTime<Utc>" | "NaiveDate"
-        ) || type_name.starts_with("Option<") 
-          || type_name.starts_with("Vec<")
-          || type_name.starts_with("HashMap<")
+        matches!(
+            type_name,
+            "String"
+                | "str"
+                | "&str"
+                | "i8"
+                | "i16"
+                | "i32"
+                | "i64"
+                | "u8"
+                | "u16"
+                | "u32"
+                | "u64"
+                | "f32"
+                | "f64"
+                | "bool"
+                | "Uuid"
+                | "DateTime"
+                | "DateTime<Utc>"
+                | "NaiveDate"
+        ) || type_name.starts_with("Option<")
+            || type_name.starts_with("Vec<")
+            || type_name.starts_with("HashMap<")
     }
 
     /// Get all generated schemas
@@ -326,14 +343,14 @@ mod tests {
     #[test]
     fn test_primitive_schema_generation() {
         let mut generator = SchemaGenerator::new(SchemaConfig::default());
-        
+
         let string_schema = generator.generate_schema("String").unwrap();
         assert_eq!(string_schema.schema_type, Some("string".to_string()));
-        
+
         let int_schema = generator.generate_schema("i32").unwrap();
         assert_eq!(int_schema.schema_type, Some("integer".to_string()));
         assert_eq!(int_schema.format, Some("int32".to_string()));
-        
+
         let bool_schema = generator.generate_schema("bool").unwrap();
         assert_eq!(bool_schema.schema_type, Some("boolean".to_string()));
     }
@@ -341,20 +358,23 @@ mod tests {
     #[test]
     fn test_optional_schema_generation() {
         let mut generator = SchemaGenerator::new(SchemaConfig::default());
-        
+
         let optional_string_schema = generator.generate_schema("Option<String>").unwrap();
-        assert_eq!(optional_string_schema.schema_type, Some("string".to_string()));
+        assert_eq!(
+            optional_string_schema.schema_type,
+            Some("string".to_string())
+        );
         assert_eq!(optional_string_schema.nullable, Some(true));
     }
 
     #[test]
     fn test_array_schema_generation() {
         let mut generator = SchemaGenerator::new(SchemaConfig::default());
-        
+
         let array_schema = generator.generate_schema("Vec<String>").unwrap();
         assert_eq!(array_schema.schema_type, Some("array".to_string()));
         assert!(array_schema.items.is_some());
-        
+
         let items = array_schema.items.unwrap();
         assert_eq!(items.schema_type, Some("string".to_string()));
     }
@@ -362,13 +382,17 @@ mod tests {
     #[test]
     fn test_struct_schema_generation() {
         let mut generator = SchemaGenerator::new(SchemaConfig::default());
-        
+
         let fields = vec![
             ("id".to_string(), "i32".to_string(), None),
-            ("name".to_string(), "String".to_string(), Some("User name".to_string())),
+            (
+                "name".to_string(),
+                "String".to_string(),
+                Some("User name".to_string()),
+            ),
             ("email".to_string(), "Option<String>".to_string(), None),
         ];
-        
+
         let schema = generator.generate_struct_schema("User", &fields).unwrap();
         assert_eq!(schema.schema_type, Some("object".to_string()));
         assert_eq!(schema.properties.len(), 3);
@@ -378,7 +402,7 @@ mod tests {
         assert!(schema.properties.contains_key("email"));
     }
 
-    #[test] 
+    #[test]
     fn test_tuple_schema_representation() {
         // Test that tuples are represented correctly for OpenAPI 3.0
         // This test ensures we don't use oneOf incorrectly for tuples
@@ -398,9 +422,17 @@ mod tests {
         // Verify the schema is structured correctly
         assert_eq!(tuple_schema.schema_type, Some("array".to_string()));
         assert!(tuple_schema.description.is_some());
-        assert!(tuple_schema.description.as_ref().unwrap().contains("fixed order"));
-        assert!(tuple_schema.description.as_ref().unwrap().contains("OpenAPI 3.0 cannot precisely represent"));
-        
+        assert!(tuple_schema
+            .description
+            .as_ref()
+            .unwrap()
+            .contains("fixed order"));
+        assert!(tuple_schema
+            .description
+            .as_ref()
+            .unwrap()
+            .contains("OpenAPI 3.0 cannot precisely represent"));
+
         // Verify items doesn't use oneOf (which would be incorrect)
         assert!(tuple_schema.items.is_some());
         let items = tuple_schema.items.as_ref().unwrap();

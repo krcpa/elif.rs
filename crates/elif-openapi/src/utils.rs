@@ -27,7 +27,7 @@ impl OpenApiUtils {
 
         if spec.info.version.is_empty() {
             warnings.push(ValidationWarning::new(
-                "info.version is required but empty", 
+                "info.version is required but empty",
                 ValidationLevel::Error,
             ));
         }
@@ -35,7 +35,10 @@ impl OpenApiUtils {
         // Check OpenAPI version
         if spec.openapi != "3.0.3" && !spec.openapi.starts_with("3.0") {
             warnings.push(ValidationWarning::new(
-                &format!("OpenAPI version {} may not be fully supported", spec.openapi),
+                &format!(
+                    "OpenAPI version {} may not be fully supported",
+                    spec.openapi
+                ),
                 ValidationLevel::Warning,
             ));
         }
@@ -128,7 +131,6 @@ impl OpenApiUtils {
 
     /// Check if a schema is referenced anywhere in the spec using proper recursive traversal
     fn is_schema_referenced(spec: &OpenApiSpec, reference: &str) -> bool {
-
         // Check in paths and operations
         for path_item in spec.paths.values() {
             if Self::is_schema_in_path_item(path_item, reference) {
@@ -180,15 +182,19 @@ impl OpenApiUtils {
     /// Check if schema is referenced in a path item
     fn is_schema_in_path_item(path_item: &crate::specification::PathItem, reference: &str) -> bool {
         let operations = vec![
-            &path_item.get, &path_item.post, &path_item.put, &path_item.delete,
-            &path_item.patch, &path_item.options, &path_item.head, &path_item.trace,
+            &path_item.get,
+            &path_item.post,
+            &path_item.put,
+            &path_item.delete,
+            &path_item.patch,
+            &path_item.options,
+            &path_item.head,
+            &path_item.trace,
         ];
 
-        for operation_opt in operations {
-            if let Some(operation) = operation_opt {
-                if Self::is_schema_in_operation(operation, reference) {
-                    return true;
-                }
+        for operation in operations.into_iter().flatten() {
+            if Self::is_schema_in_operation(operation, reference) {
+                return true;
             }
         }
 
@@ -203,7 +209,10 @@ impl OpenApiUtils {
     }
 
     /// Check if schema is referenced in an operation
-    fn is_schema_in_operation(operation: &crate::specification::Operation, reference: &str) -> bool {
+    fn is_schema_in_operation(
+        operation: &crate::specification::Operation,
+        reference: &str,
+    ) -> bool {
         // Check parameters
         for parameter in &operation.parameters {
             if Self::is_schema_in_parameter(parameter, reference) {
@@ -229,7 +238,10 @@ impl OpenApiUtils {
     }
 
     /// Check if schema is referenced in a parameter
-    fn is_schema_in_parameter(parameter: &crate::specification::Parameter, reference: &str) -> bool {
+    fn is_schema_in_parameter(
+        parameter: &crate::specification::Parameter,
+        reference: &str,
+    ) -> bool {
         if let Some(schema) = &parameter.schema {
             Self::is_schema_in_schema(schema, reference)
         } else {
@@ -238,7 +250,10 @@ impl OpenApiUtils {
     }
 
     /// Check if schema is referenced in a request body
-    fn is_schema_in_request_body(request_body: &crate::specification::RequestBody, reference: &str) -> bool {
+    fn is_schema_in_request_body(
+        request_body: &crate::specification::RequestBody,
+        reference: &str,
+    ) -> bool {
         for media_type in request_body.content.values() {
             if let Some(schema) = &media_type.schema {
                 if Self::is_schema_in_schema(schema, reference) {
@@ -346,21 +361,17 @@ impl OpenApiUtils {
                     serde_json::to_string(spec)?
                 }
             }
-            OutputFormat::Yaml => {
-                serde_yaml::to_string(spec)?
-            }
+            OutputFormat::Yaml => serde_yaml::to_string(spec)?,
         };
 
-        fs::write(path.as_ref(), content)
-            .map_err(|e| OpenApiError::Io(e))?;
+        fs::write(path.as_ref(), content).map_err(OpenApiError::Io)?;
 
         Ok(())
     }
 
     /// Load OpenAPI specification from file
     pub fn load_spec_from_file<P: AsRef<Path>>(path: P) -> OpenApiResult<OpenApiSpec> {
-        let content = fs::read_to_string(path.as_ref())
-            .map_err(|e| OpenApiError::Io(e))?;
+        let content = fs::read_to_string(path.as_ref()).map_err(OpenApiError::Io)?;
 
         let extension = path
             .as_ref()
@@ -369,12 +380,8 @@ impl OpenApiUtils {
             .unwrap_or("");
 
         match extension.to_lowercase().as_str() {
-            "json" => {
-                serde_json::from_str(&content).map_err(OpenApiError::from)
-            }
-            "yaml" | "yml" => {
-                serde_yaml::from_str(&content).map_err(OpenApiError::from)
-            }
+            "json" => serde_json::from_str(&content).map_err(OpenApiError::from),
+            "yaml" | "yml" => serde_yaml::from_str(&content).map_err(OpenApiError::from),
             _ => {
                 // Try to detect format from content
                 if content.trim_start().starts_with('{') {
@@ -391,9 +398,10 @@ impl OpenApiUtils {
         // Merge paths
         for (path, path_item) in &other.paths {
             if base.paths.contains_key(path) {
-                return Err(OpenApiError::validation_error(
-                    format!("Path '{}' already exists in base specification", path)
-                ));
+                return Err(OpenApiError::validation_error(format!(
+                    "Path '{}' already exists in base specification",
+                    path
+                )));
             }
             base.paths.insert(path.clone(), path_item.clone());
         }
@@ -405,16 +413,19 @@ impl OpenApiUtils {
             // Merge schemas
             for (name, schema) in &other_components.schemas {
                 if base_components.schemas.contains_key(name) {
-                    return Err(OpenApiError::validation_error(
-                        format!("Schema '{}' already exists in base specification", name)
-                    ));
+                    return Err(OpenApiError::validation_error(format!(
+                        "Schema '{}' already exists in base specification",
+                        name
+                    )));
                 }
                 base_components.schemas.insert(name.clone(), schema.clone());
             }
 
             // Merge other components...
             for (name, response) in &other_components.responses {
-                base_components.responses.insert(name.clone(), response.clone());
+                base_components
+                    .responses
+                    .insert(name.clone(), response.clone());
             }
         }
 
@@ -432,7 +443,7 @@ impl OpenApiUtils {
     pub fn generate_example_from_schema(
         schema: &crate::specification::Schema,
     ) -> OpenApiResult<serde_json::Value> {
-        use serde_json::{Value, Map};
+        use serde_json::{Map, Value};
 
         match schema.schema_type.as_deref() {
             Some("object") => {
@@ -460,20 +471,20 @@ impl OpenApiUtils {
                         Some("uri") => Ok(Value::String("https://example.com".to_string())),
                         Some("date") => Ok(Value::String("2023-12-01".to_string())),
                         Some("date-time") => Ok(Value::String("2023-12-01T12:00:00Z".to_string())),
-                        Some("uuid") => Ok(Value::String("123e4567-e89b-12d3-a456-426614174000".to_string())),
+                        Some("uuid") => Ok(Value::String(
+                            "123e4567-e89b-12d3-a456-426614174000".to_string(),
+                        )),
                         _ => Ok(Value::String("string".to_string())),
                     }
                 }
             }
-            Some("integer") => {
-                match schema.format.as_deref() {
-                    Some("int64") => Ok(Value::Number(serde_json::Number::from(42i64))),
-                    _ => Ok(Value::Number(serde_json::Number::from(42i32))),
-                }
-            }
-            Some("number") => {
-                Ok(Value::Number(serde_json::Number::from_f64(std::f64::consts::PI).unwrap()))
-            }
+            Some("integer") => match schema.format.as_deref() {
+                Some("int64") => Ok(Value::Number(serde_json::Number::from(42i64))),
+                _ => Ok(Value::Number(serde_json::Number::from(42i32))),
+            },
+            Some("number") => Ok(Value::Number(
+                serde_json::Number::from_f64(std::f64::consts::PI).unwrap(),
+            )),
             Some("boolean") => Ok(Value::Bool(true)),
             _ => {
                 if let Some(example) = &schema.example {
@@ -509,7 +520,7 @@ impl OpenApiUtils {
     /// Extract resource name from path
     fn extract_resource_from_path(path: &str) -> String {
         let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
-        
+
         if let Some(last_part) = parts.last() {
             if last_part.starts_with('{') {
                 // Path parameter, use previous part
@@ -588,18 +599,39 @@ mod tests {
 
     #[test]
     fn test_operation_summary_generation() {
-        assert_eq!(OpenApiUtils::generate_operation_summary("GET", "/users"), "List users");
-        assert_eq!(OpenApiUtils::generate_operation_summary("GET", "/users/{id}"), "Get user");
-        assert_eq!(OpenApiUtils::generate_operation_summary("POST", "/users"), "Create user");
-        assert_eq!(OpenApiUtils::generate_operation_summary("PUT", "/users/{id}"), "Update user");
-        assert_eq!(OpenApiUtils::generate_operation_summary("DELETE", "/users/{id}"), "Delete user");
+        assert_eq!(
+            OpenApiUtils::generate_operation_summary("GET", "/users"),
+            "List users"
+        );
+        assert_eq!(
+            OpenApiUtils::generate_operation_summary("GET", "/users/{id}"),
+            "Get user"
+        );
+        assert_eq!(
+            OpenApiUtils::generate_operation_summary("POST", "/users"),
+            "Create user"
+        );
+        assert_eq!(
+            OpenApiUtils::generate_operation_summary("PUT", "/users/{id}"),
+            "Update user"
+        );
+        assert_eq!(
+            OpenApiUtils::generate_operation_summary("DELETE", "/users/{id}"),
+            "Delete user"
+        );
     }
 
     #[test]
     fn test_resource_extraction() {
         assert_eq!(OpenApiUtils::extract_resource_from_path("/users"), "user");
-        assert_eq!(OpenApiUtils::extract_resource_from_path("/users/{id}"), "user");
-        assert_eq!(OpenApiUtils::extract_resource_from_path("/api/v1/posts/{id}/comments"), "comment");
+        assert_eq!(
+            OpenApiUtils::extract_resource_from_path("/users/{id}"),
+            "user"
+        );
+        assert_eq!(
+            OpenApiUtils::extract_resource_from_path("/api/v1/posts/{id}/comments"),
+            "comment"
+        );
         assert_eq!(OpenApiUtils::extract_resource_from_path("/"), "resource");
     }
 
@@ -635,7 +667,10 @@ mod tests {
             ..Default::default()
         };
         let example = OpenApiUtils::generate_example_from_schema(&integer_schema).unwrap();
-        assert_eq!(example, serde_json::Value::Number(serde_json::Number::from(42)));
+        assert_eq!(
+            example,
+            serde_json::Value::Number(serde_json::Number::from(42))
+        );
     }
 
     #[test]
@@ -644,9 +679,11 @@ mod tests {
         spec.paths = HashMap::new();
 
         let warnings = OpenApiUtils::validate_spec(&spec).unwrap();
-        
+
         // Should have warning about no paths
-        assert!(warnings.iter().any(|w| w.message.contains("No paths defined")));
+        assert!(warnings
+            .iter()
+            .any(|w| w.message.contains("No paths defined")));
     }
 
     #[test]
@@ -655,20 +692,26 @@ mod tests {
 
         // Create a spec with schemas and verify accurate detection
         let mut spec = OpenApiSpec::new("Test API", "1.0.0");
-        
+
         // Add a User schema
         let user_schema = Schema {
             schema_type: Some("object".to_string()),
             properties: {
                 let mut props = HashMap::new();
-                props.insert("id".to_string(), Schema {
-                    schema_type: Some("integer".to_string()),
-                    ..Default::default()
-                });
-                props.insert("name".to_string(), Schema {
-                    schema_type: Some("string".to_string()),
-                    ..Default::default()
-                });
+                props.insert(
+                    "id".to_string(),
+                    Schema {
+                        schema_type: Some("integer".to_string()),
+                        ..Default::default()
+                    },
+                );
+                props.insert(
+                    "name".to_string(),
+                    Schema {
+                        schema_type: Some("string".to_string()),
+                        ..Default::default()
+                    },
+                );
                 props
             },
             required: vec!["id".to_string(), "name".to_string()],
@@ -680,14 +723,20 @@ mod tests {
             schema_type: Some("object".to_string()),
             properties: {
                 let mut props = HashMap::new();
-                props.insert("street".to_string(), Schema {
-                    schema_type: Some("string".to_string()),
-                    ..Default::default()
-                });
-                props.insert("owner".to_string(), Schema {
-                    reference: Some("#/components/schemas/User".to_string()),
-                    ..Default::default()
-                });
+                props.insert(
+                    "street".to_string(),
+                    Schema {
+                        schema_type: Some("string".to_string()),
+                        ..Default::default()
+                    },
+                );
+                props.insert(
+                    "owner".to_string(),
+                    Schema {
+                        reference: Some("#/components/schemas/User".to_string()),
+                        ..Default::default()
+                    },
+                );
                 props
             },
             ..Default::default()
@@ -698,10 +747,13 @@ mod tests {
             schema_type: Some("object".to_string()),
             properties: {
                 let mut props = HashMap::new();
-                props.insert("value".to_string(), Schema {
-                    schema_type: Some("string".to_string()),
-                    ..Default::default()
-                });
+                props.insert(
+                    "value".to_string(),
+                    Schema {
+                        schema_type: Some("string".to_string()),
+                        ..Default::default()
+                    },
+                );
                 props
             },
             ..Default::default()
@@ -710,17 +762,30 @@ mod tests {
         // Set up components
         let mut components = Components::default();
         components.schemas.insert("User".to_string(), user_schema);
-        components.schemas.insert("Address".to_string(), address_schema);
-        components.schemas.insert("UnusedSchema".to_string(), unused_schema);
+        components
+            .schemas
+            .insert("Address".to_string(), address_schema);
+        components
+            .schemas
+            .insert("UnusedSchema".to_string(), unused_schema);
         spec.components = Some(components);
 
         // Test reference detection
-        assert!(OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/User"));
-        assert!(!OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/UnusedSchema"));
-        assert!(!OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/NonExistent"));
+        assert!(OpenApiUtils::is_schema_referenced(
+            &spec,
+            "#/components/schemas/User"
+        ));
+        assert!(!OpenApiUtils::is_schema_referenced(
+            &spec,
+            "#/components/schemas/UnusedSchema"
+        ));
+        assert!(!OpenApiUtils::is_schema_referenced(
+            &spec,
+            "#/components/schemas/NonExistent"
+        ));
     }
 
-    #[test] 
+    #[test]
     fn test_schema_reference_false_positive_prevention() {
         use crate::specification::*;
 
@@ -730,13 +795,19 @@ mod tests {
         // Add a schema with reference string in description (should NOT be detected as reference)
         let user_schema = Schema {
             schema_type: Some("object".to_string()),
-            description: Some("This schema represents a user. See also #/components/schemas/User for details.".to_string()),
+            description: Some(
+                "This schema represents a user. See also #/components/schemas/User for details."
+                    .to_string(),
+            ),
             properties: {
                 let mut props = HashMap::new();
-                props.insert("name".to_string(), Schema {
-                    schema_type: Some("string".to_string()),
-                    ..Default::default()
-                });
+                props.insert(
+                    "name".to_string(),
+                    Schema {
+                        schema_type: Some("string".to_string()),
+                        ..Default::default()
+                    },
+                );
                 props
             },
             ..Default::default()
@@ -745,19 +816,29 @@ mod tests {
         // Add an example with schema reference in the example value
         let example_schema = Schema {
             schema_type: Some("string".to_string()),
-            example: Some(serde_json::Value::String("#/components/schemas/User".to_string())),
+            example: Some(serde_json::Value::String(
+                "#/components/schemas/User".to_string(),
+            )),
             ..Default::default()
         };
 
         let mut components = Components::default();
         components.schemas.insert("User".to_string(), user_schema);
-        components.schemas.insert("Example".to_string(), example_schema);
+        components
+            .schemas
+            .insert("Example".to_string(), example_schema);
         spec.components = Some(components);
 
         // The old string-based approach would incorrectly detect these as references
         // The new approach should correctly identify that User is not actually referenced
-        assert!(!OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/User"));
-        assert!(!OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/Example"));
+        assert!(!OpenApiUtils::is_schema_referenced(
+            &spec,
+            "#/components/schemas/User"
+        ));
+        assert!(!OpenApiUtils::is_schema_referenced(
+            &spec,
+            "#/components/schemas/Example"
+        ));
     }
 
     #[test]
@@ -777,14 +858,17 @@ mod tests {
             description: Some("User data".to_string()),
             content: {
                 let mut content = HashMap::new();
-                content.insert("application/json".to_string(), MediaType {
-                    schema: Some(Schema {
-                        reference: Some("#/components/schemas/User".to_string()),
-                        ..Default::default()
-                    }),
-                    example: None,
-                    examples: HashMap::new(),
-                });
+                content.insert(
+                    "application/json".to_string(),
+                    MediaType {
+                        schema: Some(Schema {
+                            reference: Some("#/components/schemas/User".to_string()),
+                            ..Default::default()
+                        }),
+                        example: None,
+                        examples: HashMap::new(),
+                    },
+                );
                 content
             },
             required: Some(true),
@@ -794,23 +878,29 @@ mod tests {
             request_body: Some(request_body),
             responses: {
                 let mut responses = HashMap::new();
-                responses.insert("200".to_string(), Response {
-                    description: "Success".to_string(),
-                    content: {
-                        let mut content = HashMap::new();
-                        content.insert("application/json".to_string(), MediaType {
-                            schema: Some(Schema {
-                                reference: Some("#/components/schemas/User".to_string()),
-                                ..Default::default()
-                            }),
-                            example: None,
-                            examples: HashMap::new(),
-                        });
-                        content
+                responses.insert(
+                    "200".to_string(),
+                    Response {
+                        description: "Success".to_string(),
+                        content: {
+                            let mut content = HashMap::new();
+                            content.insert(
+                                "application/json".to_string(),
+                                MediaType {
+                                    schema: Some(Schema {
+                                        reference: Some("#/components/schemas/User".to_string()),
+                                        ..Default::default()
+                                    }),
+                                    example: None,
+                                    examples: HashMap::new(),
+                                },
+                            );
+                            content
+                        },
+                        headers: HashMap::new(),
+                        links: HashMap::new(),
                     },
-                    headers: HashMap::new(),
-                    links: HashMap::new(),
-                });
+                );
                 responses
             },
             ..Default::default()
@@ -828,7 +918,10 @@ mod tests {
         spec.components = Some(components);
 
         // User schema should be detected as referenced in the operation
-        assert!(OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/User"));
+        assert!(OpenApiUtils::is_schema_referenced(
+            &spec,
+            "#/components/schemas/User"
+        ));
     }
 
     #[test]
@@ -847,10 +940,13 @@ mod tests {
             schema_type: Some("object".to_string()),
             properties: {
                 let mut props = HashMap::new();
-                props.insert("user".to_string(), Schema {
-                    reference: Some("#/components/schemas/User".to_string()),
-                    ..Default::default()
-                });
+                props.insert(
+                    "user".to_string(),
+                    Schema {
+                        reference: Some("#/components/schemas/User".to_string()),
+                        ..Default::default()
+                    },
+                );
                 props
             },
             ..Default::default()
@@ -860,14 +956,17 @@ mod tests {
             schema_type: Some("object".to_string()),
             properties: {
                 let mut props = HashMap::new();
-                props.insert("data".to_string(), Schema {
-                    schema_type: Some("array".to_string()),
-                    items: Some(Box::new(Schema {
-                        reference: Some("#/components/schemas/Profile".to_string()),
+                props.insert(
+                    "data".to_string(),
+                    Schema {
+                        schema_type: Some("array".to_string()),
+                        items: Some(Box::new(Schema {
+                            reference: Some("#/components/schemas/Profile".to_string()),
+                            ..Default::default()
+                        })),
                         ..Default::default()
-                    })),
-                    ..Default::default()
-                });
+                    },
+                );
                 props
             },
             ..Default::default()
@@ -875,13 +974,23 @@ mod tests {
 
         let mut components = Components::default();
         components.schemas.insert("User".to_string(), user_schema);
-        components.schemas.insert("Profile".to_string(), profile_schema);
-        components.schemas.insert("Response".to_string(), response_schema);
+        components
+            .schemas
+            .insert("Profile".to_string(), profile_schema);
+        components
+            .schemas
+            .insert("Response".to_string(), response_schema);
         spec.components = Some(components);
 
         // Both User and Profile should be detected as referenced
-        assert!(OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/User"));
-        assert!(OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/Profile"));
+        assert!(OpenApiUtils::is_schema_referenced(
+            &spec,
+            "#/components/schemas/User"
+        ));
+        assert!(OpenApiUtils::is_schema_referenced(
+            &spec,
+            "#/components/schemas/Profile"
+        ));
     }
 
     #[test]
@@ -905,24 +1014,32 @@ mod tests {
                     schema_type: Some("object".to_string()),
                     properties: {
                         let mut props = HashMap::new();
-                        props.insert("extra".to_string(), Schema {
-                            schema_type: Some("string".to_string()),
-                            ..Default::default()
-                        });
+                        props.insert(
+                            "extra".to_string(),
+                            Schema {
+                                schema_type: Some("string".to_string()),
+                                ..Default::default()
+                            },
+                        );
                         props
                     },
                     ..Default::default()
-                }
+                },
             ],
             ..Default::default()
         };
 
         let mut components = Components::default();
         components.schemas.insert("Base".to_string(), base_schema);
-        components.schemas.insert("Extended".to_string(), extended_schema);
+        components
+            .schemas
+            .insert("Extended".to_string(), extended_schema);
         spec.components = Some(components);
 
         // Base schema should be detected as referenced in allOf composition
-        assert!(OpenApiUtils::is_schema_referenced(&spec, "#/components/schemas/Base"));
+        assert!(OpenApiUtils::is_schema_referenced(
+            &spec,
+            "#/components/schemas/Base"
+        ));
     }
 }

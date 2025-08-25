@@ -5,10 +5,7 @@ This module provides functionality to export OpenAPI specifications to various
 formats including Postman collections and Insomnia workspaces.
 */
 
-use crate::{
-    error::OpenApiResult,
-    specification::OpenApiSpec,
-};
+use crate::{error::OpenApiResult, specification::OpenApiSpec};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -23,12 +20,12 @@ impl OpenApiExporter {
 
         // Set collection info
         collection.info.version = spec.info.version.clone();
-        
+
         // Process paths and create requests
         for (path, path_item) in &spec.paths {
             let operations = vec![
                 ("GET", &path_item.get),
-                ("POST", &path_item.post), 
+                ("POST", &path_item.post),
                 ("PUT", &path_item.put),
                 ("DELETE", &path_item.delete),
                 ("PATCH", &path_item.patch),
@@ -56,9 +53,10 @@ impl OpenApiExporter {
         operation: &crate::specification::Operation,
     ) -> OpenApiResult<PostmanRequest> {
         let mut request = PostmanRequest {
-            name: operation.summary.clone().unwrap_or_else(|| {
-                format!("{} {}", method, path)
-            }),
+            name: operation
+                .summary
+                .clone()
+                .unwrap_or_else(|| format!("{} {}", method, path)),
             method: method.to_string(),
             header: Vec::new(),
             url: PostmanUrl::new(path),
@@ -76,7 +74,8 @@ impl OpenApiExporter {
                 "header" => {
                     request.header.push(PostmanHeader {
                         key: param.name.clone(),
-                        value: param.example
+                        value: param
+                            .example
                             .as_ref()
                             .and_then(|v| v.as_str())
                             .unwrap_or("{{value}}")
@@ -87,7 +86,8 @@ impl OpenApiExporter {
                 "query" => {
                     request.url.query.push(PostmanQuery {
                         key: param.name.clone(),
-                        value: param.example
+                        value: param
+                            .example
                             .as_ref()
                             .and_then(|v| v.as_str())
                             .unwrap_or("{{value}}")
@@ -98,7 +98,8 @@ impl OpenApiExporter {
                 "path" => {
                     request.url.variable.push(PostmanVariable {
                         key: param.name.clone(),
-                        value: param.example
+                        value: param
+                            .example
                             .as_ref()
                             .and_then(|v| v.as_str())
                             .unwrap_or("{{value}}")
@@ -132,7 +133,9 @@ impl OpenApiExporter {
     }
 
     /// Generate example request body from schema
-    fn generate_request_body_example(schema: &crate::specification::Schema) -> OpenApiResult<Value> {
+    fn generate_request_body_example(
+        schema: &crate::specification::Schema,
+    ) -> OpenApiResult<Value> {
         crate::utils::OpenApiUtils::generate_example_from_schema(schema)
     }
 
@@ -142,7 +145,8 @@ impl OpenApiExporter {
         let workspace_id = workspace.workspace.id.clone();
 
         // Create base environment
-        let base_url = spec.servers
+        let base_url = spec
+            .servers
             .first()
             .map(|s| s.url.clone())
             .unwrap_or_else(|| "http://localhost:3000".to_string());
@@ -181,7 +185,10 @@ impl OpenApiExporter {
         parent_id: &str,
     ) -> OpenApiResult<InsomniaRequest> {
         let mut request = InsomniaRequest::new(
-            &operation.summary.clone().unwrap_or_else(|| format!("{} {}", method, path)),
+            &operation
+                .summary
+                .clone()
+                .unwrap_or_else(|| format!("{} {}", method, path)),
             method,
             "{{ _.base_url }}", // Use environment variable
             parent_id,
@@ -196,7 +203,8 @@ impl OpenApiExporter {
                 "header" => {
                     request.headers.push(InsomniaHeader {
                         name: param.name.clone(),
-                        value: param.example
+                        value: param
+                            .example
                             .as_ref()
                             .and_then(|v| v.as_str())
                             .unwrap_or("")
@@ -206,7 +214,8 @@ impl OpenApiExporter {
                 "query" => {
                     request.parameters.push(InsomniaParameter {
                         name: param.name.clone(),
-                        value: param.example
+                        value: param
+                            .example
                             .as_ref()
                             .and_then(|v| v.as_str())
                             .unwrap_or("")
@@ -326,7 +335,8 @@ impl PostmanCollection {
                 name: name.to_string(),
                 description: description.clone(),
                 version: "1.0.0".to_string(),
-                schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json".to_string(),
+                schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+                    .to_string(),
             },
             item: Vec::new(),
         }
@@ -428,7 +438,7 @@ pub struct InsomniaEnvironment {
 impl InsomniaWorkspace {
     pub fn new(name: &str) -> Self {
         let workspace_id = format!("wrk_{}", uuid::Uuid::new_v4().simple());
-        
+
         Self {
             workspace_type: "export".to_string(),
             workspace: InsomniaWorkspaceInfo {
@@ -455,7 +465,8 @@ impl InsomniaWorkspace {
             parent_id: self.workspace.id.clone(),
         };
 
-        self.resources.push(InsomniaResource::Environment(environment));
+        self.resources
+            .push(InsomniaResource::Environment(environment));
     }
 }
 
@@ -486,7 +497,10 @@ mod tests {
     fn test_postman_collection_creation() {
         let collection = PostmanCollection::new("Test API", &Some("Test description".to_string()));
         assert_eq!(collection.info.name, "Test API");
-        assert_eq!(collection.info.description, Some("Test description".to_string()));
+        assert_eq!(
+            collection.info.description,
+            Some("Test description".to_string())
+        );
         assert!(collection.item.is_empty());
     }
 

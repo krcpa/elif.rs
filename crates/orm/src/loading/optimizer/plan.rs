@@ -1,6 +1,6 @@
 use crate::{
     error::{OrmError, OrmResult},
-    relationships::{RelationshipType, metadata::RelationshipMetadata},
+    relationships::{metadata::RelationshipMetadata, RelationshipType},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -64,11 +64,11 @@ impl QueryNode {
 
     /// Create a child node with parent relationship
     pub fn child(
-        id: String, 
-        table: String, 
-        parent_id: String, 
+        id: String,
+        table: String,
+        parent_id: String,
         relationship_type: RelationshipType,
-        foreign_key: String
+        foreign_key: String,
     ) -> Self {
         let mut node = Self::new(id, table);
         node.parent_id = Some(parent_id);
@@ -82,23 +82,25 @@ impl QueryNode {
         id: String,
         table: String,
         parent_id: String,
-        metadata: RelationshipMetadata
+        metadata: RelationshipMetadata,
     ) -> Self {
         let mut node = Self::new(id, table);
         node.parent_id = Some(parent_id);
         node.relationship_type = Some(metadata.relationship_type);
         node.relationship_metadata = Some(metadata.clone());
         node.foreign_key = Some(metadata.foreign_key.primary_column().to_string());
-        
+
         // Set estimated rows based on relationship type
         node.estimated_rows = match metadata.relationship_type {
-            RelationshipType::HasMany | RelationshipType::ManyToMany | RelationshipType::MorphMany => 10000,
+            RelationshipType::HasMany
+            | RelationshipType::ManyToMany
+            | RelationshipType::MorphMany => 10000,
             _ => 1, // HasOne, BelongsTo, MorphOne, MorphTo
         };
-        
+
         // Set parallel safety based on relationship characteristics
         node.parallel_safe = !metadata.relationship_type.requires_pivot();
-        
+
         node
     }
 
@@ -144,13 +146,15 @@ impl QueryNode {
         self.relationship_type = Some(metadata.relationship_type);
         self.relationship_metadata = Some(metadata.clone());
         self.foreign_key = Some(metadata.foreign_key.primary_column().to_string());
-        
+
         // Update estimates based on metadata
         self.estimated_rows = match metadata.relationship_type {
-            RelationshipType::HasMany | RelationshipType::ManyToMany | RelationshipType::MorphMany => 10000,
+            RelationshipType::HasMany
+            | RelationshipType::ManyToMany
+            | RelationshipType::MorphMany => 10000,
             _ => 1,
         };
-        
+
         self.parallel_safe = !metadata.relationship_type.requires_pivot();
     }
 
@@ -229,18 +233,18 @@ impl QueryPlan {
     pub fn add_node(&mut self, node: QueryNode) {
         self.max_depth = self.max_depth.max(node.depth);
         self.total_estimated_rows += node.estimated_rows;
-        
+
         if node.parent_id.is_none() {
             self.roots.push(node.id.clone());
         }
-        
+
         // Update parent-child relationships
         if let Some(parent_id) = &node.parent_id {
             if let Some(parent) = self.nodes.get_mut(parent_id) {
                 parent.add_child(node.id.clone());
             }
         }
-        
+
         self.nodes.insert(node.id.clone(), node);
     }
 
@@ -249,13 +253,13 @@ impl QueryPlan {
         let mut phases = Vec::new();
         let mut visited = HashSet::new();
         let mut current_depth = 0;
-        
+
         // Validate plan before building phases
         self.validate()?;
-        
+
         while visited.len() < self.nodes.len() && current_depth <= self.max_depth {
             let mut phase_nodes = Vec::new();
-            
+
             // Find all nodes at the current depth that haven't been visited
             for (id, node) in &self.nodes {
                 if !visited.contains(id) && node.depth == current_depth {
@@ -265,13 +269,13 @@ impl QueryPlan {
                     } else {
                         true // Root nodes are always ready
                     };
-                    
+
                     if ready && node.parallel_safe {
                         phase_nodes.push(id.clone());
                     }
                 }
             }
-            
+
             // If no parallel-safe nodes found, add sequential nodes
             if phase_nodes.is_empty() {
                 for (id, node) in &self.nodes {
@@ -281,7 +285,7 @@ impl QueryPlan {
                         } else {
                             true
                         };
-                        
+
                         if ready {
                             phase_nodes.push(id.clone());
                             break; // Only one sequential node per phase
@@ -289,24 +293,24 @@ impl QueryPlan {
                     }
                 }
             }
-            
+
             if phase_nodes.is_empty() {
                 current_depth += 1;
                 continue;
             }
-            
+
             // Mark phase nodes as visited
             for id in &phase_nodes {
                 visited.insert(id.clone());
             }
-            
+
             if !phase_nodes.is_empty() {
                 phases.push(phase_nodes);
             }
-            
+
             current_depth += 1;
         }
-        
+
         self.execution_phases = phases;
         Ok(())
     }
@@ -317,27 +321,35 @@ impl QueryPlan {
         for root_id in &self.roots {
             let mut visited = HashSet::new();
             let mut path = Vec::new();
-            
+
             if self.has_cycle_from(root_id, &mut visited, &mut path) {
-                return Err(OrmError::Query("Circular dependency detected in query plan".into()));
+                return Err(OrmError::Query(
+                    "Circular dependency detected in query plan".into(),
+                ));
             }
         }
-        
+
         // Validate parent-child relationships
         for (id, node) in &self.nodes {
             if let Some(parent_id) = &node.parent_id {
                 if !self.nodes.contains_key(parent_id) {
-                    return Err(OrmError::Query(format!("Parent node '{}' not found for node '{}'", parent_id, id)));
+                    return Err(OrmError::Query(format!(
+                        "Parent node '{}' not found for node '{}'",
+                        parent_id, id
+                    )));
                 }
             }
-            
+
             for child_id in &node.children {
                 if !self.nodes.contains_key(child_id) {
-                    return Err(OrmError::Query(format!("Child node '{}' not found for node '{}'", child_id, id)));
+                    return Err(OrmError::Query(format!(
+                        "Child node '{}' not found for node '{}'",
+                        child_id, id
+                    )));
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -351,14 +363,14 @@ impl QueryPlan {
         if path.contains(&node_id.to_string()) {
             return true; // Found a cycle
         }
-        
+
         if visited.contains(node_id) {
             return false; // Already processed this subtree
         }
-        
+
         path.push(node_id.to_string());
         visited.insert(node_id.to_string());
-        
+
         if let Some(node) = self.nodes.get(node_id) {
             for child_id in &node.children {
                 if self.has_cycle_from(child_id, visited, path) {
@@ -366,7 +378,7 @@ impl QueryPlan {
                 }
             }
         }
-        
+
         path.pop();
         false
     }
@@ -381,10 +393,7 @@ impl QueryPlan {
 
     /// Get all leaf nodes
     pub fn leaf_nodes(&self) -> Vec<&QueryNode> {
-        self.nodes
-            .values()
-            .filter(|node| node.is_leaf())
-            .collect()
+        self.nodes.values().filter(|node| node.is_leaf()).collect()
     }
 
     /// Calculate plan complexity score
@@ -392,7 +401,7 @@ impl QueryPlan {
         let depth_penalty = self.max_depth as f64 * 1.5;
         let node_penalty = self.nodes.len() as f64 * 0.5;
         let row_penalty = (self.total_estimated_rows as f64).log10() * 2.0;
-        
+
         depth_penalty + node_penalty + row_penalty
     }
 

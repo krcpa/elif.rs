@@ -1,8 +1,8 @@
 //! Query Builder pagination operations
 
-use serde_json::Value;
 use super::builder::QueryBuilder;
 use super::types::*;
+use serde_json::Value;
 
 impl<M> QueryBuilder<M> {
     /// Add LIMIT clause
@@ -23,11 +23,17 @@ impl<M> QueryBuilder<M> {
         self.offset_value = Some((page - 1) * per_page);
         self
     }
-    
+
     /// Cursor-based pagination (for better performance on large datasets)
-    pub fn paginate_cursor<T: Into<Value>>(mut self, cursor_column: &str, cursor_value: Option<T>, per_page: i64, direction: OrderDirection) -> Self {
+    pub fn paginate_cursor<T: Into<Value>>(
+        mut self,
+        cursor_column: &str,
+        cursor_value: Option<T>,
+        per_page: i64,
+        direction: OrderDirection,
+    ) -> Self {
         self.limit_count = Some(per_page);
-        
+
         if let Some(cursor_val) = cursor_value {
             match direction {
                 OrderDirection::Asc => {
@@ -38,9 +44,9 @@ impl<M> QueryBuilder<M> {
                 }
             }
         }
-        
+
         self.order_by.push((cursor_column.to_string(), direction));
-        
+
         self
     }
 }

@@ -1,6 +1,6 @@
 /*!
  * Examples module
- * 
+ *
  * Contains practical examples demonstrating elif.rs features
  */
 

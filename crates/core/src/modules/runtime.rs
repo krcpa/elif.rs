@@ -14,17 +14,14 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
 use crate::container::IocContainer;
-use crate::modules::ModuleDescriptor;
 use crate::errors::CoreError;
+use crate::modules::ModuleDescriptor;
 
 /// Errors that can occur during module runtime operations
 #[derive(Debug, Clone)]
 pub enum ModuleRuntimeError {
     /// Circular dependency detected between modules
-    CircularDependency {
-        cycle: Vec<String>,
-        message: String,
-    },
+    CircularDependency { cycle: Vec<String>, message: String },
     /// Missing module dependency
     MissingDependency {
         module: String,
@@ -60,22 +57,67 @@ impl std::fmt::Display for ModuleRuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ModuleRuntimeError::CircularDependency { cycle, message } => {
-                write!(f, "Circular dependency: {} -> {}", cycle.join(" -> "), message)
+                write!(
+                    f,
+                    "Circular dependency: {} -> {}",
+                    cycle.join(" -> "),
+                    message
+                )
             }
-            ModuleRuntimeError::MissingDependency { module, missing_dependency, message } => {
-                write!(f, "Module '{}' missing dependency '{}': {}", module, missing_dependency, message)
+            ModuleRuntimeError::MissingDependency {
+                module,
+                missing_dependency,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Module '{}' missing dependency '{}': {}",
+                    module, missing_dependency, message
+                )
             }
-            ModuleRuntimeError::InitializationFailed { module, error, phase } => {
-                write!(f, "Module '{}' initialization failed in phase '{}': {}", module, phase, error)
+            ModuleRuntimeError::InitializationFailed {
+                module,
+                error,
+                phase,
+            } => {
+                write!(
+                    f,
+                    "Module '{}' initialization failed in phase '{}': {}",
+                    module, phase, error
+                )
             }
-            ModuleRuntimeError::LifecycleOperationFailed { module, operation, error } => {
-                write!(f, "Module '{}' lifecycle operation '{}' failed: {}", module, operation, error)
+            ModuleRuntimeError::LifecycleOperationFailed {
+                module,
+                operation,
+                error,
+            } => {
+                write!(
+                    f,
+                    "Module '{}' lifecycle operation '{}' failed: {}",
+                    module, operation, error
+                )
             }
-            ModuleRuntimeError::ConfigurationConflict { module1, module2, conflict } => {
-                write!(f, "Configuration conflict between modules '{}' and '{}': {}", module1, module2, conflict)
+            ModuleRuntimeError::ConfigurationConflict {
+                module1,
+                module2,
+                conflict,
+            } => {
+                write!(
+                    f,
+                    "Configuration conflict between modules '{}' and '{}': {}",
+                    module1, module2, conflict
+                )
             }
-            ModuleRuntimeError::ValidationFailed { module, validation_errors } => {
-                write!(f, "Module '{}' validation failed: {}", module, validation_errors.join("; "))
+            ModuleRuntimeError::ValidationFailed {
+                module,
+                validation_errors,
+            } => {
+                write!(
+                    f,
+                    "Module '{}' validation failed: {}",
+                    module,
+                    validation_errors.join("; ")
+                )
             }
         }
     }
@@ -301,9 +343,12 @@ impl ModuleRuntime {
     }
 
     /// Register a module for runtime management
-    pub fn register_module(&mut self, descriptor: ModuleDescriptor) -> Result<(), ModuleRuntimeError> {
+    pub fn register_module(
+        &mut self,
+        descriptor: ModuleDescriptor,
+    ) -> Result<(), ModuleRuntimeError> {
         let module_name = descriptor.name.clone();
-        
+
         // Check for duplicate registration
         if self.modules.contains_key(&module_name) {
             return Err(ModuleRuntimeError::ConfigurationConflict {
@@ -314,8 +359,9 @@ impl ModuleRuntime {
         }
 
         // Store dependency information
-        self.dependency_graph.insert(module_name.clone(), descriptor.dependencies.clone());
-        
+        self.dependency_graph
+            .insert(module_name.clone(), descriptor.dependencies.clone());
+
         // Create runtime info
         let runtime_info = ModuleRuntimeInfo::new(descriptor);
         self.modules.insert(module_name, runtime_info);
@@ -324,7 +370,10 @@ impl ModuleRuntime {
     }
 
     /// Register multiple modules
-    pub fn register_modules(&mut self, descriptors: Vec<ModuleDescriptor>) -> Result<(), ModuleRuntimeError> {
+    pub fn register_modules(
+        &mut self,
+        descriptors: Vec<ModuleDescriptor>,
+    ) -> Result<(), ModuleRuntimeError> {
         for descriptor in descriptors {
             self.register_module(descriptor)?;
         }
@@ -333,9 +382,9 @@ impl ModuleRuntime {
 
     /// Add lifecycle hook for a module
     pub fn add_lifecycle_hook<H: ModuleLifecycleHook + 'static>(
-        &mut self, 
-        module_name: String, 
-        hook: H
+        &mut self,
+        module_name: String,
+        hook: H,
     ) {
         self.lifecycle_hooks.insert(module_name, Box::new(hook));
     }
@@ -345,7 +394,7 @@ impl ModuleRuntime {
         let start_time = Instant::now();
 
         let sorted_modules = self.topological_sort()?;
-        
+
         // Update load order in module info
         for (index, module_name) in sorted_modules.iter().enumerate() {
             if let Some(module_info) = self.modules.get_mut(module_name) {
@@ -388,7 +437,8 @@ impl ModuleRuntime {
             }
         }
 
-        let mut queue: VecDeque<String> = in_degree.iter()
+        let mut queue: VecDeque<String> = in_degree
+            .iter()
             .filter(|(_, &degree)| degree == 0)
             .map(|(name, _)| name.clone())
             .collect();
@@ -432,12 +482,9 @@ impl ModuleRuntime {
 
         for module_name in self.modules.keys() {
             if !visited.contains(module_name) {
-                if let Some(cycle) = self.dfs_cycle_detection(
-                    module_name,
-                    &mut visited,
-                    &mut rec_stack,
-                    &mut path,
-                )? {
+                if let Some(cycle) =
+                    self.dfs_cycle_detection(module_name, &mut visited, &mut rec_stack, &mut path)?
+                {
                     return Ok(cycle);
                 }
             }
@@ -482,7 +529,10 @@ impl ModuleRuntime {
     }
 
     /// Task 4.2: Add runtime dependency resolution with clear error reporting
-    pub async fn resolve_dependencies(&mut self, container: &mut IocContainer) -> Result<(), ModuleRuntimeError> {
+    pub async fn resolve_dependencies(
+        &mut self,
+        container: &mut IocContainer,
+    ) -> Result<(), ModuleRuntimeError> {
         let start_time = Instant::now();
 
         // Ensure load order is calculated
@@ -492,7 +542,8 @@ impl ModuleRuntime {
 
         // Process modules in dependency order
         for module_name in &self.load_order.clone() {
-            self.resolve_module_dependencies(module_name, container).await?;
+            self.resolve_module_dependencies(module_name, container)
+                .await?;
         }
 
         self.metrics.dependency_resolution_duration = start_time.elapsed();
@@ -510,23 +561,29 @@ impl ModuleRuntime {
             module_info.state = ModuleState::ResolvingDependencies;
         }
 
-        let dependencies = self.dependency_graph.get(module_name)
+        let dependencies = self
+            .dependency_graph
+            .get(module_name)
             .cloned()
             .unwrap_or_default();
 
         // Verify all dependencies are ready
         for dep_name in &dependencies {
-            let dep_info = self.modules.get(dep_name)
-                .ok_or_else(|| ModuleRuntimeError::MissingDependency {
+            let dep_info = self.modules.get(dep_name).ok_or_else(|| {
+                ModuleRuntimeError::MissingDependency {
                     module: module_name.to_string(),
                     missing_dependency: dep_name.clone(),
                     message: "Dependency module not found in runtime".to_string(),
-                })?;
+                }
+            })?;
 
             if matches!(dep_info.state, ModuleState::Failed(_)) {
                 return Err(ModuleRuntimeError::InitializationFailed {
                     module: module_name.to_string(),
-                    error: format!("Dependency '{}' failed initialization (state: {:?})", dep_name, dep_info.state),
+                    error: format!(
+                        "Dependency '{}' failed initialization (state: {:?})",
+                        dep_name, dep_info.state
+                    ),
                     phase: "dependency_resolution".to_string(),
                 });
             }
@@ -552,19 +609,24 @@ impl ModuleRuntime {
         }
 
         // Get module descriptor
-        let descriptor = self.modules.get(module_name)
+        let descriptor = self
+            .modules
+            .get(module_name)
             .ok_or_else(|| ModuleRuntimeError::MissingDependency {
                 module: module_name.to_string(),
                 missing_dependency: "module_descriptor".to_string(),
                 message: "Module not found".to_string(),
             })?
-            .descriptor.clone();
+            .descriptor
+            .clone();
 
         // Configure services with the IoC container
-        self.configure_module_services(&descriptor, container).await?;
+        self.configure_module_services(&descriptor, container)
+            .await?;
 
-        // Configure controllers 
-        self.configure_module_controllers(&descriptor, container).await?;
+        // Configure controllers
+        self.configure_module_controllers(&descriptor, container)
+            .await?;
 
         // Update timing and state
         let config_duration = start_time.elapsed();
@@ -582,7 +644,6 @@ impl ModuleRuntime {
         descriptor: &ModuleDescriptor,
         _container: &mut IocContainer,
     ) -> Result<(), ModuleRuntimeError> {
-
         for service in &descriptor.providers {
             match (service.implementation_type, &service.name) {
                 // Named trait service
@@ -652,7 +713,10 @@ impl ModuleRuntime {
     }
 
     /// Task 4.4: Add module lifecycle hooks (startup, shutdown, health checks)
-    pub async fn initialize_all_modules(&mut self, container: &IocContainer) -> Result<(), ModuleRuntimeError> {
+    pub async fn initialize_all_modules(
+        &mut self,
+        container: &IocContainer,
+    ) -> Result<(), ModuleRuntimeError> {
         let start_time = Instant::now();
 
         for module_name in &self.load_order.clone() {
@@ -751,13 +815,16 @@ impl ModuleRuntime {
     }
 
     /// Run health checks for all modules
-    pub async fn health_check_all_modules(&mut self) -> Result<HashMap<String, HealthStatus>, ModuleRuntimeError> {
+    pub async fn health_check_all_modules(
+        &mut self,
+    ) -> Result<HashMap<String, HealthStatus>, ModuleRuntimeError> {
         let mut health_results = HashMap::new();
         let check_time = Instant::now();
 
         for module_name in &self.load_order.clone() {
             let health_status = if let Some(hook) = self.lifecycle_hooks.get(module_name) {
-                hook.health_check(module_name).unwrap_or(HealthStatus::Unknown)
+                hook.health_check(module_name)
+                    .unwrap_or(HealthStatus::Unknown)
             } else {
                 // Default health check - if module is ready, it's healthy
                 match self.modules.get(module_name).map(|m| &m.state) {
@@ -784,14 +851,16 @@ impl ModuleRuntime {
         self.metrics.total_modules = self.modules.len();
 
         if self.metrics.total_modules > 0 {
-            let total_init_time: Duration = self.modules.values()
-                .filter_map(|m| m.init_duration)
-                .sum();
+            let total_init_time: Duration =
+                self.modules.values().filter_map(|m| m.init_duration).sum();
 
-            self.metrics.avg_init_time_per_module = total_init_time / self.metrics.total_modules as u32;
+            self.metrics.avg_init_time_per_module =
+                total_init_time / self.metrics.total_modules as u32;
 
             // Find slowest module
-            let slowest = self.modules.iter()
+            let slowest = self
+                .modules
+                .iter()
                 .filter_map(|(name, info)| info.init_duration.map(|d| (name, d)))
                 .max_by_key(|(_, duration)| *duration);
 
@@ -836,7 +905,9 @@ impl ModuleRuntime {
                         phase: "runtime_validation".to_string(),
                     });
                 }
-                ModuleState::ResolvingDependencies | ModuleState::Configuring | ModuleState::Initializing => {
+                ModuleState::ResolvingDependencies
+                | ModuleState::Configuring
+                | ModuleState::Initializing => {
                     errors.push(ModuleRuntimeError::InitializationFailed {
                         module: name.clone(),
                         error: "Module stuck in intermediate state".to_string(),
@@ -859,13 +930,11 @@ impl ModuleRuntime {
         if self.load_order.len() != self.modules.len() {
             errors.push(ModuleRuntimeError::ValidationFailed {
                 module: "runtime".to_string(),
-                validation_errors: vec![
-                    format!(
-                        "Load order length ({}) doesn't match module count ({})",
-                        self.load_order.len(),
-                        self.modules.len()
-                    )
-                ],
+                validation_errors: vec![format!(
+                    "Load order length ({}) doesn't match module count ({})",
+                    self.load_order.len(),
+                    self.modules.len()
+                )],
             });
         }
 
@@ -885,9 +954,9 @@ impl ModuleRuntime {
     /// Get runtime statistics for monitoring
     pub fn get_runtime_statistics(&self) -> ModuleRuntimeStatistics {
         let mut stats = ModuleRuntimeStatistics::default();
-        
+
         stats.total_modules = self.modules.len();
-        
+
         for info in self.modules.values() {
             match &info.state {
                 ModuleState::Registered => stats.registered_modules += 1,
@@ -909,7 +978,7 @@ impl ModuleRuntime {
         }
 
         stats.performance_metrics = self.metrics.clone();
-        
+
         stats
     }
 }
@@ -949,7 +1018,11 @@ impl ModuleLifecycleHook for DefaultLifecycleHook {
     }
 
     fn after_init(&self, module_name: &str, duration: Duration) -> Result<(), ModuleRuntimeError> {
-        tracing::info!("Module '{}' initialized successfully in {:?}", module_name, duration);
+        tracing::info!(
+            "Module '{}' initialized successfully in {:?}",
+            module_name,
+            duration
+        );
         Ok(())
     }
 
@@ -977,28 +1050,40 @@ mod tests {
     #[tokio::test]
     async fn test_topological_sorting_simple() {
         let mut runtime = ModuleRuntime::new();
-        
+
         // A -> B -> C dependency chain
-        runtime.register_module(create_test_module("A", vec![])).unwrap();
-        runtime.register_module(create_test_module("B", vec!["A".to_string()])).unwrap();
-        runtime.register_module(create_test_module("C", vec!["B".to_string()])).unwrap();
+        runtime
+            .register_module(create_test_module("A", vec![]))
+            .unwrap();
+        runtime
+            .register_module(create_test_module("B", vec!["A".to_string()]))
+            .unwrap();
+        runtime
+            .register_module(create_test_module("C", vec!["B".to_string()]))
+            .unwrap();
 
         let load_order = runtime.calculate_load_order().unwrap();
-        
+
         assert_eq!(load_order, vec!["A", "B", "C"]);
     }
 
     #[tokio::test]
     async fn test_circular_dependency_detection() {
         let mut runtime = ModuleRuntime::new();
-        
+
         // A -> B -> C -> A (circular)
-        runtime.register_module(create_test_module("A", vec!["C".to_string()])).unwrap();
-        runtime.register_module(create_test_module("B", vec!["A".to_string()])).unwrap();
-        runtime.register_module(create_test_module("C", vec!["B".to_string()])).unwrap();
+        runtime
+            .register_module(create_test_module("A", vec!["C".to_string()]))
+            .unwrap();
+        runtime
+            .register_module(create_test_module("B", vec!["A".to_string()]))
+            .unwrap();
+        runtime
+            .register_module(create_test_module("C", vec!["B".to_string()]))
+            .unwrap();
 
         let result = runtime.calculate_load_order();
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             ModuleRuntimeError::CircularDependency { cycle, .. } => {
@@ -1011,14 +1096,20 @@ mod tests {
     #[tokio::test]
     async fn test_missing_dependency_detection() {
         let mut runtime = ModuleRuntime::new();
-        
-        runtime.register_module(create_test_module("A", vec!["NonExistent".to_string()])).unwrap();
+
+        runtime
+            .register_module(create_test_module("A", vec!["NonExistent".to_string()]))
+            .unwrap();
 
         let result = runtime.calculate_load_order();
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
-            ModuleRuntimeError::MissingDependency { module, missing_dependency, .. } => {
+            ModuleRuntimeError::MissingDependency {
+                module,
+                missing_dependency,
+                ..
+            } => {
                 assert_eq!(module, "A");
                 assert_eq!(missing_dependency, "NonExistent");
             }
@@ -1029,31 +1120,44 @@ mod tests {
     #[tokio::test]
     async fn test_complex_dependency_graph() {
         let mut runtime = ModuleRuntime::new();
-        
+
         // Complex dependency graph:
         // A (no deps)
         // B -> A
-        // C -> A  
+        // C -> A
         // D -> B, C
         // E -> D
-        runtime.register_module(create_test_module("A", vec![])).unwrap();
-        runtime.register_module(create_test_module("B", vec!["A".to_string()])).unwrap();
-        runtime.register_module(create_test_module("C", vec!["A".to_string()])).unwrap();
-        runtime.register_module(create_test_module("D", vec!["B".to_string(), "C".to_string()])).unwrap();
-        runtime.register_module(create_test_module("E", vec!["D".to_string()])).unwrap();
+        runtime
+            .register_module(create_test_module("A", vec![]))
+            .unwrap();
+        runtime
+            .register_module(create_test_module("B", vec!["A".to_string()]))
+            .unwrap();
+        runtime
+            .register_module(create_test_module("C", vec!["A".to_string()]))
+            .unwrap();
+        runtime
+            .register_module(create_test_module(
+                "D",
+                vec!["B".to_string(), "C".to_string()],
+            ))
+            .unwrap();
+        runtime
+            .register_module(create_test_module("E", vec!["D".to_string()]))
+            .unwrap();
 
         let load_order = runtime.calculate_load_order().unwrap();
-        
+
         // A should be first
         assert_eq!(load_order[0], "A");
-        
+
         // B and C should come after A but before D
         let a_pos = load_order.iter().position(|x| x == "A").unwrap();
         let b_pos = load_order.iter().position(|x| x == "B").unwrap();
         let c_pos = load_order.iter().position(|x| x == "C").unwrap();
         let d_pos = load_order.iter().position(|x| x == "D").unwrap();
         let e_pos = load_order.iter().position(|x| x == "E").unwrap();
-        
+
         assert!(a_pos < b_pos);
         assert!(a_pos < c_pos);
         assert!(b_pos < d_pos);
@@ -1064,22 +1168,24 @@ mod tests {
     #[tokio::test]
     async fn test_module_lifecycle_hooks() {
         let mut runtime = ModuleRuntime::new();
-        runtime.register_module(create_test_module("TestModule", vec![])).unwrap();
-        
+        runtime
+            .register_module(create_test_module("TestModule", vec![]))
+            .unwrap();
+
         // Add default lifecycle hook
         runtime.add_lifecycle_hook("TestModule".to_string(), DefaultLifecycleHook);
-        
+
         // Calculate load order
         runtime.calculate_load_order().unwrap();
-        
+
         // Create mock container
         let mut container = IocContainer::new();
         container.build().unwrap();
-        
+
         // Test initialization with hooks
         let result = runtime.initialize_all_modules(&container).await;
         assert!(result.is_ok());
-        
+
         // Verify module is ready
         let module_info = runtime.get_module_info("TestModule").unwrap();
         assert_eq!(module_info.state, ModuleState::Ready);
@@ -1089,18 +1195,20 @@ mod tests {
     #[tokio::test]
     async fn test_health_checks() {
         let mut runtime = ModuleRuntime::new();
-        runtime.register_module(create_test_module("TestModule", vec![])).unwrap();
+        runtime
+            .register_module(create_test_module("TestModule", vec![]))
+            .unwrap();
         runtime.add_lifecycle_hook("TestModule".to_string(), DefaultLifecycleHook);
-        
+
         runtime.calculate_load_order().unwrap();
-        
+
         let mut container = IocContainer::new();
         container.build().unwrap();
         runtime.initialize_all_modules(&container).await.unwrap();
-        
+
         // Run health checks
         let health_results = runtime.health_check_all_modules().await.unwrap();
-        
+
         assert_eq!(health_results.len(), 1);
         assert_eq!(health_results["TestModule"], HealthStatus::Healthy);
     }
@@ -1108,14 +1216,16 @@ mod tests {
     #[tokio::test]
     async fn test_runtime_validation() {
         let mut runtime = ModuleRuntime::new();
-        runtime.register_module(create_test_module("TestModule", vec![])).unwrap();
-        
+        runtime
+            .register_module(create_test_module("TestModule", vec![]))
+            .unwrap();
+
         runtime.calculate_load_order().unwrap();
-        
+
         let mut container = IocContainer::new();
         container.build().unwrap();
         runtime.initialize_all_modules(&container).await.unwrap();
-        
+
         // Validate runtime state
         let validation_result = runtime.validate_runtime_state();
         assert!(validation_result.is_ok());
@@ -1124,19 +1234,21 @@ mod tests {
     #[tokio::test]
     async fn test_performance_metrics() {
         let mut runtime = ModuleRuntime::new();
-        
+
         for i in 0..10 {
-            runtime.register_module(create_test_module(&format!("Module{}", i), vec![])).unwrap();
+            runtime
+                .register_module(create_test_module(&format!("Module{}", i), vec![]))
+                .unwrap();
         }
-        
+
         runtime.calculate_load_order().unwrap();
-        
+
         let mut container = IocContainer::new();
         container.build().unwrap();
         runtime.initialize_all_modules(&container).await.unwrap();
-        
+
         let metrics = runtime.get_performance_metrics();
-        
+
         assert_eq!(metrics.total_modules, 10);
         assert!(metrics.initialization_duration > Duration::ZERO);
         assert!(metrics.avg_init_time_per_module > Duration::ZERO);
@@ -1145,20 +1257,26 @@ mod tests {
     #[tokio::test]
     async fn test_shutdown_order() {
         let mut runtime = ModuleRuntime::new();
-        
-        runtime.register_module(create_test_module("A", vec![])).unwrap();
-        runtime.register_module(create_test_module("B", vec!["A".to_string()])).unwrap();
-        runtime.register_module(create_test_module("C", vec!["B".to_string()])).unwrap();
-        
+
+        runtime
+            .register_module(create_test_module("A", vec![]))
+            .unwrap();
+        runtime
+            .register_module(create_test_module("B", vec!["A".to_string()]))
+            .unwrap();
+        runtime
+            .register_module(create_test_module("C", vec!["B".to_string()]))
+            .unwrap();
+
         runtime.calculate_load_order().unwrap();
-        
+
         let mut container = IocContainer::new();
         container.build().unwrap();
         runtime.initialize_all_modules(&container).await.unwrap();
-        
+
         // Shutdown should happen in reverse order
         runtime.shutdown_all_modules().await.unwrap();
-        
+
         // All modules should be shut down
         for info in runtime.get_all_module_info().values() {
             assert_eq!(info.state, ModuleState::Shutdown);

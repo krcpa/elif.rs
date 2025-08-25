@@ -3,13 +3,13 @@
 //! Handles creating, loading, and parsing migration files from the filesystem.
 
 use chrono::{DateTime, Utc};
-use std::fs;
-use std::path::Path;
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
+use std::fs;
+use std::path::Path;
 
-use crate::error::{OrmError, OrmResult};
 use super::definitions::{Migration, MigrationConfig};
+use crate::error::{OrmError, OrmResult};
 
 /// Migration manager for creating and loading migrations
 pub struct MigrationManager {
@@ -35,8 +35,9 @@ impl MigrationManager {
     /// Create a new migration file
     pub async fn create_migration(&self, name: &str) -> OrmResult<String> {
         // Ensure migrations directory exists
-        fs::create_dir_all(&self.config.migrations_dir)
-            .map_err(|e| OrmError::Migration(format!("Failed to create migrations directory: {}", e)))?;
+        fs::create_dir_all(&self.config.migrations_dir).map_err(|e| {
+            OrmError::Migration(format!("Failed to create migrations directory: {}", e))
+        })?;
 
         // Generate timestamp-based ID
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
@@ -46,7 +47,7 @@ impl MigrationManager {
 
         // Create migration template
         let template = self.create_migration_template(name, &migration_id);
-        
+
         fs::write(&filepath, template)
             .map_err(|e| OrmError::Migration(format!("Failed to write migration file: {}", e)))?;
 
@@ -60,15 +61,17 @@ impl MigrationManager {
         }
 
         let mut migrations = Vec::new();
-        let entries = fs::read_dir(&self.config.migrations_dir)
-            .map_err(|e| OrmError::Migration(format!("Failed to read migrations directory: {}", e)))?;
+        let entries = fs::read_dir(&self.config.migrations_dir).map_err(|e| {
+            OrmError::Migration(format!("Failed to read migrations directory: {}", e))
+        })?;
 
         for entry in entries {
-            let entry = entry
-                .map_err(|e| OrmError::Migration(format!("Failed to read directory entry: {}", e)))?;
-            
+            let entry = entry.map_err(|e| {
+                OrmError::Migration(format!("Failed to read directory entry: {}", e))
+            })?;
+
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "sql") {
+            if path.extension().is_some_and(|ext| ext == "sql") {
                 let migration = self.parse_migration_file(&path).await?;
                 migrations.push(migration);
             }
@@ -84,14 +87,17 @@ impl MigrationManager {
         let content = fs::read_to_string(path)
             .map_err(|e| OrmError::Migration(format!("Failed to read migration file: {}", e)))?;
 
-        let filename = path.file_stem()
+        let filename = path
+            .file_stem()
             .and_then(|s| s.to_str())
             .ok_or_else(|| OrmError::Migration("Invalid migration filename".to_string()))?;
 
         // Extract ID and name from filename (format: YYYYMMDD_HHMMSS_name or timestamp_name)
         let parts: Vec<&str> = filename.split('_').collect();
         if parts.len() < 2 {
-            return Err(OrmError::Migration("Migration filename must follow format: timestamp_name".to_string()));
+            return Err(OrmError::Migration(
+                "Migration filename must follow format: timestamp_name".to_string(),
+            ));
         }
 
         let id = filename.to_string();
@@ -107,7 +113,8 @@ impl MigrationManager {
         let (up_sql, down_sql) = self.parse_migration_content(&content)?;
 
         // Try to parse creation date from filename timestamp
-        let created_at = self.parse_migration_timestamp(&parts[0])
+        let created_at = self
+            .parse_migration_timestamp(parts[0])
             .unwrap_or_else(|_| Utc::now());
 
         Ok(Migration {
@@ -128,7 +135,7 @@ impl MigrationManager {
 
         for line in lines {
             let trimmed = line.trim().to_lowercase();
-            
+
             if trimmed.starts_with("-- up") || trimmed.contains("up migration") {
                 current_section = "up";
                 continue;
@@ -149,11 +156,17 @@ impl MigrationManager {
             }
         }
 
-        Ok((up_sql.join("\n").trim().to_string(), down_sql.join("\n").trim().to_string()))
+        Ok((
+            up_sql.join("\n").trim().to_string(),
+            down_sql.join("\n").trim().to_string(),
+        ))
     }
 
     /// Parse timestamp from migration filename
-    fn parse_migration_timestamp(&self, timestamp_str: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
+    fn parse_migration_timestamp(
+        &self,
+        timestamp_str: &str,
+    ) -> Result<DateTime<Utc>, chrono::ParseError> {
         let formatted = format!("{}000000", &timestamp_str[..8]); // YYYYMMDD -> YYYYMMDD000000
         let naive = chrono::NaiveDateTime::parse_from_str(&formatted, "%Y%m%d%H%M%S")?;
         Ok(DateTime::from_naive_utc_and_offset(naive, Utc))
@@ -179,7 +192,7 @@ impl MigrationManager {
     pub fn split_sql_statements(&self, sql: &str) -> OrmResult<Vec<String>> {
         let dialect = GenericDialect {};
         let mut statements = Vec::new();
-        
+
         // Parse all statements from the SQL string
         match Parser::parse_sql(&dialect, sql) {
             Ok(parsed_statements) => {
@@ -191,7 +204,8 @@ impl MigrationManager {
             Err(e) => {
                 // If parsing fails, fall back to the original naive approach with a warning
                 tracing::warn!("SQL parsing failed, using naive semicolon splitting: {}", e);
-                let naive_statements = sql.split(';')
+                let naive_statements = sql
+                    .split(';')
                     .map(|s| s.trim())
                     .filter(|s| !s.is_empty())
                     .map(|s| format!("{};", s))
@@ -216,8 +230,11 @@ impl MigrationManager {
     /// SQL to check if a migration has been applied
     pub fn check_migration_sql(&self, migration_id: &str) -> (String, Vec<String>) {
         (
-            format!("SELECT id FROM {} WHERE id = $1", self.config.migrations_table),
-            vec![migration_id.to_string()]
+            format!(
+                "SELECT id FROM {} WHERE id = $1",
+                self.config.migrations_table
+            ),
+            vec![migration_id.to_string()],
         )
     }
 
@@ -232,7 +249,7 @@ impl MigrationManager {
                 migration_id.to_string(),
                 Utc::now().to_rfc3339(),
                 batch.to_string(),
-            ]
+            ],
         )
     }
 
@@ -240,13 +257,16 @@ impl MigrationManager {
     pub fn remove_migration_sql(&self, migration_id: &str) -> (String, Vec<String>) {
         (
             format!("DELETE FROM {} WHERE id = $1", self.config.migrations_table),
-            vec![migration_id.to_string()]
+            vec![migration_id.to_string()],
         )
     }
 
     /// SQL to get the latest batch number
     pub fn get_latest_batch_sql(&self) -> String {
-        format!("SELECT COALESCE(MAX(batch), 0) FROM {}", self.config.migrations_table)
+        format!(
+            "SELECT COALESCE(MAX(batch), 0) FROM {}",
+            self.config.migrations_table
+        )
     }
 
     /// SQL to get applied migrations

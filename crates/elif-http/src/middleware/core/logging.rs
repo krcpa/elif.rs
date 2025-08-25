@@ -2,12 +2,12 @@
 //!
 //! HTTP request/response logging middleware for observability.
 
-use std::time::Instant;
-use log::{info, debug, warn, error};
 use crate::{
     middleware::v2::{Middleware, Next, NextFuture},
     request::ElifRequest,
 };
+use log::{debug, error, info, warn};
+use std::time::Instant;
 
 /// HTTP request logging middleware that logs request details and response status
 #[derive(Debug)]
@@ -26,13 +26,13 @@ impl LoggingMiddleware {
             log_response_headers: false,
         }
     }
-    
+
     /// Enable request body logging (use with caution for sensitive data)
     pub fn with_body_logging(mut self) -> Self {
         self.log_body = true;
         self
     }
-    
+
     /// Enable response headers logging
     pub fn with_response_headers(mut self) -> Self {
         self.log_response_headers = true;
@@ -52,13 +52,10 @@ impl Middleware for LoggingMiddleware {
         Box::pin(async move {
             // Store start time
             let start_time = Instant::now();
-            
+
             // Log basic request info
-            info!("→ {} {}", 
-                request.method, 
-                request.uri.path()
-            );
-            
+            info!("→ {} {}", request.method, request.uri.path());
+
             // Log headers (excluding sensitive ones)
             debug!("Request headers:");
             for name in request.headers.keys() {
@@ -70,13 +67,13 @@ impl Middleware for LoggingMiddleware {
                     }
                 }
             }
-            
+
             // Continue to next middleware/handler
             let response = next.run(request).await;
-            
+
             // Calculate duration
             let duration_ms = start_time.elapsed().as_millis();
-            
+
             // Log response info
             let status = response.status_code();
             if status.is_success() {
@@ -90,7 +87,7 @@ impl Middleware for LoggingMiddleware {
             } else {
                 info!("← {:?} {}ms (Informational)", status, duration_ms);
             }
-            
+
             // Log response headers if enabled
             if log_response_headers {
                 debug!("Response headers:");
@@ -100,11 +97,11 @@ impl Middleware for LoggingMiddleware {
                     }
                 }
             }
-            
+
             response
         })
     }
-    
+
     fn name(&self) -> &'static str {
         "LoggingMiddleware"
     }
@@ -115,26 +112,26 @@ fn is_sensitive_header(name: &str) -> bool {
     let sensitive_headers = [
         "authorization",
         "cookie",
-        "set-cookie", 
+        "set-cookie",
         "x-api-key",
         "x-auth-token",
         "bearer",
     ];
-    
+
     let name_lower = name.to_lowercase();
-    sensitive_headers.iter().any(|&sensitive| {
-        name_lower.contains(sensitive)
-    })
+    sensitive_headers
+        .iter()
+        .any(|&sensitive| name_lower.contains(sensitive))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::middleware::v2::MiddlewarePipelineV2;
-    use crate::request::{ElifRequest, ElifMethod};
+    use crate::request::{ElifMethod, ElifRequest};
     use crate::response::headers::ElifHeaderMap;
     use crate::response::{ElifResponse, ElifStatusCode};
-    
+
     #[test]
     fn test_sensitive_header_detection() {
         assert!(is_sensitive_header("Authorization"));
@@ -143,77 +140,110 @@ mod tests {
         assert!(!is_sensitive_header("Content-Type"));
         assert!(!is_sensitive_header("User-Agent"));
     }
-    
+
     #[tokio::test]
     async fn test_logging_middleware_v2() {
         let middleware = LoggingMiddleware::new();
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
-        
+
         let mut headers = ElifHeaderMap::new();
-        headers.insert("content-type".parse().unwrap(), "application/json".parse().unwrap());
-        headers.insert("authorization".parse().unwrap(), "Bearer secret".parse().unwrap());
-        
-        let request = ElifRequest::new(
-            ElifMethod::GET,
-            "/api/test".parse().unwrap(),
-            headers,
+        headers.insert(
+            "content-type".parse().unwrap(),
+            "application/json".parse().unwrap(),
         );
-        
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async move {
-                ElifResponse::ok().json_value(serde_json::json!({
-                    "message": "Success"
-                }))
+        headers.insert(
+            "authorization".parse().unwrap(),
+            "Bearer secret".parse().unwrap(),
+        );
+
+        let request = ElifRequest::new(ElifMethod::GET, "/api/test".parse().unwrap(), headers);
+
+        let response = pipeline
+            .execute(request, |_req| {
+                Box::pin(async move {
+                    ElifResponse::ok().json_value(serde_json::json!({
+                        "message": "Success"
+                    }))
+                })
             })
-        }).await;
-        
+            .await;
+
         // Should complete successfully
-        assert_eq!(response.status_code(), crate::response::status::ElifStatusCode::OK);
+        assert_eq!(
+            response.status_code(),
+            crate::response::status::ElifStatusCode::OK
+        );
     }
-    
+
     #[test]
     fn test_logging_middleware_builder() {
         let middleware = LoggingMiddleware::new()
             .with_body_logging()
             .with_response_headers();
-        
+
         assert!(middleware.log_body);
         assert!(middleware.log_response_headers);
     }
-    
+
     #[tokio::test]
     async fn test_logging_different_status_codes() {
         let middleware = LoggingMiddleware::new();
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
-        
+
         let headers = ElifHeaderMap::new();
-        
+
         // Test success status (2xx)
-        let request = ElifRequest::new(ElifMethod::GET, "/success".parse().unwrap(), headers.clone());
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async move { ElifResponse::ok().text("Success") })
-        }).await;
+        let request = ElifRequest::new(
+            ElifMethod::GET,
+            "/success".parse().unwrap(),
+            headers.clone(),
+        );
+        let response = pipeline
+            .execute(request, |_req| {
+                Box::pin(async move { ElifResponse::ok().text("Success") })
+            })
+            .await;
         assert!(response.status_code().is_success());
-        
+
         // Test redirect status (3xx)
-        let request = ElifRequest::new(ElifMethod::GET, "/redirect".parse().unwrap(), headers.clone());
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async move { ElifResponse::with_status(ElifStatusCode::FOUND).text("Redirect") })
-        }).await;
+        let request = ElifRequest::new(
+            ElifMethod::GET,
+            "/redirect".parse().unwrap(),
+            headers.clone(),
+        );
+        let response = pipeline
+            .execute(request, |_req| {
+                Box::pin(async move {
+                    ElifResponse::with_status(ElifStatusCode::FOUND).text("Redirect")
+                })
+            })
+            .await;
         assert!(response.status_code().is_redirection());
-        
+
         // Test client error (4xx)
-        let request = ElifRequest::new(ElifMethod::GET, "/client-error".parse().unwrap(), headers.clone());
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async move { ElifResponse::with_status(ElifStatusCode::NOT_FOUND).text("Not Found") })
-        }).await;
+        let request = ElifRequest::new(
+            ElifMethod::GET,
+            "/client-error".parse().unwrap(),
+            headers.clone(),
+        );
+        let response = pipeline
+            .execute(request, |_req| {
+                Box::pin(async move {
+                    ElifResponse::with_status(ElifStatusCode::NOT_FOUND).text("Not Found")
+                })
+            })
+            .await;
         assert!(response.status_code().is_client_error());
-        
+
         // Test server error (5xx)
         let request = ElifRequest::new(ElifMethod::GET, "/server-error".parse().unwrap(), headers);
-        let response = pipeline.execute(request, |_req| {
-            Box::pin(async move { ElifResponse::with_status(ElifStatusCode::INTERNAL_SERVER_ERROR).text("Error") })
-        }).await;
+        let response = pipeline
+            .execute(request, |_req| {
+                Box::pin(async move {
+                    ElifResponse::with_status(ElifStatusCode::INTERNAL_SERVER_ERROR).text("Error")
+                })
+            })
+            .await;
         assert!(response.status_code().is_server_error());
     }
 }

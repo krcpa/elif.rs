@@ -3,9 +3,9 @@
 use crate::{
     config::HttpConfig,
     errors::{HttpError, HttpResult},
+    middleware::v2::MiddlewarePipelineV2,
     routing::ElifRouter,
     server::health::health_check_handler,
-    middleware::v2::MiddlewarePipelineV2,
 };
 use elif_core::container::IocContainer;
 use std::net::SocketAddr;
@@ -27,20 +27,17 @@ pub async fn build_internal_router(
         let container = health_container.clone();
         let config = health_config.clone();
         async move {
-            Ok(crate::response::ElifResponse::ok().json(&health_check_handler(container, config).await.0)?)
+            crate::response::ElifResponse::ok()
+                .json(&health_check_handler(container, config).await.0)
         }
     };
 
     // Start with framework router
-    let mut router = if let Some(user_router) = user_router {
-        user_router
-    } else {
-        ElifRouter::new()
-    };
+    let mut router = user_router.unwrap_or_default();
 
     // Add health check route
     router = router.get(&config.health_check_path, health_handler);
-    
+
     // Apply server middleware to router
     router = router.extend_middleware(middleware);
 
@@ -59,10 +56,13 @@ pub async fn start_server(addr: SocketAddr, router: axum::Router) -> HttpResult<
     info!("🔧 Framework: Elif.rs (Axum under the hood)");
 
     // Serve with graceful shutdown
-    axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .map_err(|e| HttpError::internal(format!("Server error: {}", e)))?;
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .map_err(|e| HttpError::internal(format!("Server error: {}", e)))?;
 
     Ok(())
 }

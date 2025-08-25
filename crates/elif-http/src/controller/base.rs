@@ -1,19 +1,19 @@
 //! Controller System for Route Organization
-//! 
+//!
 //! Provides both service-oriented controllers and a new ElifController system
 //! for automatic route registration and organization.
 
-use std::{sync::Arc, pin::Pin, future::Future};
 use crate::{
-    request::{ElifState, ElifPath, ElifQuery, ElifRequest},
+    request::{ElifPath, ElifQuery, ElifRequest, ElifState},
     response::{ElifJson, ElifResponse},
-    routing::{HttpMethod, params::ParamType},
+    routing::{params::ParamType, HttpMethod},
 };
-use serde::{Serialize, Deserialize};
-use serde_json::Value;
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::{future::Future, pin::Pin, sync::Arc};
 
-use crate::{HttpResult, response::ApiResponse};
+use crate::{response::ApiResponse, HttpResult};
 use elif_core::container::IocContainer;
 
 /// Query parameters for pagination and filtering
@@ -52,6 +52,12 @@ pub struct PaginationMeta {
 #[derive(Clone)]
 pub struct BaseController;
 
+impl Default for BaseController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BaseController {
     pub fn new() -> Self {
         Self
@@ -68,36 +74,44 @@ impl BaseController {
     /// Create standardized success response
     pub fn success_response<T: Serialize>(&self, data: T) -> HttpResult<ElifResponse> {
         let api_response = ApiResponse::success(data);
-        Ok(ElifResponse::ok().json(&api_response)?)
+        ElifResponse::ok().json(&api_response)
     }
 
     /// Create standardized created response
     pub fn created_response<T: Serialize>(&self, data: T) -> HttpResult<ElifResponse> {
         let api_response = ApiResponse::success(data);
-        Ok(ElifResponse::created().json(&api_response)?)
+        ElifResponse::created().json(&api_response)
     }
 
     /// Create paginated response with metadata
-    pub fn paginated_response<T: Serialize>(&self, data: Vec<T>, meta: PaginationMeta) -> HttpResult<ElifResponse> {
+    pub fn paginated_response<T: Serialize>(
+        &self,
+        data: Vec<T>,
+        meta: PaginationMeta,
+    ) -> HttpResult<ElifResponse> {
         let response_data = serde_json::json!({
             "data": data,
             "meta": meta
         });
-        Ok(ElifResponse::ok().json(&response_data)?)
+        ElifResponse::ok().json(&response_data)
     }
 
     /// Create standardized delete response
-    pub fn deleted_response<T: Serialize>(&self, resource_name: &str, deleted_id: Option<T>) -> HttpResult<ElifResponse> {
+    pub fn deleted_response<T: Serialize>(
+        &self,
+        resource_name: &str,
+        deleted_id: Option<T>,
+    ) -> HttpResult<ElifResponse> {
         let mut response_data = serde_json::json!({
             "message": format!("{} deleted successfully", resource_name)
         });
-        
+
         if let Some(id) = deleted_id {
             response_data["deleted_id"] = serde_json::to_value(id)?;
         }
-        
+
         let api_response = ApiResponse::success(response_data);
-        Ok(ElifResponse::ok().json(&api_response)?)
+        ElifResponse::ok().json(&api_response)
     }
 }
 
@@ -159,12 +173,12 @@ impl RouteParam {
             default: None,
         }
     }
-    
+
     pub fn optional(mut self) -> Self {
         self.required = false;
         self
     }
-    
+
     pub fn with_default(mut self, default: &str) -> Self {
         self.default = Some(default.to_string());
         self.required = false;
@@ -192,17 +206,17 @@ impl ControllerRoute {
             params: vec![],
         }
     }
-    
+
     pub fn with_middleware(mut self, middleware: Vec<String>) -> Self {
         self.middleware = middleware;
         self
     }
-    
+
     pub fn with_params(mut self, params: Vec<RouteParam>) -> Self {
         self.params = params;
         self
     }
-    
+
     pub fn add_param(mut self, param: RouteParam) -> Self {
         self.params.push(param);
         self
@@ -214,18 +228,18 @@ impl ControllerRoute {
 pub trait ElifController: Send + Sync + 'static {
     /// Controller name for identification
     fn name(&self) -> &str;
-    
+
     /// Base path for all routes in this controller
     fn base_path(&self) -> &str;
-    
+
     /// Route definitions for this controller
     fn routes(&self) -> Vec<ControllerRoute>;
-    
+
     /// Dependencies required by this controller (optional)
-    fn dependencies(&self) -> Vec<String> { 
-        vec![] 
+    fn dependencies(&self) -> Vec<String> {
+        vec![]
     }
-    
+
     /// Handle a request by dispatching to the appropriate method
     /// Uses Arc<Self> for thread-safe concurrent access to controller instance
     async fn handle_request(
@@ -245,7 +259,7 @@ macro_rules! controller_dispatch {
         match $method_name.as_str() {
             $($method => Box::pin($handler($self, $request)),)*
             _ => Box::pin(async move {
-                use crate::response::ElifResponse;
+                use $crate::response::ElifResponse;
                 Ok(ElifResponse::not_found().text(&format!("Handler '{}' not found", $method_name)))
             })
         }
@@ -270,7 +284,7 @@ mod tests {
             per_page: Some(10),
             ..Default::default()
         };
-        
+
         let (page, per_page, offset) = controller.normalize_pagination(&params);
         assert_eq!(page, 5);
         assert_eq!(per_page, 10);
@@ -285,7 +299,7 @@ mod tests {
             per_page: Some(200),
             ..Default::default()
         };
-        
+
         let (page, per_page, offset) = controller.normalize_pagination(&params);
         assert_eq!(page, 1);
         assert_eq!(per_page, 100);
@@ -309,7 +323,7 @@ mod tests {
             total_pages: Some(5),
             has_more: true,
         };
-        
+
         assert_eq!(meta.page, 1);
         assert_eq!(meta.per_page, 20);
         assert_eq!(meta.total, Some(100));
