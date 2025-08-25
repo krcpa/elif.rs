@@ -31,6 +31,7 @@ Thumbs.db
 *.temp
 temp-test/
 test-app/
+test-env/
 
 # Cache directories
 .mcp-cache/

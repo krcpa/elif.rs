@@ -330,6 +330,28 @@ enum DeployCommands {
 
 #[derive(Subcommand)]
 enum DbCommands {
+    /// Database setup and health check
+    Setup {
+        /// Environment
+        #[arg(long, short)]
+        env: Option<String>,
+
+        /// Show verbose output
+        #[arg(long, short)]
+        verbose: bool,
+    },
+
+    /// Database status and health reporting
+    Status {
+        /// Environment
+        #[arg(long, short)]
+        env: Option<String>,
+
+        /// Show verbose output
+        #[arg(long, short)]
+        verbose: bool,
+    },
+
     /// Create database
     Create {
         /// Database name
@@ -361,15 +383,19 @@ enum DbCommands {
         with_seeds: bool,
 
         /// Environment
-        #[arg(long, short, default_value = "development")]
-        env: String,
+        #[arg(long, short)]
+        env: Option<String>,
+
+        /// Force reset without confirmation
+        #[arg(long)]
+        force: bool,
     },
 
     /// Run database seeders
     Seed {
         /// Environment to run seeders for
-        #[arg(long, short, default_value = "development")]
-        env: String,
+        #[arg(long, short)]
+        env: Option<String>,
 
         /// Force run seeders in production
         #[arg(long)]
@@ -383,13 +409,33 @@ enum DbCommands {
     /// Fresh database with seeds
     Fresh {
         /// Environment
-        #[arg(long, short, default_value = "development")]
-        env: String,
+        #[arg(long, short)]
+        env: Option<String>,
 
         /// Skip seeds
         #[arg(long)]
         no_seed: bool,
     },
+
+    /// Create database backup
+    Backup {
+        /// Backup file path (optional)
+        #[arg(long)]
+        path: Option<String>,
+
+        /// Enable compression
+        #[arg(long)]
+        compress: bool,
+    },
+
+    /// Restore database from backup
+    Restore {
+        /// Backup file path
+        backup_file: String,
+    },
+
+    /// Database performance analysis
+    Analyze,
 }
 
 // ========== Updated Migration Commands ==========
@@ -575,24 +621,39 @@ async fn main() -> Result<(), ElifError> {
         }
 
         Commands::Db { db_command } => match db_command {
+            DbCommands::Setup { env, verbose } => {
+                commands::db::setup(env.as_deref(), verbose).await?;
+            }
+            DbCommands::Status { env, verbose } => {
+                commands::db::status(env.as_deref(), verbose).await?;
+            }
             DbCommands::Create { name, env } => {
                 commands::db::create(&name, &env).await?;
             }
             DbCommands::Drop { name, env, force } => {
                 commands::db::drop(name.as_deref(), &env, force).await?;
             }
-            DbCommands::Reset { with_seeds, env } => {
-                commands::db::reset(with_seeds, &env).await?;
+            DbCommands::Reset { with_seeds, env, force } => {
+                commands::db::reset(with_seeds, env.as_deref(), force).await?;
             }
             DbCommands::Seed {
                 env,
                 force,
                 verbose,
             } => {
-                commands::db::seed(&env, force, verbose).await?;
+                commands::db::seed(env.as_deref(), force, verbose).await?;
             }
             DbCommands::Fresh { env, no_seed } => {
-                commands::db::fresh(&env, !no_seed).await?;
+                commands::db::fresh(env.as_deref(), !no_seed).await?;
+            }
+            DbCommands::Backup { path, compress } => {
+                commands::db::backup(path.as_deref(), compress).await?;
+            }
+            DbCommands::Restore { backup_file } => {
+                commands::db::restore(&backup_file).await?;
+            }
+            DbCommands::Analyze => {
+                commands::db::analyze().await?;
             }
         },
 
