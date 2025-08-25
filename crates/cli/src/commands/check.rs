@@ -251,6 +251,8 @@ fn check_source_structure(results: &mut CheckResults) -> Result<(), ElifError> {
         
         if as_file.exists() || as_dir.is_dir() {
             results.success(&format!("Found {} organization", file));
+        } else {
+            results.warning(&format!("Consider adding a '{}' directory or file for better organization", file));
         }
     }
     
@@ -434,20 +436,21 @@ fn check_resource_specs_enhanced(results: &mut CheckResults) -> Result<(), ElifE
            path.file_stem().and_then(|s| s.to_str())
                .map_or(false, |s| s.ends_with(".resource")) {
             
+            let file_name = path.file_name().map(|s| s.to_string_lossy()).unwrap_or_default();
             match fs::read_to_string(&path) {
                 Ok(content) => {
                     match elif_core::ResourceSpec::from_yaml(&content) {
                         Ok(_) => {
-                            results.success(&format!("Validated {}", path.file_name().unwrap().to_string_lossy()));
+                            results.success(&format!("Validated {}", file_name));
                             spec_count += 1;
                         },
                         Err(e) => {
-                            results.error(&format!("Invalid resource spec {}: {}", path.file_name().unwrap().to_string_lossy(), e));
+                            results.error(&format!("Invalid resource spec {}: {}", file_name, e));
                         }
                     }
                 },
                 Err(e) => {
-                    results.error(&format!("Could not read {}: {}", path.file_name().unwrap().to_string_lossy(), e));
+                    results.error(&format!("Could not read {}: {}", file_name, e));
                 }
             }
         }
