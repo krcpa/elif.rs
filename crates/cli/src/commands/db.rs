@@ -10,6 +10,7 @@ use elif_orm::{
 };
 use std::sync::Arc;
 use tokio::io::{AsyncWriteExt, AsyncBufReadExt, BufReader};
+use url::Url;
 
 /// Database manager for comprehensive lifecycle operations
 pub struct DatabaseManager {
@@ -51,12 +52,15 @@ impl DatabaseManager {
 
     /// Get database connection information for display
     fn connection_info(&self) -> String {
-        // Mask password in URL for display
-        let masked_url = self.database_url
-            .split('@')
-            .last()
-            .map(|part| format!("postgresql://***@{}", part))
-            .unwrap_or_else(|| "postgresql://***".to_string());
+        // Safely mask password in URL for display using proper URL parsing
+        let masked_url = Url::parse(&self.database_url)
+            .map(|mut url| {
+                if url.password().is_some() {
+                    let _ = url.set_password(Some("***"));
+                }
+                url.to_string()
+            })
+            .unwrap_or_else(|_| "postgresql://***".to_string());
         masked_url
     }
 
