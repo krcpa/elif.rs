@@ -68,7 +68,22 @@
       "Bash(RUSTFLAGS=\"-A warnings\" cargo run -- create --help)",
       "Bash(RUSTFLAGS=\"-A warnings\" cargo run --package elifrs -- add --help)",
       "Bash(RUSTFLAGS=\"-A warnings\" cargo run --package elifrs -- inspect --help)",
-      "Bash(RUSTFLAGS=\"-A warnings\" cargo build --package elifrs)"
+      "Bash(RUSTFLAGS=\"-A warnings\" cargo build --package elifrs)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker compose:*)",
+      "Bash(export DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test)",
+      "Bash(export ELIF_ENV=development)",
+      "Bash(DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test ./target/debug/elifrs db setup:*)",
+      "Bash(DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test ./target/debug/elifrs db seed:*)",
+      "Bash(DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test ./target/debug/elifrs db backup:*)",
+      "Bash(ELIF_ENV=production DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test ./target/debug/elifrs db seed --verbose)",
+      "Bash(DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test ./target/debug/elifrs migrate create test_user_table)",
+      "Bash(DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test ./target/debug/elifrs migrate up:*)",
+      "Bash(DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test ./target/debug/elifrs migrate status:*)",
+      "Bash(DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test ./target/debug/elifrs db status:*)",
+      "Bash(DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test ./target/debug/elifrs db analyze:*)",
+      "Bash(docker exec:*)",
+      "Bash(DATABASE_URL='postgresql://elif_user:p@ssw0rd@localhost:5433/elif_test' ./target/debug/elifrs db status:*)"
     ],
     "deny": []
   }
