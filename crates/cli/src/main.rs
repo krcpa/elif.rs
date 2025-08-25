@@ -176,6 +176,12 @@ enum Commands {
         #[command(subcommand)]
         version_command: ApiVersionCommands,
     },
+
+    /// Advanced module system management
+    Module {
+        #[command(subcommand)]
+        module_command: ModuleCommands,
+    },
 }
 
 // ========== Original Elif.rs Command Structure ==========
@@ -521,6 +527,43 @@ enum ApiVersionCommands {
     Validate,
 }
 
+// ========== Module System Commands ==========
+
+#[derive(Subcommand)]
+enum ModuleCommands {
+    /// List all modules and their dependencies
+    List {
+        /// Show dependency relationships
+        #[arg(long)]
+        dependencies: bool,
+    },
+
+    /// Generate and visualize module dependency graph
+    Graph {
+        /// Output format (text, dot, svg, json)
+        #[arg(long, default_value = "text")]
+        format: String,
+
+        /// Output file path (optional)
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// Convert manual IoC setup to module system
+    Migrate {
+        /// Analyze existing setup before migration
+        #[arg(long)]
+        analyze_first: bool,
+    },
+
+    /// Validate module composition and detect issues
+    Validate {
+        /// Automatically fix issues where possible
+        #[arg(long)]
+        fix_issues: bool,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<(), ElifError> {
     let cli = Cli::parse();
@@ -728,6 +771,21 @@ async fn main() -> Result<(), ElifError> {
             }
             ApiVersionCommands::Validate => {
                 commands::version::validate().await?;
+            }
+        },
+
+        Commands::Module { module_command } => match module_command {
+            ModuleCommands::List { dependencies } => {
+                commands::module::list(dependencies).await?;
+            }
+            ModuleCommands::Graph { format, output } => {
+                commands::module::graph(&format, output.as_deref()).await?;
+            }
+            ModuleCommands::Migrate { analyze_first } => {
+                commands::module::migrate(analyze_first).await?;
+            }
+            ModuleCommands::Validate { fix_issues } => {
+                commands::module::validate(fix_issues).await?;
             }
         },
     }

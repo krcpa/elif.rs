@@ -217,7 +217,7 @@ pub async fn status(env: Option<&str>, verbose: bool) -> Result<(), ElifError> {
                 println!("📊 Migration Status: {} applied, {} pending", applied_count, pending_count);
             }
         }
-        Err(e) => {
+        Err(ref e) => {
             println!("⚠️  Schema Version: Unable to determine ({})", e);
         }
     }

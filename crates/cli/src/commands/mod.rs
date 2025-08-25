@@ -16,6 +16,7 @@ pub mod optimize;
 pub mod status;
 pub mod test;
 pub mod version;
+pub mod module;
 
 // ========== Legacy modules (disabled to fix compilation) ==========
 // These modules contain unused code and will be re-enabled as needed
