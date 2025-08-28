@@ -198,7 +198,7 @@ pub async fn api(
     let project_root = std::env::current_dir()
         .map_err(|e| ElifError::Io(e))?;
 
-    let generator = ApiGenerator::new(project_root.clone());
+    let generator = ApiGenerator::new(project_root.clone())?;
     
     // Create API resource for single resource
     let api_resource = ApiResource {
@@ -211,6 +211,10 @@ pub async fn api(
         prefix: "api".to_string(),
         with_openapi: docs,
         with_versioning: true,
+        with_auth: false,
+        title: None,
+        description: None,
+        base_url: None,
     };
     
     let generated_files = generator.generate_api(&[api_resource], &options)?;

@@ -1,0 +1,22 @@
+use serde::{Serialize, Deserialize};
+use elif_validation::prelude::*;
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct Update{{ name | pascal_case }}Request {
+    {% for field in fields %}
+    {% if field.validation %}
+    #[validate({{ field.validation }})]
+    {% endif %}
+    pub {{ field.name }}: Option<{{ field.type }}>,
+    {% endfor %}
+}
+
+impl Update{{ name | pascal_case }}Request {
+    pub fn new() -> Self {
+        Self {
+            {% for field in fields %}
+            {{ field.name }}: None,
+            {% endfor %}
+        }
+    }
+}

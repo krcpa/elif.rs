@@ -1,0 +1,25 @@
+use serde::{Serialize, Deserialize};
+use elif_validation::prelude::*;
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct Create{{ name | pascal_case }}Request {
+    {% for field in fields %}
+    {% if field.required %}
+    #[validate(required)]
+    {% endif %}
+    {% if field.validation %}
+    #[validate({{ field.validation }})]
+    {% endif %}
+    pub {{ field.name }}: {{ field.type }},
+    {% endfor %}
+}
+
+impl Create{{ name | pascal_case }}Request {
+    pub fn new() -> Self {
+        Self {
+            {% for field in fields %}
+            {{ field.name }}: {{ field.default_value | default("Default::default()") }},
+            {% endfor %}
+        }
+    }
+}
