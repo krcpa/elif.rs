@@ -21,7 +21,27 @@ Database
 - `elifrs migrate run` — run pending migrations.
 - `elifrs migrate rollback` — rollback last migration.
 - `elifrs migrate status` — show status.
-- `elifrs db seed [--env <environment>] [--force] [--verbose]` — run seeders.
+
+Database Lifecycle
+- `elifrs db:setup` — database setup and health check.
+- `elifrs db:status` — database status and health reporting.
+- `elifrs db:fresh [--seed]` — fresh database with optional seeds.
+- `elifrs db:reset [--with-seeds]` — reset database with fresh migrations and optional seeds.
+- `elifrs db:seed [--env <environment>] [--force] [--verbose]` — run database seeders with dependency resolution.
+- `elifrs db:create <name> --env <environment>` — create database.
+- `elifrs db:drop [<name>] --env <environment> [--force]` — drop database.
+
+Database Utilities  
+- `elifrs db:backup [--path <file>] [--compress]` — create database backup.
+- `elifrs db:restore <backup-file>` — restore database from backup.
+- `elifrs db:analyze` — database performance analysis.
+
+Seeder Generation
+- `elifrs make:seeder <name>` — generate basic database seeder.
+- `elifrs make:seeder <name> --table <table>` — generate seeder targeting specific table.
+- `elifrs make:seeder <name> --table <table> --factory` — generate seeder with factory integration.
+
+Legacy Commands
 - `elifrs db factory status|test [--count 3]` — factory diagnostics.
 
 API & Docs
