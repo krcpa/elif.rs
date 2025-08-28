@@ -1,0 +1,142 @@
+use std::sync::Arc;
+use elif_core::{ElifResult, ElifError};
+use async_trait::async_trait;
+use tracing::{debug, info, warn, error};
+{% if has_models %}
+use crate::models::*;
+{% endif %}
+{% if has_modules %}
+// Module imports
+{% for module in modules %}
+// use crate::modules::{{module}}::*;
+{% endfor %}
+{% endif %}
+{% if dependencies %}
+
+{% for dep in dependencies %}
+use crate::services::{{dep}};
+{% endfor %}
+{% endif %}
+
+{% if trait_impl %}
+{% if async_methods %}#[async_trait]{% endif %}
+pub trait {{trait_impl}} {
+{% if async_methods %}
+    /// Execute the main operation of this service
+    async fn execute(&self) -> ElifResult<()>;
+    
+    /// Health check for this service
+    async fn health_check(&self) -> ElifResult<bool> {
+        Ok(true)
+    }
+{% else %}
+    /// Execute the main operation of this service
+    fn execute(&self) -> ElifResult<()>;
+    
+    /// Health check for this service
+    fn health_check(&self) -> ElifResult<bool> {
+        Ok(true)
+    }
+{% endif %}
+}
+
+{% endif %}
+// <<<ELIF:BEGIN agent-editable:service-fields>>>
+/// {{service_name}} provides business logic operations
+///
+/// This service is auto-generated and should be customized
+/// for your specific business requirements.
+#[derive(Debug, Clone)]
+pub struct {{service_name}} {
+{% for dep in dependencies %}
+    /// Dependency: {{dep}}
+    {{dep | lower}}: Arc<{{dep}}>,
+{% endfor %}
+}
+// <<<ELIF:END agent-editable:service-fields>>>
+
+impl {{service_name}} {
+    /// Creates a new instance of this service
+    pub fn new({% for dep in dependencies %}{% if not loop.first %}, {% endif %}{{dep | lower}}: Arc<{{dep}}>{% endfor %}) -> Self {
+        debug!("Creating new {{service_name}} instance");
+        Self {
+{% for dep in dependencies %}
+            {{dep | lower}},
+{% endfor %}
+        }
+    }
+
+    // <<<ELIF:BEGIN agent-editable:service-methods>>>
+{% if async_methods %}
+    /// Performs the main operation of this service
+    pub async fn perform_operation(&self) -> ElifResult<()> {
+        info!("Executing {{service_name}} operation");
+        
+        // TODO: Implement service logic here
+        // Example: database operations, external API calls, etc.
+        
+        debug!("Completed {{service_name}} operation successfully");
+        Ok(())
+    }
+
+    /// Validates input data for this service
+    pub async fn validate_input(&self, _data: &str) -> ElifResult<bool> {
+        // TODO: Add input validation logic
+        Ok(true)
+    }
+{% else %}
+    /// Performs the main operation of this service
+    pub fn perform_operation(&self) -> ElifResult<()> {
+        info!("Executing {{service_name}} operation");
+        
+        // TODO: Implement service logic here
+        // Example: database operations, data processing, etc.
+        
+        debug!("Completed {{service_name}} operation successfully");
+        Ok(())
+    }
+
+    /// Validates input data for this service
+    pub fn validate_input(&self, _data: &str) -> ElifResult<bool> {
+        // TODO: Add input validation logic
+        Ok(true)
+    }
+{% endif %}
+    // <<<ELIF:END agent-editable:service-methods>>>
+}
+
+{% if trait_impl %}
+{% if async_methods %}#[async_trait]{% endif %}
+impl {{trait_impl}} for {{service_name}} {
+{% if async_methods %}
+    async fn execute(&self) -> ElifResult<()> {
+        self.perform_operation().await
+    }
+
+    async fn health_check(&self) -> ElifResult<bool> {
+        // TODO: Implement actual health check logic
+        Ok(true)
+    }
+{% else %}
+    fn execute(&self) -> ElifResult<()> {
+        self.perform_operation()
+    }
+
+    fn health_check(&self) -> ElifResult<bool> {
+        // TODO: Implement actual health check logic
+        Ok(true)
+    }
+{% endif %}
+}
+
+{% endif %}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[tokio::test]
+    async fn test_{{service_name | lower}}_creation() {
+        let service = {{service_name}}::new({% for dep in dependencies %}{% if not loop.first %}, {% endif %}Arc::new({{dep}}::default()){% endfor %});
+        // Add assertions here
+    }
+}

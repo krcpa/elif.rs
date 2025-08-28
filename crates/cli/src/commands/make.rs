@@ -4,6 +4,7 @@ use crate::generators::{
     auth_generator::{AuthGenerator, AuthOptions},
     api_generator::{ApiGenerator, ApiOptions, ApiResource},
     project_analyzer::ProjectAnalyzer,
+    TemplateEngine,
 };
 
 #[allow(dead_code)]
@@ -374,7 +375,8 @@ pub async fn service(
     context.insert("async_methods".to_string(), serde_json::to_value(async_methods)?);
     context.insert("trait_impl".to_string(), serde_json::to_value(trait_impl)?);
     
-    let service_content = generate_enhanced_service_content(&service_name, trait_impl, &deps, async_methods, &context);
+    let template_engine = TemplateEngine::new()?;
+    let service_content = generate_enhanced_service_content(&template_engine, &service_name, trait_impl, &deps, async_methods, &context)?;
     
     // Write service file
     std::fs::write(&service_file_path, service_content)
@@ -382,7 +384,8 @@ pub async fn service(
     
     if let Some(ref module_name) = target_module {
         println!("✓ Generated service {} in module {} at {}", service_name, module_name, service_file_path.display());
-        update_module_services(&project_root, module_name, &service_name).await?;
+        let template_engine = TemplateEngine::new()?;
+        update_module_services(&template_engine, &project_root, module_name, &service_name).await?;
     } else {
         println!("✓ Generated service {} at {}", service_name, service_file_path.display());
     }
@@ -434,7 +437,8 @@ async fn factory_for_model(
     };
     
     // Generate factory content
-    let factory_content = generate_factory_content(model, count, &rels, &factory_traits);
+    let template_engine = TemplateEngine::new()?;
+    let factory_content = generate_factory_content(&template_engine, model, count, &rels, &factory_traits)?;
     
     // Write factory file
     std::fs::write(&factory_file_path, factory_content)
@@ -555,306 +559,64 @@ fn generate_service_content(
 }
 
 fn generate_enhanced_service_content(
+    template_engine: &TemplateEngine,
     name: &str,
     trait_impl: Option<&str>,
     dependencies: &[String],
     async_methods: bool,
     context: &std::collections::HashMap<String, serde_json::Value>,
-) -> String {
-    let mut content = String::new();
-    
-    // Enhanced imports based on project structure
-    content.push_str("use std::sync::Arc;\n");
-    content.push_str("use elif_core::{ElifResult, ElifError};\n");
-    content.push_str("use async_trait::async_trait;\n");
-    content.push_str("use tracing::{debug, info, warn, error};\n");
+) -> Result<String, ElifError> {
+    let mut template_context = context.clone();
+    template_context.insert("service_name".to_string(), serde_json::to_value(name)?);
+    template_context.insert("dependencies".to_string(), serde_json::to_value(dependencies)?);
+    template_context.insert("async_methods".to_string(), serde_json::to_value(async_methods)?);
+    template_context.insert("trait_impl".to_string(), serde_json::to_value(trait_impl)?);
     
     // Check if project has database models
     if let Some(models) = context.get("models") {
         if let Some(models_array) = models.as_array() {
-            if !models_array.is_empty() {
-                content.push_str("use crate::models::*;\n");
-            }
+            template_context.insert("has_models".to_string(), serde_json::to_value(!models_array.is_empty())?);
+        } else {
+            template_context.insert("has_models".to_string(), serde_json::to_value(false)?);
         }
+    } else {
+        template_context.insert("has_models".to_string(), serde_json::to_value(false)?);
     }
     
-    // Add module-specific imports
+    // Check if project has modules
     if let Some(modules) = context.get("modules") {
         if let Some(modules_obj) = modules.as_object() {
-            if !modules_obj.is_empty() {
-                content.push_str("// Module imports\n");
-                for (module_name, _) in modules_obj {
-                    content.push_str(&format!("// use crate::modules::{}::*;\n", module_name));
-                }
-            }
-        }
-    }
-    
-    if !dependencies.is_empty() {
-        content.push('\n');
-        for dep in dependencies {
-            content.push_str(&format!("use crate::services::{};\n", dep));
-        }
-    }
-    
-    content.push('\n');
-    
-    // Enhanced trait definition if specified
-    if let Some(trait_name) = trait_impl {
-        let async_keyword = if async_methods { "#[async_trait]" } else { "" };
-        content.push_str(&format!("{}\n", async_keyword));
-        content.push_str(&format!("pub trait {} {{\n", trait_name));
-        
-        if async_methods {
-            content.push_str("    /// Execute the main operation of this service\n");
-            content.push_str("    async fn execute(&self) -> ElifResult<()>;\n");
-            content.push_str("    \n");
-            content.push_str("    /// Health check for this service\n");
-            content.push_str("    async fn health_check(&self) -> ElifResult<bool> {\n");
-            content.push_str("        Ok(true)\n");
-            content.push_str("    }\n");
+            template_context.insert("has_modules".to_string(), serde_json::to_value(!modules_obj.is_empty())?);
+            let module_names: Vec<String> = modules_obj.keys().cloned().collect();
+            template_context.insert("modules".to_string(), serde_json::to_value(module_names)?);
         } else {
-            content.push_str("    /// Execute the main operation of this service\n");
-            content.push_str("    fn execute(&self) -> ElifResult<()>;\n");
-            content.push_str("    \n");
-            content.push_str("    /// Health check for this service\n");
-            content.push_str("    fn health_check(&self) -> ElifResult<bool> {\n");
-            content.push_str("        Ok(true)\n");
-            content.push_str("    }\n");
+            template_context.insert("has_modules".to_string(), serde_json::to_value(false)?);
         }
-        
-        content.push_str("}\n\n");
-    }
-    
-    // Enhanced service struct with documentation
-    content.push_str("// <<<ELIF:BEGIN agent-editable:service-fields>>>\n");
-    content.push_str(&format!("/// {} provides business logic operations\n", name));
-    content.push_str("///\n");
-    content.push_str("/// This service is auto-generated and should be customized\n");
-    content.push_str("/// for your specific business requirements.\n");
-    content.push_str("#[derive(Debug, Clone)]\n");
-    content.push_str(&format!("pub struct {} {{\n", name));
-    
-    for dep in dependencies {
-        content.push_str(&format!("    /// Dependency: {}\n", dep));
-        content.push_str(&format!("    {}: Arc<{}>,\n", dep.to_lowercase(), dep));
-    }
-    
-    content.push_str("}\n");
-    content.push_str("// <<<ELIF:END agent-editable:service-fields>>>\n\n");
-    
-    // Enhanced implementation with better error handling and logging
-    content.push_str(&format!("impl {} {{\n", name));
-    
-    // Enhanced constructor
-    content.push_str("    /// Creates a new instance of this service\n");
-    content.push_str("    pub fn new(");
-    for (i, dep) in dependencies.iter().enumerate() {
-        if i > 0 {
-            content.push_str(", ");
-        }
-        content.push_str(&format!("{}: Arc<{}>", dep.to_lowercase(), dep));
-    }
-    content.push_str(") -> Self {\n");
-    content.push_str(&format!("        debug!(\"Creating new {} instance\");\n", name));
-    content.push_str("        Self {\n");
-    
-    for dep in dependencies {
-        content.push_str(&format!("            {},\n", dep.to_lowercase()));
-    }
-    
-    content.push_str("        }\n    }\n\n");
-    
-    // Methods section with enhanced functionality
-    content.push_str("    // <<<ELIF:BEGIN agent-editable:service-methods>>>\n");
-    
-    if async_methods {
-        content.push_str("    /// Performs the main operation of this service\n");
-        content.push_str("    pub async fn perform_operation(&self) -> ElifResult<()> {\n");
-        content.push_str(&format!("        info!(\"Executing {} operation\");\n", name));
-        content.push_str("        \n");
-        content.push_str("        // TODO: Implement service logic here\n");
-        content.push_str("        // Example: database operations, external API calls, etc.\n");
-        content.push_str("        \n");
-        content.push_str(&format!("        debug!(\"Completed {} operation successfully\");\n", name));
-        content.push_str("        Ok(())\n");
-        content.push_str("    }\n\n");
-        
-        // Add validation method
-        content.push_str("    /// Validates input data for this service\n");
-        content.push_str("    pub async fn validate_input(&self, _data: &str) -> ElifResult<bool> {\n");
-        content.push_str("        // TODO: Add input validation logic\n");
-        content.push_str("        Ok(true)\n");
-        content.push_str("    }\n");
     } else {
-        content.push_str("    /// Performs the main operation of this service\n");
-        content.push_str("    pub fn perform_operation(&self) -> ElifResult<()> {\n");
-        content.push_str(&format!("        info!(\"Executing {} operation\");\n", name));
-        content.push_str("        \n");
-        content.push_str("        // TODO: Implement service logic here\n");
-        content.push_str("        // Example: database operations, data processing, etc.\n");
-        content.push_str("        \n");
-        content.push_str(&format!("        debug!(\"Completed {} operation successfully\");\n", name));
-        content.push_str("        Ok(())\n");
-        content.push_str("    }\n\n");
-        
-        // Add validation method
-        content.push_str("    /// Validates input data for this service\n");
-        content.push_str("    pub fn validate_input(&self, _data: &str) -> ElifResult<bool> {\n");
-        content.push_str("        // TODO: Add input validation logic\n");
-        content.push_str("        Ok(true)\n");
-        content.push_str("    }\n");
+        template_context.insert("has_modules".to_string(), serde_json::to_value(false)?);
     }
     
-    content.push_str("    // <<<ELIF:END agent-editable:service-methods>>>\n");
-    content.push_str("}\n\n");
-    
-    // Enhanced trait implementation with better error handling
-    if let Some(trait_name) = trait_impl {
-        let async_keyword = if async_methods { "#[async_trait]" } else { "" };
-        content.push_str(&format!("{}\n", async_keyword));
-        content.push_str(&format!("impl {} for {} {{\n", trait_name, name));
-        
-        if async_methods {
-            content.push_str("    async fn execute(&self) -> ElifResult<()> {\n");
-            content.push_str("        self.perform_operation().await\n");
-            content.push_str("    }\n\n");
-            content.push_str("    async fn health_check(&self) -> ElifResult<bool> {\n");
-            content.push_str("        // TODO: Implement actual health check logic\n");
-            content.push_str("        Ok(true)\n");
-            content.push_str("    }\n");
-        } else {
-            content.push_str("    fn execute(&self) -> ElifResult<()> {\n");
-            content.push_str("        self.perform_operation()\n");
-            content.push_str("    }\n\n");
-            content.push_str("    fn health_check(&self) -> ElifResult<bool> {\n");
-            content.push_str("        // TODO: Implement actual health check logic\n");
-            content.push_str("        Ok(true)\n");
-            content.push_str("    }\n");
-        }
-        
-        content.push_str("}\n\n");
-    }
-    
-    // Add tests module
-    content.push_str("#[cfg(test)]\n");
-    content.push_str("mod tests {\n");
-    content.push_str("    use super::*;\n");
-    content.push_str("    \n");
-    content.push_str("    #[tokio::test]\n");
-    content.push_str(&format!("    async fn test_{}_creation() {{\n", name.to_lowercase()));
-    content.push_str(&format!("        let service = {}::new(", name));
-    for (i, dep) in dependencies.iter().enumerate() {
-        if i > 0 {
-            content.push_str(", ");
-        }
-        content.push_str(&format!("Arc::new({}::default())", dep));
-    }
-    content.push_str(");\n");
-    content.push_str("        // Add assertions here\n");
-    content.push_str("    }\n");
-    content.push_str("}\n");
-    
-    content
+    template_engine.render("service.stub", &template_context)
 }
 
 fn generate_factory_content(
+    template_engine: &TemplateEngine,
     model: &str,
     count: u32,
     relationships: &[String],
     traits: &[String],
-) -> String {
-    let mut content = String::new();
+) -> Result<String, ElifError> {
+    let mut context = std::collections::HashMap::new();
+    context.insert("model".to_string(), serde_json::to_value(model)?);
+    context.insert("count".to_string(), serde_json::to_value(count)?);
+    context.insert("relationships".to_string(), serde_json::to_value(relationships)?);
+    context.insert("traits".to_string(), serde_json::to_value(traits)?);
     
-    // Imports
-    content.push_str("use fake::{Fake, Faker};\n");
-    content.push_str("use serde::{Deserialize, Serialize};\n");
-    content.push_str("use uuid::Uuid;\n");
-    content.push_str(&format!("use crate::models::{};\n", model));
-    
-    if !relationships.is_empty() {
-        for rel in relationships {
-            content.push_str(&format!("use crate::models::{};\n", rel));
-        }
-    }
-    
-    content.push('\n');
-    
-    // Factory struct
-    content.push_str("#[derive(Debug, Clone)]\n");
-    content.push_str(&format!("pub struct {}Factory {{\n", model));
-    content.push_str(&format!("    pub count: u32,\n"));
-    
-    for trait_name in traits {
-        if trait_name != "Faker" {
-            content.push_str(&format!("    pub {}: bool,\n", trait_name.to_lowercase()));
-        }
-    }
-    
-    content.push_str("}\n\n");
-    
-    // Factory implementation
-    content.push_str(&format!("impl {}Factory {{\n", model));
-    
-    // Constructor
-    content.push_str("    pub fn new() -> Self {\n");
-    content.push_str("        Self {\n");
-    content.push_str(&format!("            count: {},\n", count));
-    
-    for trait_name in traits {
-        if trait_name != "Faker" {
-            content.push_str(&format!("            {}: false,\n", trait_name.to_lowercase()));
-        }
-    }
-    
-    content.push_str("        }\n");
-    content.push_str("    }\n\n");
-    
-    // Count setter
-    content.push_str("    pub fn count(mut self, count: u32) -> Self {\n");
-    content.push_str("        self.count = count;\n");
-    content.push_str("        self\n");
-    content.push_str("    }\n\n");
-    
-    // Trait setters
-    for trait_name in traits {
-        if trait_name != "Faker" {
-            content.push_str(&format!("    pub fn {}(mut self) -> Self {{\n", trait_name.to_lowercase()));
-            content.push_str(&format!("        self.{} = true;\n", trait_name.to_lowercase()));
-            content.push_str("        self\n");
-            content.push_str("    }\n\n");
-        }
-    }
-    
-    // Generate method
-    content.push_str("    // <<<ELIF:BEGIN agent-editable:factory-generation>>>\n");
-    content.push_str(&format!("    pub fn make(&self) -> {} {{\n", model));
-    content.push_str(&format!("        {} {{\n", model));
-    content.push_str("            id: Uuid::new_v4(),\n");
-    content.push_str("            name: Faker.fake(),\n");
-    content.push_str("            created_at: chrono::Utc::now(),\n");
-    content.push_str("            updated_at: chrono::Utc::now(),\n");
-    content.push_str("        }\n");
-    content.push_str("    }\n\n");
-    
-    content.push_str(&format!("    pub fn make_many(&self, count: u32) -> Vec<{}> {{\n", model));
-    content.push_str("        (0..count).map(|_| self.make()).collect()\n");
-    content.push_str("    }\n");
-    content.push_str("    // <<<ELIF:END agent-editable:factory-generation>>>\n");
-    
-    content.push_str("}\n\n");
-    
-    // Default implementation
-    content.push_str(&format!("impl Default for {}Factory {{\n", model));
-    content.push_str("    fn default() -> Self {\n");
-    content.push_str("        Self::new()\n");
-    content.push_str("    }\n");
-    content.push_str("}\n");
-    
-    content
+    template_engine.render("factory.stub", &context)
 }
 
 async fn update_module_services(
+    template_engine: &TemplateEngine,
     project_root: &std::path::Path,
     module_name: &str,
     service_name: &str,
@@ -865,25 +627,30 @@ async fn update_module_services(
         .join("services")
         .join("mod.rs");
     
-    // Read existing mod.rs or create if it doesn't exist
-    let mut content = if mod_file_path.exists() {
+    // Read existing mod.rs content or empty string
+    let existing_content = if mod_file_path.exists() {
         std::fs::read_to_string(&mod_file_path)
             .map_err(|e| ElifError::Io(e))?
     } else {
         String::new()
     };
     
-    // Add module declaration if not already present
+    // Check if module declaration and re-export already exist
     let module_line = format!("pub mod {};", service_name.to_lowercase());
-    if !content.contains(&module_line) {
-        content.push_str(&format!("\n{}\n", module_line));
+    let export_line = format!("pub use {}::{};", service_name.to_lowercase(), service_name);
+    
+    if existing_content.contains(&module_line) && existing_content.contains(&export_line) {
+        // Already exists, no need to update
+        return Ok(());
     }
     
-    // Add re-export if not already present
-    let export_line = format!("pub use {}::{};", service_name.to_lowercase(), service_name);
-    if !content.contains(&export_line) {
-        content.push_str(&format!("{}\n", export_line));
-    }
+    // Prepare template context
+    let mut context = std::collections::HashMap::new();
+    context.insert("service_name".to_string(), serde_json::to_value(service_name)?);
+    context.insert("existing_content".to_string(), serde_json::to_value(existing_content.trim())?);
+    
+    // Generate content using template
+    let content = template_engine.render("module_services.stub", &context)?;
     
     // Create directory if it doesn't exist
     if let Some(parent) = mod_file_path.parent() {

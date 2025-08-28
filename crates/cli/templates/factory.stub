@@ -1,0 +1,67 @@
+use fake::{Fake, Faker};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+use crate::models::{{model}};
+{% if relationships %}
+{% for rel in relationships %}
+use crate::models::{{rel}};
+{% endfor %}
+{% endif %}
+
+#[derive(Debug, Clone)]
+pub struct {{model}}Factory {
+    pub count: u32,
+{% for trait_name in traits %}
+{% if trait_name != "Faker" %}
+    pub {{trait_name | lower}}: bool,
+{% endif %}
+{% endfor %}
+}
+
+impl {{model}}Factory {
+    pub fn new() -> Self {
+        Self {
+            count: {{count}},
+{% for trait_name in traits %}
+{% if trait_name != "Faker" %}
+            {{trait_name | lower}}: false,
+{% endif %}
+{% endfor %}
+        }
+    }
+
+    pub fn count(mut self, count: u32) -> Self {
+        self.count = count;
+        self
+    }
+
+{% for trait_name in traits %}
+{% if trait_name != "Faker" %}
+    pub fn {{trait_name | lower}}(mut self) -> Self {
+        self.{{trait_name | lower}} = true;
+        self
+    }
+
+{% endif %}
+{% endfor %}
+    // <<<ELIF:BEGIN agent-editable:factory-generation>>>
+    pub fn make(&self) -> {{model}} {
+        {{model}} {
+            id: Uuid::new_v4(),
+            name: Faker.fake(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
+    pub fn make_many(&self, count: u32) -> Vec<{{model}}> {
+        (0..count).map(|_| self.make()).collect()
+    }
+    // <<<ELIF:END agent-editable:factory-generation>>>
+}
+
+impl Default for {{model}}Factory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
