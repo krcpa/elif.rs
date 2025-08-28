@@ -641,6 +641,20 @@ enum MakeCommands {
         #[arg(long)]
         services: Option<String>,
     },
+
+    /// Generate a new database seeder
+    Seeder {
+        /// Seeder name (e.g., UserSeeder, BlogSeeder)
+        name: String,
+
+        /// Target table or model name
+        #[arg(long)]
+        table: Option<String>,
+
+        /// Generate with factory integration
+        #[arg(long)]
+        factory: bool,
+    },
 }
 
 #[tokio::main]
@@ -911,6 +925,18 @@ async fn main() -> Result<(), ElifError> {
                     providers.as_deref(),
                     controllers.as_deref(),
                     services.as_deref(),
+                )
+                .await?;
+            }
+            MakeCommands::Seeder {
+                name,
+                table,
+                factory,
+            } => {
+                commands::add::seeder_with_options(
+                    &name,
+                    table.as_deref(),
+                    factory,
                 )
                 .await?;
             }

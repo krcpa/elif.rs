@@ -190,21 +190,119 @@ pub async fn migration(name: &str) -> Result<(), ElifError> {
 
 /// Add a seeder file  
 pub async fn seeder(name: &str) -> Result<(), ElifError> {
-    println!("🌱 Adding seeder '{}'", name);
+    seeder_with_options(name, None, false).await
+}
 
-    let seeder_dir = Path::new("src/seeders");
+/// Add a seeder file with enhanced options (for make:seeder command)
+pub async fn seeder_with_options(name: &str, table: Option<&str>, factory: bool) -> Result<(), ElifError> {
+    println!("🌱 Creating seeder '{}'", name);
+
+    let seeder_dir = Path::new("database/seeders");
     if !seeder_dir.exists() {
         fs::create_dir_all(seeder_dir)?;
-        fs::write(seeder_dir.join("mod.rs"), "// Seeder declarations\n")?;
+        fs::write(seeder_dir.join("mod.rs"), "// Database seeder declarations\n")?;
     }
 
-    let seeder_content = format!(
-        r#"use elif_orm::{{Model, Database}};
+    // Enhanced seeder template with factory integration and table targeting
+    let seeder_content = if factory && table.is_some() {
+        let table_name = table.unwrap();
+        format!(
+            r#"use elif_orm::{{Database, factory::Factory}};
 use serde_json::json;
 
 pub struct {}Seeder;
 
 impl {}Seeder {{
+    /// Run the database seeder
+    pub async fn run(db: &Database) -> Result<(), Box<dyn std::error::Error>> {{
+        println!("🌱 Running {} seeder...");
+        
+        // Generate test data using factory pattern
+        let factory = Factory::new();
+        
+        // Seed {} table with factory-generated data
+        for i in 1..=10 {{
+            let data = factory
+                .for_table("{}")
+                .with_attributes(json!({{
+                    "name": format!("Test {} Entry {{}}", i),
+                    "created_at": chrono::Utc::now(),
+                    "updated_at": chrono::Utc::now(),
+                }}))
+                .build();
+            
+            factory.insert(db, "{}", &data).await?;
+        }}
+        
+        println!("✅ {} seeder completed - inserted 10 {} records");
+        Ok(())
+    }}
+    
+    /// Get seeding dependencies (run these seeders first)  
+    pub fn dependencies() -> Vec<&'static str> {{
+        vec![]
+    }}
+}}
+"#,
+            name, name, name, table_name, table_name, table_name, table_name, name, table_name
+        )
+    } else if table.is_some() {
+        let table_name = table.unwrap();
+        format!(
+            r#"use elif_orm::Database;
+use serde_json::json;
+
+pub struct {}Seeder;
+
+impl {}Seeder {{
+    /// Run the database seeder
+    pub async fn run(db: &Database) -> Result<(), Box<dyn std::error::Error>> {{
+        println!("🌱 Running {} seeder...");
+        
+        // Seed {} table with sample data
+        let records = vec![
+            json!({{
+                "name": "Sample Record 1",
+                "created_at": chrono::Utc::now(),
+                "updated_at": chrono::Utc::now(),
+            }}),
+            json!({{
+                "name": "Sample Record 2", 
+                "created_at": chrono::Utc::now(),
+                "updated_at": chrono::Utc::now(),
+            }}),
+        ];
+        
+        for record in records {{
+            db.query("INSERT INTO {} (name, created_at, updated_at) VALUES ($1, $2, $3)")
+                .bind(record["name"].as_str().unwrap())
+                .bind(record["created_at"].as_str().unwrap())
+                .bind(record["updated_at"].as_str().unwrap())
+                .execute()
+                .await?;
+        }}
+        
+        println!("✅ {} seeder completed");
+        Ok(())
+    }}
+    
+    /// Get seeding dependencies (run these seeders first)
+    pub fn dependencies() -> Vec<&'static str> {{
+        vec![]
+    }}
+}}
+"#,
+            name, name, name, table_name, table_name, name
+        )
+    } else {
+        format!(
+            r#"use elif_orm::Database;
+use serde_json::json;
+
+pub struct {}Seeder;
+
+impl {}Seeder {{
+    /// Run the database seeder
     pub async fn run(db: &Database) -> Result<(), Box<dyn std::error::Error>> {{
         println!("🌱 Running {} seeder...");
         
@@ -219,13 +317,19 @@ impl {}Seeder {{
         println!("✅ {} seeder completed");
         Ok(())
     }}
+    
+    /// Get seeding dependencies (run these seeders first)
+    pub fn dependencies() -> Vec<&'static str> {{
+        vec![]
+    }}
 }}
 "#,
-        name, name, name, name
-    );
+            name, name, name, name
+        )
+    };
 
     let seeder_file = seeder_dir.join(format!("{}_seeder.rs", to_snake_case(name)));
-    fs::write(seeder_file, seeder_content)?;
+    fs::write(&seeder_file, seeder_content)?;
 
     // Update mod.rs
     let mut mod_content = fs::read_to_string(seeder_dir.join("mod.rs"))?;
@@ -235,9 +339,20 @@ impl {}Seeder {{
         fs::write(seeder_dir.join("mod.rs"), mod_content)?;
     }
 
-    println!("✅ Successfully added seeder '{}'", name);
+    println!("✅ Successfully created seeder '{}'", name);
+    println!("   Location: {}", seeder_file.display());
+    
+    if factory {
+        println!("   🏭 Factory integration enabled");
+    }
+    if let Some(table_name) = table {
+        println!("   📊 Targeting table: {}", table_name);
+    }
+    
     println!("\n📖 Usage:");
-    println!("   elifrs db seed");
+    println!("   elifrs db seed              - Run all seeders");
+    println!("   elifrs db seed --env test   - Run seeders for test environment");
+    println!("   elifrs db fresh --seed      - Fresh database with seeds");
 
     Ok(())
 }

@@ -227,10 +227,11 @@ impl SeederManager {
             )));
         }
 
-        // TODO: Implement dependency resolution
-        // For now, just run in priority order
+        // Resolve dependencies with topological sorting
+        let ordered_seeders = self.resolve_dependencies(applicable_seeders)?;
 
-        for seeder in applicable_seeders {
+        for seeder in ordered_seeders {
+            tracing::info!("Running seeder: {}", seeder.name());
             seeder.run(pool).await?;
         }
 
@@ -251,25 +252,124 @@ impl SeederManager {
 
     /// Force run seeders in production (use with caution)
     pub async fn run_production_force(&self, pool: &sqlx::Pool<sqlx::Postgres>) -> OrmResult<()> {
-        let mut applicable_seeders: Vec<&Box<dyn Seeder>> = self
+        let applicable_seeders: Vec<&Box<dyn Seeder>> = self
             .seeders
             .iter()
             .filter(|seeder| seeder.environments().contains(&Environment::Production))
             .collect();
 
-        applicable_seeders.sort_by_key(|seeder| seeder.priority());
+        // Resolve dependencies even in production for safety
+        let ordered_seeders = self.resolve_dependencies(applicable_seeders)?;
 
         tracing::warn!(
-            "Force running {} seeders in PRODUCTION environment",
-            applicable_seeders.len()
+            "Force running {} seeders in PRODUCTION environment with dependency resolution",
+            ordered_seeders.len()
         );
 
-        for seeder in applicable_seeders {
+        for seeder in ordered_seeders {
             tracing::warn!("Running production seeder: {}", seeder.name());
             seeder.run(pool).await?;
         }
 
         Ok(())
+    }
+
+    /// Resolve seeder dependencies using topological sorting
+    fn resolve_dependencies<'a>(
+        &self,
+        seeders: Vec<&'a Box<dyn Seeder>>,
+    ) -> OrmResult<Vec<&'a Box<dyn Seeder>>> {
+        use std::collections::{HashMap, HashSet, VecDeque};
+
+        // Build a map of seeder name to seeder reference
+        let mut seeder_map: HashMap<String, &'a Box<dyn Seeder>> = HashMap::new();
+        let mut dependencies: HashMap<String, Vec<String>> = HashMap::new();
+        let mut in_degree: HashMap<String, usize> = HashMap::new();
+
+        // Initialize maps
+        for seeder in &seeders {
+            let name = seeder.name().to_string();
+            seeder_map.insert(name.clone(), seeder);
+            dependencies.insert(name.clone(), seeder.dependencies());
+            in_degree.insert(name.clone(), 0);
+        }
+
+        // Calculate in-degrees (number of dependencies pointing to each seeder)
+        for (seeder_name, deps) in &dependencies {
+            for dep in deps {
+                // Validate that dependency exists
+                if !seeder_map.contains_key(dep) {
+                    return Err(OrmError::Validation(format!(
+                        "Seeder '{}' depends on '{}', but '{}' was not found",
+                        seeder_name, dep, dep
+                    )));
+                }
+                
+                // Increment in-degree for the dependent seeder
+                if let Some(degree) = in_degree.get_mut(seeder_name) {
+                    *degree += 1;
+                }
+            }
+        }
+
+        // Kahn's algorithm for topological sorting
+        let mut queue: VecDeque<String> = VecDeque::new();
+        let mut result = Vec::new();
+        let mut processed = HashSet::new();
+
+        // Start with seeders that have no dependencies (in-degree = 0)
+        for (name, &degree) in &in_degree {
+            if degree == 0 {
+                queue.push_back(name.clone());
+            }
+        }
+
+        // Process queue
+        while let Some(current) = queue.pop_front() {
+            if processed.contains(&current) {
+                continue;
+            }
+            
+            processed.insert(current.clone());
+            
+            // Add current seeder to result
+            if let Some(seeder) = seeder_map.get(&current) {
+                result.push(*seeder);
+            }
+
+            // Update in-degrees for seeders that depend on current seeder
+            for (dependent, deps) in &dependencies {
+                if deps.contains(&current) {
+                    if let Some(degree) = in_degree.get_mut(dependent) {
+                        if *degree > 0 {
+                            *degree -= 1;
+                            if *degree == 0 && !processed.contains(dependent) {
+                                queue.push_back(dependent.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check for circular dependencies
+        if result.len() != seeders.len() {
+            let unprocessed: Vec<String> = seeders
+                .iter()
+                .map(|s| s.name().to_string())
+                .filter(|name| !processed.contains(name))
+                .collect();
+            
+            return Err(OrmError::Validation(format!(
+                "Circular dependency detected in seeders: {}",
+                unprocessed.join(", ")
+            )));
+        }
+
+        // Secondary sort by priority for seeders at the same dependency level
+        result.sort_by_key(|seeder| seeder.priority());
+
+        Ok(result)
     }
 
     /// Get current environment from environment variable
