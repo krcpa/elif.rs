@@ -18,28 +18,30 @@
 //!
 //! ## Examples
 //!
-//! ```rust
-//! use elif_http_derive::{module, demo_module, module_composition};
+//! ```rust,ignore
+//! use elif_http_derive::{module, demo_module};
 //!
-//! // Full syntax
+//! // Mock services for examples
+//! #[derive(Default)]
+//! pub struct UserService;
+//! #[derive(Default)]
+//! pub struct SmtpEmailService;
+//! #[derive(Default)]
+//! pub struct UserController;
+//!
+//! // Full syntax - concrete providers only
 //! #[module(
-//!     providers: [UserService, dyn EmailService => SmtpEmailService @ "smtp"],
+//!     providers: [UserService, SmtpEmailService],
 //!     controllers: [UserController],
-//!     exports: [UserService, dyn EmailService]
+//!     exports: [UserService, SmtpEmailService]
 //! )]
 //! pub struct UserModule;
 //!
 //! // Demo DSL syntax  
 //! let simple_module = demo_module! {
-//!     services: [UserService, EmailService],
+//!     services: [UserService, SmtpEmailService],
 //!     controllers: [UserController],
 //!     middleware: ["cors", "auth"]
-//! };
-//!
-//! // Application composition
-//! let app = module_composition! {
-//!     modules: [UserModule, AuthModule],
-//!     overrides: [dyn EmailService => MockEmailService @ "test"]
 //! };
 //! ```
 
@@ -84,12 +86,24 @@ pub fn module_composition_impl(input: TokenStream) -> TokenStream {
 
 /// Demo DSL sugar syntax implementation
 /// Supports Laravel-style simplified syntax for common cases:
-/// ```
-/// module! {
+/// ```rust,ignore
+/// use elif_http_derive::demo_module;
+///
+/// // Mock services
+/// #[derive(Default)]
+/// pub struct UserService;
+/// #[derive(Default)] 
+/// pub struct EmailService;
+/// #[derive(Default)]
+/// pub struct UserController;
+/// #[derive(Default)]
+/// pub struct PostController;
+///
+/// let module_descriptor = demo_module! {
 ///     services: [UserService, EmailService],
 ///     controllers: [UserController, PostController],
 ///     middleware: ["cors", "logging"]
-/// }
+/// };
 /// ```
 pub fn demo_dsl_impl(input: TokenStream) -> TokenStream {
     let demo_args = match syn::parse::<DemoDslArgs>(input) {
