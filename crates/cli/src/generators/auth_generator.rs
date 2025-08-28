@@ -12,6 +12,7 @@ pub struct AuthGenerator {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct AuthOptions {
     pub jwt: bool,
     pub session: bool,
@@ -34,6 +35,7 @@ impl Default for AuthOptions {
     }
 }
 
+#[allow(dead_code)]
 impl AuthGenerator {
     pub fn new(project_root: PathBuf) -> Result<Self, ElifError> {
         Ok(Self {

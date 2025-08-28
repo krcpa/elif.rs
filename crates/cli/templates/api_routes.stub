@@ -1,0 +1,27 @@
+use elif_http::prelude::*;
+use elif_core::ServiceContainer;
+use std::sync::Arc;
+
+// Import controllers
+{% for resource in resources %}
+use crate::controllers::{{ resource.name | snake_case }}_controller::{{ resource.name | pascal_case }}Controller;
+{% endfor %}
+
+pub fn setup_api_routes(container: Arc<ServiceContainer>) -> Router {
+    let mut router = Router::new();
+    
+    // API {{ version }} routes
+    let api_group = router.group("/{{ prefix }}"){% if with_versioning %}.group("{{ version }}"){% endif %} {
+        
+        {% for resource in resources %}
+        // {{ resource.name | pascal_case }} routes
+        api_group.controller({{ resource.name | pascal_case }}Controller::new(container.clone()));
+        {% endfor %}
+
+        api_group
+    };
+    
+    router.mount("", api_group);
+    
+    router
+}

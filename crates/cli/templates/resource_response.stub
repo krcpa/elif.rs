@@ -1,0 +1,39 @@
+use serde::{Serialize, Deserialize};
+use elif_orm::Model;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct {{ name | pascal_case }}Resource {
+    pub id: i32,
+    {% for field in fields %}
+    pub {{ field.name }}: {{ field.type }},
+    {% endfor %}
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<{{ name | pascal_case }}> for {{ name | pascal_case }}Resource {
+    fn from(model: {{ name | pascal_case }}) -> Self {
+        Self {
+            id: model.id,
+            {% for field in fields %}
+            {{ field.name }}: model.{{ field.name }},
+            {% endfor %}
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct {{ name | pascal_case }}Collection {
+    pub data: Vec<{{ name | pascal_case }}Resource>,
+    pub meta: PaginationMeta,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginationMeta {
+    pub current_page: u32,
+    pub per_page: u32,
+    pub total_count: u64,
+    pub total_pages: u32,
+}

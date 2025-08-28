@@ -270,87 +270,80 @@ impl ResourceGenerator {
     }
 
     fn generate_create_request_content(&self, context: &HashMap<String, Value>) -> Result<String, ElifError> {
-        let name = context.get("pascal_case_name").unwrap().as_str().unwrap();
-        let fields = context.get("fields").unwrap().as_array().unwrap();
-
-        let mut content = String::new();
-        content.push_str("use serde::{Serialize, Deserialize};\n");
-        content.push_str("use elif_validation::prelude::*;\n\n");
-        content.push_str(&format!("#[derive(Debug, Serialize, Deserialize, Validate)]\npub struct Create{}Request {{\n", name));
-
-        for field in fields {
-            let field_obj = field.as_object().unwrap();
-            let field_name = field_obj.get("name").unwrap().as_str().unwrap();
-            let field_type = field_obj.get("field_type").unwrap().as_str().unwrap();
-            let is_pk = field_obj.get("pk").unwrap().as_bool().unwrap_or(false);
-            let is_required = field_obj.get("required").unwrap().as_bool().unwrap_or(false);
-
-            if !is_pk && field_name != "created_at" && field_name != "updated_at" && field_name != "deleted_at" {
-                if is_required {
-                    content.push_str(&format!("    #[validate(required)]\n"));
-                }
-                if field_type == "String" {
-                    content.push_str(&format!("    #[validate(length(min = 1, max = 255))]\n"));
-                }
-                content.push_str(&format!("    pub {}: {},\n", to_snake_case(field_name), field_type));
-            }
-        }
-
-        content.push_str("}\n");
-        Ok(content)
+        let template_context = self.process_template_context(context)?;
+        self.template_engine.render("create_request", &template_context)
     }
 
     fn generate_update_request_content(&self, context: &HashMap<String, Value>) -> Result<String, ElifError> {
-        let name = context.get("pascal_case_name").unwrap().as_str().unwrap();
-        let fields = context.get("fields").unwrap().as_array().unwrap();
-
-        let mut content = String::new();
-        content.push_str("use serde::{Serialize, Deserialize};\n");
-        content.push_str("use elif_validation::prelude::*;\n\n");
-        content.push_str(&format!("#[derive(Debug, Serialize, Deserialize, Validate)]\npub struct Update{}Request {{\n", name));
-
-        for field in fields {
-            let field_obj = field.as_object().unwrap();
-            let field_name = field_obj.get("name").unwrap().as_str().unwrap();
-            let field_type = field_obj.get("field_type").unwrap().as_str().unwrap();
-            let is_pk = field_obj.get("pk").unwrap().as_bool().unwrap_or(false);
-
-            if !is_pk && field_name != "created_at" && field_name != "updated_at" && field_name != "deleted_at" {
-                if field_type == "String" {
-                    content.push_str(&format!("    #[validate(length(max = 255))]\n"));
-                }
-                content.push_str(&format!("    pub {}: Option<{}>,\n", to_snake_case(field_name), field_type));
-            }
-        }
-
-        content.push_str("}\n");
-        Ok(content)
+        let template_context = self.process_template_context(context)?;
+        self.template_engine.render("update_request", &template_context)
     }
 
     fn generate_resource_content(&self, context: &HashMap<String, Value>) -> Result<String, ElifError> {
-        let name = context.get("pascal_case_name").unwrap().as_str().unwrap();
-        let snake_name = context.get("snake_case_name").unwrap().as_str().unwrap();
-
-        let content = format!(
-            "use serde::{{Serialize, Deserialize}};\nuse crate::models::{}::{};\nuse chrono::{{DateTime, Utc}};\nuse uuid::Uuid;\n\n#[derive(Debug, Serialize, Deserialize)]\npub struct {}Resource {{\n    pub id: Uuid,\n    // Add other fields as needed\n    pub created_at: DateTime<Utc>,\n    pub updated_at: DateTime<Utc>,\n}}\n\nimpl {}Resource {{\n    pub fn new({}: {}) -> Self {{\n        Self {{\n            id: {}.id,\n            created_at: {}.created_at,\n            updated_at: {}.updated_at,\n        }}\n    }}\n}}\n",
-            snake_name, name, name, name, snake_name, name, snake_name, snake_name, snake_name
-        );
-
-        Ok(content)
+        let template_context = self.process_template_context(context)?;
+        self.template_engine.render("resource_response", &template_context)
     }
 
     fn generate_collection_content(&self, context: &HashMap<String, Value>) -> Result<String, ElifError> {
-        let name = context.get("pascal_case_name").unwrap().as_str().unwrap();
-        let snake_name = context.get("snake_case_name").unwrap().as_str().unwrap();
-        let _plural_name = pluralize_word(name);
+        let template_context = self.process_template_context(context)?;
+        self.template_engine.render("resource_response", &template_context)
+    }
 
-        let content = format!(
-            "use serde::{{Serialize, Deserialize}};\nuse crate::models::{}::{};\nuse crate::resources::{}_resource::{}Resource;\n\n#[derive(Debug, Serialize, Deserialize)]\npub struct {}Collection {{\n    pub data: Vec<{}Resource>,\n    pub meta: CollectionMeta,\n}}\n\nimpl {}Collection {{\n    pub fn new({}: Vec<{}>) -> Self {{\n        let data = {}.into_iter()\n            .map({}Resource::new)\n            .collect();\n\n        Self {{\n            data,\n            meta: CollectionMeta {{\n                total: data.len(),\n            }},\n        }}\n    }}\n}}\n\n#[derive(Debug, Serialize, Deserialize)]\npub struct CollectionMeta {{\n    pub total: usize,\n}}\n",
-            snake_name, name, snake_name, name, name, name, name, 
-            pluralize_word(&to_snake_case(name)), name, pluralize_word(&to_snake_case(name)), name
-        );
+    fn process_template_context(&self, context: &HashMap<String, Value>) -> Result<HashMap<String, Value>, ElifError> {
+        let mut template_context = context.clone();
+        
+        // Process fields to include validation and type info for templates
+        if let Some(fields) = context.get("fields").and_then(|f| f.as_array()) {
+            let processed_fields: Vec<Value> = fields.iter()
+                .filter_map(|field| {
+                    let field_obj = field.as_object()?;
+                    let field_name = field_obj.get("name")?.as_str()?;
+                    let field_type = field_obj.get("field_type")?.as_str()?;
+                    let is_pk = field_obj.get("pk")?.as_bool().unwrap_or(false);
+                    let is_required = field_obj.get("required")?.as_bool().unwrap_or(false);
 
-        Ok(content)
+                    // Skip system fields for request templates
+                    if is_pk || field_name == "created_at" || field_name == "updated_at" || field_name == "deleted_at" {
+                        return None;
+                    }
+
+                    let mut processed_field = json!({
+                        "name": to_snake_case(field_name),
+                        "type": field_type,
+                        "required": is_required,
+                        "default_value": match field_type {
+                            "String" => "String::new()",
+                            "i32" | "i64" => "0",
+                            "f32" | "f64" => "0.0",
+                            "bool" => "false",
+                            _ => "Default::default()"
+                        }
+                    });
+
+                    if field_type == "String" {
+                        let validation = if is_required {
+                            "required, length(min = 1, max = 255)"
+                        } else {
+                            "length(max = 255)"
+                        };
+                        processed_field["validation"] = Value::String(validation.to_string());
+                    } else if is_required {
+                        processed_field["validation"] = Value::String("required".to_string());
+                    }
+
+                    Some(processed_field)
+                })
+                .collect();
+            
+            template_context.insert("fields".to_string(), json!(processed_fields));
+        }
+
+        // Add name variants for easy template access
+        if let Some(name) = context.get("pascal_case_name") {
+            template_context.insert("name".to_string(), name.clone());
+        }
+
+        Ok(template_context)
     }
 
     fn rust_type_from_field_type(&self, field_type: &str) -> String {

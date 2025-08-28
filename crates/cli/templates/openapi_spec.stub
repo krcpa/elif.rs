@@ -1,0 +1,316 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "{{ title }}",
+    "version": "{{ version }}",
+    "description": "{{ description }}"
+  },
+  "servers": [
+    {
+      "url": "{{ base_url }}",
+      "description": "Development server"
+    }
+  ],
+  "paths": {
+    {% for resource in resources %}
+    {% set snake_name = resource.name | snake_case %}
+    {% set pascal_name = resource.name | pascal_case %}
+    {% set plural_path = "/" + (snake_name | pluralize) %}
+    {% set singular_path = "/" + (snake_name | pluralize) + "/{id}" %}
+    "{{ plural_path }}": {
+      "get": {
+        "summary": "List all {{ resource.name | pluralize }}",
+        "description": "Retrieve a paginated list of all {{ resource.name | lower | pluralize }}",
+        "tags": ["{{ pascal_name }}"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number for pagination",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query", 
+            "description": "Number of items per page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of {{ resource.name | lower | pluralize }}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/{{ pascal_name }}Collection"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create {{ resource.name | lower }}",
+        "description": "Create a new {{ resource.name | lower }}",
+        "tags": ["{{ pascal_name }}"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Create{{ pascal_name }}Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "{{ pascal_name }} created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/{{ pascal_name }}"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "{{ singular_path }}": {
+      "get": {
+        "summary": "Get {{ resource.name | lower }}",
+        "description": "Retrieve a specific {{ resource.name | lower }} by ID",
+        "tags": ["{{ pascal_name }}"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "{{ pascal_name }} ID",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{{ pascal_name }} details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/{{ pascal_name }}"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "{{ pascal_name }} not found"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update {{ resource.name | lower }}",
+        "description": "Update an existing {{ resource.name | lower }}",
+        "tags": ["{{ pascal_name }}"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "{{ pascal_name }} ID",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Update{{ pascal_name }}Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{{ pascal_name }} updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/{{ pascal_name }}"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "{{ pascal_name }} not found"
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete {{ resource.name | lower }}",
+        "description": "Delete an existing {{ resource.name | lower }}",
+        "tags": ["{{ pascal_name }}"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "{{ pascal_name }} ID",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "{{ pascal_name }} deleted successfully"
+          },
+          "404": {
+            "description": "{{ pascal_name }} not found"
+          }
+        }
+      }
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  },
+  "components": {
+    "schemas": {
+      {% for resource in resources %}
+      {% set pascal_name = resource.name | pascal_case %}
+      "{{ pascal_name }}": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Unique identifier"
+          },
+          {% for field in resource.fields %}
+          "{{ field.name }}": {
+            "type": "{{ field.openapi_type }}",
+            "description": "{{ field.description | default(field.name | capitalize) }}"
+          }{% if not loop.last %},{% endif %}
+          {% endfor %}
+        }
+      },
+      "Create{{ pascal_name }}Request": {
+        "type": "object",
+        "required": [
+          {% for field in resource.fields %}
+          {% if field.required %}"{{ field.name }}"{% if not loop.last %},{% endif %}{% endif %}
+          {% endfor %}
+        ],
+        "properties": {
+          {% for field in resource.fields %}
+          "{{ field.name }}": {
+            "type": "{{ field.openapi_type }}",
+            "description": "{{ field.description | default(field.name | capitalize) }}"
+          }{% if not loop.last %},{% endif %}
+          {% endfor %}
+        }
+      },
+      "Update{{ pascal_name }}Request": {
+        "type": "object",
+        "properties": {
+          {% for field in resource.fields %}
+          "{{ field.name }}": {
+            "type": "{{ field.openapi_type }}",
+            "description": "{{ field.description | default(field.name | capitalize) }}"
+          }{% if not loop.last %},{% endif %}
+          {% endfor %}
+        }
+      },
+      "{{ pascal_name }}Collection": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/{{ pascal_name }}"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PaginationMeta"
+          }
+        }
+      }{% if not loop.last %},{% endif %}
+      {% endfor %},
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PaginationMeta": {
+        "type": "object",
+        "properties": {
+          "current_page": {
+            "type": "integer"
+          },
+          "per_page": {
+            "type": "integer"
+          },
+          "total_count": {
+            "type": "integer"
+          },
+          "total_pages": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  }
+}

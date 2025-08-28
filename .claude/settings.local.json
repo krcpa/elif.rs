@@ -83,7 +83,15 @@
       "Bash(DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test ./target/debug/elifrs db status:*)",
       "Bash(DATABASE_URL=postgresql://elif_user:elif_pass@localhost:5433/elif_test ./target/debug/elifrs db analyze:*)",
       "Bash(docker exec:*)",
-      "Bash(DATABASE_URL='postgresql://elif_user:p@ssw0rd@localhost:5433/elif_test' ./target/debug/elifrs db status:*)"
+      "Bash(DATABASE_URL='postgresql://elif_user:p@ssw0rd@localhost:5433/elif_test' ./target/debug/elifrs db status:*)",
+      "Bash(timeout 3s cargo run -- test --watch --unit)",
+      "Bash(../../target/debug/elifrs make service Email --async-methods)",
+      "Bash(../../target/debug/elifrs make factory User --count 20 --traits \"Faker,Randomized\")",
+      "Bash(../../target/debug/elifrs make module User --services UserService --controllers UserController)",
+      "Bash(../../target/debug/elifrs make module UserModule --services UserService --controllers UserController)",
+      "Bash(../../target/debug/elifrs make service Payment --module user --async-methods --dependencies \"EmailService,DatabaseService\")",
+      "Bash(../../target/debug/elifrs make service:*)",
+      "Bash(./test-analyzer)"
     ],
     "deny": []
   }

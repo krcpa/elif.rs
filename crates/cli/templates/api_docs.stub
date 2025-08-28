@@ -1,0 +1,116 @@
+# API Documentation - {{ title }}
+
+Version: {{ version }}
+Generated: {{ timestamp }}
+
+## Overview
+
+{{ description }}
+
+## Base URL
+
+```
+{{ base_url }}
+```
+
+## Authentication
+
+{% if with_auth %}
+This API uses Bearer token authentication. Include the token in the Authorization header:
+
+```
+Authorization: Bearer <your-token>
+```
+{% else %}
+This API does not require authentication.
+{% endif %}
+
+## Resources
+
+{% for resource in resources %}
+### {{ resource.name | pascal_case }}
+
+**Endpoints:**
+- `GET /{{ resource.name | snake_case | pluralize }}` - List all {{ resource.name | pluralize }}
+- `POST /{{ resource.name | snake_case | pluralize }}` - Create new {{ resource.name }}
+- `GET /{{ resource.name | snake_case | pluralize }}/{id}` - Get {{ resource.name }} by ID
+- `PUT /{{ resource.name | snake_case | pluralize }}/{id}` - Update {{ resource.name }}
+- `DELETE /{{ resource.name | snake_case | pluralize }}/{id}` - Delete {{ resource.name }}
+
+**Fields:**
+{% for field in resource.fields %}
+- `{{ field.name }}` ({{ field.type }}) - {{ field.description | default("No description") }}
+{% endfor %}
+
+**Example Request:**
+```json
+{
+  {% for field in resource.fields %}
+  "{{ field.name }}": {{ field.example_value | default('"example"') }}{% if not loop.last %},{% endif %}
+  {% endfor %}
+}
+```
+
+**Example Response:**
+```json
+{
+  "id": 1,
+  {% for field in resource.fields %}
+  "{{ field.name }}": {{ field.example_value | default('"example"') }}{% if not loop.last %},{% endif %}
+  {% endfor %}
+}
+```
+
+---
+
+{% endfor %}
+
+## Error Responses
+
+All API endpoints follow consistent error response format:
+
+```json
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "The request data is invalid",
+    "hint": "Check the 'fields' object for specific validation errors"
+  }
+}
+```
+
+Common HTTP status codes:
+- `200` - Success
+- `201` - Created
+- `204` - No Content (successful deletion)
+- `400` - Bad Request
+- `401` - Unauthorized
+- `403` - Forbidden
+- `404` - Not Found
+- `422` - Unprocessable Entity (validation errors)
+- `500` - Internal Server Error
+
+## Pagination
+
+List endpoints support pagination with the following query parameters:
+
+- `page` - Page number (default: 1)
+- `per_page` - Items per page (default: 20, max: 100)
+
+Example:
+```
+GET /{{ resources[0].name | snake_case | pluralize }}?page=2&per_page=50
+```
+
+Response includes pagination metadata:
+```json
+{
+  "data": [...],
+  "meta": {
+    "current_page": 2,
+    "per_page": 50,
+    "total_count": 150,
+    "total_pages": 3
+  }
+}
+```

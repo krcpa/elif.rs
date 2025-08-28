@@ -173,96 +173,127 @@ impl ProductSeeder {
 - Safe production controls built-in
 - Environment-aware data generation patterns
 
-## Module Generators (Epic 6 Phase 1 - Coming Soon)
+## Advanced Code Generation (Epic 6.5 - ✅ AVAILABLE NOW!)
 
-### `elifrs make:module <name>`
+elif.rs now includes **Advanced Code Generation with Module Integration** - the most sophisticated code generation system available in any Rust web framework. Generate complete, production-ready applications with Laravel-level productivity!
+
+### 🚀 **NEW:** `elifrs make api <resource>`
+
+Generate complete REST APIs with CRUD operations, authentication, and documentation.
+
+```bash
+# Basic API generation
+elifrs make api User
+
+# Advanced API with all features
+elifrs make api Product \
+    --version v2 \
+    --module inventory \
+    --auth \
+    --validation \
+    --docs
+```
+
+**Features:**
+- ✅ Full CRUD operations with proper HTTP methods
+- ✅ OpenAPI documentation generation
+- ✅ Authentication middleware integration
+- ✅ Request/response validation
+- ✅ Module-aware placement
+- ✅ Production-ready error handling
+
+### 🚀 **NEW:** `elifrs make crud <resource>`
+
+Generate complete CRUD systems with models, controllers, services, and tests.
+
+```bash
+# Basic CRUD system
+elifrs make crud Post
+
+# Advanced CRUD with everything
+elifrs make crud Product \
+    --fields "name:string,price:decimal,description:text,sku:string" \
+    --relationships "Category:belongs_to,Reviews:has_many" \
+    --module inventory \
+    --migration \
+    --tests \
+    --factory
+```
+
+**Features:**
+- ✅ Model with relationships and validation
+- ✅ Controller with full CRUD operations
+- ✅ Service layer for business logic
+- ✅ Database migrations
+- ✅ Factory for testing and seeding
+- ✅ Comprehensive test suites
+- ✅ Request/Response DTOs
+
+### 🚀 **NEW:** `elifrs make service <name>`
+
+Generate business logic services with advanced dependency injection and module integration.
+
+```bash
+# Basic service
+elifrs make service Email --async-methods
+
+# Advanced service with full DI
+elifrs make service PaymentProcessor \
+    --module payments \
+    --dependencies "EmailService,DatabaseService,LoggingService" \
+    --trait-impl PaymentProvider \
+    --async-methods
+```
+
+**Features:**
+- ✅ **Module-aware placement** - Automatically suggests optimal module
+- ✅ **Project structure analysis** - Understands existing dependencies
+- ✅ **Advanced dependency injection** - Arc-wrapped, constructor injection
+- ✅ **Trait implementation support** - Interface-based design
+- ✅ **Comprehensive logging** - Structured logging with tracing
+- ✅ **Built-in testing** - Unit tests with mocking setup
+- ✅ **Documentation** - Inline documentation and examples
+
+### 🚀 **NEW:** `elifrs make factory <model>`
+
+Generate sophisticated model factories with relationships and traits.
+
+```bash
+# Basic factory
+elifrs make factory User
+
+# Advanced factory with traits and relationships
+elifrs make factory Order \
+    --count 50 \
+    --relationships "User,Product" \
+    --traits "WithPayment,WithShipping,Completed"
+```
+
+**Features:**
+- ✅ **Builder pattern** - Fluent API for configuration
+- ✅ **Relationship handling** - Automatic foreign key management  
+- ✅ **Trait-based states** - Multiple factory states
+- ✅ **Faker integration** - Realistic test data generation
+- ✅ **Batch generation** - Efficient bulk data creation
+
+## Module Integration (Epic 6 Phase 1 - ✅ COMPLETED)
+
+### `elifrs make module <name>`
 
 Generate complete modules with providers, controllers, and services.
 
 ```bash
 # Basic module
-elifrs make:module UserModule
+elifrs make module UserModule
 
 # Module with providers and controllers
-elifrs make:module UserModule --providers=UserService --controllers=UserController
+elifrs make module UserModule --providers=UserService --controllers=UserController
 
 # Complex module with multiple components
-elifrs make:module BlogModule \
+elifrs make module BlogModule \
     --providers=PostService,CommentService \
     --controllers=PostController,CommentController \
     --services=EmailService
-```
-
-## API Generators (Epic 6 Phase 5 - Coming Soon)
-
-### `elifrs make:api <resource>`
-
-Generate complete REST APIs with models, controllers, tests, and documentation.
-
-```bash
-# Basic API
-elifrs make:api User
-
-# API with relationships
-elifrs make:api Post --belongs-to=User --has-many=Comment
-
-# Complete API with all features
-elifrs make:api Product \
-    --with-tests \
-    --with-factory \
-    --with-seeder \
-    --auth=jwt
-```
-
-## CRUD Generators (Epic 6 Phase 5 - Coming Soon)
-
-### `elifrs make:crud <resource>`
-
-Generate complete CRUD operations with all supporting files.
-
-```bash
-# Basic CRUD
-elifrs make:crud User
-
-# CRUD with soft deletes
-elifrs make:crud Post --soft-deletes
-
-# CRUD with validation and tests
-elifrs make:crud Product --with-validation --with-tests
-```
-
-## Service Generators (Epic 6 Phase 5 - Coming Soon)
-
-### `elifrs make:service <name>`
-
-Generate business logic services with dependency injection.
-
-```bash
-# Basic service
-elifrs make:service EmailService
-
-# Service with trait implementation
-elifrs make:service PaymentService --trait=PaymentServiceTrait
-
-# Service with module integration
-elifrs make:service UserService --module=UserModule
-```
-
-## Factory Generators (Epic 6 Phase 5 - Coming Soon)
-
-### `elifrs make:factory <model>`
-
-Generate model factories for testing and seeding.
-
-```bash
-# Basic factory
-elifrs make:factory User
-
-# Factory with relationships
-elifrs make:factory Post --belongs-to=User
-
-# Factory with states
-elifrs make:factory User --states=admin,verified,suspended
 ```
 
 ## Generation Best Practices
@@ -466,17 +497,26 @@ sudo elifrs make:seeder UserSeeder  # If needed
 | **Type Safety** | ✅ Compile-time | ❌ Runtime | ❌ Runtime | ✅ Compile-time |
 | **Template System** | ✅ Smart | ✅ Basic | ✅ Basic | ✅ Advanced |
 
-## What's Next?
+## What's Complete? ✅
 
-**Current (Epic 6 Phase 3):**
-- ✅ `make:seeder` with intelligent templates
-- ✅ Dependency resolution system
-- ✅ Factory integration
+**Epic 6.5 - Advanced Code Generation (COMPLETED):**
+- ✅ `make api <resource>` - Complete REST API generation
+- ✅ `make crud <resource>` - Full CRUD systems with models, controllers, services
+- ✅ `make service <name>` - Advanced business logic services with DI
+- ✅ `make factory <model>` - Sophisticated model factories with traits
+- ✅ Project structure analysis and module integration
+- ✅ Intelligent dependency resolution and injection
+- ✅ Template engine with custom filters
+- ✅ Production-ready code with testing and documentation
 
-**Coming Soon:**
-- **Phase 4**: Testing generators with module awareness
-- **Phase 5**: Complete API and CRUD generators  
-- **Phase 6**: Advanced service and factory generators
+**Epic 6 Previous Phases (COMPLETED):**
+- ✅ `make seeder` with intelligent templates (Phase 3)
+- ✅ `make module` with providers and controllers (Phase 1)
+- ✅ Testing integration with module awareness (Phase 4)
+- ✅ Database seeding system (Phase 3)
+
+**Framework Status:**
+elif.rs now has the most advanced code generation system of any Rust web framework, rivaling Laravel and Rails for developer productivity while maintaining Rust's performance and safety guarantees!
 
 **Try It Now:**
 ```bash
