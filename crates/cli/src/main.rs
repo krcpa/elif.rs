@@ -1,5 +1,5 @@
 mod commands;
-// mod generators;  // Disabled to fix compilation - contains unused code
+mod generators;  // Re-enabled for make commands
 // mod interactive; // Disabled to fix compilation - contains unused code
 
 use clap::{Parser, Subcommand};
@@ -655,6 +655,102 @@ enum MakeCommands {
         #[arg(long)]
         factory: bool,
     },
+
+    /// Generate a complete REST API with CRUD operations
+    Api {
+        /// Resource name (e.g., User, Blog, Product)
+        resource: String,
+
+        /// API version (e.g., v1, v2)
+        #[arg(long, default_value = "v1")]
+        version: String,
+
+        /// Target module name
+        #[arg(long)]
+        module: Option<String>,
+
+        /// Include authentication middleware
+        #[arg(long)]
+        auth: bool,
+
+        /// Include validation
+        #[arg(long)]
+        validation: bool,
+
+        /// Generate OpenAPI documentation
+        #[arg(long)]
+        docs: bool,
+    },
+
+    /// Generate a complete CRUD system with model, controller, and service
+    Crud {
+        /// Resource name (e.g., User, Blog, Product)
+        resource: String,
+
+        /// Resource fields (e.g., "name:string,email:string,age:int")
+        #[arg(long)]
+        fields: Option<String>,
+
+        /// Relationships (e.g., "User:belongs_to,Posts:has_many")
+        #[arg(long)]
+        relationships: Option<String>,
+
+        /// Target module name
+        #[arg(long)]
+        module: Option<String>,
+
+        /// Include migration
+        #[arg(long)]
+        migration: bool,
+
+        /// Include tests
+        #[arg(long)]
+        tests: bool,
+
+        /// Include factory
+        #[arg(long)]
+        factory: bool,
+    },
+
+    /// Generate a business logic service with dependency injection
+    Service {
+        /// Service name (e.g., EmailService, PaymentService)
+        name: String,
+
+        /// Target module name
+        #[arg(long)]
+        module: Option<String>,
+
+        /// Implement specific trait
+        #[arg(long)]
+        trait_impl: Option<String>,
+
+        /// Service dependencies (comma-separated)
+        #[arg(long)]
+        dependencies: Option<String>,
+
+        /// Include async methods
+        #[arg(long)]
+        async_methods: bool,
+    },
+
+    /// Generate testing and seeding factories with relationships
+    Factory {
+        /// Model name (e.g., User, Blog, Product)
+        model: String,
+
+        /// Number of default instances to create
+        #[arg(long, default_value = "10")]
+        count: u32,
+
+        /// Related factories (comma-separated)
+        #[arg(long)]
+        relationships: Option<String>,
+
+        /// Include traits (e.g., Faker, Randomized)
+        #[arg(long)]
+        traits: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -937,6 +1033,74 @@ async fn main() -> Result<(), ElifError> {
                     &name,
                     table.as_deref(),
                     factory,
+                )
+                .await?;
+            }
+            MakeCommands::Api {
+                resource,
+                version,
+                module,
+                auth,
+                validation,
+                docs,
+            } => {
+                commands::make::api(
+                    &resource,
+                    &version,
+                    module.as_deref(),
+                    auth,
+                    validation,
+                    docs,
+                )
+                .await?;
+            }
+            MakeCommands::Crud {
+                resource,
+                fields,
+                relationships,
+                module,
+                migration,
+                tests,
+                factory,
+            } => {
+                commands::make::crud(
+                    &resource,
+                    fields.as_deref(),
+                    relationships.as_deref(),
+                    module.as_deref(),
+                    migration,
+                    tests,
+                    factory,
+                )
+                .await?;
+            }
+            MakeCommands::Service {
+                name,
+                module,
+                trait_impl,
+                dependencies,
+                async_methods,
+            } => {
+                commands::make::service(
+                    &name,
+                    module.as_deref(),
+                    trait_impl.as_deref(),
+                    dependencies.as_deref(),
+                    async_methods,
+                )
+                .await?;
+            }
+            MakeCommands::Factory {
+                model,
+                count,
+                relationships,
+                traits,
+            } => {
+                commands::make::factory(
+                    &model,
+                    count,
+                    relationships.as_deref(),
+                    traits.as_deref(),
                 )
                 .await?;
             }

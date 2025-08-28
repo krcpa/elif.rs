@@ -1,6 +1,7 @@
 pub mod resource_generator;
 pub mod auth_generator;
 pub mod api_generator;
+pub mod project_analyzer;
 
 use tera::{Tera, Context, Value, to_value, Result as TeraResult};
 use std::collections::HashMap;

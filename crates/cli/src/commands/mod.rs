@@ -25,7 +25,7 @@ pub mod module;
 // pub mod route;
 // pub mod model;
 // pub mod resource;
-// pub mod make;
+pub mod make;
 pub mod serve;
 // pub mod queue;
 // pub mod interactive_setup;
