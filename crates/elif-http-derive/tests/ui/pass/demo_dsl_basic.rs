@@ -3,9 +3,13 @@
 use elif_http_derive::demo_module;
 
 // Mock services
+#[derive(Default)]
 pub struct UserService;
+#[derive(Default)]
 pub struct EmailService;
+#[derive(Default)]
 pub struct UserController;
+#[derive(Default)]
 pub struct PostController;
 
 fn main() {

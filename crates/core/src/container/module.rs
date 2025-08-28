@@ -251,10 +251,14 @@ impl ModuleRegistry {
         let mut order = Vec::new();
 
         // Topological sort using DFS
-        for module_id in self.modules.keys() {
-            if !visited.contains(module_id) {
+        // Sort module IDs to ensure consistent ordering
+        let mut module_ids: Vec<_> = self.modules.keys().cloned().collect();
+        module_ids.sort_by(|a, b| a.name().cmp(b.name()));
+        
+        for module_id in module_ids {
+            if !visited.contains(&module_id) {
                 self.visit_module_for_ordering(
-                    module_id,
+                    &module_id,
                     &mut visited,
                     &mut temp_visited,
                     &mut order,
@@ -262,7 +266,7 @@ impl ModuleRegistry {
             }
         }
 
-        order.reverse(); // Reverse to get correct dependency order
+        // No reverse needed - DFS post-order already gives correct dependency order
         self.load_order = order.clone();
 
         // Update load order in module info

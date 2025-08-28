@@ -100,16 +100,17 @@ impl ServiceConventions {
 
     /// Get lifetime for a service type name
     pub fn get_lifetime_for_type(&self, type_name: &str) -> ServiceScope {
-        for (pattern, lifetime) in &self.naming_conventions {
-            if self.matches_pattern(type_name, pattern) {
-                return *lifetime;
-            }
-        }
-
-        // Check custom rules
+        // Check custom rules first (higher priority)
         for rule in &self.custom_rules {
             if let Some(lifetime) = rule.get_lifetime(type_name) {
                 return lifetime;
+            }
+        }
+
+        // Check naming conventions
+        for (pattern, lifetime) in &self.naming_conventions {
+            if self.matches_pattern(type_name, pattern) {
+                return *lifetime;
             }
         }
 

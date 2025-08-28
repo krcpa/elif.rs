@@ -92,6 +92,7 @@ pub struct DependencyValidator {
     dependency_graph: HashMap<ServiceId, Vec<ServiceId>>,
     interface_bindings: HashMap<String, Vec<ServiceId>>,
     service_ids: Vec<ServiceId>,
+    service_lifetimes: HashMap<ServiceId, ServiceScope>,
 }
 
 impl DependencyValidator {
@@ -99,12 +100,17 @@ impl DependencyValidator {
     pub fn new(descriptors: &[ServiceDescriptor]) -> Self {
         let mut dependency_graph = HashMap::new();
         let mut interface_bindings: HashMap<String, Vec<ServiceId>> = HashMap::new();
+        let mut service_lifetimes = HashMap::new();
 
-        // Build dependency graph and interface bindings
+        // Build dependency graph, interface bindings, and store lifetimes
         for descriptor in descriptors {
             dependency_graph.insert(
                 descriptor.service_id.clone(),
                 descriptor.dependencies.clone(),
+            );
+            service_lifetimes.insert(
+                descriptor.service_id.clone(),
+                descriptor.lifetime,
             );
 
             // Track interface bindings (simplified - would need more metadata in real implementation)
@@ -122,6 +128,7 @@ impl DependencyValidator {
             dependency_graph,
             interface_bindings,
             service_ids,
+            service_lifetimes,
         }
     }
 
@@ -228,15 +235,29 @@ impl DependencyValidator {
 
     /// Validate lifetime compatibility
     fn validate_lifetime_compatibility(&self) -> Vec<ValidationError> {
-        // For now, skip lifetime validation as we don't store lifetime info
-        // In a full implementation, we'd need to pass lifetime information
-        // or store it separately in the validator
-
-        Vec::new()
+        let mut errors = Vec::new();
+        
+        for (service_id, dependencies) in &self.dependency_graph {
+            if let Some(&service_lifetime) = self.service_lifetimes.get(service_id) {
+                for dependency_id in dependencies {
+                    if let Some(&dependency_lifetime) = self.service_lifetimes.get(dependency_id) {
+                        if !self.is_lifetime_compatible(service_lifetime, dependency_lifetime) {
+                            errors.push(ValidationError::LifetimeIncompatibility {
+                                service: service_id.type_name().to_string(),
+                                service_lifetime,
+                                dependency: dependency_id.type_name().to_string(),
+                                dependency_lifetime,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        errors
     }
 
     /// Check if service lifetime is compatible with dependency lifetime
-    #[allow(dead_code)]
     fn is_lifetime_compatible(&self, service: ServiceScope, dependency: ServiceScope) -> bool {
         match (service, dependency) {
             // Singleton can depend on anything
@@ -299,13 +320,17 @@ impl DependencyValidator {
         let mut temp_visited = HashSet::new();
         let mut result = Vec::new();
 
-        for service_id in self.dependency_graph.keys() {
-            if !visited.contains(service_id) {
-                self.visit_for_topo_sort(service_id, &mut visited, &mut temp_visited, &mut result)?
+        // Sort service IDs to ensure consistent ordering
+        let mut service_ids: Vec<_> = self.dependency_graph.keys().cloned().collect();
+        service_ids.sort_by(|a, b| a.type_name().cmp(b.type_name()));
+        
+        for service_id in service_ids {
+            if !visited.contains(&service_id) {
+                self.visit_for_topo_sort(&service_id, &mut visited, &mut temp_visited, &mut result)?
             }
         }
 
-        result.reverse(); // Reverse for correct dependency order
+        // No reverse needed - DFS post-order already gives correct dependency order
         Ok(result)
     }
 
@@ -562,7 +587,7 @@ mod tests {
             .iter()
             .map(|dep| ServiceId {
                 type_id: TypeId::of::<()>(),
-                type_name: "test_dependency",
+                type_name: "test_service",
                 name: Some(dep.to_string()),
             })
             .collect();

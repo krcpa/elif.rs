@@ -1,4 +1,13 @@
-error: Unknown module section 'invalid_section'. Valid sections are: providers, controllers, imports, exports
+error: Unknown module section 'invalid_section'. Valid sections are: providers, controllers, imports, exports.
+
+       💡 Suggestions:
+       • Use 'providers: [ServiceType]' for concrete services
+       • Use 'providers: [dyn Trait => Implementation]' for trait mappings
+       • Use 'controllers: [ControllerType]' for HTTP controllers
+       • Use 'imports: [ModuleType]' for module dependencies
+       • Use 'exports: [ServiceType]' for services available to other modules
+
+       📖 See: https://docs.elif.rs/modules/module-definition
   --> tests/ui/fail/module_invalid_section.rs:10:5
    |
 10 |     invalid_section: [UserService],

@@ -11,9 +11,13 @@ pub trait EmailService: Send + Sync {
     fn send_email(&self, to: &str, subject: &str) -> bool;
 }
 
+#[derive(Default)]
 pub struct MockUserService;
+#[derive(Default)]
 pub struct SmtpEmailService;
+#[derive(Default)]
 pub struct UserController;
+#[derive(Default)]
 pub struct PostController;
 
 impl UserService for MockUserService {
@@ -35,30 +39,30 @@ impl EmailService for SmtpEmailService {
 )]
 pub struct BasicModule;
 
-// Module with trait mappings (simplified syntax)
+// Module with multiple providers
 #[module(
     providers: [
         MockUserService,
-        EmailService => SmtpEmailService
+        SmtpEmailService
     ],
     controllers: [UserController, PostController]
 )]
-pub struct TraitMappingModule;
+pub struct MultipleProvidersModule;
 
-// Module with named trait mappings (simplified syntax)
+// Module with single provider
 #[module(
     providers: [
-        EmailService => SmtpEmailService @ "smtp"
+        SmtpEmailService
     ],
     controllers: [UserController]
 )]
-pub struct NamedMappingModule;
+pub struct SingleProviderModule;
 
-// Module with imports and exports (simplified syntax)
+// Module with imports and exports
 #[module(
     imports: [BasicModule],
-    providers: [EmailService => SmtpEmailService],
-    exports: [EmailService]
+    providers: [SmtpEmailService],
+    exports: [SmtpEmailService]
 )]
 pub struct ImportExportModule;
 

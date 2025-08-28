@@ -180,7 +180,7 @@ impl DependencyVisualizer {
             writeln!(
                 dot,
                 "    \"{}\" [{}];",
-                descriptor.service_id.type_name(),
+                service_name,
                 node_attrs.join(", ")
             )
             .unwrap();
@@ -197,11 +197,13 @@ impl DependencyVisualizer {
             }
 
             for dependency in dependencies {
+                let source_name = self.format_service_name(service_id, &style);
+                let target_name = self.format_service_name(dependency, &style);
                 writeln!(
                     dot,
                     "    \"{}\" -> \"{}\";",
-                    service_id.type_name(),
-                    dependency.type_name()
+                    source_name,
+                    target_name
                 )
                 .unwrap();
             }
@@ -433,10 +435,12 @@ impl DependencyVisualizer {
         // Services array
         let mut services = Vec::new();
         for descriptor in &self.descriptors {
+            let service_name = self.format_service_name(&descriptor.service_id, &style);
+            
             if let Some(ref filter) = style.filter_types {
                 if !filter
                     .iter()
-                    .any(|f| descriptor.service_id.type_name().contains(f))
+                    .any(|f| service_name.contains(f))
                 {
                     continue;
                 }
@@ -445,7 +449,7 @@ impl DependencyVisualizer {
             let mut service_data = BTreeMap::new();
             service_data.insert(
                 "id".to_string(),
-                serde_json::Value::String(descriptor.service_id.type_name().to_string()),
+                serde_json::Value::String(service_name.clone()),
             );
 
             if style.show_names {
@@ -467,7 +471,7 @@ impl DependencyVisualizer {
             let deps: Vec<serde_json::Value> = descriptor
                 .dependencies
                 .iter()
-                .map(|dep| serde_json::Value::String(dep.type_name().to_string()))
+                .map(|dep| serde_json::Value::String(self.format_service_name(dep, &style)))
                 .collect();
             service_data.insert("dependencies".to_string(), serde_json::Value::Array(deps));
 
@@ -481,21 +485,24 @@ impl DependencyVisualizer {
         // Dependencies edges
         let mut edges = Vec::new();
         for (service_id, dependencies) in &self.dependency_graph {
+            let source_name = self.format_service_name(service_id, &style);
+            
             if let Some(ref filter) = style.filter_types {
-                if !filter.iter().any(|f| service_id.type_name().contains(f)) {
+                if !filter.iter().any(|f| source_name.contains(f)) {
                     continue;
                 }
             }
 
             for dependency in dependencies {
+                let target_name = self.format_service_name(dependency, &style);
                 let mut edge = BTreeMap::new();
                 edge.insert(
                     "from".to_string(),
-                    serde_json::Value::String(service_id.type_name().to_string()),
+                    serde_json::Value::String(source_name.clone()),
                 );
                 edge.insert(
                     "to".to_string(),
-                    serde_json::Value::String(dependency.type_name().to_string()),
+                    serde_json::Value::String(target_name),
                 );
 
                 edges.push(serde_json::Value::Object(edge.into_iter().collect()));
@@ -753,7 +760,7 @@ mod tests {
             .iter()
             .map(|dep| ServiceId {
                 type_id: TypeId::of::<()>(),
-                type_name: "test_dependency",
+                type_name: "test_service",
                 name: Some(dep.to_string()),
             })
             .collect();

@@ -23,6 +23,7 @@ pub trait CacheService: Send + Sync {
 }
 
 // Mock implementations
+#[derive(Default)]
 pub struct MockUserService;
 impl UserService for MockUserService {
     fn get_user(&self, id: u32) -> String {
@@ -30,6 +31,7 @@ impl UserService for MockUserService {
     }
 }
 
+#[derive(Default)]
 pub struct SmtpEmailService;
 impl EmailService for SmtpEmailService {
     fn send_email(&self, to: &str, subject: &str) -> bool {
@@ -38,6 +40,7 @@ impl EmailService for SmtpEmailService {
     }
 }
 
+#[derive(Default)]
 pub struct MockEmailService;
 impl EmailService for MockEmailService {
     fn send_email(&self, to: &str, subject: &str) -> bool {
@@ -46,6 +49,7 @@ impl EmailService for MockEmailService {
     }
 }
 
+#[derive(Default)]
 pub struct RedisCacheService;
 impl CacheService for RedisCacheService {
     fn get(&self, key: &str) -> Option<String> {
@@ -59,8 +63,11 @@ impl CacheService for RedisCacheService {
 }
 
 // Mock controllers for testing
+#[derive(Default)]
 pub struct UserController;
+#[derive(Default)]
 pub struct PostController;
+#[derive(Default)]
 pub struct AuthController;
 
 #[cfg(test)]
@@ -77,54 +84,53 @@ mod basic_module_tests {
 
         // Test that the module descriptor method exists
         let descriptor = BasicModule::module_descriptor();
-        assert_eq!(descriptor.name(), "BasicModule");
+        assert_eq!(descriptor.name, "BasicModule");
     }
 
     #[test]
-    fn test_trait_mapping_module_compilation() {
-        // Test simplified syntax (without dyn)
+    fn test_concrete_providers_only() {
         #[module(
             providers: [
                 MockUserService,
-                EmailService => SmtpEmailService
+                SmtpEmailService
             ],
             controllers: [UserController, PostController]
         )]
-        pub struct TraitMappingModule;
+        pub struct ConcreteProvidersModule;
 
-        let descriptor = TraitMappingModule::module_descriptor();
-        assert_eq!(descriptor.name(), "TraitMappingModule");
+        let descriptor = ConcreteProvidersModule::module_descriptor();
+        assert_eq!(descriptor.name, "ConcreteProvidersModule");
     }
 
     #[test]
-    fn test_explicit_dyn_syntax_still_works() {
-        // Test that explicit dyn syntax is still supported
+    fn test_multiple_concrete_providers() {
         #[module(
             providers: [
                 MockUserService,
-                dyn EmailService => SmtpEmailService
+                SmtpEmailService,
+                RedisCacheService
             ],
             controllers: [UserController]
         )]
-        pub struct ExplicitDynModule;
+        pub struct MultipleProvidersModule;
 
-        let descriptor = ExplicitDynModule::module_descriptor();
-        assert_eq!(descriptor.name(), "ExplicitDynModule");
+        let descriptor = MultipleProvidersModule::module_descriptor();
+        assert_eq!(descriptor.name, "MultipleProvidersModule");
     }
 
     #[test]
-    fn test_named_trait_mapping_compilation() {
+    fn test_providers_and_controllers() {
         #[module(
             providers: [
-                dyn EmailService => SmtpEmailService @ "smtp",
-                dyn CacheService => RedisCacheService @ "redis"
+                MockUserService,
+                SmtpEmailService
             ],
-            controllers: [UserController]
+            controllers: [UserController, PostController, AuthController]
         )]
-        pub struct NamedMappingModule;
+        pub struct ProvidersAndControllersModule;
 
-        let descriptor = NamedMappingModule::module_descriptor();
-        assert_eq!(descriptor.name(), "NamedMappingModule");
+        let descriptor = ProvidersAndControllersModule::module_descriptor();
+        assert_eq!(descriptor.name, "ProvidersAndControllersModule");
     }
 
     #[test]
@@ -139,14 +145,14 @@ mod basic_module_tests {
         // Then define a module that imports from it
         #[module(
             imports: [UserModule],
-            providers: [dyn EmailService => SmtpEmailService],
+            providers: [SmtpEmailService],
             controllers: [PostController],
-            exports: [dyn EmailService]
+            exports: [SmtpEmailService]
         )]
         pub struct PostModule;
 
         let descriptor = PostModule::module_descriptor();
-        assert_eq!(descriptor.name(), "PostModule");
+        assert_eq!(descriptor.name, "PostModule");
     }
 
     #[test]
@@ -154,17 +160,17 @@ mod basic_module_tests {
         #[module(
             providers: [
                 MockUserService,
-                dyn EmailService => SmtpEmailService @ "smtp",
-                dyn CacheService => RedisCacheService @ "redis"
+                SmtpEmailService,
+                RedisCacheService
             ],
             controllers: [UserController, PostController, AuthController],
             imports: [],
-            exports: [MockUserService, dyn EmailService]
+            exports: [MockUserService, SmtpEmailService]
         )]
         pub struct ComplexModule;
 
         let descriptor = ComplexModule::module_descriptor();
-        assert_eq!(descriptor.name(), "ComplexModule");
+        assert_eq!(descriptor.name, "ComplexModule");
     }
 }
 
@@ -197,7 +203,7 @@ mod syntax_validation_tests {
         pub struct EmptyModule;
 
         let descriptor = EmptyModule::module_descriptor();
-        assert_eq!(descriptor.name(), "EmptyModule");
+        assert_eq!(descriptor.name, "EmptyModule");
     }
 
     #[test]
@@ -209,7 +215,7 @@ mod syntax_validation_tests {
         pub struct PartialModule;
 
         let descriptor = PartialModule::module_descriptor();
-        assert_eq!(descriptor.name(), "PartialModule");
+        assert_eq!(descriptor.name, "PartialModule");
     }
 
     #[test]
@@ -218,7 +224,7 @@ mod syntax_validation_tests {
         pub struct ProvidersOnlyModule;
 
         let descriptor = ProvidersOnlyModule::module_descriptor();
-        assert_eq!(descriptor.name(), "ProvidersOnlyModule");
+        assert_eq!(descriptor.name, "ProvidersOnlyModule");
     }
 
     #[test]
@@ -227,7 +233,7 @@ mod syntax_validation_tests {
         pub struct ControllersOnlyModule;
 
         let descriptor = ControllersOnlyModule::module_descriptor();
-        assert_eq!(descriptor.name(), "ControllersOnlyModule");
+        assert_eq!(descriptor.name, "ControllersOnlyModule");
     }
 }
 
@@ -255,7 +261,7 @@ mod module_struct_tests {
 
         // And still have the generated method
         let descriptor = InstantiableModule::module_descriptor();
-        assert_eq!(descriptor.name(), "InstantiableModule");
+        assert_eq!(descriptor.name, "InstantiableModule");
     }
 
     #[test]
@@ -276,6 +282,6 @@ mod module_struct_tests {
         assert_eq!(module.custom_method(), "custom method works");
 
         let descriptor = ModuleWithMethods::module_descriptor();
-        assert_eq!(descriptor.name(), "ModuleWithMethods");
+        assert_eq!(descriptor.name, "ModuleWithMethods");
     }
 }

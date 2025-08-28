@@ -7,12 +7,18 @@ pub trait DatabaseService: Send + Sync {}
 pub trait CacheService: Send + Sync {}
 pub trait LoggingService: Send + Sync {}
 
+#[derive(Default)]
 pub struct PostgresService;
+#[derive(Default)]
 pub struct RedisService;
+#[derive(Default)]
 pub struct FileLogger;
 
+#[derive(Default)]
 pub struct UserController;
+#[derive(Default)]
 pub struct PostController;
+#[derive(Default)]
 pub struct AuthController;
 
 impl DatabaseService for PostgresService {}
@@ -53,12 +59,12 @@ pub struct ExportsOnlyModule;
 #[module(
     providers: [
         PostgresService,
-        dyn CacheService => RedisService,
-        dyn LoggingService => FileLogger @ "file_logger"
+        RedisService,
+        FileLogger
     ],
     controllers: [UserController, PostController, AuthController],
     imports: [ProvidersOnlyModule, ControllersOnlyModule],
-    exports: [PostgresService, dyn CacheService, dyn LoggingService]
+    exports: [PostgresService, RedisService, FileLogger]
 )]
 pub struct ComplexModule;
 

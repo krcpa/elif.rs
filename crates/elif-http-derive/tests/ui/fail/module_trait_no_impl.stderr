@@ -1,4 +1,20 @@
-error: Trait providers must specify implementation type: dyn Trait => Implementation
+error: Trait providers must specify implementation type: dyn Trait => Implementation.
+
+       💡 Suggestions:
+       • Use 'dyn EmailService => SmtpEmailService' for trait mapping
+       • Use 'dyn EmailService => SmtpEmailService @ "smtp"' for named mapping
+       • Use 'EmailService => SmtpEmailService' (dyn is optional in simplified syntax)
+
+       📖 Examples:
+       #[module(
+       providers: [
+       UserService,  // Concrete service
+       dyn EmailService => SmtpEmailService,  // Trait mapping
+       dyn EmailService => MockEmailService @ "test"  // Named mapping
+       ]
+       )]
+
+       📖 See: https://docs.elif.rs/modules/dependency-injection
   --> tests/ui/fail/module_trait_no_impl.rs:10:21
    |
 10 |     providers: [dyn UserService],

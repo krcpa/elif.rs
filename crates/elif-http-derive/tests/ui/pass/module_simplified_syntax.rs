@@ -1,4 +1,4 @@
-//! Test simplified syntax without dyn keyword
+//! Test simplified module provider syntax
 
 use elif_http_derive::{module, app};
 
@@ -15,44 +15,50 @@ pub trait CacheService: Send + Sync {
     }
 }
 
+#[derive(Default)]
 pub struct MockUserService;
+#[derive(Default)]
 pub struct SmtpEmailService;
+#[derive(Default)]
 pub struct RedisCacheService;
+#[derive(Default)]
 pub struct MockEmailService;
+#[derive(Default)]
 pub struct UserController;
+#[derive(Default)]
 pub struct PostController;
 
 impl EmailService for SmtpEmailService {}
 impl CacheService for RedisCacheService {}
 impl EmailService for MockEmailService {}
 
-// Test simplified trait mapping syntax without dyn
+// Test simplified provider syntax
 #[module(
     providers: [
         MockUserService,
-        EmailService => SmtpEmailService,                    // No dyn needed!
-        CacheService => RedisCacheService @ "redis"          // Named without dyn!
+        SmtpEmailService,                    // Simple provider
+        RedisCacheService          // Another simple provider
     ],
     controllers: [UserController, PostController]
 )]
 pub struct SimplifiedModule;
 
-// Test mixed syntax (both dyn and without are supported)
+// Test mixed provider types
 #[module(
     providers: [
         MockUserService,
-        EmailService => SmtpEmailService,                    // Simple form
-        dyn CacheService => RedisCacheService               // Explicit dyn still works
+        SmtpEmailService,                    // Simple form
+        RedisCacheService               // Another simple form
     ]
 )]
 pub struct MixedSyntaxModule;
 
-// Test application composition with simplified syntax
+// Test application composition
 fn test_app_composition() {
     let _app = app! {
         modules: [SimplifiedModule, MixedSyntaxModule],
         overrides: [
-            EmailService => MockEmailService @ "test"        // Simple override syntax
+            MockEmailService        // Override service
         ]
     };
 }
