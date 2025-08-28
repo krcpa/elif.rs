@@ -8,7 +8,7 @@ use std::{
 use tokio::process::{Child, Command};
 use tokio::time::sleep;
 
-/// Development server with hot-reload functionality
+/// Enhanced development server with hot-reload functionality
 pub async fn run(
     watch: Vec<PathBuf>,
     profile: bool,
@@ -16,36 +16,41 @@ pub async fn run(
     host: &str,
     env: &str,
 ) -> Result<(), ElifError> {
-    println!("🚀 Starting elif.rs development server...");
+    println!("🚀 Starting elif.rs unified development mode...");
     println!("   Host: {}", host);
     println!("   Port: {}", port);
     println!("   Environment: {}", env);
-    println!(
-        "   Profiling: {}",
-        if profile { "enabled" } else { "disabled" }
-    );
+    println!("   Profiling: {}", if profile { "enabled" } else { "disabled" });
+    println!("   Features: Hot reload + Module validation + Performance monitoring");
 
-    // Run pre-flight checks
+    // Run comprehensive pre-flight checks
     if let Err(e) = run_preflight_checks().await {
         eprintln!("❌ Pre-flight checks failed: {}", e);
         return Err(e);
     }
 
+    // Run module system validation
+    if let Err(e) = validate_module_system().await {
+        eprintln!("⚠️  Module system validation warnings: {}", e);
+        // Continue anyway - this is just a warning
+    }
+
     println!("✅ Pre-flight checks passed");
 
-    // Determine watch paths
+    // Determine watch paths with intelligent defaults
     let watch_paths = if watch.is_empty() {
-        get_default_watch_paths()
+        get_comprehensive_watch_paths()
     } else {
         watch
     };
 
     println!("👀 Watching paths: {:?}", watch_paths);
+    println!("🔍 Excluding: target/, .git/, *.tmp, *~, *.swp");
 
-    // Start file watcher
+    // Start enhanced file watcher with built-in exclusions
     let file_watcher = FileWatcher::new(watch_paths)?;
 
-    // Start development server
+    // Start comprehensive development server
     let dev_server = DevelopmentServer::new(host.to_string(), port, env.to_string(), profile);
 
     dev_server.start_with_reload(file_watcher).await
@@ -100,6 +105,59 @@ fn get_default_watch_paths() -> Vec<PathBuf> {
     paths.push(PathBuf::from("Cargo.toml"));
 
     paths
+}
+
+/// Get comprehensive paths to watch including module-related files
+fn get_comprehensive_watch_paths() -> Vec<PathBuf> {
+    let mut paths = get_default_watch_paths();
+
+    // Add module-specific paths if they exist
+    for module_path in ["modules", "services", "controllers", "middleware"] {
+        let path = PathBuf::from(module_path);
+        if path.exists() {
+            paths.push(path);
+        }
+    }
+
+    // Add configuration files
+    for config_file in ["elifrs.toml", ".env", ".env.local", "config.toml"] {
+        let path = PathBuf::from(config_file);
+        if path.exists() {
+            paths.push(path);
+        }
+    }
+
+    paths
+}
+
+/// Validate module system for development mode
+async fn validate_module_system() -> Result<(), ElifError> {
+    // Check if modules directory exists
+    if !Path::new("modules").exists() && !Path::new("src/modules").exists() {
+        return Err(ElifError::configuration("No modules directory found. Consider running 'elifrs make module' to create your first module."));
+    }
+
+    // Run basic module validation
+    println!("🔍 Validating module system...");
+    
+    // Check for common module patterns
+    let has_mod_rs = Path::new("src/modules/mod.rs").exists();
+    let has_lib_rs = Path::new("src/lib.rs").exists();
+    
+    if !has_mod_rs && !has_lib_rs {
+        println!("💡 Tip: Consider organizing your code with modules using 'elifrs module' commands");
+    } else {
+        println!("✅ Module system structure detected");
+    }
+    
+    // Check for Phase 1 integration
+    if has_mod_rs {
+        println!("🔗 Phase 1 module system integration: Available");
+        println!("   Use 'elifrs module list' to see your modules");
+        println!("   Use 'elifrs module validate' to check module dependencies");
+    }
+    
+    Ok(())
 }
 
 /// File watching system

@@ -1,7 +1,9 @@
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use clap::Args;
 use elif_core::ElifError;
+use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use crossbeam_channel::{select, tick, unbounded, Receiver};
 
 /// Serve command arguments
 #[derive(Args, Debug, Clone)]
@@ -32,35 +34,205 @@ pub struct ServeArgs {
 }
 
 
-/// Internal implementation for serve functionality
-struct ServeCommand {
-    args: ServeArgs,
+/// Enhanced file watcher using notify crate
+struct FileWatcher {
+    receiver: Receiver<Event>,
+    _watcher: RecommendedWatcher,
+    exclude_patterns: Vec<String>,
 }
 
-impl ServeCommand {
-    fn new(args: ServeArgs) -> Self {
-        Self { args }
+impl FileWatcher {
+    fn new(watch_paths: Vec<PathBuf>, exclude_patterns: Vec<String>) -> Result<Self, ElifError> {
+        let (tx, rx) = unbounded();
+
+        let mut watcher = RecommendedWatcher::new(
+            move |res| {
+                if let Ok(event) = res {
+                    let _ = tx.send(event);
+                }
+            },
+            Config::default(),
+        )
+        .map_err(|e| ElifError::system_error(format!("Failed to create file watcher: {}", e)))?;
+
+        // Watch all specified paths
+        for path in watch_paths {
+            if path.exists() {
+                watcher
+                    .watch(&path, RecursiveMode::Recursive)
+                    .map_err(|e| {
+                        ElifError::system_error(format!("Failed to watch path {:?}: {}", path, e))
+                    })?;
+                println!("🔍 Watching: {:?}", path);
+            } else {
+                println!("⚠️  Path not found, skipping: {:?}", path);
+            }
+        }
+
+        Ok(FileWatcher {
+            receiver: rx,
+            _watcher: watcher,
+            exclude_patterns,
+        })
     }
-    
-    async fn handle(&self) -> Result<(), ElifError> {
-        println!("🚀 Starting elif development server...");
-        println!("📡 Host: {}", self.args.host);
-        println!("🔌 Port: {}", self.args.port);
-        println!("🌍 Environment: {}", self.args.env);
-        
-        if self.args.hot_reload {
-            println!("🔥 Hot reload: enabled");
-            self.start_hot_reload_server().await
-        } else {
-            println!("🔥 Hot reload: disabled");
-            self.start_server().await
+
+    /// Check if there are file changes, with debouncing
+    fn check_for_changes(&self, debounce_duration: Duration) -> bool {
+        let mut last_event_time = None;
+        let mut relevant_changes = false;
+
+        // Process all pending events
+        while let Ok(event) = self.receiver.try_recv() {
+            if self.is_relevant_change(&event) {
+                relevant_changes = true;
+                last_event_time = Some(Instant::now());
+            }
+        }
+
+        // If we have changes, wait for the debounce period
+        if let Some(last_time) = last_event_time {
+            if last_time.elapsed() < debounce_duration {
+                return false; // Still in debounce period
+            }
+        }
+
+        relevant_changes
+    }
+
+    fn is_relevant_change(&self, event: &Event) -> bool {
+        match event.kind {
+            EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
+                // Filter out temporary files and build artifacts
+                event.paths.iter().any(|path| {
+                    let path_str = path.to_string_lossy();
+                    
+                    // Skip build artifacts and temp files
+                    if path_str.contains(".tmp")
+                        || path_str.contains("target/")
+                        || path_str.contains(".git/")
+                        || path_str.ends_with("~")
+                        || path_str.ends_with(".swp")
+                        || path_str.contains("__pycache__") 
+                    {
+                        return false;
+                    }
+                    
+                    // Skip excluded patterns
+                    if self.exclude_patterns.iter().any(|pattern| {
+                        if pattern.contains('*') {
+                            // Simple glob pattern matching
+                            path_str.contains(&pattern.replace('*', ""))
+                        } else {
+                            path_str.contains(pattern)
+                        }
+                    }) {
+                        return false;
+                    }
+                    
+                    true
+                })
+            }
+            _ => false,
         }
     }
-    
-    async fn start_server(&self) -> Result<(), ElifError> {
+}
+
+/// Development server manager
+struct DevelopmentServer {
+    host: String,
+    port: u16,
+    env: String,
+    current_process: Option<tokio::process::Child>,
+}
+
+impl DevelopmentServer {
+    fn new(host: String, port: u16, env: String) -> Self {
+        Self {
+            host,
+            port,
+            env,
+            current_process: None,
+        }
+    }
+
+    async fn start_with_reload(&mut self, file_watcher: FileWatcher) -> Result<(), ElifError> {
+        let debounce_duration = Duration::from_millis(500);
+        let ticker = tick(Duration::from_millis(100));
+
+        // Start the server initially
+        self.restart_server().await?;
+
+        println!("\n🎯 Development server started successfully!");
+        println!("📡 Server running at http://{}:{}", self.host, self.port);
+        println!("👀 Watching for file changes... (Ctrl+C to stop)\n");
+
+        // Main event loop
+        loop {
+            select! {
+                recv(ticker) -> _ => {
+                    // Check for file changes every 100ms
+                    if file_watcher.check_for_changes(debounce_duration) {
+                        println!("🔄 Files changed, restarting server...");
+                        if let Err(e) = self.restart_server().await {
+                            eprintln!("❌ Failed to restart server: {}", e);
+                            // Continue watching even if restart fails
+                        } else {
+                            println!("✅ Server restarted successfully\n");
+                        }
+                    }
+                },
+            }
+
+            // Small sleep to prevent busy waiting
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    async fn restart_server(&mut self) -> Result<(), ElifError> {
+        // Kill existing process
+        if let Some(mut child) = self.current_process.take() {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+        }
+
+        // Build the project first
+        println!("🔨 Building project...");
+        let build_result = tokio::process::Command::new("cargo")
+            .args(["build", "--quiet"])
+            .status()
+            .await
+            .map_err(|e| ElifError::system_error(format!("Failed to run cargo build: {}", e)))?;
+
+        if !build_result.success() {
+            println!("❌ Build failed - waiting for file changes to retry");
+            return Ok(()); // Don't error out, just wait for next change
+        }
+
+        // Start new server process
+        let mut cmd = tokio::process::Command::new("cargo");
+        cmd.args(["run", "--quiet"]);
+
+        // Set environment variables
+        cmd.env("ELIF_ENV", &self.env);
+        cmd.env("ELIF_HOST", &self.host);
+        cmd.env("ELIF_PORT", self.port.to_string());
+
+        let child = cmd
+            .spawn()
+            .map_err(|e| ElifError::system_error(format!("Failed to start server: {}", e)))?;
+
+        self.current_process = Some(child);
+
+        // Give the server a moment to start
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+
+        Ok(())
+    }
+
+    async fn start_simple(&mut self) -> Result<(), ElifError> {
         // Check if Cargo.toml exists
         if !std::path::Path::new("Cargo.toml").exists() {
-            return Err(ElifError::Codegen { message: "No Cargo.toml found. Make sure you're in an elif project directory.".to_string() });
+            return Err(ElifError::configuration("No Cargo.toml found. Make sure you're in an elif project directory."));
         }
         
         println!("📦 Building project...");
@@ -69,26 +241,29 @@ impl ServeCommand {
         let build_output = tokio::process::Command::new("cargo")
             .args(["build"])
             .output()
-            .await?;
+            .await
+            .map_err(|e| ElifError::system_error(format!("Failed to run cargo build: {}", e)))?;
             
         if !build_output.status.success() {
             let stderr = String::from_utf8_lossy(&build_output.stderr);
-            return Err(ElifError::Codegen { message: format!("Build failed:\n{}", stderr) });
+            return Err(ElifError::configuration(format!("Build failed:\n{}", stderr)));
         }
         
         println!("✅ Build completed successfully");
-        println!("🌐 Server starting at http://{}:{}", self.args.host, self.args.port);
+        println!("🌐 Server starting at http://{}:{}", self.host, self.port);
         
         // Start the server
         let mut cmd = tokio::process::Command::new("cargo");
         cmd.args(["run"]);
         
         // Set environment variables
-        cmd.env("ELIF_HOST", &self.args.host);
-        cmd.env("ELIF_PORT", self.args.port.to_string());
-        cmd.env("ELIF_ENV", &self.args.env);
+        cmd.env("ELIF_HOST", &self.host);
+        cmd.env("ELIF_PORT", self.port.to_string());
+        cmd.env("ELIF_ENV", &self.env);
         
-        let mut child = cmd.spawn()?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| ElifError::system_error(format!("Failed to start server: {}", e)))?;
         
         // Handle Ctrl+C gracefully
         tokio::select! {
@@ -102,7 +277,7 @@ impl ServeCommand {
                         }
                     }
                     Err(e) => {
-                        return Err(ElifError::Codegen { message: format!("Failed to wait for server: {}", e) });
+                        return Err(ElifError::system_error(format!("Failed to wait for server: {}", e)));
                     }
                 }
             }
@@ -115,151 +290,128 @@ impl ServeCommand {
         
         Ok(())
     }
-    
-    async fn start_hot_reload_server(&self) -> Result<(), ElifError> {
-        println!("🔍 Setting up file watchers...");
-        
-        // Default watch directories
-        let mut watch_dirs = vec![PathBuf::from("src")];
-        watch_dirs.extend(self.args.watch.clone());
-        
-        // Add common directories if they exist
-        for dir in ["templates", "static", "migrations", "config"] {
-            let path = PathBuf::from(dir);
-            if path.exists() {
-                watch_dirs.push(path);
-            }
+}
+
+impl Drop for DevelopmentServer {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.current_process.take() {
+            let _ = child.start_kill();
         }
-        
-        println!("👀 Watching directories: {:?}", watch_dirs);
-        
-        if !self.args.exclude.is_empty() {
-            println!("🚫 Excluding patterns: {:?}", self.args.exclude);
-        }
-        
-        // For now, we'll implement a basic polling-based file watcher
-        // In production, you'd use notify crate for efficient file watching
-        
-        let mut last_modified = std::time::SystemTime::now();
-        let mut server_process: Option<tokio::process::Child> = None;
-        
-        loop {
-            let should_reload = self.check_file_changes(&watch_dirs, last_modified).await?;
-            
-            if should_reload {
-                println!("📝 File changes detected, reloading...");
-                
-                // Kill existing server
-                if let Some(mut process) = server_process.take() {
-                    let _ = process.kill().await;
-                    println!("🛑 Stopped previous server instance");
-                }
-                
-                // Build project
-                println!("📦 Rebuilding project...");
-                let build_output = tokio::process::Command::new("cargo")
-                    .args(["build"])
-                    .output()
-                    .await?;
-                    
-                if !build_output.status.success() {
-                    let stderr = String::from_utf8_lossy(&build_output.stderr);
-                    println!("❌ Build failed:\n{}", stderr);
-                    println!("⏰ Waiting for changes...");
-                    last_modified = std::time::SystemTime::now();
-                    continue;
-                }
-                
-                // Start new server
-                println!("🚀 Starting server...");
-                let mut cmd = tokio::process::Command::new("cargo");
-                cmd.args(["run"]);
-                cmd.env("ELIF_HOST", &self.args.host);
-                cmd.env("ELIF_PORT", self.args.port.to_string());
-                cmd.env("ELIF_ENV", &self.args.env);
-                
-                server_process = Some(cmd.spawn()?);
-                last_modified = std::time::SystemTime::now();
-                println!("✅ Server reloaded at http://{}:{}", self.args.host, self.args.port);
-            }
-            
-            // Check for Ctrl+C
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_millis(500)) => {
-                    // Continue watching
-                }
-                _ = tokio::signal::ctrl_c() => {
-                    println!("\n🛑 Received Ctrl+C, stopping server...");
-                    if let Some(mut process) = server_process.take() {
-                        let _ = process.kill().await;
-                    }
-                    println!("✅ Hot reload server stopped");
-                    break;
-                }
-            }
-        }
-        
-        Ok(())
     }
-    
-    async fn check_file_changes(
-        &self,
-        watch_dirs: &[PathBuf],
-        last_check: std::time::SystemTime,
-    ) -> Result<bool, ElifError> {
-        for dir in watch_dirs {
-            if self.dir_modified_since(dir, last_check).await? {
-                return Ok(true);
-            }
+}
+
+/// Get default paths to watch for changes
+fn get_default_watch_paths() -> Vec<PathBuf> {
+    let mut paths = vec![PathBuf::from("src")];
+
+    // Add optional directories if they exist
+    for optional_path in ["config", "migrations", "templates", "static", "assets"] {
+        let path = PathBuf::from(optional_path);
+        if path.exists() {
+            paths.push(path);
         }
-        Ok(false)
     }
-    
-    async fn dir_modified_since(
-        &self,
-        dir: &PathBuf,
-        since: std::time::SystemTime,
-    ) -> Result<bool, ElifError> {
-        if !dir.exists() {
-            return Ok(false);
-        }
-        
-        let mut entries = tokio::fs::read_dir(dir).await?;
-        
-        while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            let metadata = entry.metadata().await?;
-            
-            // Skip excluded patterns
-            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                if self.args.exclude.iter().any(|pattern| {
-                    // Simple pattern matching - in production use glob crate
-                    pattern.contains('*') && file_name.contains(&pattern.replace('*', "")) ||
-                    file_name == pattern
-                }) {
-                    continue;
-                }
-            }
-            
-            if metadata.is_file() {
-                if let Ok(modified) = metadata.modified() {
-                    if modified > since {
-                        return Ok(true);
-                    }
-                }
-            } else if metadata.is_dir() {
-                if Box::pin(self.dir_modified_since(&path, since)).await? {
-                    return Ok(true);
-                }
-            }
-        }
-        
-        Ok(false)
-    }
+
+    // Add Cargo.toml for dependency changes
+    paths.push(PathBuf::from("Cargo.toml"));
+
+    paths
 }
 
 /// Create and run a serve command
 pub async fn run(args: ServeArgs) -> Result<(), ElifError> {
-    let command = ServeCommand::new(args);
-    command.handle().await
+    println!("🚀 Starting elif development server...");
+    println!("📡 Host: {}", args.host);
+    println!("🔌 Port: {}", args.port);
+    println!("🌍 Environment: {}", args.env);
+    
+    let mut server = DevelopmentServer::new(args.host.clone(), args.port, args.env.clone());
+    
+    if args.hot_reload {
+        println!("🔥 Hot reload: enabled");
+        
+        // Determine watch paths
+        let watch_paths = if args.watch.is_empty() {
+            get_default_watch_paths()
+        } else {
+            args.watch
+        };
+        
+        println!("🔍 Setting up file watchers...");
+        let file_watcher = FileWatcher::new(watch_paths, args.exclude.clone())?;
+        
+        if !args.exclude.is_empty() {
+            println!("🚫 Excluding patterns: {:?}", args.exclude);
+        }
+        
+        server.start_with_reload(file_watcher).await
+    } else {
+        println!("🔥 Hot reload: disabled");
+        server.start_simple().await
+    }
+}
+
+/// Standalone watch command for monitoring files and executing commands
+pub async fn watch(
+    paths: Vec<PathBuf>,
+    exclude: Vec<String>,
+    command: String,
+    debounce: u64,
+) -> Result<(), ElifError> {
+    println!("👀 Starting file watcher...");
+    
+    let watch_paths = if paths.is_empty() {
+        get_default_watch_paths()
+    } else {
+        paths
+    };
+    
+    println!("🔍 Watching paths: {:?}", watch_paths);
+    if !exclude.is_empty() {
+        println!("🚫 Excluding patterns: {:?}", exclude);
+    }
+    println!("⚡ Command to execute: {}", command);
+    
+    let file_watcher = FileWatcher::new(watch_paths, exclude.clone())?;
+    let debounce_duration = Duration::from_millis(debounce);
+    let ticker = tick(Duration::from_millis(100));
+    
+    println!("✅ File watcher started. Press Ctrl+C to stop.\n");
+    
+    // Main watch loop
+    loop {
+        select! {
+            recv(ticker) -> _ => {
+                if file_watcher.check_for_changes(debounce_duration) {
+                    println!("🔄 Files changed, executing command: {}", command);
+                    
+                    let parts: Vec<&str> = command.split_whitespace().collect();
+                    if !parts.is_empty() {
+                        let mut cmd = tokio::process::Command::new(parts[0]);
+                        if parts.len() > 1 {
+                            cmd.args(&parts[1..]);
+                        }
+                        
+                        match cmd.status().await {
+                            Ok(status) => {
+                                if status.success() {
+                                    println!("✅ Command executed successfully");
+                                } else {
+                                    println!("❌ Command failed with exit code: {}", 
+                                        status.code().unwrap_or(-1));
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("❌ Failed to execute command: {}", e);
+                            }
+                        }
+                    }
+                    
+                    println!("👀 Continuing to watch for changes...\n");
+                }
+            },
+        }
+        
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 }

@@ -33,6 +33,52 @@ enum Commands {
         inspect_command: InspectCommands,
     },
 
+    /// Development server with hot reload
+    Serve {
+        /// Port to bind the server to
+        #[arg(long, short, default_value = "3000")]
+        port: u16,
+
+        /// Host to bind the server to
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Enable hot reload for development
+        #[arg(long)]
+        hot_reload: bool,
+
+        /// Watch additional directories for changes
+        #[arg(long)]
+        watch: Vec<std::path::PathBuf>,
+
+        /// Exclude patterns from watching
+        #[arg(long)]
+        exclude: Vec<String>,
+
+        /// Environment to run in
+        #[arg(long, short, default_value = "development")]
+        env: String,
+    },
+
+    /// File watcher for auto-restart
+    Watch {
+        /// Directories to watch for changes
+        #[arg(long)]
+        paths: Vec<std::path::PathBuf>,
+
+        /// Patterns to exclude from watching
+        #[arg(long)]
+        exclude: Vec<String>,
+
+        /// Command to execute on file changes
+        #[arg(long, default_value = "cargo build")]
+        command: String,
+
+        /// Debounce delay in milliseconds
+        #[arg(long, default_value = "500")]
+        debounce: u64,
+    },
+
     /// Unified development mode with hot reload and intelligent features
     Dev {
         /// Watch specific directories for changes
@@ -663,6 +709,34 @@ async fn main() -> Result<(), ElifError> {
                 commands::inspect::config(detailed, validate).await?;
             }
         },
+
+        Commands::Serve {
+            port,
+            host,
+            hot_reload,
+            watch,
+            exclude,
+            env,
+        } => {
+            let args = commands::serve::ServeArgs {
+                port,
+                host,
+                hot_reload,
+                watch,
+                exclude,
+                env,
+            };
+            commands::serve::run(args).await?;
+        }
+
+        Commands::Watch {
+            paths,
+            exclude,
+            command,
+            debounce,
+        } => {
+            commands::serve::watch(paths, exclude, command, debounce).await?;
+        }
 
         Commands::Dev {
             watch,
