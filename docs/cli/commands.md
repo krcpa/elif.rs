@@ -6,7 +6,13 @@ Project
 - `elifrs new <name> [--path <dir>]` — scaffold a new application.
 - `elifrs serve [--port 3000] [--host 127.0.0.1] [--hot-reload] [--watch <paths>...] [--exclude <glob>...] [--env development]` — start dev server.
 - `elifrs check` — lint/check project.
-- `elifrs test [--focus <Resource>]` — run tests.
+Testing
+- `elifrs test` — run comprehensive test suite with module awareness.
+- `elifrs test --unit` — run unit tests only.
+- `elifrs test --integration` — run integration tests only.
+- `elifrs test --watch` — continuous testing mode with file change detection.
+- `elifrs test --coverage` — run tests with coverage reporting.
+- `elifrs test --module <name>` — focus on specific module tests.
 - `elifrs map [--json]` — output project map.
 
 Generation
