@@ -304,11 +304,11 @@ impl SeederManager {
                         seeder_name, dep, dep
                     )));
                 }
-                
-                // Increment in-degree for the dependent seeder
-                if let Some(degree) = in_degree.get_mut(seeder_name) {
-                    *degree += 1;
-                }
+            }
+            
+            // The in-degree is simply the number of dependencies.
+            if let Some(degree) = in_degree.get_mut(seeder_name) {
+                *degree = deps.len();
             }
         }
 
