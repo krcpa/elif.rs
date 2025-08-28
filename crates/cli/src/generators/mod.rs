@@ -69,6 +69,7 @@ fn register_custom_filters(tera: &mut Tera) {
     tera.register_filter("pascal_case", pascal_case_filter);
     tera.register_filter("camel_case", camel_case_filter);
     tera.register_filter("upper_case", upper_case_filter);
+    tera.register_filter("lower", lower_filter);
     tera.register_filter("sql_type", sql_type_filter);
 }
 
@@ -101,6 +102,12 @@ fn upper_case_filter(value: &Value, _args: &HashMap<String, Value>) -> TeraResul
     let s = value.as_str().ok_or_else(|| tera::Error::msg("upper_case filter requires string input"))?;
     let upper_case = s.to_uppercase();
     Ok(to_value(upper_case)?)
+}
+
+fn lower_filter(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
+    let s = value.as_str().ok_or_else(|| tera::Error::msg("lower filter requires string input"))?;
+    let lower_case = s.to_lowercase();
+    Ok(to_value(lower_case)?)
 }
 
 fn sql_type_filter(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
