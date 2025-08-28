@@ -273,14 +273,14 @@ impl {}Seeder {{
             }}),
         ];
         
-        for record in records {{
+        for record in [("Sample Record 1"), ("Sample Record 2")] {
             db.query("INSERT INTO {} (name, created_at, updated_at) VALUES ($1, $2, $3)")
-                .bind(record["name"].as_str().unwrap())
-                .bind(record["created_at"].as_str().unwrap())
-                .bind(record["updated_at"].as_str().unwrap())
+                .bind(record)
+                .bind(chrono::Utc::now())
+                .bind(chrono::Utc::now())
                 .execute()
                 .await?;
-        }}
+        }
         
         println!("✅ {} seeder completed");
         Ok(())
