@@ -4,6 +4,7 @@ use std::fs;
 use elif_core::ElifError;
 use serde_json::Value;
 use serde::{Deserialize, Serialize};
+use regex::Regex;
 
 #[derive(Debug, Clone)]
 pub struct ProjectAnalyzer {
@@ -211,46 +212,260 @@ impl ProjectAnalyzer {
 
     fn extract_dependencies_from_file(&self, file_path: &Path) -> Result<Vec<String>, ElifError> {
         let content = fs::read_to_string(file_path).map_err(|e| ElifError::Io(e))?;
-        let mut dependencies = Vec::new();
+        let mut dependencies = HashSet::new();
 
-        // Extract use statements and module declarations
-        for line in content.lines() {
-            let trimmed = line.trim();
+        // Extract use statements from crate modules
+        let crate_imports = self.extract_crate_imports(&content)?;
+        dependencies.extend(crate_imports);
+
+        // Extract extern crate statements
+        let extern_crates = self.extract_extern_crates(&content)?;
+        dependencies.extend(extern_crates);
+
+        Ok(dependencies.into_iter().collect())
+    }
+
+    /// Extract all imports from crate modules using robust regex parsing
+    /// Handles: use crate::services::UserService;
+    ///         use crate::services::{UserService, AdminService};  
+    ///         use crate::services::UserService as US;
+    ///         use crate::modules::auth::{AuthService, TokenService};
+    ///         Multi-line grouped imports with proper brace matching
+    fn extract_crate_imports(&self, content: &str) -> Result<Vec<String>, ElifError> {
+        let mut imports = Vec::new();
+        
+        // First, normalize the content by removing comments and extra whitespace
+        let normalized = self.normalize_content(content);
+        
+        // Regex to match use crate:: statements, including multi-line ones
+        // This handles cases where braces span multiple lines
+        let use_regex = Regex::new(r"use\s+crate::([^;]+);")
+            .map_err(|e| ElifError::Validation { message: format!("Invalid regex: {}", e) })?;
             
-            // Look for use statements from crate modules
-            if trimmed.starts_with("use crate::") {
-                if let Some(import) = self.extract_crate_import(trimmed) {
-                    dependencies.push(import);
+        for capture in use_regex.captures_iter(&normalized) {
+            if let Some(import_part) = capture.get(1) {
+                let import_str = import_part.as_str().trim();
+                let parsed_imports = self.parse_import_statement(import_str)?;
+                imports.extend(parsed_imports);
+            }
+        }
+        
+        Ok(imports)
+    }
+    
+    /// Normalize content by removing comments and collapsing multi-line statements
+    fn normalize_content(&self, content: &str) -> String {
+        let mut normalized = String::new();
+        let mut in_multiline_comment = false;
+        let mut current_statement = String::new();
+        let mut brace_depth = 0;
+        
+        for line in content.lines() {
+            let mut line = line.to_string();
+            
+            // Handle multi-line comments
+            if let Some(start) = line.find("/*") {
+                if let Some(end) = line.find("*/") {
+                    // Single-line /* */ comment
+                    line = format!("{}{}", &line[..start], &line[end + 2..]);
+                } else {
+                    // Start of multi-line comment
+                    line = line[..start].to_string();
+                    in_multiline_comment = true;
                 }
             }
             
-            // Look for extern crate statements
-            if trimmed.starts_with("extern crate ") {
-                if let Some(crate_name) = trimmed.strip_prefix("extern crate ") {
-                    let crate_name = crate_name.trim_end_matches(';');
-                    dependencies.push(crate_name.to_string());
+            if in_multiline_comment {
+                if let Some(end) = line.find("*/") {
+                    line = line[end + 2..].to_string();
+                    in_multiline_comment = false;
+                } else {
+                    continue;
+                }
+            }
+            
+            // Remove single-line comments
+            if let Some(comment_pos) = line.find("//") {
+                line = line[..comment_pos].to_string();
+            }
+            
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            
+            // Handle multi-line statements (particularly use statements with braces)
+            if trimmed.starts_with("use ") || !current_statement.is_empty() {
+                current_statement.push(' ');
+                current_statement.push_str(trimmed);
+                
+                // Count braces to detect statement completion
+                for ch in trimmed.chars() {
+                    match ch {
+                        '{' => brace_depth += 1,
+                        '}' => brace_depth -= 1,
+                        ';' if brace_depth == 0 => {
+                            // Statement complete
+                            normalized.push_str(&current_statement);
+                            normalized.push('\n');
+                            current_statement.clear();
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            } else {
+                // Regular single-line statement
+                normalized.push_str(trimmed);
+                normalized.push('\n');
+            }
+        }
+        
+        // Add any remaining statement
+        if !current_statement.is_empty() {
+            normalized.push_str(&current_statement);
+            normalized.push('\n');
+        }
+        
+        normalized
+    }
+    
+    /// Parse a single import statement to extract all imported items
+    /// Handles: services::UserService
+    ///         services::{UserService, AdminService}
+    ///         services::UserService as US
+    ///         modules::auth::{AuthService, TokenService}
+    fn parse_import_statement(&self, import_str: &str) -> Result<Vec<String>, ElifError> {
+        let mut imports = Vec::new();
+        
+        // Check if this is a grouped import (contains braces)
+        if import_str.contains('{') && import_str.contains('}') {
+            imports.extend(self.parse_grouped_import(import_str)?);
+        } else {
+            // Single import
+            if let Some(single_import) = self.parse_single_import(import_str) {
+                imports.push(single_import);
+            }
+        }
+        
+        Ok(imports)
+    }
+    
+    /// Parse grouped imports like: services::{UserService, AdminService, super::BaseService}
+    fn parse_grouped_import(&self, import_str: &str) -> Result<Vec<String>, ElifError> {
+        let mut imports = Vec::new();
+        
+        // Regex to extract the grouped part
+        let group_regex = Regex::new(r"([^{]+)\{([^}]+)\}")
+            .map_err(|e| ElifError::Validation { message: format!("Invalid group regex: {}", e) })?;
+            
+        if let Some(captures) = group_regex.captures(import_str) {
+            let _path_part = captures.get(1).map(|m| m.as_str().trim());
+            let items_part = captures.get(2).map(|m| m.as_str()).unwrap_or("");
+            
+            // Split by comma and clean each item
+            for item in items_part.split(',') {
+                let cleaned_item = item.trim();
+                
+                // Skip empty items and relative paths in grouped imports
+                if cleaned_item.is_empty() || 
+                   cleaned_item.starts_with("self::") || 
+                   cleaned_item.starts_with("super::") ||
+                   cleaned_item.starts_with("crate::") ||
+                   cleaned_item == "self" ||
+                   cleaned_item == "super" ||
+                   cleaned_item == "crate" {
+                    continue;
+                }
+                
+                // Handle aliased imports (Item as Alias)
+                let import_name = if let Some(as_pos) = cleaned_item.find(" as ") {
+                    &cleaned_item[..as_pos]
+                } else {
+                    cleaned_item
+                };
+                
+                // Extract just the final identifier
+                if let Some(final_name) = import_name.split("::").last() {
+                    if self.is_valid_rust_identifier(final_name) {
+                        imports.push(final_name.to_string());
+                    }
                 }
             }
         }
-
-        Ok(dependencies)
-    }
-
-    fn extract_crate_import(&self, use_statement: &str) -> Option<String> {
-        // Extract module/service names from use statements like:
-        // use crate::services::UserService;
-        // use crate::modules::auth::AuthService;
         
-        if let Some(import_part) = use_statement.strip_prefix("use crate::") {
-            let import_part = import_part.trim_end_matches(';');
-            let parts: Vec<&str> = import_part.split("::").collect();
+        Ok(imports)
+    }
+    
+    /// Parse single import like: services::UserService or services::UserService as US
+    fn parse_single_import(&self, import_str: &str) -> Option<String> {
+        // Handle aliased imports (remove " as Alias" part)
+        let clean_import = if let Some(as_pos) = import_str.find(" as ") {
+            &import_str[..as_pos]
+        } else {
+            import_str
+        };
+        
+        // Split by :: and get the last part (the actual import name)
+        let parts: Vec<&str> = clean_import.split("::").collect();
+        if let Some(last_part) = parts.last() {
+            let trimmed = last_part.trim();
             
-            if parts.len() >= 2 {
-                return Some(parts[parts.len() - 1].to_string());
+            // Skip wildcard imports and bare relative keywords
+            if trimmed == "*" || 
+               trimmed == "self" || 
+               trimmed == "super" ||
+               trimmed == "crate" {
+                return None;
+            }
+            
+            // Validate it's a proper Rust identifier
+            if self.is_valid_rust_identifier(trimmed) {
+                return Some(trimmed.to_string());
             }
         }
         
         None
+    }
+    
+    /// Extract extern crate statements
+    fn extract_extern_crates(&self, content: &str) -> Result<Vec<String>, ElifError> {
+        let mut crates = Vec::new();
+        
+        let extern_regex = Regex::new(r"extern\s+crate\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+            .map_err(|e| ElifError::Validation { message: format!("Invalid extern regex: {}", e) })?;
+            
+        for capture in extern_regex.captures_iter(content) {
+            if let Some(crate_name) = capture.get(1) {
+                crates.push(crate_name.as_str().to_string());
+            }
+        }
+        
+        Ok(crates)
+    }
+    
+    /// Validate that a string is a valid Rust identifier
+    fn is_valid_rust_identifier(&self, s: &str) -> bool {
+        if s.is_empty() {
+            return false;
+        }
+        
+        // Must start with letter or underscore
+        let mut chars = s.chars();
+        if let Some(first) = chars.next() {
+            if !first.is_ascii_alphabetic() && first != '_' {
+                return false;
+            }
+        }
+        
+        // Rest must be alphanumeric or underscore
+        for c in chars {
+            if !c.is_ascii_alphanumeric() && c != '_' {
+                return false;
+            }
+        }
+        
+        true
     }
 
     fn build_dependency_graph(&self, structure: &mut ProjectStructure) -> Result<(), ElifError> {
@@ -342,7 +557,6 @@ impl ProjectAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use tempfile::TempDir;
 
     #[test]
@@ -353,19 +567,169 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_crate_import() {
+    fn test_extract_crate_imports() {
         let temp_dir = TempDir::new().unwrap();
         let analyzer = ProjectAnalyzer::new(temp_dir.path().to_path_buf());
         
+        // Test simple import
+        let content1 = "use crate::services::UserService;";
+        let imports1 = analyzer.extract_crate_imports(content1).unwrap();
+        assert_eq!(imports1, vec!["UserService"]);
+        
+        // Test grouped import  
+        let content2 = "use crate::services::{UserService, AdminService};";
+        let imports2 = analyzer.extract_crate_imports(content2).unwrap();
+        let mut sorted_imports2 = imports2.clone();
+        sorted_imports2.sort();
+        assert_eq!(sorted_imports2, vec!["AdminService", "UserService"]);
+        
+        // Test aliased import
+        let content3 = "use crate::services::UserService as US;";
+        let imports3 = analyzer.extract_crate_imports(content3).unwrap();
+        assert_eq!(imports3, vec!["UserService"]);
+        
+        // Test complex grouped import with aliases
+        let content4 = "use crate::modules::auth::{AuthService, TokenService as TS, super::BaseService};";
+        let imports4 = analyzer.extract_crate_imports(content4).unwrap();
+        let mut sorted_imports4 = imports4.clone();
+        sorted_imports4.sort();
+        assert_eq!(sorted_imports4, vec!["AuthService", "TokenService"]);
+        
+        // Test multiple use statements
+        let content5 = r#"
+            use crate::services::UserService;
+            use crate::controllers::UserController;
+            use crate::models::{User, Role, Permission};
+            use std::collections::HashMap;  // Should be ignored
+        "#;
+        let imports5 = analyzer.extract_crate_imports(content5).unwrap();
+        let mut sorted_imports5 = imports5.clone();
+        sorted_imports5.sort();
+        assert_eq!(sorted_imports5, vec!["Permission", "Role", "User", "UserController", "UserService"]);
+    }
+    
+    #[test]
+    fn test_parse_grouped_import() {
+        let temp_dir = TempDir::new().unwrap();
+        let analyzer = ProjectAnalyzer::new(temp_dir.path().to_path_buf());
+        
+        // Test basic grouped import
+        let imports1 = analyzer.parse_grouped_import("services::{UserService, AdminService}").unwrap();
+        let mut sorted_imports1 = imports1.clone();
+        sorted_imports1.sort();
+        assert_eq!(sorted_imports1, vec!["AdminService", "UserService"]);
+        
+        // Test grouped import with aliases
+        let imports2 = analyzer.parse_grouped_import("services::{UserService as US, AdminService}").unwrap();
+        let mut sorted_imports2 = imports2.clone();
+        sorted_imports2.sort();
+        assert_eq!(sorted_imports2, vec!["AdminService", "UserService"]);
+        
+        // Test grouped import with relative paths (should be filtered out)
+        let imports3 = analyzer.parse_grouped_import("services::{UserService, self::LocalService, super::ParentService}").unwrap();
+        assert_eq!(imports3, vec!["UserService"]);
+        
+        // Test empty or invalid groups
+        let imports4 = analyzer.parse_grouped_import("services::{}").unwrap();
+        assert!(imports4.is_empty());
+    }
+    
+    #[test]
+    fn test_parse_single_import() {
+        let temp_dir = TempDir::new().unwrap();
+        let analyzer = ProjectAnalyzer::new(temp_dir.path().to_path_buf());
+        
+        // Test basic single import
         assert_eq!(
-            analyzer.extract_crate_import("use crate::services::UserService;"),
+            analyzer.parse_single_import("services::UserService"),
             Some("UserService".to_string())
         );
         
+        // Test aliased single import
         assert_eq!(
-            analyzer.extract_crate_import("use crate::modules::auth::AuthService;"),
+            analyzer.parse_single_import("services::UserService as US"),
+            Some("UserService".to_string())
+        );
+        
+        // Test deep path import
+        assert_eq!(
+            analyzer.parse_single_import("modules::auth::services::AuthService"),
             Some("AuthService".to_string())
         );
+        
+        // Test wildcard import (should be filtered out)
+        assert_eq!(analyzer.parse_single_import("services::*"), None);
+        
+        // Test relative imports - `self::LocalService` extracts `LocalService`
+        assert_eq!(
+            analyzer.parse_single_import("self::LocalService"), 
+            Some("LocalService".to_string())
+        );
+        
+        // But bare relative keywords should be filtered out
+        assert_eq!(analyzer.parse_single_import("self"), None);
+        assert_eq!(analyzer.parse_single_import("super"), None);
+    }
+    
+    #[test]
+    fn test_is_valid_rust_identifier() {
+        let temp_dir = TempDir::new().unwrap();
+        let analyzer = ProjectAnalyzer::new(temp_dir.path().to_path_buf());
+        
+        // Valid identifiers
+        assert!(analyzer.is_valid_rust_identifier("UserService"));
+        assert!(analyzer.is_valid_rust_identifier("_private"));
+        assert!(analyzer.is_valid_rust_identifier("user_service"));
+        assert!(analyzer.is_valid_rust_identifier("User123"));
+        
+        // Invalid identifiers
+        assert!(!analyzer.is_valid_rust_identifier("123User"));
+        assert!(!analyzer.is_valid_rust_identifier("user-service"));
+        assert!(!analyzer.is_valid_rust_identifier(""));
+        assert!(!analyzer.is_valid_rust_identifier("user.service"));
+        assert!(!analyzer.is_valid_rust_identifier("AdminService}"));
+    }
+    
+    #[test]
+    fn test_complex_real_world_imports() {
+        let temp_dir = TempDir::new().unwrap();
+        let analyzer = ProjectAnalyzer::new(temp_dir.path().to_path_buf());
+        
+        // Realistic Rust file content
+        let content = r#"
+            use std::collections::HashMap;
+            use std::sync::Arc;
+            
+            use crate::services::{UserService, AdminService, EmailService as ES};
+            use crate::models::{User, Role};
+            use crate::controllers::auth::{AuthController, TokenController};
+            use crate::middleware::auth::{JwtMiddleware, SessionMiddleware};
+            use crate::middleware::cors::CorsMiddleware;
+            use crate::utils::*;  // Wildcard should be ignored
+            
+            extern crate serde;
+            extern crate tokio;
+        "#;
+        
+        let crate_imports = analyzer.extract_crate_imports(content).unwrap();
+        let extern_crates = analyzer.extract_extern_crates(content).unwrap();
+        
+        // Verify crate imports
+        let mut sorted_crate = crate_imports.clone();
+        sorted_crate.sort();
+        assert_eq!(
+            sorted_crate, 
+            vec![
+                "AdminService", "AuthController", "CorsMiddleware", 
+                "EmailService", "JwtMiddleware", "Role", "SessionMiddleware", 
+                "TokenController", "User", "UserService"
+            ]
+        );
+        
+        // Verify extern crates
+        let mut sorted_extern = extern_crates.clone();
+        sorted_extern.sort();
+        assert_eq!(sorted_extern, vec!["serde", "tokio"]);
     }
 
     #[test]
