@@ -219,7 +219,7 @@ enum CreateCommands {
 
 #[derive(Subcommand)]
 enum AddCommands {
-    /// Add a new module with intelligent defaults
+    /// Add a new module with intelligent defaults (DEPRECATED: use 'make module' instead)
     Module {
         /// Module name (e.g., UserModule, BlogModule)
         name: String,
@@ -621,6 +621,8 @@ async fn main() -> Result<(), ElifError> {
                 controllers,
                 services,
             } => {
+                println!("⚠️  DEPRECATED: 'add module' is deprecated. Use 'make module' instead.");
+                println!("   This command will be removed in a future version.\n");
                 commands::add::module(
                     &name,
                     providers.as_deref(),
