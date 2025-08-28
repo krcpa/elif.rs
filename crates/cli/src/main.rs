@@ -186,6 +186,12 @@ enum Commands {
         #[command(subcommand)]
         module_command: ModuleCommands,
     },
+
+    /// Generate code components and scaffolding
+    Make {
+        #[command(subcommand)]
+        make_command: MakeCommands,
+    },
 }
 
 // ========== Original Elif.rs Command Structure ==========
@@ -568,6 +574,29 @@ enum ModuleCommands {
     },
 }
 
+// ========== Make Commands ==========
+
+#[derive(Subcommand)]
+enum MakeCommands {
+    /// Generate a new module with providers and controllers
+    Module {
+        /// Module name (e.g., UserModule, BlogModule)
+        name: String,
+
+        /// Include providers (comma-separated)
+        #[arg(long)]
+        providers: Option<String>,
+
+        /// Include controllers (comma-separated)
+        #[arg(long)]
+        controllers: Option<String>,
+
+        /// Include services (comma-separated)
+        #[arg(long)]
+        services: Option<String>,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<(), ElifError> {
     let cli = Cli::parse();
@@ -791,6 +820,23 @@ async fn main() -> Result<(), ElifError> {
             }
             ModuleCommands::Validate { fix_issues } => {
                 commands::module::validate(fix_issues).await?;
+            }
+        },
+
+        Commands::Make { make_command } => match make_command {
+            MakeCommands::Module {
+                name,
+                providers,
+                controllers,
+                services,
+            } => {
+                commands::add::module(
+                    &name,
+                    providers.as_deref(),
+                    controllers.as_deref(),
+                    services.as_deref(),
+                )
+                .await?;
             }
         },
     }
