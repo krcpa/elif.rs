@@ -294,7 +294,8 @@ impl SeederManager {
             in_degree.insert(name.clone(), 0);
         }
 
-        // Calculate in-degrees (number of dependencies pointing to each seeder)
+        // Build reverse dependency graph for efficient lookups (O(V+E) optimization)
+        let mut rev_deps: HashMap<String, Vec<String>> = HashMap::new();
         for (seeder_name, deps) in &dependencies {
             for dep in deps {
                 // Validate that dependency exists
@@ -304,11 +305,14 @@ impl SeederManager {
                         seeder_name, dep, dep
                     )));
                 }
-            }
-            
-            // The in-degree is simply the number of dependencies.
-            if let Some(degree) = in_degree.get_mut(seeder_name) {
-                *degree = deps.len();
+                
+                // Build reverse dependency graph: dep -> [list of seeders that depend on dep]
+                rev_deps.entry(dep.clone()).or_default().push(seeder_name.clone());
+                
+                // Increment in-degree for the dependent seeder
+                if let Some(degree) = in_degree.get_mut(seeder_name) {
+                    *degree += 1;
+                }
             }
         }
 
@@ -324,12 +328,8 @@ impl SeederManager {
             }
         }
 
-        // Process queue
+        // Process queue (optimized O(V+E) implementation)
         while let Some(current) = queue.pop_front() {
-            if processed.contains(&current) {
-                continue;
-            }
-            
             processed.insert(current.clone());
             
             // Add current seeder to result
@@ -337,15 +337,13 @@ impl SeederManager {
                 result.push(*seeder);
             }
 
-            // Update in-degrees for seeders that depend on current seeder
-            for (dependent, deps) in &dependencies {
-                if deps.contains(&current) {
+            // Update in-degrees for seeders that depend on the current seeder
+            if let Some(dependents) = rev_deps.get(&current) {
+                for dependent in dependents {
                     if let Some(degree) = in_degree.get_mut(dependent) {
-                        if *degree > 0 {
-                            *degree -= 1;
-                            if *degree == 0 && !processed.contains(dependent) {
-                                queue.push_back(dependent.clone());
-                            }
+                        *degree -= 1;
+                        if *degree == 0 {
+                            queue.push_back(dependent.clone());
                         }
                     }
                 }
