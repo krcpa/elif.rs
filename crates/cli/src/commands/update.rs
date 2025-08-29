@@ -122,22 +122,125 @@ pub async fn run(check: bool, security: bool, dependencies: bool, verbose: bool)
     Ok(())
 }
 
+async fn get_current_dependencies() -> Result<HashMap<String, String>, ElifError> {
+    let mut dependencies = HashMap::new();
+    
+    // First, try to read from Cargo.lock for exact versions
+    if Path::new("Cargo.lock").exists() {
+        if let Ok(lock_content) = tokio::fs::read_to_string("Cargo.lock").await {
+            dependencies.extend(parse_cargo_lock(&lock_content).await?);
+        }
+    }
+    
+    // If Cargo.lock parsing didn't get elif dependencies, fall back to Cargo.toml
+    if dependencies.is_empty() {
+        if let Ok(toml_content) = tokio::fs::read_to_string("Cargo.toml").await {
+            dependencies.extend(parse_cargo_toml_dependencies(&toml_content).await?);
+        }
+    }
+    
+    Ok(dependencies)
+}
+
+async fn parse_cargo_lock(content: &str) -> Result<HashMap<String, String>, ElifError> {
+    let mut dependencies = HashMap::new();
+    
+    // Parse TOML content
+    let lock_data: toml::Value = toml::from_str(content)
+        .map_err(|e| ElifError::Validation {
+            message: format!("Failed to parse Cargo.lock: {}", e),
+        })?;
+    
+    // Extract package information
+    if let Some(packages) = lock_data.get("package").and_then(|p| p.as_array()) {
+        for package in packages {
+            if let (Some(name), Some(version)) = (
+                package.get("name").and_then(|n| n.as_str()),
+                package.get("version").and_then(|v| v.as_str())
+            ) {
+                if name.starts_with("elif-") {
+                    dependencies.insert(name.to_string(), version.to_string());
+                }
+            }
+        }
+    }
+    
+    Ok(dependencies)
+}
+
+async fn parse_cargo_toml_dependencies(content: &str) -> Result<HashMap<String, String>, ElifError> {
+    let mut dependencies = HashMap::new();
+    
+    // Parse TOML content
+    let toml_data: toml::Value = toml::from_str(content)
+        .map_err(|e| ElifError::Validation {
+            message: format!("Failed to parse Cargo.toml: {}", e),
+        })?;
+    
+    // Check dependencies section
+    if let Some(deps) = toml_data.get("dependencies").and_then(|d| d.as_table()) {
+        for (name, value) in deps {
+            if name.starts_with("elif-") {
+                let version = match value {
+                    toml::Value::String(v) => v.clone(),
+                    toml::Value::Table(t) => {
+                        if let Some(v) = t.get("version").and_then(|v| v.as_str()) {
+                            v.to_string()
+                        } else {
+                            // Skip path dependencies or git dependencies without version
+                            continue;
+                        }
+                    },
+                    _ => continue,
+                };
+                
+                // Clean version string (remove range specifiers like "^", "~", ">=")
+                let clean_version = clean_version_string(&version);
+                dependencies.insert(name.clone(), clean_version);
+            }
+        }
+    }
+    
+    Ok(dependencies)
+}
+
+fn clean_version_string(version: &str) -> String {
+    // Remove common version range specifiers
+    version
+        .trim_start_matches('^')
+        .trim_start_matches('~')
+        .trim_start_matches(">=")
+        .trim_start_matches("<=")
+        .trim_start_matches('>')
+        .trim_start_matches('<')
+        .trim_start_matches('=')
+        .trim()
+        .to_string()
+}
+
 async fn check_framework_updates(verbose: bool) -> Result<Vec<FrameworkUpdate>, ElifError> {
     let mut framework_updates = Vec::new();
     
-    // Check elif framework components
-    let elif_components = vec![
-        ("elif-http", "0.8.0"),
-        ("elif-http-derive", "0.1.0"), 
-        ("elif-core", "0.8.0"),
-        ("elif-orm", "0.4.0"),
-        ("elif-auth", "0.4.0"),
-        ("elif-cache", "0.3.0"),
+    // Read actual versions from Cargo.toml and Cargo.lock
+    let current_dependencies = get_current_dependencies().await?;
+    
+    // Check elif framework components that are actually in use
+    let elif_components = [
+        "elif-http",
+        "elif-http-derive", 
+        "elif-core",
+        "elif-orm",
+        "elif-auth",
+        "elif-cache",
     ];
 
-    for (component, current_version) in &elif_components {
-        if let Some(update) = check_component_update(component, current_version, verbose).await? {
-            framework_updates.push(update);
+    for component in &elif_components {
+        if let Some(current_version) = current_dependencies.get(*component) {
+            if let Some(update) = check_component_update(component, current_version, verbose).await? {
+                framework_updates.push(update);
+            }
+        } else if verbose {
+            println!("   📦 {} not in use in this project", component);
         }
     }
 
@@ -145,12 +248,7 @@ async fn check_framework_updates(verbose: bool) -> Result<Vec<FrameworkUpdate>, 
 }
 
 async fn check_component_update(name: &str, current_version: &str, verbose: bool) -> Result<Option<FrameworkUpdate>, ElifError> {
-    // Check if component is in use in current project
-    if !is_component_in_use(name).await? {
-        return Ok(None);
-    }
-
-    // Simulate checking for latest version (in real implementation, would use crates.io API)
+    // Get latest version from crates.io or mock data
     let latest_version = get_latest_version(name).await?;
     
     if latest_version != current_version {
@@ -177,18 +275,9 @@ async fn check_component_update(name: &str, current_version: &str, verbose: bool
     }
 }
 
-async fn is_component_in_use(component: &str) -> Result<bool, ElifError> {
-    // Check if component is listed in Cargo.toml dependencies
-    if let Ok(cargo_content) = tokio::fs::read_to_string("Cargo.toml").await {
-        Ok(cargo_content.contains(component))
-    } else {
-        Ok(false)
-    }
-}
-
 async fn get_latest_version(component: &str) -> Result<String, ElifError> {
     // In a real implementation, this would query crates.io API
-    // For now, return mock versions based on component
+    // For now, return mock versions that are slightly newer than typical current versions
     let mock_versions = HashMap::from([
         ("elif-http", "0.8.1"),
         ("elif-http-derive", "0.1.1"),
@@ -197,6 +286,11 @@ async fn get_latest_version(component: &str) -> Result<String, ElifError> {
         ("elif-auth", "0.4.1"),
         ("elif-cache", "0.3.1"),
     ]);
+
+    // In a real implementation, you would do something like:
+    // let url = format!("https://crates.io/api/v1/crates/{}", component);
+    // let response = reqwest::get(&url).await?.json::<CrateResponse>().await?;
+    // Ok(response.crate.max_version)
 
     Ok(mock_versions.get(component).unwrap_or(&"0.1.0").to_string())
 }
