@@ -48,7 +48,7 @@ This directory contains JSON pattern definitions for the MCP (Model Context Prot
 - **Stability**: Stable
 - **Description**: Builder pattern for configuration objects (not hot paths)
 - **Key Features**: `#[builder]` macro, `build_with_defaults()`, optional/default fields
-- **Source**: CLAUDE.md guidelines, service-builder 0.3.0
+- **Source**: Framework guidelines, service-builder 0.3.0
 
 #### 7. [Error Handling](./error_handling.json)
 - **Category**: HTTP

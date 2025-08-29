@@ -95,7 +95,12 @@
       "Bash(/Users/kog/Code/elif/target/debug/elifrs new --non-interactive my-test-app)",
       "Bash(/Users/kog/Code/elif/target/debug/elifrs --help)",
       "Bash(/Users/kog/Code/elif/target/debug/elifrs new --help)",
-      "Bash(/Users/kog/Code/elif/target/debug/elifrs new --non-interactive test-app)"
+      "Bash(/Users/kog/Code/elif/target/debug/elifrs new --non-interactive test-app)",
+      "WebFetch(domain:crates.io)",
+      "Bash(python3:*)",
+      "Bash(for:*)",
+      "Bash(do echo \"Checking $file:\")",
+      "Bash(done)"
     ],
     "deny": []
   }

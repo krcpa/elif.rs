@@ -43,8 +43,8 @@
   
   "source_files": [
     {
-      "path": "CLAUDE.md",
-      "description": "Guidelines on when to use service-builder pattern"
+      "path": "crates/*/Cargo.toml",
+      "description": "Service-builder dependency usage across crates"
     }
   ],
   

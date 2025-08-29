@@ -11,7 +11,7 @@
     "title": "Basic Error Handling with HttpResult",
     "code": "use elif_http::{HttpResult, HttpError, ElifResponse, ElifRequest};\nuse serde_json::json;\n\n// Controller method with error handling\nasync fn get_user(request: ElifRequest) -> HttpResult<ElifResponse> {\n    let user_id: u32 = request.path_param_int(\"id\")?; // Auto-converts parse errors\n    \n    // Validate user ID\n    if user_id == 0 {\n        return Err(HttpError::BadRequest {\n            message: \"User ID must be greater than 0\".to_string(),\n            details: Some(json!({\n                \"field\": \"id\",\n                \"value\": user_id,\n                \"constraint\": \"greater_than_zero\"\n            })),\n        });\n    }\n    \n    // Simulate database lookup that might fail\n    match find_user_in_database(user_id).await {\n        Ok(Some(user)) => {\n            Ok(ElifResponse::ok().json(&user)?)\n        },\n        Ok(None) => {\n            Err(HttpError::NotFound {\n                message: format!(\"User with ID {} not found\", user_id),\n                details: Some(json!({\n                    \"resource\": \"user\",\n                    \"id\": user_id\n                })),\n            })\n        },\n        Err(db_error) => {\n            Err(HttpError::InternalServerError {\n                message: \"Database error occurred\".to_string(),\n                details: Some(json!({\n                    \"error\": \"database_connection_failed\",\n                    \"hint\": \"Please try again later\"\n                })),\n            })\n        }\n    }\n}\n\n// Error responses follow consistent JSON format\n// {\n//   \"error\": {\n//     \"code\": \"not_found\",\n//     \"message\": \"User with ID 123 not found\",\n//     \"details\": {\n//       \"resource\": \"user\",\n//       \"id\": 123\n//     }\n//   }\n// }",
     "explanation": "Basic error handling showing HttpResult usage, validation errors, and structured JSON error responses.",
-    "file_source": "Framework convention from CLAUDE.md"
+    "file_source": "Framework convention"
   },
   
   "advanced_example": {
@@ -43,24 +43,32 @@
       "description": "HTTP error types and conversion"
     },
     {
-      "path": "CLAUDE.md",
-      "description": "Error format specification"
+      "path": "crates/elif-http/src/errors/",
+      "description": "Error format specification and implementations"
     }
   ],
   
   "related_patterns": [
-    "http_server_core",\n    "declarative_controllers",\n    "middleware_v2_system"
+    "http_server_core",
+    "declarative_controllers",
+    "middleware_v2_system"
   ],
   
   "common_mistakes": [
     {
       "mistake": "Returning generic error messages without context",
       "solution": "Include specific error details and hints for client applications"
-    },\n    {\n      "mistake": "Not using ? operator for error propagation",
+    },
+    {
+      "mistake": "Not using ? operator for error propagation",
       "solution": "Use ? operator to automatically convert and propagate errors"
-    },\n    {\n      "mistake": "Exposing internal error details in production",
+    },
+    {
+      "mistake": "Exposing internal error details in production",
       "solution": "Sanitize error messages and log full details internally"
-    },\n    {\n      "mistake": "Inconsistent error response formats",
+    },
+    {
+      "mistake": "Inconsistent error response formats",
       "solution": "Always use HttpError types for consistent JSON format"
     }
   ],
@@ -71,7 +79,8 @@
       "thiserror = \"1.0\"",
       "serde = { version = \"1.0\", features = [\"derive\"] }",
       "serde_json = \"1.0\""
-    ],\n    "imports": [
+    ],
+    "imports": [
       "use elif_http::{HttpResult, HttpError, ElifResponse};",
       "use thiserror::Error;"
     ]
@@ -83,11 +92,17 @@
       {
         "name": "BadRequest (400)",
         "code": "HttpError::BadRequest {\n    message: \"Invalid request data\".to_string(),\n    details: Some(json!({\n        \"field\": \"email\",\n        \"error\": \"invalid_format\"\n    })),\n}"
-      },\n      {\n        "name": "Unauthorized (401)",
+      },
+      {
+        "name": "Unauthorized (401)",
         "code": "HttpError::Unauthorized {\n    message: \"Authentication required\".to_string(),\n    details: Some(json!({\n        \"error\": \"missing_token\",\n        \"hint\": \"Include Authorization header\"\n    })),\n}"
-      },\n      {\n        "name": "NotFound (404)",
+      },
+      {
+        "name": "NotFound (404)",
         "code": "HttpError::NotFound {\n    message: \"Resource not found\".to_string(),\n    details: Some(json!({\n        \"resource\": \"user\",\n        \"id\": user_id\n    })),\n}"
-      },\n      {\n        "name": "InternalServerError (500)",
+      },
+      {
+        "name": "InternalServerError (500)",
         "code": "HttpError::InternalServerError {\n    message: \"Internal server error\".to_string(),\n    details: Some(json!({\n        \"error\": \"database_connection_failed\",\n        \"hint\": \"Please try again later\"\n    })),\n}"
       }
     ]
@@ -106,7 +121,7 @@
   "testing": {
     "title": "Testing Error Handling",
     "code": "#[cfg(test)]\nmod tests {\n    use super::*;\n    use elif_http::testing::TestClient;\n    \n    #[tokio::test]\n    async fn test_validation_error() {\n        let client = TestClient::new();\n        \n        // Send invalid data\n        let invalid_user = serde_json::json!({\n            \"name\": \"\", // Empty name should fail validation\n            \"email\": \"invalid-email\", // Invalid email format\n            \"age\": 200 // Age too high\n        });\n        \n        let response = client\n            .post(\"/users\")\n            .json(&invalid_user)\n            .await;\n        \n        assert_eq!(response.status(), 400);\n        \n        let error_body: serde_json::Value = response.json().await.unwrap();\n        assert_eq!(error_body[\"error\"][\"code\"], \"validation_failed\");\n        assert!(error_body[\"error\"][\"fields\"].is_array());\n    }\n    \n    #[tokio::test]\n    async fn test_not_found_error() {\n        let client = TestClient::new();\n        \n        let response = client.get(\"/users/999999\").await;\n        \n        assert_eq!(response.status(), 404);\n        \n        let error_body: serde_json::Value = response.json().await.unwrap();\n        assert_eq!(error_body[\"error\"][\"code\"], \"not_found\");\n        assert_eq!(error_body[\"error\"][\"details\"][\"resource\"], \"user\");\n        assert_eq!(error_body[\"error\"][\"details\"][\"id\"], 999999);\n    }\n    \n    #[tokio::test]\n    async fn test_custom_error_conversion() {\n        let service_error = UserServiceError::DuplicateEmail {\n            email: \"test@example.com\".to_string()\n        };\n        \n        let http_error: HttpError = service_error.into();\n        \n        match http_error {\n            HttpError::Conflict { message, details } => {\n                assert_eq!(message, \"User already exists\");\n                assert!(details.is_some());\n            },\n            _ => panic!(\"Expected Conflict error\"),\n        }\n    }\n}"
-  ],
+  },
   
   "logging_integration": {
     "title": "Error Logging and Monitoring",
@@ -122,6 +137,7 @@
       "Include request IDs for error correlation",
       "Set up monitoring and alerting for 500 errors",
       "Provide helpful error messages and hints for users"
-    ],\n    "example": "// Production error sanitization\nimpl HttpError {\n    pub fn sanitize_for_production(self) -> Self {\n        match self {\n            HttpError::InternalServerError { .. } => {\n                HttpError::InternalServerError {\n                    message: \"Internal server error\".to_string(),\n                    details: Some(json!({\n                        \"error\": {\n                            \"code\": \"internal_error\",\n                            \"message\": \"An unexpected error occurred\",\n                            \"hint\": \"Please try again later or contact support\"\n                        }\n                    })),\n                }\n            },\n            other => other, // Keep client errors as-is\n        }\n    }\n}"
+    ],
+    "example": "// Production error sanitization\nimpl HttpError {\n    pub fn sanitize_for_production(self) -> Self {\n        match self {\n            HttpError::InternalServerError { .. } => {\n                HttpError::InternalServerError {\n                    message: \"Internal server error\".to_string(),\n                    details: Some(json!({\n                        \"error\": {\n                            \"code\": \"internal_error\",\n                            \"message\": \"An unexpected error occurred\",\n                            \"hint\": \"Please try again later or contact support\"\n                        }\n                    })),\n                }\n            },\n            other => other, // Keep client errors as-is\n        }\n    }\n}"
   }
 }
