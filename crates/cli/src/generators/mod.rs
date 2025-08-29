@@ -36,6 +36,10 @@ impl TemplateEngine {
                 .map_err(|e| ElifError::Validation { message: format!("Failed to register test template: {}", e) })?;
             tera.add_raw_template("policy.stub", include_str!("../../templates/policy.stub"))
                 .map_err(|e| ElifError::Validation { message: format!("Failed to register policy template: {}", e) })?;
+            tera.add_raw_template("cargo_toml.stub", include_str!("../../templates/cargo_toml.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register cargo_toml template: {}", e) })?;
+            tera.add_raw_template("main_api.stub", include_str!("../../templates/main_api.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register main_api template: {}", e) })?;
         }
         
         // Register filters (Tera equivalent of Handlebars helpers)
