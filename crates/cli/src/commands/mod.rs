@@ -21,7 +21,7 @@ pub mod module;
 
 // ========== Legacy modules (disabled to fix compilation) ==========
 // These modules contain unused code and will be re-enabled as needed
-// pub mod new;
+pub mod new;
 // pub mod generate;
 // pub mod route;
 // pub mod model;

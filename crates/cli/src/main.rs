@@ -16,6 +16,32 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Create a new elif application (Laravel-style: interactive wizard)
+    New {
+        /// Application name (optional - will prompt if not provided)
+        name: Option<String>,
+        
+        /// Skip interactive mode and use defaults
+        #[arg(long)]
+        non_interactive: bool,
+        
+        /// Project type (api, web, microservice, cli, minimal)
+        #[arg(long)]
+        project_type: Option<String>,
+        
+        /// Target directory (optional)
+        #[arg(long)]
+        path: Option<String>,
+        
+        /// Template type (api, web, minimal)  
+        #[arg(long)]
+        template: Option<String>,
+        
+        /// Include module system setup
+        #[arg(long)]
+        modules: bool,
+    },
+
     /// Create a new elif application with module system templates
     Create {
         #[command(subcommand)]
@@ -778,6 +804,27 @@ async fn main() -> Result<(), ElifError> {
     let cli = Cli::parse();
 
     match cli.command {
+        // ========== Interactive Laravel-style New Command ==========
+        Commands::New {
+            name,
+            non_interactive,
+            project_type: _,
+            path,
+            template,
+            modules,
+        } => {
+            if non_interactive {
+                // Use provided arguments or defaults for non-interactive mode
+                let app_name = name.unwrap_or_else(|| "my-app".to_string());
+                let app_template = template.unwrap_or_else(|| "api".to_string());
+                
+                commands::create::app(&app_name, path.as_deref(), &app_template, modules).await?;
+            } else {
+                // Run interactive wizard
+                commands::new::run_simple_wizard().await?;
+            }
+        }
+
         // ========== Original Elif.rs Command Structure ==========
         Commands::Create { create_command } => match create_command {
             CreateCommands::App {

@@ -1,4 +1,4 @@
-pub mod new_app;
-pub mod new_templates;
+pub mod simple_interactive;
+pub mod template_generator;
 
-pub use new_app::create_app;
+pub use simple_interactive::run_simple_wizard;
