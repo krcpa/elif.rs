@@ -50,7 +50,7 @@ pub async fn run(comprehensive: bool, module: Option<&str>) -> Result<(), ElifEr
 
         // 7. Framework health checks
         println!("🏥 Checking framework health...");
-        check_framework_health(&mut results)?;
+        check_framework_health(&mut results).await?;
 
         // 8. Security configuration
         println!("🔒 Checking security configuration...");
@@ -483,7 +483,7 @@ fn check_resource_specs_enhanced(results: &mut CheckResults) -> Result<(), ElifE
     Ok(())
 }
 
-fn check_framework_health(results: &mut CheckResults) -> Result<(), ElifError> {
+async fn check_framework_health(results: &mut CheckResults) -> Result<(), ElifError> {
     // Check database connectivity if configured
     if std::env::var("DATABASE_URL").is_ok() {
         // Test database connection using port check
@@ -496,12 +496,14 @@ fn check_framework_health(results: &mut CheckResults) -> Result<(), ElifError> {
     }
 
     // Check Redis connectivity if configured
-    if std::env::var("REDIS_URL").is_ok() || is_port_in_use(6379) {
-        if is_port_in_use(6379) {
-            results.success("Redis service is running");
+    if let Ok(redis_url) = std::env::var("REDIS_URL") {
+        let (host, port) = parse_redis_url(&redis_url).unwrap_or(("127.0.0.1".to_string(), 6379));
+        
+        if is_redis_accessible(&host, port).await {
+            results.success(&format!("Redis service is running on {}:{}", host, port));
         } else {
-            results.warning("Redis service appears to be down");
-            results.recommend("Start Redis service if using caching");
+            results.warning(&format!("Redis service appears to be down on {}:{}", host, port));
+            results.recommend("Start Redis service for caching functionality");
         }
     }
 
@@ -596,4 +598,50 @@ fn is_port_in_use(port: u16) -> bool {
     
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     TcpListener::bind(addr).is_err()
+}
+
+fn parse_redis_url(redis_url: &str) -> Option<(String, u16)> {
+    // Handle common Redis URL formats:
+    // redis://localhost:6379
+    // redis://user:pass@localhost:6379
+    // redis://localhost:6379/0
+    // localhost:6379
+    
+    if let Ok(parsed_url) = url::Url::parse(redis_url) {
+        // Parsed as a full URL
+        let host = parsed_url.host_str().unwrap_or("127.0.0.1").to_string();
+        let port = parsed_url.port().unwrap_or(6379);
+        Some((host, port))
+    } else if redis_url.contains(':') {
+        // Try to parse as "host:port"
+        let parts: Vec<&str> = redis_url.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            if let Ok(port) = parts[1].parse::<u16>() {
+                return Some((parts[0].to_string(), port));
+            }
+        }
+        None
+    } else {
+        // Just a hostname, use default port
+        Some((redis_url.to_string(), 6379))
+    }
+}
+
+async fn is_redis_accessible(host: &str, port: u16) -> bool {
+    use std::net::TcpStream;
+    use std::time::Duration;
+    
+    // Try to establish a TCP connection to the Redis server
+    let addr = match format!("{}:{}", host, port).parse::<std::net::SocketAddr>() {
+        Ok(addr) => addr,
+        Err(_) => return false,
+    };
+    
+    // Use a short timeout for the connection attempt
+    match tokio::time::timeout(Duration::from_millis(1000), async move {
+        TcpStream::connect(addr)
+    }).await {
+        Ok(Ok(_)) => true,
+        _ => false,
+    }
 }
