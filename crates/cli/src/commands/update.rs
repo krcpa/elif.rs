@@ -1,7 +1,7 @@
 use elif_core::ElifError;
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command;
+use tokio::process::Command;
 use serde::{Serialize, Deserialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -335,7 +335,8 @@ async fn check_dependency_updates(verbose: bool) -> Result<Vec<DependencyUpdate>
     // Use cargo outdated to check for updates
     let outdated_result = Command::new("cargo")
         .args(&["outdated", "--format", "json"])
-        .output();
+        .output()
+        .await;
 
     match outdated_result {
         Ok(output) => {
@@ -405,7 +406,8 @@ async fn scan_security_vulnerabilities(verbose: bool) -> Result<Vec<SecurityIssu
     // Use cargo audit to scan for vulnerabilities
     let audit_result = Command::new("cargo")
         .args(&["audit", "--format", "json"])
-        .output();
+        .output()
+        .await;
 
     match audit_result {
         Ok(output) => {
@@ -454,7 +456,8 @@ async fn update_dependencies(verbose: bool) -> Result<(), ElifError> {
     let update_result = Command::new("cargo")
         .args(&["update"])
         .output()
-        .map_err(|e| ElifError::Io(e))?;
+        .await
+        .map_err(ElifError::Io)?;
 
     if update_result.status.success() {
         if verbose {
@@ -476,7 +479,8 @@ async fn update_dependencies(verbose: bool) -> Result<(), ElifError> {
     let check_result = Command::new("cargo")
         .args(&["check", "--quiet"])
         .output()
-        .map_err(|e| ElifError::Io(e))?;
+        .await
+        .map_err(ElifError::Io)?;
 
     if !check_result.status.success() {
         let stderr = String::from_utf8_lossy(&check_result.stderr);
@@ -576,6 +580,7 @@ async fn has_cargo_audit() -> bool {
     Command::new("cargo")
         .args(&["audit", "--version"])
         .output()
+        .await
         .map(|output| output.status.success())
         .unwrap_or(false)
 }
@@ -584,6 +589,7 @@ async fn has_cargo_outdated() -> bool {
     Command::new("cargo")
         .args(&["outdated", "--version"])
         .output()
+        .await
         .map(|output| output.status.success())
         .unwrap_or(false)
 }
