@@ -1,0 +1,119 @@
+{
+  "name": "declarative_controllers",
+  "title": "Declarative Controllers",
+  "category": "http",
+  "version": "0.8.0",
+  "stability": "production",
+  "description": "70% boilerplate reduction through derive macros for REST API routing",
+  "tags": ["routing", "macros", "controllers", "rest", "api"],
+  
+  "basic_example": {
+    "title": "Basic Controller with HTTP Methods",
+    "code": "use elif_http::{ElifRequest, ElifResponse, HttpResult};\nuse elif_http_derive::{controller, get, post, middleware};\n\n#[derive(Clone)]\npub struct UserController;\n\n#[controller(\"/users\")]\n#[middleware(\"logging\", \"cors\")]\nimpl UserController {\n    #[get(\"\")]\n    #[middleware(\"cache\")]\n    pub async fn list(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {\n        let users = vec![\"Alice\", \"Bob\"];\n        Ok(ElifResponse::ok().json(&users)?)\n    }\n    \n    #[get(\"/{id}\")]\n    #[param(id: int)]\n    pub async fn show(&self, req: ElifRequest) -> HttpResult<ElifResponse> {\n        let id: u32 = req.path_param_int(\"id\")?;\n        Ok(ElifResponse::ok().json(&format!(\"User {}\", id))?)\n    }\n}",
+    "explanation": "Controller with automatic route registration using macros. Reduces boilerplate by ~70% compared to manual route registration.",
+    "file_source": "/examples/declarative_controller_example.rs:52-89"
+  },
+  
+  "advanced_example": {
+    "title": "Full CRUD Controller with Multiple Middleware",
+    "code": "#[controller(\"/api/users\")]\n#[middleware(\"logging\", \"cors\", \"rate_limit\")]\nimpl UserController {\n    #[get(\"\")]\n    #[middleware(\"cache\")]\n    pub async fn list(&self, req: ElifRequest) -> HttpResult<ElifResponse> {\n        // GET /api/users - with caching\n    }\n    \n    #[post(\"\")]\n    #[middleware(\"auth\", \"validation\")]\n    pub async fn create(&self, req: ElifRequest) -> HttpResult<ElifResponse> {\n        let data: CreateUserRequest = req.json().await?;\n        Ok(ElifResponse::created().json(&data)?)\n    }\n    \n    #[put(\"/{id}\")]\n    #[middleware(\"auth\")]\n    #[param(id: int)]\n    pub async fn update(&self, req: ElifRequest) -> HttpResult<ElifResponse> {\n        let id: u32 = req.path_param_int(\"id\")?;\n        let data: UpdateUserRequest = req.json().await?;\n        Ok(ElifResponse::ok().json(&data)?)\n    }\n    \n    #[delete(\"/{id}\")]\n    #[middleware(\"auth\")]\n    #[param(id: int)]\n    pub async fn delete(&self, req: ElifRequest) -> HttpResult<ElifResponse> {\n        let id: u32 = req.path_param_int(\"id\")?;\n        Ok(ElifResponse::ok().json(&serde_json::json!({\n            \"message\": format!(\"User {} deleted\", id)\n        }))?)\n    }\n}",
+    "explanation": "Complete CRUD controller with middleware composition and parameter validation. Shows how to combine multiple middleware and handle different HTTP methods."
+  },
+  
+  "when_to_use": [
+    "Building REST APIs with minimal boilerplate",
+    "Need automatic parameter validation and extraction",
+    "Want middleware composition at controller and method level",
+    "Prefer declarative over imperative route registration",
+    "Building CRUD operations with consistent patterns"
+  ],
+  
+  "benefits": [
+    "70% reduction in routing boilerplate code",
+    "Automatic route registration with Router",
+    "Type-safe parameter extraction with #[param]",
+    "Flexible middleware composition",
+    "Clear separation of concerns",
+    "Self-documenting route structure"
+  ],
+  
+  "source_files": [
+    {
+      "path": "crates/elif-http-derive/src/controller.rs",
+      "description": "Controller macro implementation"
+    },
+    {
+      "path": "examples/declarative_controller_example.rs",
+      "description": "Complete working example with multiple controllers"
+    },
+    {
+      "path": "crates/elif-http/src/controller/mod.rs", 
+      "description": "Controller traits and base functionality"
+    }
+  ],
+  
+  "related_patterns": [
+    "middleware_v2_system",
+    "dependency_injection",
+    "http_server_core",
+    "error_handling"
+  ],
+  
+  "common_mistakes": [
+    {
+      "mistake": "Forgetting to enable 'derive' feature in elif-http",
+      "solution": "Add elif-http = { version = '0.8.0', features = ['derive'] }"
+    },
+    {
+      "mistake": "Not using HttpResult<ElifResponse> return type",
+      "solution": "All controller methods must return HttpResult<ElifResponse>"
+    },
+    {
+      "mistake": "Missing #[param] attribute for path parameters",
+      "solution": "Add #[param(id: int)] for each path parameter"
+    },
+    {
+      "mistake": "Incorrect middleware string references",
+      "solution": "Ensure middleware names match registered middleware in pipeline"
+    }
+  ],
+  
+  "prerequisites": {
+    "dependencies": [
+      "elif-http = { version = \"0.8.0\", features = [\"derive\"] }",
+      "elif-http-derive = \"0.1.0\"",
+      "serde = { version = \"1.0\", features = [\"derive\"] }"
+    ],
+    "imports": [
+      "use elif_http::{ElifRequest, ElifResponse, HttpResult, Server, Router as ElifRouter};",
+      "use elif_http_derive::{controller, get, post, put, delete, middleware, param};"
+    ]
+  },
+  
+  "configuration": {
+    "router_registration": {
+      "title": "Register Controllers with Router",
+      "code": "let router = ElifRouter::<()>::new()\n    .controller(UserController)\n    .controller(PostController)\n    .controller(ApiController);\n\nlet server = Server::new().use_router(router);\nserver.listen(\"127.0.0.1:3000\").await?;"
+    }
+  },
+  
+  "testing": {
+    "title": "Testing Declarative Controllers", 
+    "code": "#[cfg(test)]\nmod tests {\n    use super::*;\n    use elif_http::testing::TestClient;\n    \n    #[tokio::test]\n    async fn test_user_list() {\n        let client = TestClient::new().controller(UserController);\n        let response = client.get(\"/users\").await;\n        assert_eq!(response.status(), 200);\n    }\n}"
+  },
+  
+  "performance": {
+    "notes": [
+      "Compile-time code generation with zero runtime overhead",
+      "Route registration happens at application startup",
+      "Middleware composition optimized during compilation"
+    ]
+  },
+  
+  "limitations": [
+    "Currently requires 'derive' feature to be enabled",
+    "Middleware names are string-based (compile-time validation planned)",
+    "Parameter types limited to predefined set (int, string, uuid)",
+    "Method-level middleware stacks with controller-level middleware"
+  ]
+}

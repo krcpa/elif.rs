@@ -1,0 +1,181 @@
+{
+  "name": "orm_models",
+  "title": "ORM Models",
+  "category": "database", 
+  "version": "0.8.0",
+  "stability": "production",
+  "description": "Django/Laravel-inspired ORM with Model trait, query builder, relationships, and migrations for type-safe database operations",
+  "tags": ["orm", "database", "models", "query-builder", "relationships", "migrations"],
+  
+  "basic_example": {
+    "title": "Basic User Model with Timestamps",
+    "code": "use elif_orm::{Model, ModelResult, ModelError};\nuse chrono::{DateTime, Utc};\nuse serde::{Serialize, Deserialize};\nuse uuid::Uuid;\nuse std::collections::HashMap;\n\n#[derive(Debug, Serialize, Deserialize, Clone)]\npub struct User {\n    pub id: Uuid,\n    pub name: String,\n    pub email: String,\n    pub age: Option<i32>,\n    pub is_active: bool,\n    pub created_at: DateTime<Utc>,\n    pub updated_at: DateTime<Utc>,\n}\n\nimpl Model for User {\n    type PrimaryKey = Uuid;\n    \n    fn table_name() -> &'static str {\n        \"users\"\n    }\n    \n    fn primary_key(&self) -> Option<Self::PrimaryKey> {\n        Some(self.id)\n    }\n    \n    fn set_primary_key(&mut self, key: Self::PrimaryKey) {\n        self.id = key;\n    }\n    \n    fn uses_timestamps() -> bool {\n        true\n    }\n    \n    fn from_row(row: &sqlx::postgres::PgRow) -> ModelResult<Self> {\n        Ok(User {\n            id: row.try_get(\"id\")?,\n            name: row.try_get(\"name\")?,\n            email: row.try_get(\"email\")?,\n            age: row.try_get(\"age\")?,\n            is_active: row.try_get(\"is_active\")?,\n            created_at: row.try_get(\"created_at\")?,\n            updated_at: row.try_get(\"updated_at\")?,\n        })\n    }\n    \n    fn to_fields(&self) -> HashMap<String, serde_json::Value> {\n        let mut fields = HashMap::new();\n        fields.insert(\"id\".to_string(), serde_json::json!(self.id));\n        fields.insert(\"name\".to_string(), serde_json::json!(self.name));\n        fields.insert(\"email\".to_string(), serde_json::json!(self.email));\n        fields.insert(\"age\".to_string(), serde_json::json!(self.age));\n        fields.insert(\"is_active\".to_string(), serde_json::json!(self.is_active));\n        fields\n    }\n}",
+    "explanation": "Basic model implementation with primary key, timestamps, and database row mapping. Demonstrates core ORM patterns.",
+    "file_source": "/examples/controllers/user_model.rs:14-135"
+  },
+  
+  "advanced_example": {
+    "title": "Advanced Query Building and Relationships",
+    "code": "// Query Builder Usage\nuse elif_orm::QueryBuilder;\n\n// Basic queries\nlet users = User::query()\n    .where_eq(\"is_active\", true)\n    .where_gt(\"age\", 18)\n    .order_by(\"created_at\", \"DESC\")\n    .limit(10)\n    .get(pool)\n    .await?;\n\n// Join queries\nlet posts_with_authors = Post::query()\n    .join(\"users\", \"posts.user_id\", \"users.id\")\n    .select(&[\"posts.*\", \"users.name as author_name\"])\n    .where_eq(\"posts.published\", true)\n    .get(pool)\n    .await?;\n\n// Aggregations\nlet user_count = User::query()\n    .where_eq(\"is_active\", true)\n    .count(pool)\n    .await?;\n\n// Complex conditions\nlet complex_query = Post::query()\n    .where_like(\"title\", \"%rust%\")\n    .where_in(\"status\", vec![\"published\", \"featured\"])\n    .where_between(\"created_at\", start_date, end_date)\n    .group_by(\"user_id\")\n    .having_gt(\"COUNT(*)\", 5)\n    .order_by(\"created_at\", \"DESC\")\n    .paginate(page, per_page)\n    .get(pool)\n    .await?;\n\n// Relationships (when implemented)\nlet user_with_posts = User::find(user_id)\n    .with(\"posts\")\n    .with(\"posts.comments\")\n    .first(pool)\n    .await?;\n\n// Model factory usage\nimpl User {\n    pub fn factory() -> UserFactory {\n        UserFactory::new()\n    }\n}\n\nlet test_user = User::factory()\n    .name(\"John Doe\")\n    .email(\"john@example.com\")\n    .age(25)\n    .create(pool)\n    .await?;",
+    "explanation": "Advanced ORM usage showing query building, joins, aggregations, relationships, and model factories."
+  },
+  
+  "when_to_use": [
+    "Type-safe database operations with compile-time validation",
+    "Complex queries with joins, aggregations, and relationships", 
+    "Database schema evolution through migrations",
+    "Model relationships (has_many, belongs_to, has_one)",
+    "Transaction management and connection pooling",
+    "Database seeding and testing with factories"
+  ],
+  
+  "benefits": [
+    "Type safety with compile-time query validation",
+    "Laravel/Django-inspired familiar API patterns",
+    "Automatic timestamp management", 
+    "Built-in soft delete support",
+    "Connection pooling and transaction management",
+    "Relationship loading with eager/lazy patterns",
+    "Model factories for testing and seeding",
+    "Migration system for schema evolution"
+  ],
+  
+  "source_files": [
+    {
+      "path": "crates/orm/src/model/core_trait.rs",
+      "description": "Core Model trait definition"
+    },
+    {
+      "path": "crates/orm/examples/advanced_queries.rs",
+      "description": "Advanced query builder examples"
+    },
+    {
+      "path": "examples/controllers/user_model.rs",
+      "description": "Complete User model with validation"
+    },
+    {
+      "path": "crates/orm/src/query/builder.rs",
+      "description": "Query builder implementation"
+    }
+  ],
+  
+  "related_patterns": [
+    "declarative_controllers",
+    "http_server_core", 
+    "dependency_injection",
+    "testing_framework"
+  ],
+  
+  "common_mistakes": [
+    {
+      "mistake": "Not implementing from_row correctly for complex types",
+      "solution": "Use try_get() for each field and handle potential database NULL values"
+    },
+    {
+      "mistake": "Forgetting to enable timestamps on models that need them",
+      "solution": "Return true from uses_timestamps() and implement timestamp getters/setters"
+    },
+    {
+      "mistake": "Not handling database errors in model operations",
+      "solution": "Use ModelResult<T> and proper error handling patterns"
+    },
+    {
+      "mistake": "Complex queries without proper indexing",
+      "solution": "Create appropriate database indexes for commonly queried fields"
+    }
+  ],
+  
+  "prerequisites": {
+    "dependencies": [
+      "elif-orm = \"0.8.0\"",
+      "sqlx = { version = \"0.7\", features = [\"runtime-tokio-rustls\", \"postgres\", \"uuid\", \"chrono\"] }",
+      "serde = { version = \"1.0\", features = [\"derive\"] }",
+      "uuid = { version = \"1.0\", features = [\"v4\", \"serde\"] }",
+      "chrono = { version = \"0.4\", features = [\"serde\"] }"
+    ],
+    "imports": [
+      "use elif_orm::{Model, ModelResult, QueryBuilder, Migration};",
+      "use serde::{Serialize, Deserialize};",
+      "use chrono::{DateTime, Utc};",
+      "use uuid::Uuid;"
+    ]
+  },
+  
+  "database_setup": {
+    "title": "Database Configuration",
+    "code": "// Database connection setup\nuse sqlx::{Pool, Postgres};\nuse elif_orm::Database;\n\n#[tokio::main]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {\n    // Connect to database\n    let database_url = \"postgresql://username:password@localhost/myapp\";\n    let pool = sqlx::postgres::PgPoolOptions::new()\n        .max_connections(20)\n        .connect(database_url)\n        .await?;\n    \n    // Run migrations\n    sqlx::migrate!(\"./migrations\").run(&pool).await?;\n    \n    // Use models\n    let user = User::new(\"John\".to_string(), \"john@example.com\".to_string());\n    let saved_user = user.save(&pool).await?;\n    \n    Ok(())\n}"
+  },
+  
+  "migrations": {
+    "title": "Database Migrations",
+    "examples": [
+      {
+        "name": "Create Users Table",
+        "code": "-- migrations/20240101000001_create_users.sql\nCREATE TABLE users (\n    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    name VARCHAR NOT NULL,\n    email VARCHAR UNIQUE NOT NULL,\n    age INTEGER,\n    is_active BOOLEAN NOT NULL DEFAULT true,\n    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\n\nCREATE INDEX idx_users_email ON users(email);\nCREATE INDEX idx_users_active ON users(is_active);"
+      },
+      {
+        "name": "Add Soft Deletes",
+        "code": "-- migrations/20240101000002_add_soft_deletes.sql\nALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ;\nCREATE INDEX idx_users_deleted_at ON users(deleted_at) WHERE deleted_at IS NOT NULL;"
+      }
+    ]
+  },
+  
+  "query_patterns": {
+    "title": "Common Query Patterns",
+    "examples": [
+      {
+        "name": "Basic CRUD Operations",
+        "code": "// Create\nlet user = User::new(name, email).save(&pool).await?;\n\n// Read\nlet user = User::find(id, &pool).await?;\nlet users = User::all(&pool).await?;\n\n// Update\nlet mut user = User::find(id, &pool).await?;\nuser.name = \"New Name\".to_string();\nuser.save(&pool).await?;\n\n// Delete\nUser::delete(id, &pool).await?;\n\n// Soft delete\nUser::soft_delete(id, &pool).await?;"
+      },
+      {
+        "name": "Filtering and Ordering",
+        "code": "// Where conditions\nlet active_users = User::query()\n    .where_eq(\"is_active\", true)\n    .where_not_null(\"email\")\n    .where_in(\"role\", vec![\"admin\", \"moderator\"])\n    .get(&pool)\n    .await?;\n\n// Ordering and limits\nlet recent_posts = Post::query()\n    .order_by(\"created_at\", \"DESC\")\n    .limit(10)\n    .offset(20)\n    .get(&pool)\n    .await?;\n\n// Search patterns\nlet search_results = Post::query()\n    .where_like(\"title\", \"%search term%\")\n    .or_where_like(\"content\", \"%search term%\")\n    .get(&pool)\n    .await?;"
+      }
+    ]
+  },
+  
+  "relationships": {
+    "title": "Model Relationships",
+    "code": "// Define relationships\nimpl User {\n    // Has many posts\n    pub fn posts(&self) -> HasMany<Post> {\n        HasMany::new(\"user_id\", self.id)\n    }\n    \n    // Has one profile\n    pub fn profile(&self) -> HasOne<Profile> {\n        HasOne::new(\"user_id\", self.id)\n    }\n}\n\nimpl Post {\n    // Belongs to user\n    pub fn user(&self) -> BelongsTo<User> {\n        BelongsTo::new(\"user_id\", self.user_id)\n    }\n    \n    // Has many comments\n    pub fn comments(&self) -> HasMany<Comment> {\n        HasMany::new(\"post_id\", self.id)\n    }\n}\n\n// Eager loading\nlet user_with_posts = User::query()\n    .with(\"posts\")\n    .with(\"posts.comments\")\n    .find(user_id)\n    .await?;\n\n// Lazy loading\nlet user = User::find(user_id).await?;\nlet posts = user.posts().get(&pool).await?;"
+  },
+  
+  "model_factories": {
+    "title": "Model Factories for Testing",
+    "code": "#[cfg(test)]\nmod factories {\n    use super::*;\n    use elif_orm::Factory;\n    \n    pub struct UserFactory {\n        name: String,\n        email: String,\n        age: Option<i32>,\n    }\n    \n    impl UserFactory {\n        pub fn new() -> Self {\n            Self {\n                name: \"Test User\".to_string(),\n                email: format!(\"test{}@example.com\", uuid::Uuid::new_v4()),\n                age: Some(25),\n            }\n        }\n        \n        pub fn name(mut self, name: &str) -> Self {\n            self.name = name.to_string();\n            self\n        }\n        \n        pub fn email(mut self, email: &str) -> Self {\n            self.email = email.to_string();\n            self\n        }\n        \n        pub async fn create(self, pool: &Pool<Postgres>) -> ModelResult<User> {\n            let user = User::new(self.name, self.email);\n            user.save(pool).await\n        }\n    }\n}\n\n// Usage in tests\n#[tokio::test]\nasync fn test_user_creation() {\n    let pool = setup_test_db().await;\n    \n    let user = User::factory()\n        .name(\"John Doe\")\n        .email(\"john@test.com\")\n        .create(&pool)\n        .await?;\n    \n    assert_eq!(user.name, \"John Doe\");\n}"
+  },
+  
+  "testing": {
+    "title": "Testing Models",
+    "code": "#[cfg(test)]\nmod tests {\n    use super::*;\n    use sqlx::Pool;\n    \n    async fn setup_test_db() -> Pool<sqlx::Postgres> {\n        let pool = sqlx::postgres::PgPoolOptions::new()\n            .max_connections(1)\n            .connect(&std::env::var(\"TEST_DATABASE_URL\").unwrap())\n            .await\n            .unwrap();\n        \n        // Run migrations\n        sqlx::migrate!(\"./migrations\").run(&pool).await.unwrap();\n        pool\n    }\n    \n    #[tokio::test]\n    async fn test_user_model() {\n        let pool = setup_test_db().await;\n        \n        // Test creation\n        let user = User::new(\n            \"Test User\".to_string(),\n            \"test@example.com\".to_string()\n        );\n        let saved_user = user.save(&pool).await.unwrap();\n        \n        assert!(saved_user.id != Uuid::default());\n        assert_eq!(saved_user.name, \"Test User\");\n        \n        // Test retrieval\n        let found_user = User::find(saved_user.id, &pool).await.unwrap();\n        assert_eq!(found_user.email, \"test@example.com\");\n        \n        // Test query\n        let active_users = User::query()\n            .where_eq(\"is_active\", true)\n            .get(&pool)\n            .await\n            .unwrap();\n        \n        assert!(active_users.len() > 0);\n    }\n}"
+  },
+  
+  "performance": {
+    "notes": [
+      "Connection pooling with configurable pool size",
+      "Prepared statement caching for repeated queries", 
+      "Lazy loading prevents N+1 query problems",
+      "Batch operations for bulk inserts/updates",
+      "Query optimization with proper indexing"
+    ],
+    "best_practices": [
+      "Use connection pooling for production applications",
+      "Create indexes for frequently queried columns",
+      "Use eager loading for known relationships",
+      "Batch operations for bulk data processing",
+      "Monitor query performance with logging"
+    ]
+  },
+  
+  "limitations": [
+    "Currently supports PostgreSQL only", 
+    "Relationship system under development",
+    "No automatic migration generation yet",
+    "Limited support for complex database types",
+    "Derive macros for Model trait coming in future releases"
+  ],
+  
+  "configuration": {
+    "title": "Production Configuration",
+    "code": "// database.yml or environment configuration\nuse sqlx::postgres::PgPoolOptions;\nuse std::time::Duration;\n\nlet pool = PgPoolOptions::new()\n    .max_connections(20)\n    .min_connections(5)\n    .max_lifetime(Duration::from_secs(1800))\n    .idle_timeout(Duration::from_secs(600))\n    .acquire_timeout(Duration::from_secs(30))\n    .connect(&database_url)\n    .await?;\n\n// Enable query logging for development\nif cfg!(debug_assertions) {\n    sqlx::any::install_default_drivers();\n}"
+  }
+}

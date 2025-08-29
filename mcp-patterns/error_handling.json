@@ -1,0 +1,143 @@
+{
+  "name": "error_handling",
+  "title": "Error Handling",
+  "category": "http",
+  "version": "0.8.0",
+  "stability": "production",
+  "description": "Structured error handling with HttpResult, custom error types, and consistent JSON error responses following framework conventions",
+  "tags": ["errors", "http", "json", "structured", "results"],
+  
+  "basic_example": {
+    "title": "Basic Error Handling with HttpResult",
+    "code": "use elif_http::{HttpResult, HttpError, ElifResponse, ElifRequest};\nuse serde_json::json;\n\n// Controller method with error handling\nasync fn get_user(request: ElifRequest) -> HttpResult<ElifResponse> {\n    let user_id: u32 = request.path_param_int(\"id\")?; // Auto-converts parse errors\n    \n    // Validate user ID\n    if user_id == 0 {\n        return Err(HttpError::BadRequest {\n            message: \"User ID must be greater than 0\".to_string(),\n            details: Some(json!({\n                \"field\": \"id\",\n                \"value\": user_id,\n                \"constraint\": \"greater_than_zero\"\n            })),\n        });\n    }\n    \n    // Simulate database lookup that might fail\n    match find_user_in_database(user_id).await {\n        Ok(Some(user)) => {\n            Ok(ElifResponse::ok().json(&user)?)\n        },\n        Ok(None) => {\n            Err(HttpError::NotFound {\n                message: format!(\"User with ID {} not found\", user_id),\n                details: Some(json!({\n                    \"resource\": \"user\",\n                    \"id\": user_id\n                })),\n            })\n        },\n        Err(db_error) => {\n            Err(HttpError::InternalServerError {\n                message: \"Database error occurred\".to_string(),\n                details: Some(json!({\n                    \"error\": \"database_connection_failed\",\n                    \"hint\": \"Please try again later\"\n                })),\n            })\n        }\n    }\n}\n\n// Error responses follow consistent JSON format\n// {\n//   \"error\": {\n//     \"code\": \"not_found\",\n//     \"message\": \"User with ID 123 not found\",\n//     \"details\": {\n//       \"resource\": \"user\",\n//       \"id\": 123\n//     }\n//   }\n// }",
+    "explanation": "Basic error handling showing HttpResult usage, validation errors, and structured JSON error responses.",
+    "file_source": "Framework convention"
+  },
+  
+  "advanced_example": {
+    "title": "Custom Error Types and Validation",
+    "code": "use elif_http::{HttpResult, HttpError, ElifResponse};\nuse serde::{Deserialize, Serialize};\nuse thiserror::Error;\n\n// Custom domain errors\n#[derive(Error, Debug)]\npub enum UserServiceError {\n    #[error(\"User validation failed: {field}\")]\n    ValidationError { field: String, message: String },\n    \n    #[error(\"User with email {email} already exists\")]\n    DuplicateEmail { email: String },\n    \n    #[error(\"Database operation failed\")]\n    DatabaseError(#[from] sqlx::Error),\n    \n    #[error(\"External service unavailable\")]\n    ExternalServiceError,\n}\n\n// Convert domain errors to HTTP errors\nimpl From<UserServiceError> for HttpError {\n    fn from(error: UserServiceError) -> Self {\n        match error {\n            UserServiceError::ValidationError { field, message } => {\n                HttpError::BadRequest {\n                    message: format!(\"Validation failed for field: {}\", field),\n                    details: Some(serde_json::json!({\n                        \"error\": {\n                            \"code\": \"validation_failed\",\n                            \"message\": message,\n                            \"field\": field\n                        }\n                    })),\n                }\n            },\n            UserServiceError::DuplicateEmail { email } => {\n                HttpError::Conflict {\n                    message: \"User already exists\".to_string(),\n                    details: Some(serde_json::json!({\n                        \"error\": {\n                            \"code\": \"duplicate_email\",\n                            \"message\": format!(\"User with email {} already exists\", email),\n                            \"field\": \"email\",\n                            \"value\": email\n                        }\n                    })),\n                }\n            },\n            UserServiceError::DatabaseError(_) => {\n                HttpError::InternalServerError {\n                    message: \"Internal server error\".to_string(),\n                    details: Some(serde_json::json!({\n                        \"error\": {\n                            \"code\": \"database_error\",\n                            \"message\": \"Database operation failed\",\n                            \"hint\": \"Please try again later\"\n                        }\n                    })),\n                }\n            },\n            UserServiceError::ExternalServiceError => {\n                HttpError::ServiceUnavailable {\n                    message: \"External service temporarily unavailable\".to_string(),\n                    details: Some(serde_json::json!({\n                        \"error\": {\n                            \"code\": \"service_unavailable\",\n                            \"message\": \"External service is temporarily unavailable\",\n                            \"retry_after\": 60\n                        }\n                    })),\n                }\n            },\n        }\n    }\n}\n\n// Validation helper functions\nfn validate_email(email: &str) -> Result<(), UserServiceError> {\n    if !email.contains('@') {\n        return Err(UserServiceError::ValidationError {\n            field: \"email\".to_string(),\n            message: \"Invalid email format\".to_string(),\n        });\n    }\n    Ok(())\n}\n\n// Service method with comprehensive error handling\nasync fn create_user(request: ElifRequest) -> HttpResult<ElifResponse> {\n    // Parse and validate request body\n    let user_data: CreateUserRequest = request.json().await?;\n    \n    // Validate email format\n    validate_email(&user_data.email)?;\n    \n    // Check for duplicate email\n    if user_exists_by_email(&user_data.email).await? {\n        return Err(UserServiceError::DuplicateEmail { \n            email: user_data.email \n        }.into());\n    }\n    \n    // Create user - database errors automatically converted\n    let user = create_user_in_db(user_data).await?;\n    \n    Ok(ElifResponse::created()\n        .json(&user)?\n        .header(\"Location\", &format!(\"/users/{}\", user.id))?)\n}",
+    "explanation": "Advanced error handling with custom error types, automatic conversions, and comprehensive validation patterns."
+  },
+  
+  "when_to_use": [
+    "Building REST APIs with consistent error responses",
+    "Need structured error information for client applications",
+    "Want automatic error conversion from domain errors to HTTP errors",
+    "Building user-facing applications that need good error messages",
+    "API documentation requires consistent error format"
+  ],
+  
+  "benefits": [
+    "Consistent JSON error format across all endpoints",
+    "Automatic conversion from Result types to HTTP responses",
+    "Rich error context with details and hints",
+    "Type-safe error handling with HttpResult<T>",
+    "Integration with middleware for error processing",
+    "Support for validation errors and business logic errors"
+  ],
+  
+  "source_files": [
+    {
+      "path": "crates/elif-http/src/errors/http_error.rs",
+      "description": "HTTP error types and conversion"
+    },
+    {
+      "path": "crates/elif-http/src/errors/",
+      "description": "Error format specification and implementations"
+    }
+  ],
+  
+  "related_patterns": [
+    "http_server_core",
+    "declarative_controllers",
+    "middleware_v2_system"
+  ],
+  
+  "common_mistakes": [
+    {
+      "mistake": "Returning generic error messages without context",
+      "solution": "Include specific error details and hints for client applications"
+    },
+    {
+      "mistake": "Not using ? operator for error propagation",
+      "solution": "Use ? operator to automatically convert and propagate errors"
+    },
+    {
+      "mistake": "Exposing internal error details in production",
+      "solution": "Sanitize error messages and log full details internally"
+    },
+    {
+      "mistake": "Inconsistent error response formats",
+      "solution": "Always use HttpError types for consistent JSON format"
+    }
+  ],
+  
+  "prerequisites": {
+    "dependencies": [
+      "elif-http = \"0.8.0\"",
+      "thiserror = \"1.0\"",
+      "serde = { version = \"1.0\", features = [\"derive\"] }",
+      "serde_json = \"1.0\""
+    ],
+    "imports": [
+      "use elif_http::{HttpResult, HttpError, ElifResponse};",
+      "use thiserror::Error;"
+    ]
+  },
+  
+  "error_types": {
+    "title": "Standard HTTP Error Types",
+    "examples": [
+      {
+        "name": "BadRequest (400)",
+        "code": "HttpError::BadRequest {\n    message: \"Invalid request data\".to_string(),\n    details: Some(json!({\n        \"field\": \"email\",\n        \"error\": \"invalid_format\"\n    })),\n}"
+      },
+      {
+        "name": "Unauthorized (401)",
+        "code": "HttpError::Unauthorized {\n    message: \"Authentication required\".to_string(),\n    details: Some(json!({\n        \"error\": \"missing_token\",\n        \"hint\": \"Include Authorization header\"\n    })),\n}"
+      },
+      {
+        "name": "NotFound (404)",
+        "code": "HttpError::NotFound {\n    message: \"Resource not found\".to_string(),\n    details: Some(json!({\n        \"resource\": \"user\",\n        \"id\": user_id\n    })),\n}"
+      },
+      {
+        "name": "InternalServerError (500)",
+        "code": "HttpError::InternalServerError {\n    message: \"Internal server error\".to_string(),\n    details: Some(json!({\n        \"error\": \"database_connection_failed\",\n        \"hint\": \"Please try again later\"\n    })),\n}"
+      }
+    ]
+  },
+  
+  "validation_patterns": {
+    "title": "Request Validation Patterns",
+    "code": "use serde::{Deserialize, Serialize};\nuse validator::{Validate, ValidationErrors};\n\n#[derive(Debug, Deserialize, Validate)]\nstruct CreateUserRequest {\n    #[validate(length(min = 2, max = 50))]\n    pub name: String,\n    \n    #[validate(email)]\n    pub email: String,\n    \n    #[validate(range(min = 18, max = 120))]\n    pub age: Option<u32>,\n}\n\n// Validation error conversion\nimpl From<ValidationErrors> for HttpError {\n    fn from(errors: ValidationErrors) -> Self {\n        let field_errors: Vec<_> = errors\n            .field_errors()\n            .iter()\n            .map(|(field, errs)| {\n                json!({\n                    \"field\": field,\n                    \"errors\": errs.iter().map(|e| e.message.as_ref()).collect::<Vec<_>>()\n                })\n            })\n            .collect();\n        \n        HttpError::BadRequest {\n            message: \"Validation failed\".to_string(),\n            details: Some(json!({\n                \"error\": {\n                    \"code\": \"validation_failed\",\n                    \"message\": \"One or more fields failed validation\",\n                    \"fields\": field_errors\n                }\n            })),\n        }\n    }\n}\n\n// Controller method with validation\nasync fn create_user(request: ElifRequest) -> HttpResult<ElifResponse> {\n    let user_data: CreateUserRequest = request.json().await?;\n    \n    // Validate request data\n    user_data.validate()?;\n    \n    // Proceed with business logic\n    let user = create_user_service(&user_data).await?;\n    Ok(ElifResponse::created().json(&user)?)\n}"
+  },
+  
+  "middleware_integration": {
+    "title": "Error Handling Middleware",
+    "code": "use elif_http::middleware::v2::{Middleware, Next, NextFuture};\n\n#[derive(Debug)]\npub struct ErrorHandlerMiddleware {\n    include_stack_trace: bool,\n}\n\nimpl ErrorHandlerMiddleware {\n    pub fn new(include_stack_trace: bool) -> Self {\n        Self { include_stack_trace }\n    }\n}\n\nimpl Middleware for ErrorHandlerMiddleware {\n    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {\n        let include_trace = self.include_stack_trace;\n        \n        Box::pin(async move {\n            match next.run(request).await {\n                response => {\n                    // Check if response is an error\n                    if response.status_code().is_client_error() || response.status_code().is_server_error() {\n                        // Log error details\n                        log::error!(\"HTTP Error: {} - {}\", response.status_code(), \"error details\");\n                        \n                        // Add debugging headers in development\n                        if include_trace && cfg!(debug_assertions) {\n                            let mut response = response;\n                            let _ = response.add_header(\"X-Debug-Timestamp\", &chrono::Utc::now().to_rfc3339());\n                            return response;\n                        }\n                    }\n                    \n                    response\n                }\n            }\n        })\n    }\n}\n\n// Usage\nlet server = Server::new(container, config)?\n    .use_middleware(ErrorHandlerMiddleware::new(true));"
+  },
+  
+  "testing": {
+    "title": "Testing Error Handling",
+    "code": "#[cfg(test)]\nmod tests {\n    use super::*;\n    use elif_http::testing::TestClient;\n    \n    #[tokio::test]\n    async fn test_validation_error() {\n        let client = TestClient::new();\n        \n        // Send invalid data\n        let invalid_user = serde_json::json!({\n            \"name\": \"\", // Empty name should fail validation\n            \"email\": \"invalid-email\", // Invalid email format\n            \"age\": 200 // Age too high\n        });\n        \n        let response = client\n            .post(\"/users\")\n            .json(&invalid_user)\n            .await;\n        \n        assert_eq!(response.status(), 400);\n        \n        let error_body: serde_json::Value = response.json().await.unwrap();\n        assert_eq!(error_body[\"error\"][\"code\"], \"validation_failed\");\n        assert!(error_body[\"error\"][\"fields\"].is_array());\n    }\n    \n    #[tokio::test]\n    async fn test_not_found_error() {\n        let client = TestClient::new();\n        \n        let response = client.get(\"/users/999999\").await;\n        \n        assert_eq!(response.status(), 404);\n        \n        let error_body: serde_json::Value = response.json().await.unwrap();\n        assert_eq!(error_body[\"error\"][\"code\"], \"not_found\");\n        assert_eq!(error_body[\"error\"][\"details\"][\"resource\"], \"user\");\n        assert_eq!(error_body[\"error\"][\"details\"][\"id\"], 999999);\n    }\n    \n    #[tokio::test]\n    async fn test_custom_error_conversion() {\n        let service_error = UserServiceError::DuplicateEmail {\n            email: \"test@example.com\".to_string()\n        };\n        \n        let http_error: HttpError = service_error.into();\n        \n        match http_error {\n            HttpError::Conflict { message, details } => {\n                assert_eq!(message, \"User already exists\");\n                assert!(details.is_some());\n            },\n            _ => panic!(\"Expected Conflict error\"),\n        }\n    }\n}"
+  },
+  
+  "logging_integration": {
+    "title": "Error Logging and Monitoring",
+    "code": "use log::{error, warn, info};\nuse serde_json::json;\n\n// Custom error logging\npub fn log_http_error(error: &HttpError, request_id: &str) {\n    match error {\n        HttpError::BadRequest { message, details } => {\n            warn!(\n                \"Bad request [{}]: {} - {:?}\", \n                request_id, message, details\n            );\n        },\n        HttpError::NotFound { message, .. } => {\n            info!(\"Resource not found [{}]: {}\", request_id, message);\n        },\n        HttpError::InternalServerError { message, details } => {\n            error!(\n                \"Internal server error [{}]: {} - {:?}\", \n                request_id, message, details\n            );\n            \n            // Send to monitoring service\n            send_error_to_monitoring(error, request_id);\n        },\n        _ => {\n            warn!(\"HTTP error [{}]: {:?}\", request_id, error);\n        }\n    }\n}\n\n// Integration with monitoring services\nfn send_error_to_monitoring(error: &HttpError, request_id: &str) {\n    let error_event = json!({\n        \"timestamp\": chrono::Utc::now().to_rfc3339(),\n        \"request_id\": request_id,\n        \"error_type\": \"internal_server_error\",\n        \"message\": error.to_string(),\n        \"severity\": \"error\"\n    });\n    \n    // Send to Sentry, DataDog, etc.\n    // monitoring_client.send_event(&error_event);\n}"
+  },
+  
+  "production_considerations": {
+    "title": "Production Error Handling",
+    "notes": [
+      "Never expose internal error details in production responses",
+      "Log full error details internally for debugging",
+      "Use consistent error codes for client application integration",
+      "Include request IDs for error correlation",
+      "Set up monitoring and alerting for 500 errors",
+      "Provide helpful error messages and hints for users"
+    ],
+    "example": "// Production error sanitization\nimpl HttpError {\n    pub fn sanitize_for_production(self) -> Self {\n        match self {\n            HttpError::InternalServerError { .. } => {\n                HttpError::InternalServerError {\n                    message: \"Internal server error\".to_string(),\n                    details: Some(json!({\n                        \"error\": {\n                            \"code\": \"internal_error\",\n                            \"message\": \"An unexpected error occurred\",\n                            \"hint\": \"Please try again later or contact support\"\n                        }\n                    })),\n                }\n            },\n            other => other, // Keep client errors as-is\n        }\n    }\n}"
+  }
+}

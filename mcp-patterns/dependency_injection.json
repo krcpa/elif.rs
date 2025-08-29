@@ -1,0 +1,178 @@
+{
+  "name": "dependency_injection",
+  "title": "Dependency Injection",
+  "category": "architecture",
+  "version": "0.8.0",
+  "stability": "production", 
+  "description": "NestJS-inspired dependency injection system with IoC container, service lifetimes, module system, and automatic dependency resolution",
+  "tags": ["dependency-injection", "ioc", "container", "services", "modules", "nestjs-style"],
+  
+  "basic_example": {
+    "title": "Basic Service Registration and Resolution",
+    "code": "use elif_core::container::{IocContainer, ServiceBinder};\nuse std::sync::Arc;\n\n// Define service traits and implementations\ntrait UserRepository: Send + Sync {\n    fn find_by_id(&self, id: u32) -> Option<String>;\n}\n\n#[derive(Default)]\nstruct PostgresUserRepository {\n    connection_string: String,\n}\n\nimpl UserRepository for PostgresUserRepository {\n    fn find_by_id(&self, id: u32) -> Option<String> {\n        Some(format!(\"User {} from database\", id))\n    }\n}\n\n#[derive(Default)]\nstruct UserService;\n\nimpl UserService {\n    pub fn get_user(&self, id: u32) -> Option<String> {\n        // In real implementation, would use injected repository\n        Some(format!(\"User {}\", id))\n    }\n}\n\n#[tokio::main]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {\n    // Create and configure container\n    let mut container = IocContainer::new();\n    \n    // Register services with different lifetimes\n    container\n        .bind_singleton::<PostgresUserRepository, PostgresUserRepository>()\n        .bind_transient::<UserService, UserService>();\n    \n    // Build container (validates dependencies)\n    container.build()?;\n    \n    // Resolve services\n    let user_service = container.resolve::<UserService>()?;\n    let user = user_service.get_user(123);\n    println!(\"Found user: {:?}\", user);\n    \n    Ok(())\n}",
+    "explanation": "Basic IoC container usage with service registration, different lifetimes, and dependency resolution.",
+    "file_source": "/crates/core/src/container/examples.rs:55-76"
+  },
+  
+  "advanced_example": {
+    "title": "Laravel-Style Module System with Dependency Injection",
+    "code": "use elif_http_derive::demo_module;\nuse elif_core::container::{IocContainer, ServiceBinder};\n\n// Domain services\n#[derive(Default)]\nstruct UserService {\n    repository: Option<Arc<dyn UserRepository>>,\n    email_service: Option<Arc<EmailService>>,\n}\n\nimpl UserService {\n    pub fn create_user(&self, name: &str, email: &str) -> Result<u32, String> {\n        // Business logic using injected dependencies\n        let user_id = 42; // Mock ID\n        \n        if let Some(email_service) = &self.email_service {\n            email_service.send_welcome_email(email);\n        }\n        \n        Ok(user_id)\n    }\n}\n\n#[derive(Default)]\nstruct EmailService;\n\nimpl EmailService {\n    pub fn send_welcome_email(&self, email: &str) {\n        println!(\"📧 Sending welcome email to {}\", email);\n    }\n}\n\n#[derive(Default)]\nstruct CacheService;\n\n// Laravel-style module definition\nlet user_module = demo_module! {\n    services: [\n        UserService,\n        EmailService,\n        CacheService\n    ],\n    controllers: [\n        UserController,\n        ProfileController\n    ],\n    middleware: [\n        \"auth\",\n        \"logging\",\n        \"rate_limiting\"\n    ]\n};\n\n// Advanced dependency resolution with factories\nstruct DatabaseConfig {\n    host: String,\n    port: u16,\n    database: String,\n}\n\nlet mut container = IocContainer::new();\n\n// Factory-based registration for complex dependencies\ncontainer.bind_factory::<DatabaseConfig, _, _>(|| {\n    Ok(DatabaseConfig {\n        host: std::env::var(\"DB_HOST\").unwrap_or_else(|_| \"localhost\".to_string()),\n        port: std::env::var(\"DB_PORT\")\n            .unwrap_or_else(|_| \"5432\".to_string())\n            .parse()\n            .unwrap_or(5432),\n        database: std::env::var(\"DB_NAME\").unwrap_or_else(|_| \"app\".to_string()),\n    })\n});\n\n// Named services for multiple implementations\ncontainer\n    .bind_named::<PostgresUserRepository, PostgresUserRepository>(\"primary\")\n    .bind_named::<RedisUserRepository, RedisUserRepository>(\"cache\");\n\n// Scoped services (per-request lifetime)\ncontainer.bind_scoped::<RequestContext, RequestContext>();",
+    "explanation": "Advanced DI patterns with modules, factories, named services, and scoped lifetimes."
+  },
+  
+  "when_to_use": [
+    "Need loose coupling between application components",
+    "Building modular applications with swappable implementations",
+    "Require different service lifetimes (singleton, transient, scoped)", 
+    "Want testable code with easy mocking/stubbing",
+    "Building large applications with complex dependency graphs",
+    "Need Laravel/NestJS-style module organization"
+  ],
+  
+  "benefits": [
+    "Loose coupling through interface-based dependencies",
+    "Multiple service lifetimes (singleton, transient, scoped)",
+    "Automatic dependency resolution and validation",
+    "Factory-based service creation for complex scenarios",
+    "Named services for multiple implementations",
+    "Module system for organizing related services",
+    "Thread-safe service resolution",
+    "Integration with HTTP server and controllers"
+  ],
+  
+  "source_files": [
+    {
+      "path": "crates/core/src/container/ioc_container.rs",
+      "description": "Main IoC container implementation"
+    },
+    {
+      "path": "crates/core/src/container/examples.rs",
+      "description": "Container usage examples and patterns"
+    },
+    {
+      "path": "examples/demo-dsl-showcase.rs",
+      "description": "Laravel-style module system demonstration"
+    },
+    {
+      "path": "crates/core/src/container/binding.rs",
+      "description": "Service binding and registration"
+    }
+  ],
+  
+  "related_patterns": [
+    "http_server_core",
+    "declarative_controllers",
+    "middleware_v2_system",
+    "orm_models"
+  ],
+  
+  "common_mistakes": [
+    {
+      "mistake": "Not calling container.build() before resolving services",
+      "solution": "Always call build() after registering services to validate dependencies"
+    },
+    {
+      "mistake": "Creating circular dependencies between services",
+      "solution": "Use interfaces to break circular dependencies or restructure services"
+    },
+    {
+      "mistake": "Not implementing Send + Sync for services",
+      "solution": "Ensure all services are thread-safe with Send + Sync traits"
+    },
+    {
+      "mistake": "Using wrong lifetime for services",
+      "solution": "Use singleton for stateless services, transient for stateful, scoped for request-based"
+    }
+  ],
+  
+  "prerequisites": {
+    "dependencies": [
+      "elif-core = \"0.8.0\"",
+      "elif-http-derive = \"0.1.0\"",
+      "tokio = { version = \"1.0\", features = [\"rt-multi-thread\", \"macros\"] }"
+    ],
+    "imports": [
+      "use elif_core::container::{IocContainer, ServiceBinder};",
+      "use elif_http_derive::demo_module;",
+      "use std::sync::Arc;"
+    ]
+  },
+  
+  "service_lifetimes": {
+    "title": "Service Lifetime Management",
+    "examples": [
+      {
+        "name": "Singleton Lifetime",
+        "code": "// Same instance returned every time\ncontainer.bind_singleton::<DatabasePool, PostgresPool>();\n\n// Usage\nlet pool1 = container.resolve::<DatabasePool>()?;\nlet pool2 = container.resolve::<DatabasePool>()?;\nassert!(Arc::ptr_eq(&pool1, &pool2)); // Same instance"
+      },
+      {
+        "name": "Transient Lifetime", 
+        "code": "// New instance created every time\ncontainer.bind_transient::<EmailService, SmtpEmailService>();\n\n// Usage\nlet service1 = container.resolve::<EmailService>()?;\nlet service2 = container.resolve::<EmailService>()?;\nassert!(!Arc::ptr_eq(&service1, &service2)); // Different instances"
+      },
+      {
+        "name": "Scoped Lifetime",
+        "code": "// Same instance within a scope (e.g., HTTP request)\ncontainer.bind_scoped::<RequestContext, HttpRequestContext>();\n\n// Usage in HTTP handler\nlet scope = container.create_scope();\nlet ctx1 = container.resolve_scoped::<RequestContext>(&scope)?;\nlet ctx2 = container.resolve_scoped::<RequestContext>(&scope)?;\nassert!(Arc::ptr_eq(&ctx1, &ctx2)); // Same within scope"
+      }
+    ]
+  },
+  
+  "factory_patterns": {
+    "title": "Factory-Based Service Creation",
+    "code": "use std::env;\n\n// Simple factory\ncontainer.bind_factory::<DatabasePool, _, _>(|| {\n    let url = env::var(\"DATABASE_URL\")?;\n    Ok(DatabasePool::new(&url)?)\n});\n\n// Factory with dependencies\ncontainer.bind_factory_with_deps::<UserService, _, _>(|container| {\n    let repository = container.resolve::<UserRepository>()?;\n    let email_service = container.resolve::<EmailService>()?;\n    Ok(UserService::new(repository, email_service))\n});\n\n// Conditional factory based on environment\ncontainer.bind_factory::<CacheService, _, _>(|| {\n    match env::var(\"CACHE_TYPE\").as_deref() {\n        Ok(\"redis\") => Ok(Box::new(RedisCache::new()) as Box<dyn Cache>),\n        Ok(\"memory\") => Ok(Box::new(MemoryCache::new()) as Box<dyn Cache>),\n        _ => Ok(Box::new(NoOpCache::new()) as Box<dyn Cache>),\n    }\n});"
+  },
+  
+  "named_services": {
+    "title": "Named Service Registration", 
+    "code": "// Register multiple implementations\ncontainer\n    .bind_named::<UserRepository, PostgresRepository>(\"primary\")\n    .bind_named::<UserRepository, RedisRepository>(\"cache\")\n    .bind_named::<UserRepository, MockRepository>(\"test\");\n\n// Resolve by name\nlet primary_repo = container.resolve_named::<UserRepository>(\"primary\")?;\nlet cache_repo = container.resolve_named::<UserRepository>(\"cache\")?;\n\n// Use in service factories\ncontainer.bind_factory::<UserService, _, _>(|container| {\n    let primary = container.resolve_named::<UserRepository>(\"primary\")?;\n    let cache = container.resolve_named::<UserRepository>(\"cache\")?;\n    Ok(UserService::new(primary, cache))\n});"
+  },
+  
+  "module_system": {
+    "title": "Module-Based Organization",
+    "code": "// Define application modules\nlet auth_module = demo_module! {\n    services: [\n        AuthService,\n        TokenService,\n        PasswordHasher\n    ],\n    controllers: [\n        AuthController,\n        TokenController\n    ],\n    middleware: [\"jwt_auth\"]\n};\n\nlet user_module = demo_module! {\n    services: [\n        UserService,\n        ProfileService,\n        NotificationService\n    ],\n    controllers: [\n        UserController,\n        ProfileController\n    ],\n    middleware: [\"user_context\"]\n};\n\n// Compose modules into application\nlet app = module_composition! {\n    modules: [auth_module, user_module],\n    global_middleware: [\"cors\", \"logging\", \"error_handling\"]\n};\n\n// Register modules with container\nlet container = app.build_container()?;"
+  },
+  
+  "integration_patterns": {
+    "title": "Integration with HTTP Server",
+    "code": "use elif_http::{Server, HttpConfig};\n\n// Create container with services\nlet mut container = IocContainer::new();\ncontainer\n    .bind_singleton::<UserService, UserService>()\n    .bind_singleton::<EmailService, EmailService>()\n    .bind_transient::<AuthService, AuthService>();\n\ncontainer.build()?;\n\n// Use container with HTTP server\nlet server = Server::new(container, HttpConfig::default())?;\n\n// Services are automatically injected into controllers\n#[controller(\"/users\")]\nimpl UserController {\n    // Automatic dependency injection\n    pub fn new(user_service: Arc<UserService>, auth_service: Arc<AuthService>) -> Self {\n        Self { user_service, auth_service }\n    }\n    \n    #[get(\"/\")]\n    pub async fn list(&self, req: ElifRequest) -> HttpResult<ElifResponse> {\n        // Use injected services\n        let users = self.user_service.get_all_users().await?;\n        Ok(ElifResponse::ok().json(&users)?)\n    }\n}"
+  },
+  
+  "testing": {
+    "title": "Testing with Dependency Injection",
+    "code": "#[cfg(test)]\nmod tests {\n    use super::*;\n    use std::sync::{Arc, Mutex};\n    \n    // Mock implementations for testing\n    #[derive(Default)]\n    struct MockUserRepository {\n        users: Arc<Mutex<Vec<User>>>,\n    }\n    \n    impl UserRepository for MockUserRepository {\n        fn find_by_id(&self, id: u32) -> Option<User> {\n            self.users.lock().unwrap()\n                .iter()\n                .find(|u| u.id == id)\n                .cloned()\n        }\n        \n        fn create(&self, user: User) -> Result<u32, String> {\n            let mut users = self.users.lock().unwrap();\n            let id = users.len() as u32 + 1;\n            let mut user = user;\n            user.id = id;\n            users.push(user);\n            Ok(id)\n        }\n    }\n    \n    #[tokio::test]\n    async fn test_user_service() {\n        // Create test container with mocks\n        let mut container = IocContainer::new();\n        container.bind_singleton::<MockUserRepository, MockUserRepository>();\n        container.build().unwrap();\n        \n        // Test service behavior\n        let repo = container.resolve::<MockUserRepository>().unwrap();\n        let user = User { id: 0, name: \"Test\".to_string(), email: \"test@example.com\".to_string() };\n        \n        let user_id = repo.create(user).unwrap();\n        let found_user = repo.find_by_id(user_id).unwrap();\n        \n        assert_eq!(found_user.name, \"Test\");\n    }\n}"
+  },
+  
+  "async_services": {
+    "title": "Async Service Initialization",
+    "code": "use async_trait::async_trait;\n\n#[async_trait]\ntrait AsyncService: Send + Sync {\n    async fn initialize(&mut self) -> Result<(), String>;\n    async fn shutdown(&mut self) -> Result<(), String>;\n}\n\n#[derive(Default)]\nstruct DatabaseService {\n    pool: Option<DatabasePool>,\n}\n\n#[async_trait]\nimpl AsyncService for DatabaseService {\n    async fn initialize(&mut self) -> Result<(), String> {\n        let pool = DatabasePool::connect(\"postgresql://localhost/db\").await\n            .map_err(|e| e.to_string())?;\n        self.pool = Some(pool);\n        println!(\"Database service initialized\");\n        Ok(())\n    }\n    \n    async fn shutdown(&mut self) -> Result<(), String> {\n        if let Some(pool) = &self.pool {\n            pool.close().await;\n        }\n        println!(\"Database service shut down\");\n        Ok(())\n    }\n}\n\n// Register async service\ncontainer.bind_singleton::<DatabaseService, DatabaseService>();\ncontainer.build()?;\n\n// Initialize all async services\ncontainer.initialize_async().await?;\n\n// Graceful shutdown\ncontainer.shutdown_async().await?;"
+  },
+  
+  "performance": {
+    "notes": [
+      "Service resolution is O(1) after container build",
+      "Dependency validation happens at build time, not runtime",
+      "Thread-safe service resolution with minimal locking",
+      "Lazy initialization for factory-based services",
+      "Memory efficient with Arc-based service sharing"
+    ],
+    "best_practices": [
+      "Use singleton lifetime for stateless services",
+      "Build container once at application startup",
+      "Prefer interface-based dependencies over concrete types",
+      "Use scoped lifetime for request-specific services",
+      "Validate container during application startup"
+    ]
+  },
+  
+  "configuration": {
+    "title": "Advanced Container Configuration",
+    "code": "use elif_core::container::{ContainerConfig, ServiceScope};\n\n// Configure container behavior\nlet config = ContainerConfig::new()\n    .enable_circular_dependency_detection(true)\n    .max_resolution_depth(50)\n    .enable_performance_monitoring(true)\n    .default_service_scope(ServiceScope::Singleton);\n\nlet mut container = IocContainer::with_config(config);\n\n// Configure service-specific options\ncontainer\n    .bind::<UserService, UserService>()\n    .with_scope(ServiceScope::Transient)\n    .with_initialization_order(100)\n    .with_lazy_loading(true);\n\n// Enable debug logging\ncontainer.enable_debug_logging();\n\n// Container introspection\nlet service_info = container.get_service_info::<UserService>();\nprintln!(\"Service lifetime: {:?}\", service_info.lifetime);\nprintln!(\"Dependencies: {:?}\", service_info.dependencies);"
+  },
+  
+  "limitations": [
+    "Circular dependencies must be manually resolved",
+    "Limited support for generic service types",
+    "Factory functions cannot capture environment at registration time",
+    "Scoped services require manual scope management",
+    "No automatic constructor injection (manual registration required)"
+  ]
+}

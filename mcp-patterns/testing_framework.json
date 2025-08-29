@@ -1,0 +1,115 @@
+{
+  "name": "testing_framework",
+  "title": "Testing Framework", 
+  "category": "testing",
+  "version": "0.8.0",
+  "stability": "stable",
+  "description": "Framework-native testing with TestClient, integration tests, UI tests with trybuild, and comprehensive testing patterns for HTTP servers and controllers",
+  "tags": ["testing", "integration-tests", "ui-tests", "test-client", "trybuild"],
+  
+  "basic_example": {
+    "title": "Basic HTTP Testing with TestClient",
+    "code": "use elif_http::testing::{TestClient, TestServerBuilder};\nuse elif_http::{Server, HttpConfig, ElifRouter, ElifRequest, ElifResponse, HttpResult};\nuse elif_core::IocContainer;\nuse serde_json::json;\n\n// Handler for testing\nasync fn get_users(_req: ElifRequest) -> HttpResult<ElifResponse> {\n    let users = vec![\n        json!({\"id\": 1, \"name\": \"Alice\"}),\n        json!({\"id\": 2, \"name\": \"Bob\"})\n    ];\n    Ok(ElifResponse::ok().json(&users)?)\n}\n\nasync fn create_user(req: ElifRequest) -> HttpResult<ElifResponse> {\n    let user_data: serde_json::Value = req.json().await?;\n    let new_user = json!({\n        \"id\": 3,\n        \"name\": user_data[\"name\"],\n        \"email\": user_data[\"email\"]\n    });\n    Ok(ElifResponse::created().json(&new_user)?)\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    \n    #[tokio::test]\n    async fn test_get_users() {\n        // Create test server\n        let container = IocContainer::new();\n        let router = ElifRouter::new()\n            .get(\"/users\", get_users)\n            .post(\"/users\", create_user);\n        \n        let server = Server::new(container, HttpConfig::test())\n            .unwrap()\n            .use_router(router);\n        \n        let client = TestClient::new(server);\n        \n        // Test GET request\n        let response = client.get(\"/users\").await;\n        \n        assert_eq!(response.status(), 200);\n        \n        let users: Vec<serde_json::Value> = response.json().await.unwrap();\n        assert_eq!(users.len(), 2);\n        assert_eq!(users[0][\"name\"], \"Alice\");\n    }\n    \n    #[tokio::test]\n    async fn test_create_user() {\n        let container = IocContainer::new();\n        let router = ElifRouter::new().post(\"/users\", create_user);\n        let server = Server::new(container, HttpConfig::test()).unwrap().use_router(router);\n        let client = TestClient::new(server);\n        \n        // Test POST with JSON body\n        let new_user = json!({\n            \"name\": \"Charlie\",\n            \"email\": \"charlie@example.com\"\n        });\n        \n        let response = client\n            .post(\"/users\")\n            .json(&new_user)\n            .await;\n        \n        assert_eq!(response.status(), 201);\n        \n        let created_user: serde_json::Value = response.json().await.unwrap();\n        assert_eq!(created_user[\"name\"], \"Charlie\");\n        assert_eq!(created_user[\"email\"], \"charlie@example.com\");\n    }\n}",
+    "explanation": "Basic HTTP testing using TestClient for integration testing of endpoints.",
+    "file_source": "/crates/elif-http/tests/proper_integration_tests.rs"
+  },
+  
+  "advanced_example": {
+    "title": "Advanced Testing with Controllers and Middleware",
+    "code": "#[cfg(test)]\nmod advanced_tests {\n    use super::*;\n    use elif_http::middleware::v2::{LoggingMiddleware, MiddlewarePipelineV2};\n    use elif_http_derive::{controller, get, post};\n    \n    #[derive(Clone, Default)]\n    pub struct TestUserController;\n    \n    #[controller(\"/api/users\")]\n    impl TestUserController {\n        #[get(\"\")]\n        pub async fn list(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {\n            Ok(ElifResponse::ok().json(&vec![\n                json!({\"id\": 1, \"name\": \"Test User 1\"}),\n                json!({\"id\": 2, \"name\": \"Test User 2\"})\n            ])?)\n        }\n        \n        #[get(\"/{id}\")]\n        #[param(id: int)]\n        pub async fn show(&self, req: ElifRequest) -> HttpResult<ElifResponse> {\n            let id: u32 = req.path_param_int(\"id\")?;\n            \n            if id == 999 {\n                return Ok(ElifResponse::not_found().json(&json!({\n                    \"error\": {\n                        \"code\": \"user_not_found\",\n                        \"message\": format!(\"User {} not found\", id)\n                    }\n                }))?)\n            }\n            \n            Ok(ElifResponse::ok().json(&json!({\n                \"id\": id,\n                \"name\": format!(\"Test User {}\", id)\n            }))?)\n        }\n        \n        #[post(\"\")]\n        pub async fn create(&self, req: ElifRequest) -> HttpResult<ElifResponse> {\n            let user_data: serde_json::Value = req.json().await?;\n            \n            // Validate required fields\n            if user_data[\"name\"].as_str().is_none() {\n                return Ok(ElifResponse::bad_request().json(&json!({\n                    \"error\": {\n                        \"code\": \"validation_failed\",\n                        \"message\": \"Name is required\",\n                        \"field\": \"name\"\n                    }\n                }))?)\n            }\n            \n            Ok(ElifResponse::created().json(&json!({\n                \"id\": 123,\n                \"name\": user_data[\"name\"],\n                \"email\": user_data.get(\"email\").unwrap_or(&json!(null))\n            }))?)\n        }\n    }\n    \n    #[tokio::test]\n    async fn test_controller_with_middleware() {\n        let container = IocContainer::new();\n        \n        // Create middleware pipeline\n        let middleware = MiddlewarePipelineV2::new()\n            .add(LoggingMiddleware);\n        \n        let router = ElifRouter::new()\n            .controller(TestUserController::default());\n        \n        let server = Server::new(container, HttpConfig::test())\n            .unwrap()\n            .use_router(router)\n            .use_middleware_pipeline(middleware);\n        \n        let client = TestClient::new(server);\n        \n        // Test controller endpoints\n        let response = client.get(\"/api/users\").await;\n        assert_eq!(response.status(), 200);\n        \n        let users: Vec<serde_json::Value> = response.json().await.unwrap();\n        assert_eq!(users.len(), 2);\n    }\n    \n    #[tokio::test]\n    async fn test_parameter_extraction() {\n        let container = IocContainer::new();\n        let router = ElifRouter::new().controller(TestUserController::default());\n        let server = Server::new(container, HttpConfig::test()).unwrap().use_router(router);\n        let client = TestClient::new(server);\n        \n        // Test valid parameter\n        let response = client.get(\"/api/users/42\").await;\n        assert_eq!(response.status(), 200);\n        \n        let user: serde_json::Value = response.json().await.unwrap();\n        assert_eq!(user[\"id\"], 42);\n        assert_eq!(user[\"name\"], \"Test User 42\");\n    }\n    \n    #[tokio::test]\n    async fn test_not_found_handling() {\n        let container = IocContainer::new();\n        let router = ElifRouter::new().controller(TestUserController::default());\n        let server = Server::new(container, HttpConfig::test()).unwrap().use_router(router);\n        let client = TestClient::new(server);\n        \n        // Test not found response\n        let response = client.get(\"/api/users/999\").await;\n        assert_eq!(response.status(), 404);\n        \n        let error: serde_json::Value = response.json().await.unwrap();\n        assert_eq!(error[\"error\"][\"code\"], \"user_not_found\");\n    }\n    \n    #[tokio::test]\n    async fn test_validation_errors() {\n        let container = IocContainer::new();\n        let router = ElifRouter::new().controller(TestUserController::default());\n        let server = Server::new(container, HttpConfig::test()).unwrap().use_router(router);\n        let client = TestClient::new(server);\n        \n        // Test validation error\n        let invalid_data = json!({\"email\": \"test@example.com\"}); // Missing name\n        \n        let response = client\n            .post(\"/api/users\")\n            .json(&invalid_data)\n            .await;\n        \n        assert_eq!(response.status(), 400);\n        \n        let error: serde_json::Value = response.json().await.unwrap();\n        assert_eq!(error[\"error\"][\"code\"], \"validation_failed\");\n        assert_eq!(error[\"error\"][\"field\"], \"name\");\n    }\n}",
+    "explanation": "Advanced testing patterns with controllers, middleware, parameter extraction, and error handling validation."
+  },
+  
+  "when_to_use": [
+    "Integration testing of HTTP endpoints and controllers",
+    "Testing middleware behavior and pipeline composition",
+    "Validating request/response handling and parameter extraction",
+    "Testing error handling and validation logic",
+    "UI testing of macro expansions with trybuild",
+    "Performance testing of server components"
+  ],
+  
+  "benefits": [
+    "Framework-native TestClient for realistic integration testing",
+    "No need for external HTTP server in tests",
+    "Automatic cleanup and isolated test environments",
+    "Support for testing controllers, middleware, and full request pipeline",
+    "UI tests with trybuild for compile-time validation",
+    "Integration with standard Rust testing tools"
+  ],
+  
+  "source_files": [
+    {
+      "path": "crates/elif-http/src/testing/mod.rs",
+      "description": "Testing utilities and TestClient implementation"
+    },
+    {
+      "path": "crates/elif-http/tests/proper_integration_tests.rs", 
+      "description": "Integration test examples"
+    },
+    {
+      "path": "crates/elif-http-derive/tests/ui/",
+      "description": "UI tests for macro validation"
+    }
+  ],
+  
+  "related_patterns": [
+    "http_server_core",
+    "declarative_controllers",
+    "middleware_v2_system",
+    "error_handling"
+  ],
+  
+  "common_mistakes": [
+    {
+      "mistake": "Not using HttpConfig::test() for test configurations",
+      "solution": "Use test-specific config to avoid port conflicts and enable debug features"
+    },
+    {
+      "mistake": "Testing individual functions instead of full HTTP pipeline",
+      "solution": "Use TestClient to test complete request/response cycle"
+    },
+    {
+      "mistake": "Not testing error scenarios and edge cases",
+      "solution": "Include tests for validation errors, not found, and server errors"
+    },
+    {
+      "mistake": "Sharing state between test cases",
+      "solution": "Create fresh server instance for each test case"
+    }
+  ],
+  
+  "prerequisites": {
+    "dependencies": [
+      "elif-http = { version = \"0.8.0\", features = [\"testing\"] }",
+      "elif-testing = \"0.8.0\"",
+      "tokio-test = \"0.4\"",
+      "trybuild = \"1.0\"" 
+    ],
+    "imports": [
+      "use elif_http::testing::{TestClient, TestServerBuilder};",
+      "use elif_testing::*;"
+    ]
+  },
+  
+  "ui_testing": {
+    "title": "UI Tests with trybuild for Macro Validation",
+    "code": "// tests/ui_tests.rs - Testing macro expansions\nuse trybuild::TestCases;\n\n#[test]\nfn ui_tests() {\n    let t = TestCases::new();\n    \n    // Test successful macro expansions\n    t.pass(\"tests/ui/pass/basic_controller.rs\");\n    t.pass(\"tests/ui/pass/parameter_extraction.rs\");\n    t.pass(\"tests/ui/pass/middleware_usage.rs\");\n    \n    // Test compilation failures\n    t.compile_fail(\"tests/ui/fail/invalid_controller.rs\");\n    t.compile_fail(\"tests/ui/fail/missing_param_type.rs\");\n    t.compile_fail(\"tests/ui/fail/invalid_http_method.rs\");\n}\n\n// tests/ui/pass/basic_controller.rs\nuse elif_http_derive::{controller, get, post};\nuse elif_http::{ElifRequest, ElifResponse, HttpResult};\n\n#[derive(Clone, Default)]\nstruct TestController;\n\n#[controller(\"/test\")]\nimpl TestController {\n    #[get(\"/\")]\n    async fn index(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {\n        Ok(ElifResponse::ok().text(\"Hello\"))\n    }\n    \n    #[post(\"/{id}\")]\n    #[param(id: int)]\n    async fn create(&self, req: ElifRequest) -> HttpResult<ElifResponse> {\n        let id: u32 = req.path_param_int(\"id\")?;\n        Ok(ElifResponse::created().json(&id)?)\n    }\n}\n\nfn main() {}\n\n// tests/ui/fail/invalid_controller.rs\nuse elif_http_derive::controller;\n\n// This should fail - controller on enum not supported\n#[controller(\"/test\")]\nenum InvalidController {\n    Variant,\n}\n\nfn main() {}",
+    "explanation": "UI testing with trybuild validates that macros work correctly and produce meaningful error messages."
+  },
+  
+  "database_testing": {
+    "title": "Database Integration Testing",
+    "code": "use elif_orm::{Database, Model};\nuse elif_testing::database::{TestDatabase, DatabaseFixtures};\nuse sqlx::PgPool;\n\n#[cfg(test)]\nmod database_tests {\n    use super::*;\n    \n    // Test database setup\n    async fn setup_test_db() -> PgPool {\n        let test_db = TestDatabase::new().await;\n        \n        // Run migrations\n        sqlx::migrate!(\"./migrations\")\n            .run(&test_db.pool)\n            .await\n            .expect(\"Failed to run migrations\");\n        \n        test_db.pool\n    }\n    \n    #[tokio::test]\n    async fn test_user_crud_operations() {\n        let pool = setup_test_db().await;\n        \n        // Create test data\n        let user = User::new(\"Test User\".to_string(), \"test@example.com\".to_string());\n        let saved_user = user.save(&pool).await.unwrap();\n        \n        assert!(saved_user.id != uuid::Uuid::default());\n        assert_eq!(saved_user.name, \"Test User\");\n        \n        // Test retrieval\n        let found_user = User::find(saved_user.id, &pool).await.unwrap();\n        assert_eq!(found_user.email, \"test@example.com\");\n        \n        // Test query\n        let active_users = User::query()\n            .where_eq(\"is_active\", true)\n            .get(&pool)\n            .await\n            .unwrap();\n        \n        assert!(active_users.len() >= 1);\n        \n        // Cleanup happens automatically when pool is dropped\n    }\n    \n    #[tokio::test]\n    async fn test_user_service_integration() {\n        let pool = setup_test_db().await;\n        \n        // Create container with test database\n        let mut container = IocContainer::new();\n        container.bind_singleton_instance(pool.clone());\n        container.bind_singleton::<UserService, UserService>();\n        container.build().unwrap();\n        \n        let user_service = container.resolve::<UserService>().unwrap();\n        \n        // Test service methods\n        let result = user_service.create_user(\n            \"Integration Test\".to_string(),\n            \"integration@example.com\".to_string()\n        ).await;\n        \n        assert!(result.is_ok());\n        let user_id = result.unwrap();\n        \n        let found_user = user_service.get_user(user_id).await.unwrap();\n        assert_eq!(found_user.name, \"Integration Test\");\n    }\n    \n    #[tokio::test]\n    async fn test_with_fixtures() {\n        let pool = setup_test_db().await;\n        \n        // Load test fixtures\n        DatabaseFixtures::new()\n            .load_fixture(\"users.json\", &pool)\n            .await\n            .expect(\"Failed to load fixtures\");\n        \n        // Test with pre-loaded data\n        let users = User::all(&pool).await.unwrap();\n        assert!(users.len() > 0);\n    }\n}"
+  },
+  
+  "performance_testing": {
+    "title": "Performance and Load Testing",
+    "code": "use elif_http::testing::{TestClient, LoadTestConfig};\nuse std::time::{Duration, Instant};\nuse tokio::time::sleep;\n\n#[cfg(test)]\nmod performance_tests {\n    use super::*;\n    \n    #[tokio::test]\n    async fn test_response_time() {\n        let client = TestClient::new(create_test_server());\n        \n        let start = Instant::now();\n        let response = client.get(\"/api/users\").await;\n        let duration = start.elapsed();\n        \n        assert_eq!(response.status(), 200);\n        assert!(duration < Duration::from_millis(100)); // Should respond within 100ms\n    }\n    \n    #[tokio::test]\n    async fn test_concurrent_requests() {\n        let client = TestClient::new(create_test_server());\n        \n        // Create multiple concurrent requests\n        let handles: Vec<_> = (0..10)\n            .map(|i| {\n                let client = client.clone();\n                tokio::spawn(async move {\n                    client.get(&format!(\"/api/users/{}\", i)).await\n                })\n            })\n            .collect();\n        \n        // Wait for all requests to complete\n        for handle in handles {\n            let response = handle.await.unwrap();\n            assert_eq!(response.status(), 200);\n        }\n    }\n    \n    #[tokio::test]\n    async fn test_middleware_overhead() {\n        // Test server without middleware\n        let client_no_middleware = TestClient::new(create_minimal_server());\n        \n        let start = Instant::now();\n        for _ in 0..100 {\n            client_no_middleware.get(\"/\").await;\n        }\n        let duration_no_middleware = start.elapsed();\n        \n        // Test server with middleware\n        let client_with_middleware = TestClient::new(create_server_with_middleware());\n        \n        let start = Instant::now();\n        for _ in 0..100 {\n            client_with_middleware.get(\"/\").await;\n        }\n        let duration_with_middleware = start.elapsed();\n        \n        // Middleware overhead should be minimal\n        let overhead = duration_with_middleware.saturating_sub(duration_no_middleware);\n        assert!(overhead < Duration::from_millis(50));\n    }\n    \n    #[tokio::test]\n    async fn test_memory_usage() {\n        let client = TestClient::new(create_test_server());\n        \n        // Create many requests to test for memory leaks\n        for _ in 0..1000 {\n            let response = client.get(\"/api/users\").await;\n            assert_eq!(response.status(), 200);\n            \n            // Small delay to allow cleanup\n            if rand::random::<u8>() % 100 == 0 {\n                sleep(Duration::from_millis(1)).await;\n            }\n        }\n        \n        // Memory usage should be stable (no major leaks)\n        // This is more of a manual verification point\n    }\n    \n    fn create_test_server() -> Server {\n        // Implementation details...\n    }\n    \n    fn create_minimal_server() -> Server {\n        // Server without middleware for baseline testing\n    }\n    \n    fn create_server_with_middleware() -> Server {\n        // Server with typical middleware stack\n    }\n}"
+  },
+  
+  "test_utilities": {
+    "title": "Custom Test Utilities and Helpers",
+    "code": "// Test utilities module\npub mod test_utils {\n    use super::*;\n    \n    pub struct ApiTestSuite {\n        client: TestClient,\n        base_url: String,\n    }\n    \n    impl ApiTestSuite {\n        pub fn new(server: Server) -> Self {\n            Self {\n                client: TestClient::new(server),\n                base_url: \"/api/v1\".to_string(),\n            }\n        }\n        \n        pub async fn create_user(&self, name: &str, email: &str) -> serde_json::Value {\n            let user_data = serde_json::json!({\n                \"name\": name,\n                \"email\": email\n            });\n            \n            let response = self.client\n                .post(&format!(\"{}/users\", self.base_url))\n                .json(&user_data)\n                .await;\n            \n            assert_eq!(response.status(), 201);\n            response.json().await.unwrap()\n        }\n        \n        pub async fn get_user(&self, id: u32) -> Option<serde_json::Value> {\n            let response = self.client\n                .get(&format!(\"{}/users/{}\", self.base_url, id))\n                .await;\n            \n            match response.status() {\n                200 => Some(response.json().await.unwrap()),\n                404 => None,\n                _ => panic!(\"Unexpected status: {}\", response.status()),\n            }\n        }\n        \n        pub async fn assert_user_exists(&self, id: u32) -> serde_json::Value {\n            self.get_user(id).await.expect(\"User should exist\")\n        }\n        \n        pub async fn assert_user_not_found(&self, id: u32) {\n            assert!(self.get_user(id).await.is_none(), \"User should not exist\");\n        }\n        \n        pub async fn cleanup(&self) {\n            // Cleanup test data if needed\n            let _response = self.client\n                .delete(&format!(\"{}/test/cleanup\", self.base_url))\n                .await;\n        }\n    }\n    \n    // Custom assertions\n    pub trait ResponseAssertions {\n        fn assert_json_contains(&self, key: &str, expected: serde_json::Value);\n        fn assert_has_header(&self, header: &str);\n        fn assert_error_code(&self, expected_code: &str);\n    }\n    \n    // Implement for test response type\n    impl ResponseAssertions for TestResponse {\n        fn assert_json_contains(&self, key: &str, expected: serde_json::Value) {\n            let body: serde_json::Value = self.json().await.unwrap();\n            assert_eq!(body[key], expected, \"JSON field '{}' mismatch\", key);\n        }\n        \n        fn assert_has_header(&self, header: &str) {\n            assert!(self.headers().contains_key(header), \n                    \"Response should contain header: {}\", header);\n        }\n        \n        fn assert_error_code(&self, expected_code: &str) {\n            let body: serde_json::Value = self.json().await.unwrap();\n            assert_eq!(body[\"error\"][\"code\"], expected_code);\n        }\n    }\n}\n\n// Usage in tests\n#[cfg(test)]\nmod integration_tests {\n    use super::test_utils::*;\n    \n    #[tokio::test]\n    async fn test_user_workflow() {\n        let api = ApiTestSuite::new(create_test_server());\n        \n        // Create user\n        let user = api.create_user(\"Test User\", \"test@example.com\").await;\n        let user_id = user[\"id\"].as_u64().unwrap() as u32;\n        \n        // Verify user exists\n        let retrieved_user = api.assert_user_exists(user_id).await;\n        assert_eq!(retrieved_user[\"name\"], \"Test User\");\n        \n        // Cleanup\n        api.cleanup().await;\n        \n        // Verify cleanup worked\n        api.assert_user_not_found(user_id).await;\n    }\n}"
+  }
+}
