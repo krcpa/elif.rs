@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::{System, Disks};
+use crate::utils::{is_port_in_use, parse_redis_url, is_redis_accessible};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SystemStatus {
@@ -203,7 +204,7 @@ async fn check_application_service() -> Result<ServiceStatus, ElifError> {
     let common_ports = [3000, 8000, 8080, 4000];
     
     for port in &common_ports {
-        if is_port_in_use(*port).await {
+        if is_port_in_use(*port) {
             return Ok(ServiceStatus {
                 name: "Application".to_string(),
                 status: "running".to_string(),
@@ -229,7 +230,7 @@ async fn check_application_service() -> Result<ServiceStatus, ElifError> {
 
 async fn check_database_service() -> Result<ServiceStatus, ElifError> {
     // Check if PostgreSQL is running on default port
-    if is_port_in_use(5432).await {
+    if is_port_in_use(5432) {
         Ok(ServiceStatus {
             name: "PostgreSQL".to_string(),
             status: "running".to_string(),
@@ -253,36 +254,46 @@ async fn check_database_service() -> Result<ServiceStatus, ElifError> {
 }
 
 async fn check_redis_service() -> Result<ServiceStatus, ElifError> {
-    // Check if Redis is running on default port
-    if is_port_in_use(6379).await {
-        Ok(ServiceStatus {
-            name: "Redis".to_string(),
-            status: "running".to_string(),
-            uptime: None,
-            cpu_usage: None,
-            memory_usage: None,
-            port: Some(6379),
-            last_health_check: Some(get_current_timestamp()),
-        })
+    // Check if Redis URL is configured
+    if let Ok(redis_url) = std::env::var("REDIS_URL") {
+        // Parse the Redis URL to get host and port
+        let (host, port) = parse_redis_url(&redis_url).unwrap_or(("127.0.0.1".to_string(), 6379));
+        
+        if is_redis_accessible(&host, port).await {
+            Ok(ServiceStatus {
+                name: "Redis".to_string(),
+                status: "running".to_string(),
+                uptime: None,
+                cpu_usage: None,
+                memory_usage: None,
+                port: Some(port),
+                last_health_check: Some(get_current_timestamp()),
+            })
+        } else {
+            Ok(ServiceStatus {
+                name: "Redis".to_string(),
+                status: "stopped".to_string(),
+                uptime: None,
+                cpu_usage: None,
+                memory_usage: None,
+                port: Some(port),
+                last_health_check: Some(get_current_timestamp()),
+            })
+        }
     } else {
+        // No Redis configuration found
         Ok(ServiceStatus {
             name: "Redis".to_string(),
-            status: "stopped".to_string(),
+            status: "not_configured".to_string(),
             uptime: None,
             cpu_usage: None,
             memory_usage: None,
-            port: Some(6379),
+            port: None,
             last_health_check: Some(get_current_timestamp()),
         })
     }
 }
 
-async fn is_port_in_use(port: u16) -> bool {
-    use std::net::{TcpListener, SocketAddr};
-    
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    TcpListener::bind(addr).is_err()
-}
 
 async fn get_database_status() -> Result<Option<DatabaseStatus>, ElifError> {
     // Check if database URL is configured
@@ -294,7 +305,7 @@ async fn get_database_status() -> Result<Option<DatabaseStatus>, ElifError> {
 
     // This is a simplified check - in a real implementation you'd connect to the database
     Ok(Some(DatabaseStatus {
-        connection_status: if is_port_in_use(5432).await { "connected" } else { "disconnected" }.to_string(),
+        connection_status: if is_port_in_use(5432) { "connected" } else { "disconnected" }.to_string(),
         active_connections: Some(5), // Mock data
         slow_queries: Some(0),
         last_migration: get_last_migration().await?,
@@ -409,7 +420,7 @@ async fn check_dependencies() -> (bool, String) {
 
 async fn check_database_connection() -> (bool, String) {
     // This is a simplified check - in a real implementation you'd actually connect
-    if is_port_in_use(5432).await {
+    if is_port_in_use(5432) {
         (true, "Database service is running on port 5432".to_string())
     } else {
         (false, "Cannot connect to database on port 5432".to_string())
@@ -608,6 +619,7 @@ async fn display_services_status(services: &HashMap<String, ServiceStatus>) -> R
             "running" => "🟢",
             "stopped" => "🔴",
             "error" => "❌",
+            "not_configured" => "⚫",
             _ => "❓",
         };
         

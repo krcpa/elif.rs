@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use crate::utils::{is_port_in_use, parse_redis_url, is_redis_accessible};
 
 pub async fn run(fix_issues: bool, verbose: bool) -> Result<(), ElifError> {
     println!("🩺 Running elif.rs project diagnostics...");
@@ -42,6 +43,7 @@ enum IssueCategory {
     Configuration,
     Dependencies,
     Performance,
+    FrameworkHealth,
 }
 
 #[derive(Debug, PartialEq)]
@@ -91,6 +93,7 @@ impl Doctor {
         self.diagnose_configuration()?;
         self.diagnose_dependencies()?;
         self.diagnose_performance()?;
+        self.diagnose_framework_health().await?;
 
         // Report findings
         self.report_findings();
@@ -341,6 +344,176 @@ impl Doctor {
         Ok(())
     }
 
+    async fn diagnose_framework_health(&mut self) -> Result<(), ElifError> {
+        if self.verbose {
+            println!("   🏥 Diagnosing framework health...");
+        }
+
+        // Check if essential elif.rs dependencies are present and their configuration
+        if let Ok(content) = fs::read_to_string("Cargo.toml") {
+            if let Ok(parsed_cargo) = toml::from_str::<toml::Value>(&content) {
+                let has_elif_dependencies = self.check_elif_dependencies(&parsed_cargo);
+                
+                if !has_elif_dependencies {
+                    self.issues.push(Issue {
+                        category: IssueCategory::FrameworkHealth,
+                        severity: IssueSeverity::Warning,
+                        description: "No elif.rs framework dependencies detected".to_string(),
+                        auto_fixable: false,
+                        fix_action: None,
+                    });
+                }
+
+                // Check for derive feature in elif-http
+                if !self.is_elif_http_derive_enabled(&parsed_cargo) {
+                    // Only suggest if elif-http is present
+                    if self.has_elif_http_dependency(&parsed_cargo) {
+                        self.issues.push(Issue {
+                            category: IssueCategory::FrameworkHealth,
+                            severity: IssueSeverity::Suggestion,
+                            description: "Consider enabling 'derive' feature for elif-http to use declarative routing".to_string(),
+                            auto_fixable: false,
+                            fix_action: None,
+                        });
+                    }
+                }
+            } else {
+                self.issues.push(Issue {
+                    category: IssueCategory::FrameworkHealth,
+                    severity: IssueSeverity::Warning,
+                    description: "Failed to parse Cargo.toml - invalid TOML format".to_string(),
+                    auto_fixable: false,
+                    fix_action: None,
+                });
+            }
+        }
+
+        // Check for database configuration if using elif-orm
+        if let Ok(content) = fs::read_to_string("Cargo.toml") {
+            if let Ok(parsed_cargo) = toml::from_str::<toml::Value>(&content) {
+                if self.has_elif_orm_dependency(&parsed_cargo) && std::env::var("DATABASE_URL").is_err() {
+                    self.issues.push(Issue {
+                        category: IssueCategory::FrameworkHealth,
+                        severity: IssueSeverity::Warning,
+                        description: "Using elif-orm but DATABASE_URL not configured".to_string(),
+                        auto_fixable: false,
+                        fix_action: None,
+                    });
+                }
+            }
+        }
+
+        // Check for migrations directory if using database
+        if std::env::var("DATABASE_URL").is_ok() && !Path::new("migrations").exists() {
+            self.issues.push(Issue {
+                category: IssueCategory::FrameworkHealth,
+                severity: IssueSeverity::Suggestion,
+                description: "Database configured but no migrations directory found".to_string(),
+                auto_fixable: true,
+                fix_action: Some(FixAction::CreateDirectory {
+                    path: "migrations".to_string(),
+                }),
+            });
+        }
+
+        // Check for essential services if they should be running
+        if std::env::var("DATABASE_URL").is_ok() && !is_port_in_use(5432) {
+            self.issues.push(Issue {
+                category: IssueCategory::FrameworkHealth,
+                severity: IssueSeverity::Critical,
+                description: "Database service is not running (PostgreSQL on port 5432)".to_string(),
+                auto_fixable: false,
+                fix_action: None,
+            });
+        }
+
+        if let Ok(redis_url) = std::env::var("REDIS_URL") {
+            let (host, port) = parse_redis_url(&redis_url).unwrap_or(("127.0.0.1".to_string(), 6379));
+            
+            if !is_redis_accessible(&host, port).await {
+                self.issues.push(Issue {
+                    category: IssueCategory::FrameworkHealth,
+                    severity: IssueSeverity::Warning,
+                    description: format!("Redis service is not running on {}:{}", host, port),
+                    auto_fixable: false,
+                    fix_action: None,
+                });
+            }
+        }
+
+        // Check for application health
+        let common_ports = [3000, 8000, 8080];
+        let app_running = common_ports.iter().any(|port| is_port_in_use(*port));
+        
+        if !app_running {
+            self.issues.push(Issue {
+                category: IssueCategory::FrameworkHealth,
+                severity: IssueSeverity::Suggestion,
+                description: "Application is not currently running".to_string(),
+                auto_fixable: false,
+                fix_action: None,
+            });
+        }
+
+        Ok(())
+    }
+
+
+    fn check_elif_dependencies(&self, parsed_cargo: &toml::Value) -> bool {
+        if let Some(deps) = parsed_cargo.get("dependencies").and_then(|d| d.as_table()) {
+            // Check if any elif.rs dependency is present
+            deps.keys().any(|key| key.starts_with("elif-"))
+        } else {
+            false
+        }
+    }
+
+    fn has_elif_http_dependency(&self, parsed_cargo: &toml::Value) -> bool {
+        if let Some(deps) = parsed_cargo.get("dependencies").and_then(|d| d.as_table()) {
+            deps.contains_key("elif-http")
+        } else {
+            false
+        }
+    }
+
+    fn has_elif_orm_dependency(&self, parsed_cargo: &toml::Value) -> bool {
+        if let Some(deps) = parsed_cargo.get("dependencies").and_then(|d| d.as_table()) {
+            deps.contains_key("elif-orm")
+        } else {
+            false
+        }
+    }
+
+    fn is_elif_http_derive_enabled(&self, parsed_cargo: &toml::Value) -> bool {
+        if let Some(deps) = parsed_cargo.get("dependencies").and_then(|d| d.as_table()) {
+            if let Some(elif_http_dep) = deps.get("elif-http") {
+                match elif_http_dep {
+                    // Handle table format: elif-http = { version = "...", features = ["derive"] }
+                    toml::Value::Table(dep_table) => {
+                        if let Some(features) = dep_table.get("features").and_then(|f| f.as_array()) {
+                            features.iter().any(|feature| {
+                                feature.as_str() == Some("derive")
+                            })
+                        } else {
+                            false
+                        }
+                    },
+                    // Handle string format with features: elif-http = { version = "...", features = ["derive"] }
+                    // Note: string format like "0.8.0" doesn't support features
+                    toml::Value::String(_) => {
+                        // String format cannot have features, so derive is not enabled
+                        false
+                    },
+                    _ => false,
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
     fn report_findings(&self) {
         println!("\n📋 Diagnosis Results:");
 
@@ -355,6 +528,7 @@ impl Doctor {
             (IssueCategory::Configuration, "⚙️ Configuration"),
             (IssueCategory::Dependencies, "📚 Dependencies"),
             (IssueCategory::Performance, "🚀 Performance"),
+            (IssueCategory::FrameworkHealth, "🏥 Framework Health"),
         ];
 
         for (category, title) in categories {

@@ -15,6 +15,7 @@ pub mod migrate;
 pub mod optimize;
 pub mod status;
 pub mod test;
+pub mod update;
 pub mod version;
 pub mod module;
 
