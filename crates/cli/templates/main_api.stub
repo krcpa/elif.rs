@@ -1,4 +1,4 @@
-use elif_http::{Server, Router, get, ElifRequest, ElifResponse, HttpResult};
+use elif_http::{Server, Router, get, post, ElifRequest, ElifResponse, HttpResult};
 {% if modules_enabled %}use elif_core::container::Container;{% endif %}
 {% if database_enabled %}use sqlx::PgPool;{% endif %}
 
