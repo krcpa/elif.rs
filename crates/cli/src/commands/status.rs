@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::{System, Disks};
+use crate::utils::{is_port_in_use, parse_redis_url, is_redis_accessible};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SystemStatus {
@@ -203,7 +204,7 @@ async fn check_application_service() -> Result<ServiceStatus, ElifError> {
     let common_ports = [3000, 8000, 8080, 4000];
     
     for port in &common_ports {
-        if is_port_in_use(*port).await {
+        if is_port_in_use(*port) {
             return Ok(ServiceStatus {
                 name: "Application".to_string(),
                 status: "running".to_string(),
@@ -229,7 +230,7 @@ async fn check_application_service() -> Result<ServiceStatus, ElifError> {
 
 async fn check_database_service() -> Result<ServiceStatus, ElifError> {
     // Check if PostgreSQL is running on default port
-    if is_port_in_use(5432).await {
+    if is_port_in_use(5432) {
         Ok(ServiceStatus {
             name: "PostgreSQL".to_string(),
             status: "running".to_string(),
@@ -293,58 +294,6 @@ async fn check_redis_service() -> Result<ServiceStatus, ElifError> {
     }
 }
 
-async fn is_port_in_use(port: u16) -> bool {
-    use std::net::{TcpListener, SocketAddr};
-    
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    TcpListener::bind(addr).is_err()
-}
-
-fn parse_redis_url(redis_url: &str) -> Option<(String, u16)> {
-    // Handle common Redis URL formats:
-    // redis://localhost:6379
-    // redis://user:pass@localhost:6379
-    // redis://localhost:6379/0
-    // localhost:6379
-    
-    if let Ok(parsed_url) = url::Url::parse(redis_url) {
-        // Parsed as a full URL
-        let host = parsed_url.host_str().unwrap_or("127.0.0.1").to_string();
-        let port = parsed_url.port().unwrap_or(6379);
-        Some((host, port))
-    } else if redis_url.contains(':') {
-        // Try to parse as "host:port"
-        let parts: Vec<&str> = redis_url.splitn(2, ':').collect();
-        if parts.len() == 2 {
-            if let Ok(port) = parts[1].parse::<u16>() {
-                return Some((parts[0].to_string(), port));
-            }
-        }
-        None
-    } else {
-        // Just a hostname, use default port
-        Some((redis_url.to_string(), 6379))
-    }
-}
-
-async fn is_redis_accessible(host: &str, port: u16) -> bool {
-    use std::net::{TcpStream, SocketAddr};
-    use std::time::Duration;
-    
-    // Try to establish a TCP connection to the Redis server
-    let addr = match format!("{}:{}", host, port).parse::<SocketAddr>() {
-        Ok(addr) => addr,
-        Err(_) => return false,
-    };
-    
-    // Use a short timeout for the connection attempt
-    match tokio::time::timeout(Duration::from_millis(1000), async move {
-        TcpStream::connect(addr)
-    }).await {
-        Ok(Ok(_)) => true,
-        _ => false,
-    }
-}
 
 async fn get_database_status() -> Result<Option<DatabaseStatus>, ElifError> {
     // Check if database URL is configured
@@ -356,7 +305,7 @@ async fn get_database_status() -> Result<Option<DatabaseStatus>, ElifError> {
 
     // This is a simplified check - in a real implementation you'd connect to the database
     Ok(Some(DatabaseStatus {
-        connection_status: if is_port_in_use(5432).await { "connected" } else { "disconnected" }.to_string(),
+        connection_status: if is_port_in_use(5432) { "connected" } else { "disconnected" }.to_string(),
         active_connections: Some(5), // Mock data
         slow_queries: Some(0),
         last_migration: get_last_migration().await?,
@@ -471,7 +420,7 @@ async fn check_dependencies() -> (bool, String) {
 
 async fn check_database_connection() -> (bool, String) {
     // This is a simplified check - in a real implementation you'd actually connect
-    if is_port_in_use(5432).await {
+    if is_port_in_use(5432) {
         (true, "Database service is running on port 5432".to_string())
     } else {
         (false, "Cannot connect to database on port 5432".to_string())

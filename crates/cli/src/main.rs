@@ -1,5 +1,6 @@
 mod commands;
 mod generators;  // Re-enabled for make commands
+mod utils;
 // mod interactive; // Disabled to fix compilation - contains unused code
 
 use clap::{Parser, Subcommand};
