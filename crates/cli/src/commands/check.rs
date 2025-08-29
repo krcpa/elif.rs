@@ -47,6 +47,14 @@ pub async fn run(comprehensive: bool, module: Option<&str>) -> Result<(), ElifEr
         // 6. Dependency compatibility
         println!("📚 Checking dependencies...");
         check_dependencies(&mut results)?;
+
+        // 7. Framework health checks
+        println!("🏥 Checking framework health...");
+        check_framework_health(&mut results)?;
+
+        // 8. Security configuration
+        println!("🔒 Checking security configuration...");
+        check_security_config(&mut results)?;
     }
 
     // 7. Code quality checks (existing)
@@ -473,4 +481,119 @@ fn check_resource_specs_enhanced(results: &mut CheckResults) -> Result<(), ElifE
     }
 
     Ok(())
+}
+
+fn check_framework_health(results: &mut CheckResults) -> Result<(), ElifError> {
+    // Check database connectivity if configured
+    if std::env::var("DATABASE_URL").is_ok() {
+        // Test database connection using port check
+        if is_port_in_use(5432) {
+            results.success("Database service is running");
+        } else {
+            results.warning("Database service appears to be down");
+            results.recommend("Start your database service (PostgreSQL)");
+        }
+    }
+
+    // Check Redis connectivity if configured
+    if std::env::var("REDIS_URL").is_ok() || is_port_in_use(6379) {
+        if is_port_in_use(6379) {
+            results.success("Redis service is running");
+        } else {
+            results.warning("Redis service appears to be down");
+            results.recommend("Start Redis service if using caching");
+        }
+    }
+
+    // Check if application is running
+    let common_ports = [3000, 8000, 8080];
+    let mut app_running = false;
+    for port in &common_ports {
+        if is_port_in_use(*port) {
+            results.success(&format!("Application running on port {}", port));
+            app_running = true;
+            break;
+        }
+    }
+
+    if !app_running {
+        results.warning("Application is not currently running");
+        results.recommend("Start the application with: elifrs serve");
+    }
+
+    // Check target directory and build artifacts
+    if Path::new("target/debug").exists() {
+        results.success("Debug build artifacts found");
+    } else {
+        results.warning("No debug build artifacts found");
+        results.recommend("Run 'cargo build' to create build artifacts");
+    }
+
+    Ok(())
+}
+
+fn check_security_config(results: &mut CheckResults) -> Result<(), ElifError> {
+    // Check for sensitive files that shouldn't be committed
+    let sensitive_files = [".env", "private.key", "secrets.yaml", "database.url"];
+    for file in &sensitive_files {
+        if Path::new(file).exists() {
+            results.warning(&format!("Sensitive file found: {} - ensure it's in .gitignore", file));
+        }
+    }
+
+    // Check .gitignore exists and has common patterns
+    if Path::new(".gitignore").exists() {
+        let gitignore_content = fs::read_to_string(".gitignore").unwrap_or_default();
+        if gitignore_content.contains("target/") {
+            results.success("Build artifacts are ignored in git");
+        } else {
+            results.warning("Build artifacts (target/) not ignored in git");
+            results.recommend("Add 'target/' to .gitignore");
+        }
+
+        if gitignore_content.contains(".env") {
+            results.success("Environment files are ignored in git");
+        } else {
+            results.warning("Environment files (.env) not ignored in git");
+            results.recommend("Add '.env' to .gitignore");
+        }
+    } else {
+        results.error(".gitignore file missing");
+        results.recommend("Create .gitignore to prevent committing sensitive files");
+    }
+
+    // Check environment variable security
+    if let Ok(secret_key) = std::env::var("SECRET_KEY") {
+        if secret_key.len() < 32 {
+            results.warning("SECRET_KEY is too short (should be 32+ characters)");
+            results.recommend("Use a longer SECRET_KEY for better security");
+        } else {
+            results.success("SECRET_KEY length is adequate");
+        }
+
+        if secret_key == "changeme" || secret_key == "your-secret-key" {
+            results.error("SECRET_KEY appears to be a default value");
+            results.recommend("Change SECRET_KEY to a secure random value");
+        }
+    } else {
+        results.warning("SECRET_KEY environment variable not set");
+        results.recommend("Set SECRET_KEY environment variable for security");
+    }
+
+    // Check for debug settings in production-like environments
+    if let Ok(rust_log) = std::env::var("RUST_LOG") {
+        if rust_log.contains("debug") || rust_log.contains("trace") {
+            results.warning("Debug logging enabled - consider for production");
+            results.recommend("Use 'info' or 'warn' log levels in production");
+        }
+    }
+
+    Ok(())
+}
+
+fn is_port_in_use(port: u16) -> bool {
+    use std::net::{TcpListener, SocketAddr};
+    
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    TcpListener::bind(addr).is_err()
 }

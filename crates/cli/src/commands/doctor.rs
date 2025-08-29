@@ -42,6 +42,7 @@ enum IssueCategory {
     Configuration,
     Dependencies,
     Performance,
+    FrameworkHealth,
 }
 
 #[derive(Debug, PartialEq)]
@@ -91,6 +92,7 @@ impl Doctor {
         self.diagnose_configuration()?;
         self.diagnose_dependencies()?;
         self.diagnose_performance()?;
+        self.diagnose_framework_health()?;
 
         // Report findings
         self.report_findings();
@@ -341,6 +343,109 @@ impl Doctor {
         Ok(())
     }
 
+    fn diagnose_framework_health(&mut self) -> Result<(), ElifError> {
+        if self.verbose {
+            println!("   🏥 Diagnosing framework health...");
+        }
+
+        // Check if essential elif.rs dependencies are present
+        if let Ok(content) = fs::read_to_string("Cargo.toml") {
+            let has_elif_http = content.contains("elif-http");
+            let has_elif_core = content.contains("elif-core");
+
+            if !has_elif_http && !has_elif_core {
+                self.issues.push(Issue {
+                    category: IssueCategory::FrameworkHealth,
+                    severity: IssueSeverity::Warning,
+                    description: "No elif.rs framework dependencies detected".to_string(),
+                    auto_fixable: false,
+                    fix_action: None,
+                });
+            }
+
+            // Check for derive feature in elif-http
+            if has_elif_http && !content.contains("elif-http") || !content.contains("derive") {
+                self.issues.push(Issue {
+                    category: IssueCategory::FrameworkHealth,
+                    severity: IssueSeverity::Suggestion,
+                    description: "Consider enabling 'derive' feature for elif-http to use declarative routing".to_string(),
+                    auto_fixable: false,
+                    fix_action: None,
+                });
+            }
+        }
+
+        // Check for database configuration if using elif-orm
+        if let Ok(content) = fs::read_to_string("Cargo.toml") {
+            if content.contains("elif-orm") && std::env::var("DATABASE_URL").is_err() {
+                self.issues.push(Issue {
+                    category: IssueCategory::FrameworkHealth,
+                    severity: IssueSeverity::Warning,
+                    description: "Using elif-orm but DATABASE_URL not configured".to_string(),
+                    auto_fixable: false,
+                    fix_action: None,
+                });
+            }
+        }
+
+        // Check for migrations directory if using database
+        if std::env::var("DATABASE_URL").is_ok() && !Path::new("migrations").exists() {
+            self.issues.push(Issue {
+                category: IssueCategory::FrameworkHealth,
+                severity: IssueSeverity::Suggestion,
+                description: "Database configured but no migrations directory found".to_string(),
+                auto_fixable: true,
+                fix_action: Some(FixAction::CreateDirectory {
+                    path: "migrations".to_string(),
+                }),
+            });
+        }
+
+        // Check for essential services if they should be running
+        if std::env::var("DATABASE_URL").is_ok() && !self.is_port_in_use(5432) {
+            self.issues.push(Issue {
+                category: IssueCategory::FrameworkHealth,
+                severity: IssueSeverity::Critical,
+                description: "Database service is not running (PostgreSQL on port 5432)".to_string(),
+                auto_fixable: false,
+                fix_action: None,
+            });
+        }
+
+        if std::env::var("REDIS_URL").is_ok() && !self.is_port_in_use(6379) {
+            self.issues.push(Issue {
+                category: IssueCategory::FrameworkHealth,
+                severity: IssueSeverity::Warning,
+                description: "Redis service is not running (port 6379)".to_string(),
+                auto_fixable: false,
+                fix_action: None,
+            });
+        }
+
+        // Check for application health
+        let common_ports = [3000, 8000, 8080];
+        let app_running = common_ports.iter().any(|port| self.is_port_in_use(*port));
+        
+        if !app_running {
+            self.issues.push(Issue {
+                category: IssueCategory::FrameworkHealth,
+                severity: IssueSeverity::Suggestion,
+                description: "Application is not currently running".to_string(),
+                auto_fixable: false,
+                fix_action: None,
+            });
+        }
+
+        Ok(())
+    }
+
+    fn is_port_in_use(&self, port: u16) -> bool {
+        use std::net::{TcpListener, SocketAddr};
+        
+        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+        TcpListener::bind(addr).is_err()
+    }
+
     fn report_findings(&self) {
         println!("\n📋 Diagnosis Results:");
 
@@ -355,6 +460,7 @@ impl Doctor {
             (IssueCategory::Configuration, "⚙️ Configuration"),
             (IssueCategory::Dependencies, "📚 Dependencies"),
             (IssueCategory::Performance, "🚀 Performance"),
+            (IssueCategory::FrameworkHealth, "🏥 Framework Health"),
         ];
 
         for (category, title) in categories {

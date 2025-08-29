@@ -69,15 +69,34 @@ async fn display_framework_info() -> Result<(), ElifError> {
     let rust_version = get_rust_version().await?;
     println!("   🔧 Rust Version: {}", rust_version);
     
+    // Show framework components
+    println!("   📦 Framework Components:");
+    println!("      • elif-core (0.8.0) - Dependency injection and module system");
+    println!("      • elif-http (0.8.0) - HTTP server with declarative routing");
+    println!("      • elif-http-derive (0.1.0) - Routing macros and controller generation");
+    println!("      • elif-orm (0.4.0) - Database ORM with migrations");
+    println!("      • elif-auth (0.4.0) - Authentication and authorization");
+    println!("      • elif-cache (0.3.0) - Caching layer with Redis support");
+    
     // Show core features
     println!("   ✨ Core Features:");
     println!("      • Module System with Dependency Injection");
+    println!("      • Declarative Controllers with #[controller] macro");
     println!("      • Complete ORM with Migrations & Seeding");
     println!("      • Built-in Authentication & Authorization");
     println!("      • OpenAPI/Swagger Integration");
     println!("      • Hot Reload Development Mode");
     println!("      • Production-Ready CLI Tools");
+    println!("      • Framework Management & Health Monitoring");
     println!("      • Docker & Kubernetes Support");
+    
+    // Show management tools
+    println!("   🛠️  Management Commands:");
+    println!("      • elifrs status - Framework health monitoring");
+    println!("      • elifrs check - Comprehensive system validation");
+    println!("      • elifrs doctor - Intelligent issue diagnosis");
+    println!("      • elifrs update - Dependency management and updates");
+    println!("      • elifrs info - Detailed framework information");
     
     Ok(())
 }

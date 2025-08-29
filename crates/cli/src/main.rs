@@ -221,6 +221,25 @@ enum Commands {
         component: Option<String>,
     },
 
+    /// Framework dependency management and updates
+    Update {
+        /// Check for framework updates
+        #[arg(long)]
+        check: bool,
+
+        /// Perform dependency vulnerability scanning
+        #[arg(long)]
+        security: bool,
+
+        /// Update dependencies automatically
+        #[arg(long)]
+        dependencies: bool,
+
+        /// Show verbose update information
+        #[arg(long)]
+        verbose: bool,
+    },
+
     /// API version management
     Version {
         #[command(subcommand)]
@@ -966,6 +985,15 @@ async fn main() -> Result<(), ElifError> {
 
         Commands::Status { health, component } => {
             commands::status::run(health, component.as_deref()).await?;
+        }
+
+        Commands::Update {
+            check,
+            security,
+            dependencies,
+            verbose,
+        } => {
+            commands::update::run(check, security, dependencies, verbose).await?;
         }
 
         Commands::Version { version_command } => match version_command {
