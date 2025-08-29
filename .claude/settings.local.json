@@ -91,7 +91,11 @@
       "Bash(../../target/debug/elifrs make module UserModule --services UserService --controllers UserController)",
       "Bash(../../target/debug/elifrs make service Payment --module user --async-methods --dependencies \"EmailService,DatabaseService\")",
       "Bash(../../target/debug/elifrs make service:*)",
-      "Bash(./test-analyzer)"
+      "Bash(./test-analyzer)",
+      "Bash(/Users/kog/Code/elif/target/debug/elifrs new --non-interactive my-test-app)",
+      "Bash(/Users/kog/Code/elif/target/debug/elifrs --help)",
+      "Bash(/Users/kog/Code/elif/target/debug/elifrs new --help)",
+      "Bash(/Users/kog/Code/elif/target/debug/elifrs new --non-interactive test-app)"
     ],
     "deny": []
   }
