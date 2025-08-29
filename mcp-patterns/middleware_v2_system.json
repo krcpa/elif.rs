@@ -1,0 +1,169 @@
+{
+  "name": "middleware_v2_system", 
+  "title": "Middleware V2 System",
+  "category": "http",
+  "version": "0.8.0",
+  "stability": "production",
+  "description": "Laravel-inspired middleware system with handle(request, next) pattern for clean pre/post request processing",
+  "tags": ["middleware", "pipeline", "request-response", "laravel-style", "composition"],
+  
+  "basic_example": {
+    "title": "Simple Logging Middleware",
+    "code": "use elif_http::middleware::v2::{Middleware, Next, NextFuture};\nuse elif_http::{ElifRequest, ElifResponse};\nuse std::time::Instant;\n\n#[derive(Debug)]\npub struct LoggingMiddleware;\n\nimpl Middleware for LoggingMiddleware {\n    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {\n        Box::pin(async move {\n            // Pre-processing: log incoming request\n            let start = Instant::now();\n            let method = request.method.clone();\n            let path = request.path().to_string();\n            \n            // Continue to next middleware/handler\n            let response = next.run(request).await;\n            \n            // Post-processing: log response\n            let duration = start.elapsed();\n            println!(\"{} {} - {} - {:?}\", method, path, \n                     response.status_code(), duration);\n            \n            response\n        })\n    }\n}",
+    "explanation": "Basic middleware that logs request/response information with timing. Demonstrates pre and post-processing around the request pipeline.",
+    "file_source": "/crates/elif-http/src/middleware/v2.rs:906-937"
+  },
+  
+  "advanced_example": {
+    "title": "JWT Authentication Middleware with Conditional Logic",
+    "code": "#[derive(Debug)]\npub struct JwtAuthMiddleware {\n    secret: String,\n    skip_paths: Vec<String>,\n}\n\nimpl JwtAuthMiddleware {\n    pub fn new(secret: String) -> Self {\n        Self {\n            secret,\n            skip_paths: vec![\"/health\".to_string(), \"/public\".to_string()],\n        }\n    }\n    \n    pub fn skip_paths(mut self, paths: Vec<String>) -> Self {\n        self.skip_paths = paths;\n        self\n    }\n}\n\nimpl Middleware for JwtAuthMiddleware {\n    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {\n        let skip = self.skip_paths.iter().any(|p| request.path().starts_with(p));\n        let secret = self.secret.clone();\n        \n        Box::pin(async move {\n            // Skip authentication for public paths\n            if skip {\n                return next.run(request).await;\n            }\n            \n            // Extract and validate JWT token\n            let token = match request.header(\"Authorization\")\n                .and_then(|h| h.to_str().ok())\n                .and_then(|h| h.strip_prefix(\"Bearer \")) {\n                Some(token) => token,\n                None => {\n                    return ElifResponse::unauthorized().json_value(json!({\n                        \"error\": {\n                            \"code\": \"missing_token\",\n                            \"message\": \"Missing Authorization header\"\n                        }\n                    }));\n                }\n            };\n            \n            if !validate_jwt_token(token, &secret) {\n                return ElifResponse::unauthorized().json_value(json!({\n                    \"error\": {\n                        \"code\": \"invalid_token\",\n                        \"message\": \"Invalid or expired token\"\n                    }\n                }));\n            }\n            \n            // Token valid, continue to next middleware\n            let mut response = next.run(request).await;\n            let _ = response.add_header(\"X-Authenticated\", \"true\");\n            response\n        })\n    }\n}",
+    "explanation": "Advanced middleware with conditional logic, path skipping, and response modification. Shows real-world authentication patterns."
+  },
+  
+  "when_to_use": [
+    "Need request/response processing before/after handlers",
+    "Cross-cutting concerns like authentication, logging, CORS",
+    "Request transformation and validation",
+    "Response modification and headers",
+    "Rate limiting and security policies",
+    "Middleware composition and reusability"
+  ],
+  
+  "benefits": [
+    "Clean separation of cross-cutting concerns",
+    "Laravel-style handle(request, next) pattern",
+    "Pipeline composition with MiddlewarePipelineV2",
+    "Conditional middleware execution",
+    "Built-in middleware factories for common patterns",
+    "Comprehensive testing and debugging support",
+    "Zero-cost abstractions with compile-time optimization"
+  ],
+  
+  "source_files": [
+    {
+      "path": "crates/elif-http/src/middleware/v2.rs",
+      "description": "Core V2 middleware system implementation"
+    },
+    {
+      "path": "docs/middleware/examples/auth_middleware.rs",
+      "description": "JWT authentication middleware example"
+    },
+    {
+      "path": "docs/middleware/examples/logging_middleware.rs", 
+      "description": "Advanced logging middleware with multiple formats"
+    }
+  ],
+  
+  "related_patterns": [
+    "declarative_controllers",
+    "http_server_core",
+    "dependency_injection",
+    "error_handling"
+  ],
+  
+  "common_mistakes": [
+    {
+      "mistake": "Not using Box::pin() for async middleware functions",
+      "solution": "Always wrap async blocks with Box::pin(async move { ... })"
+    },
+    {
+      "mistake": "Forgetting to call next.run(request).await",
+      "solution": "Middleware must call next to continue the pipeline"
+    },
+    {
+      "mistake": "Not handling response modification failures gracefully",
+      "solution": "Use .unwrap_or(original_response) when adding headers"
+    },
+    {
+      "mistake": "Complex middleware blocking the async runtime",
+      "solution": "Use tokio::spawn for CPU-intensive operations"
+    }
+  ],
+  
+  "prerequisites": {
+    "dependencies": [
+      "elif-http = \"0.8.0\"",
+      "tokio = { version = \"1.0\", features = [\"rt-multi-thread\", \"macros\"] }",
+      "serde_json = \"1.0\""
+    ],
+    "imports": [
+      "use elif_http::middleware::v2::{Middleware, Next, NextFuture, MiddlewarePipelineV2};",
+      "use elif_http::{ElifRequest, ElifResponse};"
+    ]
+  },
+  
+  "configuration": {
+    "pipeline_setup": {
+      "title": "Middleware Pipeline Configuration",
+      "code": "use elif_http::middleware::v2::{MiddlewarePipelineV2, LoggingMiddleware};\nuse elif_http::Server;\n\n// Create pipeline with multiple middleware\nlet pipeline = MiddlewarePipelineV2::new()\n    .add(LoggingMiddleware)\n    .add(CorsMiddleware::new())\n    .add(JwtAuthMiddleware::new(\"secret\".to_string()))\n    .add(RateLimitMiddleware::new().limit(100));\n\n// Use with server\nlet server = Server::new().use_middleware_pipeline(pipeline);\nserver.listen(\"127.0.0.1:3000\").await?;"
+    },
+    "conditional_middleware": {
+      "title": "Conditional Middleware Execution",
+      "code": "use elif_http::middleware::v2::ConditionalMiddleware;\n\n// Skip middleware for certain paths\nlet conditional_auth = ConditionalMiddleware::new(auth_middleware)\n    .skip_paths(vec![\"/health\", \"/public/*\"])\n    .only_methods(vec![ElifMethod::POST, ElifMethod::PUT])\n    .condition(|req| req.header(\"X-API-Key\").is_some());\n\nlet pipeline = MiddlewarePipelineV2::new().add(conditional_auth);"
+    }
+  },
+  
+  "factories": {
+    "title": "Built-in Middleware Factories",
+    "examples": [
+      {
+        "name": "Rate Limiting",
+        "code": "use elif_http::middleware::v2::factories;\n\nlet rate_limiter = factories::rate_limit(60); // 60 requests per minute\nlet custom_limiter = factories::rate_limit_with_window(100, Duration::from_secs(300));"
+      },
+      {
+        "name": "CORS",
+        "code": "let cors = factories::cors();\nlet custom_cors = factories::cors_with_origins(vec![\"https://example.com\".to_string()]);"
+      },
+      {
+        "name": "Timeout",
+        "code": "let timeout = factories::timeout(Duration::from_secs(30));"
+      },
+      {
+        "name": "Body Limit",
+        "code": "let body_limit = factories::body_limit(1024 * 1024); // 1MB limit"
+      }
+    ]
+  },
+  
+  "composition": {
+    "title": "Middleware Composition Utilities",
+    "code": "use elif_http::middleware::v2::composition;\n\n// Compose two middleware\nlet composed = composition::compose(logging_middleware, auth_middleware);\n\n// Compose three middleware\nlet triple = composition::compose3(cors, auth, rate_limit);\n\n// Create middleware group\nlet group = composition::group(vec![\n    Arc::new(LoggingMiddleware),\n    Arc::new(CorsMiddleware::new()),\n    Arc::new(RateLimitMiddleware::new())\n]);"
+  },
+  
+  "testing": {
+    "title": "Testing Middleware",
+    "code": "#[cfg(test)]\nmod tests {\n    use super::*;\n    use elif_http::middleware::v2::MiddlewarePipelineV2;\n    \n    #[tokio::test]\n    async fn test_auth_middleware() {\n        let middleware = JwtAuthMiddleware::new(\"secret\".to_string());\n        let pipeline = MiddlewarePipelineV2::new().add(middleware);\n        \n        // Test with valid token\n        let mut headers = ElifHeaderMap::new();\n        headers.insert(\"authorization\", \"Bearer secret\");\n        let request = ElifRequest::new(ElifMethod::GET, \"/protected\", headers);\n        \n        let response = pipeline.execute(request, |_| {\n            Box::pin(async { ElifResponse::ok().text(\"Protected\") })\n        }).await;\n        \n        assert_eq!(response.status_code(), 200);\n    }\n}"
+  },
+  
+  "introspection": {
+    "title": "Debugging and Performance Monitoring",
+    "code": "use elif_http::middleware::v2::introspection;\n\n// Create debug pipeline with timing\nlet debug_pipeline = pipeline.with_debug();\n\n// Execute with timing information\nlet (response, duration) = debug_pipeline\n    .execute_debug(request, handler).await;\n\n// Get execution statistics\nlet stats = debug_pipeline.stats();\nfor (name, stat) in stats {\n    println!(\"Middleware {}: {} executions, avg {:?}\", \n             name, stat.executions, stat.avg_time);\n}\n\n// Instrument individual middleware\nlet instrumented = introspection::instrument(\n    auth_middleware, \"auth\".to_string()\n);"
+  },
+  
+  "performance": {
+    "notes": [
+      "Zero-cost abstractions with compile-time optimization",
+      "Middleware pipeline built once at application startup",
+      "Boxed futures provide optimal async performance",
+      "Built-in middleware use efficient algorithms (e.g., periodic cleanup for rate limiting)",
+      "Debug instrumentation only active when explicitly enabled"
+    ],
+    "benchmarks": [
+      "Simple middleware pipeline: ~10μs overhead per request",
+      "Complex pipeline (5 middleware): ~25μs overhead per request",
+      "Rate limiting middleware: O(1) per request with periodic O(N) cleanup"
+    ]
+  },
+  
+  "limitations": [
+    "Middleware must be Send + Sync + 'static",
+    "Response body can only be read once (see issue #130)",
+    "Complex middleware composition requires careful lifetime management",
+    "Some middleware features require tokio runtime"
+  ],
+  
+  "migration": {
+    "title": "Migrating from V1 Middleware",
+    "code": "// Old V1 pattern\nimpl OldMiddleware for MyMiddleware {\n    fn call(&self, req: Request) -> impl Future<Output = Response> {\n        // Old implementation\n    }\n}\n\n// New V2 pattern\nimpl Middleware for MyMiddleware {\n    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {\n        Box::pin(async move {\n            // Pre-processing\n            let response = next.run(request).await;\n            // Post-processing\n            response\n        })\n    }\n}"
+  }
+}

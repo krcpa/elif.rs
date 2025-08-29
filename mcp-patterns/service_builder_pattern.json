@@ -1,0 +1,135 @@
+{
+  "name": "service_builder_pattern",
+  "title": "Service-Builder Pattern",
+  "category": "architecture",
+  "version": "0.8.0",
+  "stability": "stable",
+  "description": "Builder pattern for configuration objects using service-builder crate - suggested for infrequent construction with many optional fields, not hot paths",
+  "tags": ["builder", "configuration", "service-builder", "patterns"],
+  
+  "basic_example": {
+    "title": "Basic Configuration Builder",
+    "code": "use service_builder::builder;\n\n#[derive(Debug, Clone)]\n#[builder]\npub struct DatabaseConfig {\n    pub host: String,\n    pub port: u16,\n    #[builder(default = \"myapp\")]\n    pub database: String,\n    #[builder(optional)]\n    pub username: Option<String>,\n    #[builder(optional)]\n    pub password: Option<String>,\n    #[builder(default = false)]\n    pub ssl_enabled: bool,\n    #[builder(default = \"Duration::from_secs(30)\")]\n    pub timeout: std::time::Duration,\n}\n\nimpl DatabaseConfig {\n    pub fn new(host: String, port: u16) -> Self {\n        DatabaseConfigBuilder::new()\n            .host(host)\n            .port(port)\n            .build_with_defaults()\n    }\n}\n\n// Usage\nlet config = DatabaseConfigBuilder::new()\n    .host(\"localhost\".to_string())\n    .port(5432)\n    .database(\"production_db\".to_string())\n    .username(Some(\"admin\".to_string()))\n    .ssl_enabled(true)\n    .build_with_defaults();\n\nprintln!(\"Database config: {:?}\", config);",
+    "explanation": "Basic builder pattern for configuration objects with default values and optional fields."
+  },
+  
+  "advanced_example": {
+    "title": "Advanced Builder with Runtime Configuration",
+    "code": "#[derive(Debug, Clone)]\n#[builder]\npub struct HttpServerConfig {\n    pub host: String,\n    pub port: u16,\n    #[builder(default = \"true\")]\n    pub cors_enabled: bool,\n    #[builder(default = \"Duration::from_secs(30)\")]\n    pub request_timeout: Duration,\n    #[builder(default = \"1024 * 1024\")]\n    pub max_request_size: usize,\n    #[builder(optional)]\n    pub tls_config: Option<TlsConfig>,\n    #[builder(default)]\n    pub middleware: Vec<String>,\n    #[builder(getter, setter)]\n    pub workers: usize,\n}\n\n// Convenience methods via impl block\nimpl HttpServerConfigBuilder {\n    pub fn development() -> Self {\n        Self::new()\n            .host(\"127.0.0.1\".to_string())\n            .port(3000)\n            .cors_enabled(true)\n            .workers(1)\n    }\n    \n    pub fn production() -> Self {\n        Self::new()\n            .host(\"0.0.0.0\".to_string())\n            .port(80)\n            .cors_enabled(false)\n            .request_timeout(Duration::from_secs(60))\n            .workers(num_cpus::get())\n    }\n    \n    pub fn with_tls(mut self, cert_path: &str, key_path: &str) -> Self {\n        let tls = TlsConfig {\n            cert_path: cert_path.to_string(),\n            key_path: key_path.to_string(),\n        };\n        self.tls_config(Some(tls))\n    }\n}\n\n// Usage patterns\nlet dev_config = HttpServerConfigBuilder::development()\n    .port(8080)\n    .build_with_defaults();\n\nlet prod_config = HttpServerConfigBuilder::production()\n    .with_tls(\"/etc/ssl/cert.pem\", \"/etc/ssl/key.pem\")\n    .build_with_defaults();\n\n// Runtime configuration modification\nlet mut config = prod_config;\nconfig.set_port(443); // Using generated setter"
+  },
+  
+  "when_to_use": [
+    "Configuration objects with many optional fields",
+    "Infrequent object construction (not hot paths)",
+    "Need default values and validation",
+    "Complex initialization logic",
+    "Want fluent API for configuration"
+  ],
+  
+  "when_not_to_use": [
+    "Hot path builders called frequently (performance regression)",
+    "Simple objects with few fields",
+    "Objects constructed in tight loops",
+    "When original builder is already O(1) per operation"
+  ],
+  
+  "benefits": [
+    "Fluent API for configuration",
+    "Default value management",
+    "Optional field handling",
+    "Compile-time validation",
+    "Extensible with custom methods"
+  ],
+  
+  "source_files": [
+    {
+      "path": "CLAUDE.md",
+      "description": "Guidelines on when to use service-builder pattern"
+    }
+  ],
+  
+  "related_patterns": [
+    "http_server_core",
+    "dependency_injection",
+    "orm_models"
+  ],
+  
+  "common_mistakes": [
+    {
+      "mistake": "Using for hot path builders that are called frequently",
+      "solution": "Keep simple builders for performance-critical code paths"
+    },
+    {
+      "mistake": "Not using build_with_defaults() for configuration patterns",
+      "solution": "Use build_with_defaults() for config objects, build()? for services"
+    },
+    {
+      "mistake": "Over-applying builder pattern to simple structs",
+      "solution": "Only use for complex objects with many optional fields"
+    }
+  ],
+  
+  "prerequisites": {
+    "dependencies": [
+      "service-builder = \"0.3.0\""
+    ],
+    "imports": [
+      "use service_builder::builder;"
+    ]
+  },
+  
+  "performance_considerations": {
+    "title": "Performance Guidelines",
+    "notes": [
+      "Service-builder may introduce O(N) overhead per operation",
+      "RequestBuilder was reverted in 8.8.4 due to performance regression",
+      "Measure before and after migration for hot paths",
+      "Configuration objects: good fit (infrequent construction)",
+      "Fluent accumulators: poor fit (frequent method calls)"
+    ],
+    "example": "// ❌ Bad: Hot path builder\nfor request in requests {\n    let req = RequestBuilder::new()\n        .method(\"GET\")\n        .url(&url)\n        .build(); // O(N) overhead per request\n}\n\n// ✅ Good: Configuration object\nlet config = DatabaseConfigBuilder::new()\n    .host(\"localhost\")\n    .port(5432)\n    .build_with_defaults(); // Built once, used many times"
+  },
+  
+  "migration_guide": {
+    "title": "Migrating to Service-Builder",
+    "steps": [
+      "Identify configuration objects (not hot path builders)",
+      "Add #[builder] macro to struct definition",
+      "Use #[builder(optional)] for Option<T> fields",
+      "Use #[builder(default)] or #[builder(default = \"expr\")] for defaults",
+      "Add convenience methods via impl ConfigBuilder block",
+      "Update usage to use build_with_defaults()",
+      "Measure performance if used in performance-critical paths"
+    ]
+  },
+  
+  "builder_attributes": {
+    "title": "Builder Macro Attributes",
+    "examples": [
+      {
+        "name": "Optional Fields",
+        "code": "#[builder(optional)]\npub field: Option<String>, // Defaults to None"
+      },
+      {
+        "name": "Default Values",
+        "code": "#[builder(default)]\npub enabled: bool, // Uses Default::default()\n\n#[builder(default = \"Duration::from_secs(30)\")]\npub timeout: Duration, // Custom default"
+      },
+      {
+        "name": "Getters and Setters",
+        "code": "#[builder(getter, setter)]\npub workers: usize, // Generates get_workers() and set_workers()"
+      }
+    ]
+  },
+  
+  "testing": {
+    "title": "Testing Builder Patterns",
+    "code": "#[cfg(test)]\nmod tests {\n    use super::*;\n    \n    #[test]\n    fn test_config_builder_defaults() {\n        let config = HttpServerConfigBuilder::new()\n            .host(\"localhost\".to_string())\n            .port(3000)\n            .build_with_defaults();\n        \n        assert_eq!(config.host, \"localhost\");\n        assert_eq!(config.port, 3000);\n        assert!(config.cors_enabled); // Default true\n        assert_eq!(config.request_timeout, Duration::from_secs(30));\n    }\n    \n    #[test]\n    fn test_development_preset() {\n        let config = HttpServerConfigBuilder::development()\n            .build_with_defaults();\n        \n        assert_eq!(config.host, \"127.0.0.1\");\n        assert_eq!(config.port, 3000);\n        assert!(config.cors_enabled);\n        assert_eq!(config.workers, 1);\n    }\n    \n    #[test]\n    fn test_production_preset() {\n        let config = HttpServerConfigBuilder::production()\n            .build_with_defaults();\n        \n        assert_eq!(config.host, \"0.0.0.0\");\n        assert_eq!(config.port, 80);\n        assert!(!config.cors_enabled);\n        assert_eq!(config.workers, num_cpus::get());\n    }\n}"
+  },
+  
+  "limitations": [
+    "May introduce performance overhead in hot paths",
+    "Requires service-builder dependency",
+    "Generated code can be verbose",
+    "Limited to struct-based builders"
+  ]
+}
