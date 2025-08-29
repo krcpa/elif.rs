@@ -348,27 +348,39 @@ impl Doctor {
             println!("   🏥 Diagnosing framework health...");
         }
 
-        // Check if essential elif.rs dependencies are present
+        // Check if essential elif.rs dependencies are present and their configuration
         if let Ok(content) = fs::read_to_string("Cargo.toml") {
-            let has_elif_http = content.contains("elif-http");
-            let has_elif_core = content.contains("elif-core");
+            if let Ok(parsed_cargo) = toml::from_str::<toml::Value>(&content) {
+                let has_elif_dependencies = self.check_elif_dependencies(&parsed_cargo);
+                
+                if !has_elif_dependencies {
+                    self.issues.push(Issue {
+                        category: IssueCategory::FrameworkHealth,
+                        severity: IssueSeverity::Warning,
+                        description: "No elif.rs framework dependencies detected".to_string(),
+                        auto_fixable: false,
+                        fix_action: None,
+                    });
+                }
 
-            if !has_elif_http && !has_elif_core {
+                // Check for derive feature in elif-http
+                if !self.is_elif_http_derive_enabled(&parsed_cargo) {
+                    // Only suggest if elif-http is present
+                    if self.has_elif_http_dependency(&parsed_cargo) {
+                        self.issues.push(Issue {
+                            category: IssueCategory::FrameworkHealth,
+                            severity: IssueSeverity::Suggestion,
+                            description: "Consider enabling 'derive' feature for elif-http to use declarative routing".to_string(),
+                            auto_fixable: false,
+                            fix_action: None,
+                        });
+                    }
+                }
+            } else {
                 self.issues.push(Issue {
                     category: IssueCategory::FrameworkHealth,
                     severity: IssueSeverity::Warning,
-                    description: "No elif.rs framework dependencies detected".to_string(),
-                    auto_fixable: false,
-                    fix_action: None,
-                });
-            }
-
-            // Check for derive feature in elif-http
-            if has_elif_http && !content.contains("elif-http") || !content.contains("derive") {
-                self.issues.push(Issue {
-                    category: IssueCategory::FrameworkHealth,
-                    severity: IssueSeverity::Suggestion,
-                    description: "Consider enabling 'derive' feature for elif-http to use declarative routing".to_string(),
+                    description: "Failed to parse Cargo.toml - invalid TOML format".to_string(),
                     auto_fixable: false,
                     fix_action: None,
                 });
@@ -377,14 +389,16 @@ impl Doctor {
 
         // Check for database configuration if using elif-orm
         if let Ok(content) = fs::read_to_string("Cargo.toml") {
-            if content.contains("elif-orm") && std::env::var("DATABASE_URL").is_err() {
-                self.issues.push(Issue {
-                    category: IssueCategory::FrameworkHealth,
-                    severity: IssueSeverity::Warning,
-                    description: "Using elif-orm but DATABASE_URL not configured".to_string(),
-                    auto_fixable: false,
-                    fix_action: None,
-                });
+            if let Ok(parsed_cargo) = toml::from_str::<toml::Value>(&content) {
+                if self.has_elif_orm_dependency(&parsed_cargo) && std::env::var("DATABASE_URL").is_err() {
+                    self.issues.push(Issue {
+                        category: IssueCategory::FrameworkHealth,
+                        severity: IssueSeverity::Warning,
+                        description: "Using elif-orm but DATABASE_URL not configured".to_string(),
+                        auto_fixable: false,
+                        fix_action: None,
+                    });
+                }
             }
         }
 
@@ -493,6 +507,61 @@ impl Doctor {
         }).await {
             Ok(Ok(_)) => true,
             _ => false,
+        }
+    }
+
+    fn check_elif_dependencies(&self, parsed_cargo: &toml::Value) -> bool {
+        if let Some(deps) = parsed_cargo.get("dependencies").and_then(|d| d.as_table()) {
+            // Check if any elif.rs dependency is present
+            deps.keys().any(|key| key.starts_with("elif-"))
+        } else {
+            false
+        }
+    }
+
+    fn has_elif_http_dependency(&self, parsed_cargo: &toml::Value) -> bool {
+        if let Some(deps) = parsed_cargo.get("dependencies").and_then(|d| d.as_table()) {
+            deps.contains_key("elif-http")
+        } else {
+            false
+        }
+    }
+
+    fn has_elif_orm_dependency(&self, parsed_cargo: &toml::Value) -> bool {
+        if let Some(deps) = parsed_cargo.get("dependencies").and_then(|d| d.as_table()) {
+            deps.contains_key("elif-orm")
+        } else {
+            false
+        }
+    }
+
+    fn is_elif_http_derive_enabled(&self, parsed_cargo: &toml::Value) -> bool {
+        if let Some(deps) = parsed_cargo.get("dependencies").and_then(|d| d.as_table()) {
+            if let Some(elif_http_dep) = deps.get("elif-http") {
+                match elif_http_dep {
+                    // Handle table format: elif-http = { version = "...", features = ["derive"] }
+                    toml::Value::Table(dep_table) => {
+                        if let Some(features) = dep_table.get("features").and_then(|f| f.as_array()) {
+                            features.iter().any(|feature| {
+                                feature.as_str() == Some("derive")
+                            })
+                        } else {
+                            false
+                        }
+                    },
+                    // Handle string format with features: elif-http = { version = "...", features = ["derive"] }
+                    // Note: string format like "0.8.0" doesn't support features
+                    toml::Value::String(_) => {
+                        // String format cannot have features, so derive is not enabled
+                        false
+                    },
+                    _ => false,
+                }
+            } else {
+                false
+            }
+        } else {
+            false
         }
     }
 
