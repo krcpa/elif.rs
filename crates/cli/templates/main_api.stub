@@ -1,67 +1,74 @@
-use elif_http::{Server, Router, get, post, ElifRequest, ElifResponse, HttpResult};
-{% if modules_enabled %}use elif_core::container::Container;{% endif %}
+use elif_http::{Server, ElifRequest, ElifResponse, HttpResult};
+use elif_http::routing::{Router, get, post};
+use elif_core::config::HttpConfig;
+{% if modules_enabled %}use elif_core::container::{Container, IocContainer};
+use modules::app_module::AppModule;
+
+mod modules;{% endif %}
 {% if database_enabled %}use sqlx::PgPool;{% endif %}
 
-{% if modules_enabled %}mod modules;
-use modules::app_module::AppModule;{% endif %}
+// Add controllers and services
+mod controllers;
+mod services;
+
+use controllers::user_controller::UserController;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {% if modules_enabled %}// Initialize IoC container with modules
-    let container = Container::builder()
-        .register_module(AppModule)
-        .build()?;{% endif %}
+    let container = Container::new();
+    // TODO: Register your services and controllers here
+    let ioc_container = IocContainer::new(container);{% endif %}
     {% if database_enabled %}
     // Initialize database connection
     let database_url = std::env::var("DATABASE_URL")?;
     let pool = PgPool::connect(&database_url).await?;{% endif %}
 
-    let router = Router::new(){% if modules_enabled %}
-        .with_container(container){% endif %}
+    let router = Router::new()
         .route("/", get(hello))
         .route("/health", get(health_check)){% if auth_enabled %}
         .route("/auth/login", post(auth_login))
-        .route("/auth/register", post(auth_register)){% endif %};
+        .route("/auth/register", post(auth_register)){% endif %}
+        .controller(UserController);
 
     println!("🚀 Starting {{ project_name }} server on http://127.0.0.1:3000");
     println!("📊 Health check: http://127.0.0.1:3000/health");
     println!("📚 API docs: http://127.0.0.1:3000/docs");
     
-    Server::new()
-        .router(router)
-        .listen("127.0.0.1:3000")
-        .await?;
+    let config = HttpConfig::default();
+    {% if modules_enabled %}let server = Server::new(ioc_container, config)?;
+    server.router(router).listen("127.0.0.1:3000").await?;{% else %}Server::default().router(router).listen("127.0.0.1:3000").await?;{% endif %}
 
     Ok(())
 }
 
 async fn hello(_req: ElifRequest) -> HttpResult<ElifResponse> {
-    Ok(ElifResponse::json(&serde_json::json!({
+    ElifResponse::ok().json(&serde_json::json!({
         "message": "Hello from {{ project_name }} - Built with elif.rs! 🦀",
         "framework": "elif.rs",
         "version": "0.8.0",
         "project": "{{ project_name }}"
-    }))?)
+    }))
 }
 
 async fn health_check(_req: ElifRequest) -> HttpResult<ElifResponse> {
-    Ok(ElifResponse::json(&serde_json::json!({
+    ElifResponse::ok().json(&serde_json::json!({
         "status": "healthy",
         "timestamp": chrono::Utc::now(),
         "service": "{{ project_name }}"
-    }))?)
+    }))
 }
 {% if auth_enabled %}
 async fn auth_login(_req: ElifRequest) -> HttpResult<ElifResponse> {
     // TODO: Implement authentication login
-    Ok(ElifResponse::json(&serde_json::json!({
+    ElifResponse::ok().json(&serde_json::json!({
         "message": "Login endpoint - implement authentication logic here"
-    }))?)
+    }))
 }
 
 async fn auth_register(_req: ElifRequest) -> HttpResult<ElifResponse> {
     // TODO: Implement user registration
-    Ok(ElifResponse::json(&serde_json::json!({
+    ElifResponse::ok().json(&serde_json::json!({
         "message": "Register endpoint - implement registration logic here"
-    }))?)
+    }))
 }{% endif %}

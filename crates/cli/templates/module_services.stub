@@ -1,4 +1,9 @@
-{% if existing_content %}{{existing_content}}{% endif %}
+use elif_http_derive::module;
 
-pub mod {{service_name | lower}};
-pub use {{service_name | lower}}::{{service_name}};
+#[module(
+    controllers = [],
+    providers = [],
+    imports = [],
+    exports = []
+)]
+pub struct AppModule;
