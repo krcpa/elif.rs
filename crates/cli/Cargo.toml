@@ -46,6 +46,7 @@ regex = "1.10"
 inquire = "0.7"
 console = "0.15"
 indicatif = "0.17"
+git2 = "0.19"
 
 [dev-dependencies]
 tempfile = "3.8"

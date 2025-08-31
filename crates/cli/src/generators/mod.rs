@@ -21,9 +21,26 @@ impl TemplateEngine {
             .join("crates/cli/templates");
             
         if template_dir.exists() {
-            // Load from stub files if available
-            tera = Tera::new(&format!("{}/*.stub", template_dir.display()))
-                .map_err(|e| ElifError::Validation { message: format!("Failed to load stub templates: {}", e) })?;
+            // Load specific templates that we know work
+            let template_files = [
+                "cargo_toml.stub",
+                "main_api.stub", 
+                "user_controller.stub",
+                "user_service.stub",
+                "controllers_mod.stub",
+                "services_mod.stub",
+                "module_services.stub",
+            ];
+            
+            for template_file in &template_files {
+                let template_path = template_dir.join(template_file);
+                if template_path.exists() {
+                    let content = std::fs::read_to_string(&template_path)
+                        .map_err(|e| ElifError::Validation { message: format!("Failed to read template {}: {}", template_file, e) })?;
+                    tera.add_raw_template(template_file, &content)
+                        .map_err(|e| ElifError::Validation { message: format!("Failed to register template {}: {}", template_file, e) })?;
+                }
+            }
         } else {
             // Fallback to embedded templates for backwards compatibility
             tera.add_raw_template("model.stub", include_str!("../../templates/model.stub"))
@@ -54,6 +71,10 @@ impl TemplateEngine {
             context.insert(key, value);
         }
         
+        self.render_with_context(template, &context)
+    }
+    
+    pub fn render_with_context(&self, template: &str, context: &Context) -> Result<String, ElifError> {
         // Handle both old template names and new .stub names
         let template_name = if template.ends_with(".stub") {
             template
@@ -61,7 +82,7 @@ impl TemplateEngine {
             &format!("{}.stub", template)
         };
         
-        self.tera.render(template_name, &context)
+        self.tera.render(template_name, context)
             .map_err(|e| ElifError::Validation { message: format!("Template rendering error: {}", e) })
     }
 }

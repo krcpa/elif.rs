@@ -1,0 +1,123 @@
+use elif_orm::{Model, QueryBuilder};
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct User {
+    pub id: Uuid,
+    pub name: String,
+    pub email: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl Model for User {
+    type PrimaryKey = Uuid;
+    
+    fn table_name() -> &'static str {
+        "users"
+    }
+    
+    fn primary_key(&self) -> Option<Self::PrimaryKey> {
+        Some(self.id)
+    }
+    
+    fn set_primary_key(&mut self, key: Self::PrimaryKey) {
+        self.id = key;
+    }
+    
+    fn uses_timestamps() -> bool {
+        true
+    }
+    
+    fn from_row(row: &sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
+        Ok(User {
+            id: sqlx::Row::try_get(row, "id")?,
+            name: sqlx::Row::try_get(row, "name")?,
+            email: sqlx::Row::try_get(row, "email")?,
+            created_at: sqlx::Row::try_get(row, "created_at")?,
+            updated_at: sqlx::Row::try_get(row, "updated_at")?,
+        })
+    }
+    
+    fn to_fields(&self) -> HashMap<String, serde_json::Value> {
+        let mut fields = HashMap::new();
+        fields.insert("id".to_string(), serde_json::json!(self.id));
+        fields.insert("name".to_string(), serde_json::json!(self.name));
+        fields.insert("email".to_string(), serde_json::json!(self.email));
+        fields
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateUserRequest {
+    pub name: String,
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserRequest {
+    pub name: Option<String>,
+    pub email: Option<String>,
+}
+
+pub struct UserService;
+
+impl UserService {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub async fn list_users(&self) -> Result<Vec<User>, Box<dyn std::error::Error>> {
+        // TODO: Implement with actual database connection
+        Ok(vec![
+            User {
+                id: Uuid::new_v4(),
+                name: "John Doe".to_string(),
+                email: "john@example.com".to_string(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            }
+        ])
+    }
+
+    pub async fn get_user(&self, id: String) -> Result<User, Box<dyn std::error::Error>> {
+        // TODO: Implement with actual database lookup
+        Ok(User {
+            id: Uuid::parse_str(&id)?,
+            name: "John Doe".to_string(),
+            email: "john@example.com".to_string(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+    }
+
+    pub async fn create_user(&self, data: CreateUserRequest) -> Result<User, Box<dyn std::error::Error>> {
+        // TODO: Implement with actual database insert
+        Ok(User {
+            id: Uuid::new_v4(),
+            name: data.name,
+            email: data.email,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+    }
+
+    pub async fn update_user(&self, id: String, data: UpdateUserRequest) -> Result<User, Box<dyn std::error::Error>> {
+        // TODO: Implement with actual database update
+        Ok(User {
+            id: Uuid::parse_str(&id)?,
+            name: data.name.unwrap_or_else(|| "John Doe".to_string()),
+            email: data.email.unwrap_or_else(|| "john@example.com".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+    }
+
+    pub async fn delete_user(&self, _id: String) -> Result<(), Box<dyn std::error::Error>> {
+        // TODO: Implement with actual database deletion
+        Ok(())
+    }
+}

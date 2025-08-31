@@ -1,6 +1,8 @@
 use elif_core::ElifError;
 use std::fs;
 use std::path::Path;
+use crate::generators::TemplateEngine;
+use tera::Context;
 
 /// Create a new elif application with module system templates
 pub async fn app(name: &str, path: Option<&str>, template: &str, modules: bool) -> Result<(), ElifError> {
@@ -22,11 +24,8 @@ pub async fn app(name: &str, path: Option<&str>, template: &str, modules: bool) 
     // Create directory structure
     create_directory_structure(&app_path, template, modules)?;
     
-    // Generate Cargo.toml with elif dependencies
-    generate_cargo_toml(&app_path, name, template)?;
-    
-    // Generate main.rs with appropriate template
-    generate_main_file(&app_path, template, modules)?;
+    // Generate files using templates
+    generate_files_from_templates(&app_path, name, template, modules)?;
     
     // Generate module system files if requested
     if modules {
@@ -35,6 +34,9 @@ pub async fn app(name: &str, path: Option<&str>, template: &str, modules: bool) 
     
     // Generate configuration files
     generate_config_files(&app_path, template)?;
+    
+    // Initialize git repository and create initial commit
+    initialize_git_repo(&app_path)?;
     
     println!("\n✅ Successfully created elif.rs application '{}'", name);
     println!("\n📖 Next steps:");
@@ -48,16 +50,116 @@ pub async fn app(name: &str, path: Option<&str>, template: &str, modules: bool) 
     Ok(())
 }
 
+fn generate_files_from_templates(path: &Path, name: &str, _template: &str, modules: bool) -> Result<(), ElifError> {
+    let template_engine = TemplateEngine::new()?;
+    
+    // Create context for templates
+    let mut context = Context::new();
+    context.insert("project_name", name);
+    context.insert("http_enabled", &true);
+    context.insert("modules_enabled", &modules);
+    context.insert("database_enabled", &true);
+    context.insert("database_type", "postgresql");
+    context.insert("auth_enabled", &false);
+    
+    // Generate Cargo.toml
+    let cargo_toml = template_engine.render_with_context("cargo_toml.stub", &context)?;
+    fs::write(path.join("Cargo.toml"), cargo_toml)?;
+    
+    // Generate main.rs
+    let main_rs = template_engine.render_with_context("main_api.stub", &context)?;
+    fs::write(path.join("src/main.rs"), main_rs)?;
+    
+    // Generate controllers and services
+    let controllers_mod = template_engine.render_with_context("controllers_mod.stub", &context)?;
+    fs::write(path.join("src/controllers/mod.rs"), controllers_mod)?;
+    
+    let user_controller = template_engine.render_with_context("user_controller.stub", &context)?;
+    fs::write(path.join("src/controllers/user_controller.rs"), user_controller)?;
+    
+    let services_mod = template_engine.render_with_context("services_mod.stub", &context)?;
+    fs::write(path.join("src/services/mod.rs"), services_mod)?;
+    
+    let user_service = template_engine.render_with_context("user_service.stub", &context)?;
+    fs::write(path.join("src/services/user_service.rs"), user_service)?;
+    
+    if modules && !path.join("src/modules/mod.rs").exists() {
+        let modules_mod = "pub mod app_module;";
+        fs::write(path.join("src/modules/mod.rs"), modules_mod)?;
+        
+        let app_module = template_engine.render_with_context("module_services.stub", &context)?;
+        fs::write(path.join("src/modules/app_module.rs"), app_module)?;
+    }
+    
+    Ok(())
+}
+
+fn initialize_git_repo(path: &Path) -> Result<(), ElifError> {
+    use std::process::Command;
+    
+    // Initialize git repository
+    let output = Command::new("git")
+        .args(&["init"])
+        .current_dir(path)
+        .output();
+        
+    match output {
+        Ok(output) if output.status.success() => {
+            println!("🔧 Initialized git repository");
+        }
+        _ => {
+            // Git might not be available, continue silently
+        }
+    }
+    
+    // Add all files
+    let _ = Command::new("git")
+        .args(&["add", "."])
+        .current_dir(path)
+        .output();
+    
+    // Create initial commit
+    let _ = Command::new("git")
+        .args(&["commit", "-m", "Initial commit - Created with elif.rs CLI"])
+        .current_dir(path)
+        .output();
+    
+    if let Ok(output) = Command::new("git").args(&["status", "--porcelain"]).current_dir(path).output() {
+        if output.stdout.is_empty() {
+            println!("📝 Created initial commit");
+        }
+    }
+    
+    Ok(())
+}
+
 fn create_directory_structure(path: &Path, template: &str, modules: bool) -> Result<(), ElifError> {
     // Create base directories
     fs::create_dir_all(path)?;
     fs::create_dir_all(path.join("src"))?;
     
+    let dirs = [
+        "src/controllers",
+        "src/services",
+        "src/middleware", 
+        "src/models",
+        "src/routes",
+        "resources",
+        "migrations",
+        "tests",
+    ];
+    
+    for dir in &dirs {
+        fs::create_dir_all(path.join(dir))?;
+    }
+    
+    if modules {
+        fs::create_dir_all(path.join("src/modules"))?;
+    }
+    
     match template {
         "api" => {
-            fs::create_dir_all(path.join("src/controllers"))?;
-            fs::create_dir_all(path.join("src/models"))?;
-            fs::create_dir_all(path.join("src/middleware"))?;
+            // API-specific directories already created above
         }
         "web" => {
             fs::create_dir_all(path.join("src/controllers"))?;

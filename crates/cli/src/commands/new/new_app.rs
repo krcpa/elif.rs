@@ -38,6 +38,8 @@ pub async fn create_app(name: &str, target_path: Option<&str>) -> Result<(), Eli
 async fn create_app_structure(app_dir: &Path, _name: &str) -> Result<(), ElifError> {
     let dirs = [
         "src/controllers",
+        "src/services",
+        "src/modules",
         "src/middleware", 
         "src/models",
         "src/routes",
