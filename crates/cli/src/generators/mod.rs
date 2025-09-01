@@ -25,6 +25,10 @@ impl TemplateEngine {
             let template_files = [
                 "cargo_toml.stub",
                 "main_api.stub", 
+                "main_minimal.stub",
+                "app_module.stub",
+                "app_controller.stub",
+                "app_service.stub",
                 "user_controller.stub",
                 "user_service.stub",
                 "controllers_mod.stub",
@@ -57,6 +61,26 @@ impl TemplateEngine {
                 .map_err(|e| ElifError::Validation { message: format!("Failed to register cargo_toml template: {}", e) })?;
             tera.add_raw_template("main_api.stub", include_str!("../../templates/main_api.stub"))
                 .map_err(|e| ElifError::Validation { message: format!("Failed to register main_api template: {}", e) })?;
+            // Add the missing critical templates
+            tera.add_raw_template("controllers_mod.stub", include_str!("../../templates/controllers_mod.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register controllers_mod template: {}", e) })?;
+            tera.add_raw_template("services_mod.stub", include_str!("../../templates/services_mod.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register services_mod template: {}", e) })?;
+            tera.add_raw_template("user_controller.stub", include_str!("../../templates/user_controller.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register user_controller template: {}", e) })?;
+            tera.add_raw_template("user_service.stub", include_str!("../../templates/user_service.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register user_service template: {}", e) })?;
+            tera.add_raw_template("module_services.stub", include_str!("../../templates/module_services.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register module_services template: {}", e) })?;
+            // Add NestJS-style minimal templates
+            tera.add_raw_template("main_minimal.stub", include_str!("../../templates/main_minimal.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register main_minimal template: {}", e) })?;
+            tera.add_raw_template("app_module.stub", include_str!("../../templates/app_module.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register app_module template: {}", e) })?;
+            tera.add_raw_template("app_controller.stub", include_str!("../../templates/app_controller.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register app_controller template: {}", e) })?;
+            tera.add_raw_template("app_service.stub", include_str!("../../templates/app_service.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register app_service template: {}", e) })?;
         }
         
         // Register filters (Tera equivalent of Handlebars helpers)

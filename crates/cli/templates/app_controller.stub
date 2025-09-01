@@ -1,0 +1,14 @@
+use elif_http::{controller, get, ElifRequest, ElifResponse, HttpResult};
+use crate::services::AppService;
+
+#[controller("/api")]
+pub struct AppController {
+    app_service: AppService,
+}
+
+impl AppController {
+    #[get("/health")]
+    pub async fn health(&self) -> HttpResult<ElifResponse> {
+        Ok(ElifResponse::ok().json(&self.app_service.get_health())?)
+    }
+}

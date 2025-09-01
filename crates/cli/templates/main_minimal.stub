@@ -1,0 +1,34 @@
+use elif_http::{Server, HttpConfig, ElifRouter};
+use elif_core::container::IocContainer;
+
+// Add controllers and services
+mod controllers;
+mod services;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize IoC container
+    let mut container = IocContainer::new();
+    // TODO: Register your services and controllers here
+    container.build()?;
+
+    // Create router with basic health endpoint
+    let router = ElifRouter::new()
+        .get("/api/health", health_check);
+
+    println!("🚀 Starting {{ project_name }} server on http://127.0.0.1:3000");
+    println!("📊 Health check: http://127.0.0.1:3000/api/health");
+    
+    // Create and start server
+    let mut server = Server::new(container, HttpConfig::default())?;
+    server.use_router(router);
+    server.listen("127.0.0.1:3000").await?;
+
+    Ok(())
+}
+
+async fn health_check(_req: elif_http::ElifRequest) -> elif_http::HttpResult<elif_http::ElifResponse> {
+    use crate::services::AppService;
+    let app_service = AppService::new();
+    elif_http::ElifResponse::ok().json(&app_service.get_health())
+}
