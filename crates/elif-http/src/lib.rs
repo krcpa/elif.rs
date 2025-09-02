@@ -11,6 +11,7 @@
 //! - Framework-native routing system
 
 // Core modules
+pub mod bootstrap;
 pub mod config;
 pub mod controller;
 pub mod errors;
@@ -30,6 +31,7 @@ pub mod websocket;
 pub mod auth;
 
 // Main server API - NestJS-like experience
+pub use bootstrap::{AppBootstrap, AppBootstrapper, BootstrapError, BootstrapResult, create_bootstrapper};
 pub use config::HttpConfig;
 pub use errors::{HttpError, HttpResult, VersionedError, VersionedErrorBuilder, VersionedErrorExt};
 pub use server::Server;
