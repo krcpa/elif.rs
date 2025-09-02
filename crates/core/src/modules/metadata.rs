@@ -248,10 +248,10 @@ static GLOBAL_MODULE_REGISTRY: OnceLock<Mutex<CompileTimeModuleRegistry>> = Once
 /// Panics if the global registry lock is poisoned, which indicates a serious
 /// inconsistency in the module system that should not be silently ignored.
 pub fn register_module_globally(metadata: CompileTimeModuleMetadata) {
-    let registry = GLOBAL_MODULE_REGISTRY.get_or_init(|| Mutex::new(CompileTimeModuleRegistry::new()));
-    registry
+    let registry_mutex = GLOBAL_MODULE_REGISTRY.get_or_init(|| Mutex::new(CompileTimeModuleRegistry::new()));
+    registry_mutex
         .lock()
-        .expect("Global module registry lock was poisoned - this indicates a serious bug in the module system")
+        .expect("Global module registry is poisoned")
         .register_module(metadata);
 }
 
@@ -261,10 +261,10 @@ pub fn register_module_globally(metadata: CompileTimeModuleMetadata) {
 /// Panics if the global registry lock is poisoned, which indicates a serious
 /// inconsistency in the module system that should not be silently ignored.
 pub fn get_global_module_registry() -> CompileTimeModuleRegistry {
-    let registry = GLOBAL_MODULE_REGISTRY.get_or_init(|| Mutex::new(CompileTimeModuleRegistry::new()));
-    registry
+    let registry_mutex = GLOBAL_MODULE_REGISTRY.get_or_init(|| Mutex::new(CompileTimeModuleRegistry::new()));
+    registry_mutex
         .lock()
-        .expect("Global module registry lock was poisoned - this indicates a serious bug in the module system")
+        .expect("Global module registry is poisoned")
         .clone()
 }
 
