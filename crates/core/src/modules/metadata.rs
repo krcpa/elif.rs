@@ -242,27 +242,30 @@ use std::sync::{Mutex, OnceLock};
 
 static GLOBAL_MODULE_REGISTRY: OnceLock<Mutex<CompileTimeModuleRegistry>> = OnceLock::new();
 
-/// Initialize the global module registry
-pub fn initialize_global_registry() {
-    GLOBAL_MODULE_REGISTRY.get_or_init(|| Mutex::new(CompileTimeModuleRegistry::new()));
-}
-
 /// Register a module in the global registry
+/// 
+/// # Panics
+/// Panics if the global registry lock is poisoned, which indicates a serious
+/// inconsistency in the module system that should not be silently ignored.
 pub fn register_module_globally(metadata: CompileTimeModuleMetadata) {
-    initialize_global_registry();
-    if let Ok(mut registry) = GLOBAL_MODULE_REGISTRY.get().unwrap().lock() {
-        registry.register_module(metadata);
-    }
+    let registry = GLOBAL_MODULE_REGISTRY.get_or_init(|| Mutex::new(CompileTimeModuleRegistry::new()));
+    registry
+        .lock()
+        .expect("Global module registry lock was poisoned - this indicates a serious bug in the module system")
+        .register_module(metadata);
 }
 
 /// Get a copy of the global module registry
+/// 
+/// # Panics
+/// Panics if the global registry lock is poisoned, which indicates a serious
+/// inconsistency in the module system that should not be silently ignored.
 pub fn get_global_module_registry() -> CompileTimeModuleRegistry {
-    initialize_global_registry();
-    if let Ok(registry) = GLOBAL_MODULE_REGISTRY.get().unwrap().lock() {
-        registry.clone()
-    } else {
-        CompileTimeModuleRegistry::new()
-    }
+    let registry = GLOBAL_MODULE_REGISTRY.get_or_init(|| Mutex::new(CompileTimeModuleRegistry::new()));
+    registry
+        .lock()
+        .expect("Global module registry lock was poisoned - this indicates a serious bug in the module system")
+        .clone()
 }
 
 #[cfg(test)]
