@@ -38,7 +38,7 @@ test-env/
 
 # Logs
 *.log
-EOF < /dev/null
 
-.claude
+# Claude AI assistant files (user-specific configurations)
+.claude/
 CLAUDE.md
