@@ -100,7 +100,13 @@
       "Bash(python3:*)",
       "Bash(for:*)",
       "Bash(do echo \"Checking $file:\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(../target/release/elifrs new test-nestjs-app --template minimal)",
+      "Bash(/Users/kog/Code/elif/target/release/elifrs new test-nestjs-app --template minimal)",
+      "Bash(/Users/kog/Code/elif/target/release/elifrs help)",
+      "Bash(/Users/kog/Code/elif/target/release/elifrs create app:*)",
+      "Bash(/Users/kog/Code/elif/target/release/elifrs version)",
+      "Bash(/Users/kog/Code/elif/target/release/elifrs --version)"
     ],
     "deny": []
   }

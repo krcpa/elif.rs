@@ -440,6 +440,7 @@ fn generate_module_descriptor_method(
     let imports_list = generate_imports_list(&module_args.imports)?;
     let exports_list = generate_exports_list(&module_args.exports)?;
     let auto_configure_code = generate_auto_configure_function(struct_name, module_args)?;
+    let registry_registration_code = generate_registry_registration_code(struct_name, module_args)?;
 
     Ok(quote! {
         impl #struct_name {
@@ -474,6 +475,11 @@ fn generate_module_descriptor_method(
                 #auto_configure_code
             }
         }
+
+        // Auto-register this module in the global registry at compile time
+        const _: () = {
+            #registry_registration_code
+        };
     })
 }
 
@@ -617,6 +623,63 @@ fn generate_exports_list(exports: &[Type]) -> Result<proc_macro2::TokenStream> {
 
     Ok(quote! {
         vec![#(#export_strings),*]
+    })
+}
+
+/// Generate code to register module in the global registry
+fn generate_registry_registration_code(
+    struct_name: &Ident,
+    module_args: &ModuleArgs,
+) -> Result<proc_macro2::TokenStream> {
+    // Extract controller names as strings
+    let controller_names: Vec<String> = module_args.controllers
+        .iter()
+        .map(|controller| controller.to_token_stream().to_string())
+        .collect();
+
+    // Extract provider names as strings
+    let provider_names: Vec<String> = module_args.providers
+        .iter()
+        .map(|provider| match &provider.service_type {
+            ProviderType::Concrete(service_type) => service_type.to_token_stream().to_string(),
+            ProviderType::Trait(trait_type) => {
+                if let Some(impl_type) = &provider.implementation {
+                    impl_type.to_token_stream().to_string()
+                } else {
+                    trait_type.to_token_stream().to_string()
+                }
+            }
+        })
+        .collect();
+
+    // Extract import names as strings
+    let import_names: Vec<String> = module_args.imports
+        .iter()
+        .map(|import| import.to_token_stream().to_string())
+        .collect();
+
+    // Extract export names as strings  
+    let export_names: Vec<String> = module_args.exports
+        .iter()
+        .map(|export| export.to_token_stream().to_string())
+        .collect();
+
+    let struct_name_str = struct_name.to_string();
+
+    Ok(quote! {
+        use elif_core::modules::{CompileTimeModuleMetadata, register_module_globally};
+        
+        // Register this module in the global registry
+        static REGISTER_MODULE: std::sync::Once = std::sync::Once::new();
+        REGISTER_MODULE.call_once(|| {
+            let metadata = CompileTimeModuleMetadata::new(#struct_name_str.to_string())
+                .with_controllers(vec![#(#controller_names.to_string()),*])
+                .with_providers(vec![#(#provider_names.to_string()),*])
+                .with_imports(vec![#(#import_names.to_string()),*])
+                .with_exports(vec![#(#export_names.to_string()),*]);
+                
+            register_module_globally(metadata);
+        });
     })
 }
 
