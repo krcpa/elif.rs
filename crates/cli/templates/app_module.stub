@@ -1,0 +1,8 @@
+use elif_http::Module;
+use crate::controllers::AppController;
+use crate::services::AppService;
+
+#[derive(Module)]
+#[controllers(AppController)]
+#[providers(AppService)]
+pub struct AppModule;

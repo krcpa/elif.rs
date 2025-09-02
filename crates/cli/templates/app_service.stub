@@ -1,0 +1,17 @@
+use serde_json::{Value, json};
+
+pub struct AppService;
+
+impl AppService {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn get_health(&self) -> Value {
+        json!({
+            "status": "healthy",
+            "timestamp": chrono::Utc::now(),
+            "service": "{{ project_name }}"
+        })
+    }
+}

@@ -36,14 +36,8 @@ pub async fn generate_project_from_template(config: &ProjectConfig) -> Result<()
     generate_main_from_template(app_dir, config, &template_engine).await?;
     generate_config_files_from_template(app_dir, config).await?;
     
-    // Generate controllers and services for non-minimal projects
-    if config.project_type != "Minimal Setup" {
-        generate_controllers_and_services_from_template(app_dir, config, &template_engine).await?;
-    }
-    
-    if config.modules_enabled {
-        generate_module_system_from_template(app_dir, config, &template_engine).await?;
-    }
+    // Always generate NestJS-style services
+    generate_controllers_and_services_from_template(app_dir, config, &template_engine).await?;
     
     // Initialize git repository
     initialize_git_repository(app_dir)?;
@@ -66,23 +60,16 @@ async fn create_directory_structure(app_dir: &Path, config: &ProjectConfig) -> R
         "tests",
     ];
     
-    // Add directories based on project type
+    // Always include NestJS-style basic directories
+    dirs.extend(vec![
+        "src/controllers",
+        "src/services",
+    ]);
+
+    // Add extra directories based on project type  
     match config.project_type.as_str() {
-        "API Server" | "api" => {
-            dirs.extend(vec![
-                "src/controllers",
-                "src/middleware",
-                "src/models",
-                "src/services",
-                "docs",
-            ]);
-        }
         "Full-Stack Web App" | "web" => {
             dirs.extend(vec![
-                "src/controllers",
-                "src/middleware", 
-                "src/models",
-                "src/services",
                 "src/views",
                 "public",
                 "public/css",
@@ -91,16 +78,13 @@ async fn create_directory_structure(app_dir: &Path, config: &ProjectConfig) -> R
                 "docs",
             ]);
         }
-        "Minimal Setup" | "minimal" => {
-            // Just src/ and tests/
+        _ => {
+            // All projects get docs by default
+            dirs.push("docs");
         }
-        _ => {}
     }
     
-    // Add modules directory if enabled
-    if config.modules_enabled {
-        dirs.push("src/modules");
-    }
+    // Module system is now built-in to NestJS-style structure (app_module.rs in src/)
     
     // Add database directories if database is enabled
     if config.database_enabled {
@@ -161,10 +145,10 @@ async fn generate_main_from_template(
     template_data.insert("auth_enabled".to_string(), serde_json::Value::Bool(config.auth_enabled));
     
     let template_name = match config.project_type.as_str() {
-        "API Server" | "api" => "main_api.stub",
-        "Full-Stack Web App" | "web" => "main_web.stub", // We can create this later
-        "Minimal Setup" | "minimal" => "main_minimal.stub", // We can create this later
-        _ => "main_api.stub",
+        "API Server" | "api" => "main_minimal.stub", // Use NestJS-style minimal setup
+        "Full-Stack Web App" | "web" => "main_minimal.stub", // Use NestJS-style minimal setup
+        "Minimal Setup" | "minimal" => "main_minimal.stub",
+        _ => "main_minimal.stub", // Default to NestJS-style
     };
     
     let main_content = template_engine.render(template_name, &template_data)?;
@@ -243,32 +227,6 @@ Thumbs.db
     Ok(())
 }
 
-async fn generate_module_system_from_template(
-    app_dir: &Path,
-    _config: &ProjectConfig,
-    _template_engine: &TemplateEngine,
-) -> Result<(), ElifError> {
-    // Create modules/mod.rs
-    let modules_mod = r#"pub mod app_module;
-"#;
-    fs::write(app_dir.join("src").join("modules").join("mod.rs"), modules_mod).await?;
-
-    // Create app_module.rs
-    let app_module = r#"use elif_core::container::module;
-use elif_http_derive::module;
-
-#[module(
-    controllers = [],
-    providers = [],
-    imports = [],
-    exports = []
-)]
-pub struct AppModule;
-"#;
-    fs::write(app_dir.join("src").join("modules").join("app_module.rs"), app_module).await?;
-
-    Ok(())
-}
 
 fn format_project_type(project_type: &str) -> String {
     match project_type {
@@ -337,21 +295,17 @@ async fn generate_controllers_and_services_from_template(
     let mut template_data = HashMap::new();
     template_data.insert("project_name".to_string(), serde_json::Value::String(_config.name.clone()));
     
-    // Generate controllers/mod.rs
-    let controllers_mod = template_engine.render("controllers_mod.stub", &template_data)?;
-    fs::write(app_dir.join("src/controllers/mod.rs"), controllers_mod).await?;
+    // Generate simple controllers/mod.rs (placeholder for future)
+    let controllers_mod_content = "// Controllers will be added here\n// Use elifrs generate controller to create new controllers";
+    fs::write(app_dir.join("src/controllers/mod.rs"), controllers_mod_content).await?;
     
-    // Generate controllers/user_controller.rs
-    let user_controller = template_engine.render("user_controller.stub", &template_data)?;
-    fs::write(app_dir.join("src/controllers/user_controller.rs"), user_controller).await?;
+    // Generate simple services/mod.rs for app service
+    let services_mod_content = "pub mod app_service;\n\npub use app_service::AppService;";
+    fs::write(app_dir.join("src/services/mod.rs"), services_mod_content).await?;
     
-    // Generate services/mod.rs
-    let services_mod = template_engine.render("services_mod.stub", &template_data)?;
-    fs::write(app_dir.join("src/services/mod.rs"), services_mod).await?;
-    
-    // Generate services/user_service.rs
-    let user_service = template_engine.render("user_service.stub", &template_data)?;
-    fs::write(app_dir.join("src/services/user_service.rs"), user_service).await?;
+    // Generate services/app_service.rs (NestJS-style)
+    let app_service = template_engine.render("app_service.stub", &template_data)?;
+    fs::write(app_dir.join("src/services/app_service.rs"), app_service).await?;
     
     Ok(())
 }

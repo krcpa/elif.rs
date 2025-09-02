@@ -13,7 +13,8 @@ anyhow = "1.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 {% if http_enabled %}elif-http = { version = "0.8.0", features = ["derive"] }
-elif-http-derive = "0.1.0"{% endif %}
+elif-http-derive = "0.1.0"
+elif-core = "0.6.0"{% endif %}
 {% if modules_enabled %}elif-core = "0.6.0"{% endif %}
 {% if database_enabled %}{% if database_type == "postgresql" %}sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono"] }
 elif-orm = "0.7.0"{% elif database_type == "mysql" %}sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "mysql", "uuid", "chrono"] }
@@ -29,6 +30,8 @@ jsonwebtoken = "9.0"{% endif %}{% endif %}
 {% elif feature == "OpenAPI Documentation" %}elif-openapi = "0.2.0"
 {% elif feature == "Testing Framework" %}elif-testing = "0.1.0"
 {% endif %}{% endfor %}{% endif %}
+
+[workspace]
 
 [dev-dependencies]
 tempfile = "3.8"
