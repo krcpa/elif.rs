@@ -936,12 +936,11 @@ fn generate_composition_overrides(overrides: &[ProviderDef]) -> Result<proc_macr
 fn generate_app_bootstrap_impl(struct_name: &Ident) -> Result<proc_macro2::TokenStream> {
     Ok(quote! {
         impl elif_http::AppBootstrap for #struct_name {
-            fn bootstrap() -> elif_http::AppBootstrapper {
+            fn bootstrap() -> elif_http::BootstrapResult<elif_http::AppBootstrapper> {
                 // Ensure this module and all referenced modules are registered
                 Self::ensure_registered();
                 
                 elif_http::AppBootstrapper::new()
-                    .expect("Failed to create AppBootstrapper from global module registry")
             }
         }
     })

@@ -267,4 +267,31 @@ mod tests {
         // Just test that configuration doesn't panic
         assert!(!bootstrapper.modules().is_empty());
     }
+    
+    #[tokio::test]
+    async fn test_bootstrap_error_handling() {
+        // Test what happens when no modules are registered
+        // Note: This test may be affected by other tests registering modules
+        // In a real scenario, you'd want to use a separate test registry
+        
+        // The current implementation will find modules from other tests,
+        // but in principle, if no modules were found, it should return an error
+        let result = AppBootstrapper::new();
+        
+        // Either succeeds (because other tests registered modules) 
+        // or fails with a clear error message
+        match result {
+            Ok(bootstrapper) => {
+                // Other tests registered modules, that's fine
+                assert!(!bootstrapper.modules().is_empty());
+            }
+            Err(BootstrapError::ModuleDiscoveryFailed { message }) => {
+                // This is the expected error when no modules are found
+                assert!(message.contains("No modules found"));
+            }
+            Err(other) => {
+                panic!("Unexpected error type: {:?}", other);
+            }
+        }
+    }
 }

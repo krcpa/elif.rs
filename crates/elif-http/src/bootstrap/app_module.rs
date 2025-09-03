@@ -14,7 +14,10 @@ pub trait AppBootstrap {
     /// This method discovers all modules in the dependency tree, configures
     /// the DI container, registers all controllers, and returns an AppBootstrapper
     /// ready for server startup.
-    fn bootstrap() -> AppBootstrapper;
+    ///
+    /// Returns a `BootstrapResult<AppBootstrapper>` to allow proper error handling
+    /// instead of panicking on configuration errors.
+    fn bootstrap() -> BootstrapResult<AppBootstrapper>;
 }
 
 /// Error type for bootstrap operations
