@@ -147,12 +147,15 @@ impl AppBootstrapper {
     
     /// Configure the DI container with all module providers
     async fn configure_container(&self) -> BootstrapResult<IocContainer> {
-        if let Some(_container) = &self.container {
-            // TODO: Clone IocContainer when it supports Clone
-            // For now, return a new container
-        }
-        
-        let mut container = IocContainer::new();
+        let mut container = if let Some(_provided_container) = &self.container {
+            // TODO: Proper container merging/extension when IocContainer supports it
+            // For now, we create a new container and document this limitation
+            tracing::warn!("Bootstrap: Custom container provided but cannot be cloned. Creating new container with module configurations.");
+            tracing::info!("Bootstrap: To properly use custom containers, consider configuring modules directly on your container before bootstrap");
+            IocContainer::new()
+        } else {
+            IocContainer::new()
+        };
         
         // Configure container with providers from each module in dependency order
         for module_name in &self.load_order {
@@ -225,7 +228,10 @@ impl AppBootstrapper {
 
 impl Default for AppBootstrapper {
     fn default() -> Self {
-        Self::new().expect("Failed to create default AppBootstrapper")
+        Self::new().unwrap_or_else(|e| {
+            tracing::error!("Failed to create default AppBootstrapper: {}", e);
+            panic!("Failed to create default AppBootstrapper: {}", e);
+        })
     }
 }
 
