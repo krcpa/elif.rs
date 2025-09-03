@@ -1,13 +1,11 @@
 //! AppBootstrap trait and bootstrap implementation for app modules
 
 use crate::{bootstrap::AppBootstrapper, HttpError};
-use async_trait::async_trait;
 
 /// Trait for app modules that can bootstrap themselves
 ///
 /// This trait is automatically implemented for modules marked with `#[module]`
 /// that are designated as app modules (typically the root module).
-#[async_trait]
 pub trait AppBootstrap {
     /// Start the bootstrap process for this app module
     ///
