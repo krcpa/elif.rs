@@ -124,6 +124,7 @@ pub struct ModuleArgs {
     pub controllers: Vec<Type>,
     pub imports: Vec<Type>,
     pub exports: Vec<Type>,
+    pub is_app_module: bool,
 }
 
 impl Parse for ModuleArgs {
@@ -132,14 +133,19 @@ impl Parse for ModuleArgs {
         let mut controllers = Vec::new();
         let mut imports = Vec::new();
         let mut exports = Vec::new();
+        let mut is_app_module = false;
 
         // Parse comma-separated key-value pairs
         while !input.is_empty() {
             let key: Ident = input.parse()?;
-            let _colon: Token![:] = input.parse()?;
-
             let key_str = key.to_string();
-            match key_str.as_str() {
+            
+            // Check if this is is_app flag without colon
+            if key_str == "is_app" && !input.peek(Token![:]) {
+                is_app_module = true;
+            } else {
+                let _colon: Token![:] = input.parse()?;
+                match key_str.as_str() {
                 "providers" => {
                     providers = parse_provider_list(input)?;
                 }
@@ -156,7 +162,7 @@ impl Parse for ModuleArgs {
                     return Err(Error::new_spanned(
                         key,
                         format!(
-                            "Unknown module section '{}'. Valid sections are: providers, controllers, imports, exports.\n\
+                            "Unknown module section '{}'. Valid sections are: providers, controllers, imports, exports, is_app.\n\
                             \n\
                             💡 Suggestions:\n\
                             • Use 'providers: [ServiceType]' for concrete services\n\
@@ -164,12 +170,14 @@ impl Parse for ModuleArgs {
                             • Use 'controllers: [ControllerType]' for HTTP controllers\n\
                             • Use 'imports: [ModuleType]' for module dependencies\n\
                             • Use 'exports: [ServiceType]' for services available to other modules\n\
+                            • Use 'is_app' (without colon) to mark this module as an app module that can bootstrap\n\
                             \n\
                             📖 See: https://docs.elif.rs/modules/module-definition",
                             key_str
                         )
                     ));
                 }
+            }
             }
 
             // Optional comma between sections
@@ -183,6 +191,7 @@ impl Parse for ModuleArgs {
             controllers,
             imports,
             exports,
+            is_app_module,
         })
     }
 }
@@ -422,11 +431,20 @@ fn process_module_attribute(
 
     // Generate module descriptor method
     let module_descriptor_impl = generate_module_descriptor_method(struct_name, &module_args)?;
+    
+    // Generate AppBootstrap implementation if this is an app module
+    let app_bootstrap_impl = if module_args.is_app_module {
+        generate_app_bootstrap_impl(struct_name)?
+    } else {
+        quote! {}
+    };
 
     Ok(quote! {
         #item_struct
 
         #module_descriptor_impl
+        
+        #app_bootstrap_impl
     })
 }
 
@@ -476,10 +494,8 @@ fn generate_module_descriptor_method(
             }
         }
 
-        // Auto-register this module in the global registry at compile time
-        const _: () = {
-            #registry_registration_code
-        };
+        // Auto-register this module in the global registry 
+        #registry_registration_code
     })
 }
 
@@ -667,19 +683,25 @@ fn generate_registry_registration_code(
     let struct_name_str = struct_name.to_string();
 
     Ok(quote! {
-        use elif_core::modules::{CompileTimeModuleMetadata, register_module_globally};
-        
-        // Register this module in the global registry
-        static REGISTER_MODULE: std::sync::Once = std::sync::Once::new();
-        REGISTER_MODULE.call_once(|| {
-            let metadata = CompileTimeModuleMetadata::new(#struct_name_str.to_string())
-                .with_controllers(vec![#(#controller_names.to_string()),*])
-                .with_providers(vec![#(#provider_names.to_string()),*])
-                .with_imports(vec![#(#import_names.to_string()),*])
-                .with_exports(vec![#(#export_names.to_string()),*]);
+        // Generate registration code that runs when module is first referenced
+        impl #struct_name {
+            fn ensure_registered() {
+                use elif_core::modules::{CompileTimeModuleMetadata, register_module_globally};
+                static REGISTER_MODULE: std::sync::Once = std::sync::Once::new();
                 
-            register_module_globally(metadata);
-        });
+                REGISTER_MODULE.call_once(|| {
+                    let metadata = CompileTimeModuleMetadata::new(#struct_name_str.to_string())
+                        .with_controllers(vec![#(#controller_names.to_string()),*])
+                        .with_providers(vec![#(#provider_names.to_string()),*])
+                        .with_imports(vec![#(#import_names.to_string()),*])
+                        .with_exports(vec![#(#export_names.to_string()),*]);
+                        
+                    register_module_globally(metadata);
+                });
+            }
+        }
+        
+        // Registration will be triggered when AppBootstrap::bootstrap() is called
     })
 }
 
@@ -906,6 +928,20 @@ fn generate_composition_overrides(overrides: &[ProviderDef]) -> Result<proc_macr
     })
 }
 
+/// Generate AppBootstrap implementation for app modules
+fn generate_app_bootstrap_impl(struct_name: &Ident) -> Result<proc_macro2::TokenStream> {
+    Ok(quote! {
+        impl elif_http::AppBootstrap for #struct_name {
+            fn bootstrap() -> elif_http::BootstrapResult<elif_http::AppBootstrapper> {
+                // Ensure this module and all referenced modules are registered
+                Self::ensure_registered();
+                
+                elif_http::AppBootstrapper::new()
+            }
+        }
+    })
+}
+
 /// Generate expanded code for demo DSL sugar syntax
 /// Converts simplified syntax to full #[module(...)] form
 fn generate_demo_dsl_expansion(demo_args: DemoDslArgs) -> Result<proc_macro2::TokenStream> {
@@ -926,6 +962,7 @@ fn generate_demo_dsl_expansion(demo_args: DemoDslArgs) -> Result<proc_macro2::To
         controllers: demo_args.controllers,
         imports: Vec::new(), // Demo DSL doesn't support imports yet
         exports: Vec::new(), // Demo DSL doesn't support exports yet
+        is_app_module: false, // Demo DSL modules are not app modules
     };
 
     // Generate a temporary struct name for the module
