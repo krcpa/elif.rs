@@ -158,10 +158,6 @@ impl Parse for ModuleArgs {
                 "exports" => {
                     exports = parse_type_list(input)?;
                 }
-                "is_app" => {
-                    // is_app is just a flag, no value needed
-                    is_app_module = true;
-                }
                 _ => {
                     return Err(Error::new_spanned(
                         key,
@@ -174,7 +170,7 @@ impl Parse for ModuleArgs {
                             • Use 'controllers: [ControllerType]' for HTTP controllers\n\
                             • Use 'imports: [ModuleType]' for module dependencies\n\
                             • Use 'exports: [ServiceType]' for services available to other modules\n\
-                            • Use 'is_app' to mark this module as an app module that can bootstrap\n\
+                            • Use 'is_app' (without colon) to mark this module as an app module that can bootstrap\n\
                             \n\
                             📖 See: https://docs.elif.rs/modules/module-definition",
                             key_str

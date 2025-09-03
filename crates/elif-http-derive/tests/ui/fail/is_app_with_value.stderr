@@ -1,4 +1,4 @@
-error: Unknown module section 'invalid_section'. Valid sections are: providers, controllers, imports, exports, is_app.
+error: Unknown module section 'is_app'. Valid sections are: providers, controllers, imports, exports, is_app.
 
        💡 Suggestions:
        • Use 'providers: [ServiceType]' for concrete services
@@ -9,7 +9,7 @@ error: Unknown module section 'invalid_section'. Valid sections are: providers, 
        • Use 'is_app' (without colon) to mark this module as an app module that can bootstrap
 
        📖 See: https://docs.elif.rs/modules/module-definition
-  --> tests/ui/fail/module_invalid_section.rs:10:5
+  --> tests/ui/fail/is_app_with_value.rs:16:5
    |
-10 |     invalid_section: [UserService],
-   |     ^^^^^^^^^^^^^^^
+16 |     is_app: true
+   |     ^^^^^^
