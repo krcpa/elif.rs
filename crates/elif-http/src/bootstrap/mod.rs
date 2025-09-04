@@ -12,6 +12,8 @@
 
 pub mod app_module;
 pub mod engine;
+pub mod route_validator;
 
 pub use app_module::*;
 pub use engine::*;
+pub use route_validator::*;

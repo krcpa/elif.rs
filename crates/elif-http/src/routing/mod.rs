@@ -17,6 +17,7 @@ pub mod versioned;
 
 // New framework-independent routing engine
 pub mod compiler;
+pub mod diagnostics;
 pub mod extraction;
 pub mod matcher;
 pub mod pattern;
@@ -34,8 +35,9 @@ pub use versioned::{
 pub use compiler::{
     CompilableRoute, CompilationResult, CompilationStats, RouteCompiler, RouteCompilerBuilder,
 };
+pub use diagnostics::{CliDiagnosticsFormatter, RouteDiagnostics};
 pub use extraction::{ExtractedParams, ExtractionError, ParameterExtractor, TypedExtractorBuilder};
-pub use matcher::{MatcherStats, RouteDefinition, RouteMatcher, RouteMatcherBuilder};
+pub use matcher::{MatcherStats, RouteDefinition, RouteMatcher, RouteMatcherBuilder, RouteMatchError};
 pub use pattern::{CompiledRoute, ParamConstraint, PathSegment, RouteMatch, RoutePattern};
 
 use axum::http::Method;
@@ -55,18 +57,25 @@ pub enum HttpMethod {
     TRACE,
 }
 
+impl HttpMethod {
+    /// Get the string representation of the HTTP method
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            HttpMethod::GET => "GET",
+            HttpMethod::POST => "POST", 
+            HttpMethod::PUT => "PUT",
+            HttpMethod::DELETE => "DELETE",
+            HttpMethod::PATCH => "PATCH",
+            HttpMethod::HEAD => "HEAD",
+            HttpMethod::OPTIONS => "OPTIONS",
+            HttpMethod::TRACE => "TRACE",
+        }
+    }
+}
+
 impl std::fmt::Display for HttpMethod {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HttpMethod::GET => write!(f, "GET"),
-            HttpMethod::POST => write!(f, "POST"),
-            HttpMethod::PUT => write!(f, "PUT"),
-            HttpMethod::DELETE => write!(f, "DELETE"),
-            HttpMethod::PATCH => write!(f, "PATCH"),
-            HttpMethod::HEAD => write!(f, "HEAD"),
-            HttpMethod::OPTIONS => write!(f, "OPTIONS"),
-            HttpMethod::TRACE => write!(f, "TRACE"),
-        }
+        write!(f, "{}", self.as_str())
     }
 }
 
