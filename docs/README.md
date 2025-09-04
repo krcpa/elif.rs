@@ -4,8 +4,40 @@ This directory contains comprehensive documentation for the elif.rs web framewor
 
 ## Directory Structure
 
+### `/getting-started/`
+Getting started guides and tutorials:
+- `introduction.md` - What makes elif.rs special
+- `installation.md` - Setup and installation guide
+- `zero-boilerplate-quickstart.md` - 5-minute API with zero boilerplate 🚀
+- `bootstrap-macro.md` - Complete guide to #[elif::bootstrap] macro
+- `quickstart-no-rust.md` - Build APIs using only CLI commands
+- `configuration.md` - Application configuration
+- `project-structure.md` - Understanding generated projects
+
+### `/basics/`
+Core framework concepts:
+- `controllers.md` - Declarative HTTP controllers
+- `routing.md` - Request routing and path parameters
+- `requests.md` - Request handling and parsing
+- `responses.md` - Response building and formatting
+- `middleware.md` - Cross-cutting concerns and middleware
+- `dependency-injection.md` - IoC container and service management
+- `error-handling.md` - Error handling patterns
+- `validation.md` - Request validation
+
+### `/database/`
+Database and ORM documentation:
+- `introduction.md` - Database integration overview
+- `configuration.md` - Database setup and connection
+- `models.md` - ORM models and field definitions
+- `query-builder.md` - Building database queries
+- `relationships.md` - Model relationships
+- `migrations.md` - Database schema management
+- `transactions.md` - Transaction handling
+- `seeding.md` - Database seeding
+
 ### `/middleware/`
-Documentation related to the middleware system:
+Middleware system documentation:
 - `integration_example.md` - Complete middleware v2 router integration example and status
 - `redesign_plan.md` - Original middleware redesign plan and architecture
 

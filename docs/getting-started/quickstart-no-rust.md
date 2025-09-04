@@ -125,12 +125,44 @@ This creates:
 
 ## Step 5: Start the Development Server
 
+The generated project uses elif.rs's zero-boilerplate bootstrap setup:
+
+```rust
+// Generated main.rs - No manual server configuration needed!
+use elif::prelude::*;
+
+#[module(
+    controllers: [UserController, PostController, CommentController],
+    providers: [DatabaseService],
+    is_app
+)]
+struct BlogApp;
+
+#[elif::bootstrap(BlogApp)]
+async fn main() -> Result<(), HttpError> {
+    println!("🚀 Blog API starting...");
+    // Server automatically starts with:
+    // ✅ All controllers registered
+    // ✅ Database connection configured  
+    // ✅ Middleware pipeline active
+    // ✅ API documentation available
+}
+```
+
+Start the server:
 ```bash
-# Start the server with hot reload
+# Start with hot reload - true Laravel-style development experience
 elifrs serve --hot-reload --port 3000
 ```
 
 Your API is now running at `http://127.0.0.1:3000`! 🚀
+
+**What just happened?** The `#[elif::bootstrap]` macro automatically:
+- ✅ Discovered all your controllers and registered their routes
+- ✅ Set up dependency injection for all services  
+- ✅ Applied authentication middleware where specified
+- ✅ Started the HTTP server with proper error handling
+- ✅ Enabled OpenAPI documentation generation
 
 ## Step 6: Test Your API
 
