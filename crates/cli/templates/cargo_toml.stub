@@ -6,21 +6,22 @@ description = "A {{ project_type }} built with elif.rs"
 authors = ["Your Name <your.email@example.com>"]
 
 [dependencies]
-# Main elif.rs framework with bootstrap macros
-elif = { git = "https://github.com/krcpa/elif.rs", branch = "main" }
+# elif.rs framework components
+elif-http = "0.8.2"
+elif-core = "0.6.1" 
+elif-macros = "0.1.1"
+env_logger = "0.10"
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-{% if http_enabled %}elif-http = { git = "https://github.com/krcpa/elif.rs", branch = "main", features = ["derive"] }
-elif-http-derive = { git = "https://github.com/krcpa/elif.rs", branch = "main" }
-elif-core = { git = "https://github.com/krcpa/elif.rs", branch = "main" }{% endif %}
+{% if http_enabled %}elif-http-derive = "0.2.0"{% endif %}
 {% if database_enabled %}{% if database_type == "postgresql" %}sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono"] }
-elif-orm = { git = "https://github.com/krcpa/elif.rs", branch = "main" }{% elif database_type == "mysql" %}sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "mysql", "uuid", "chrono"] }
-elif-orm = { git = "https://github.com/krcpa/elif.rs", branch = "main" }{% elif database_type == "sqlite" %}sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "uuid", "chrono"] }
-elif-orm = { git = "https://github.com/krcpa/elif.rs", branch = "main" }{% endif %}{% endif %}
+elif-orm = "0.7.0"{% elif database_type == "mysql" %}sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "mysql", "uuid", "chrono"] }
+elif-orm = "0.7.0"{% elif database_type == "sqlite" %}sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "uuid", "chrono"] }
+elif-orm = "0.7.0"{% endif %}{% endif %}
 {% if auth_enabled %}elif-auth = "0.4.0"{% if jwt_enabled %}
 jsonwebtoken = "9.0"{% endif %}{% endif %}
 {% if features %}{% for feature in features %}{% if feature == "Caching" %}elif-cache = "0.3.0"

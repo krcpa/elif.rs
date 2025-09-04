@@ -293,7 +293,7 @@ async fn generate_controllers_and_services_from_template(
     fs::write(app_dir.join("src/controllers/mod.rs"), controllers_mod_content).await?;
     
     // Generate controllers/user_controller.rs stub
-    let user_controller_content = "use elif_http::{ElifRequest, ElifResponse, HttpResult};\nuse elif_http_derive::{controller, get};\n\n#[controller(\"/api/users\")]\npub struct UserController;\n\nimpl UserController {\n    #[get(\"\")]\n    pub async fn index(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {\n        let users = vec![\"Alice\", \"Bob\", \"Charlie\"];\n        Ok(ElifResponse::ok().json(&users)?)\n    }\n}";
+    let user_controller_content = "use elif_http::{ElifRequest, ElifResponse, HttpResult};\nuse elif_http_derive::{controller, get};\n\n#[derive(Default)]\n#[controller(\"/api/users\")]\npub struct UserController;\n\nimpl UserController {\n    #[get(\"\")]\n    pub async fn index(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {\n        let users = vec![\"Alice\", \"Bob\", \"Charlie\"];\n        Ok(ElifResponse::ok().json(&users)?)\n    }\n}";
     fs::write(app_dir.join("src/controllers/user_controller.rs"), user_controller_content).await?;
     
     // Generate services/mod.rs for user service
@@ -301,7 +301,7 @@ async fn generate_controllers_and_services_from_template(
     fs::write(app_dir.join("src/services/mod.rs"), services_mod_content).await?;
     
     // Generate services/user_service.rs stub
-    let user_service_content = "#[derive(Clone)]\npub struct UserService;\n\nimpl UserService {\n    pub fn new() -> Self {\n        Self\n    }\n    \n    pub async fn get_users(&self) -> Vec<String> {\n        vec![\"Alice\".to_string(), \"Bob\".to_string(), \"Charlie\".to_string()]\n    }\n}";
+    let user_service_content = "#[derive(Clone, Default)]\npub struct UserService;\n\nimpl UserService {\n    pub fn new() -> Self {\n        Self\n    }\n    \n    pub async fn get_users(&self) -> Vec<String> {\n        vec![\"Alice\".to_string(), \"Bob\".to_string(), \"Charlie\".to_string()]\n    }\n}";
     fs::write(app_dir.join("src/services/user_service.rs"), user_service_content).await?;
     
     // Generate services/app_service.rs (NestJS-style)
