@@ -21,8 +21,9 @@ impl TemplateEngine {
             .join("crates/cli/templates");
             
         if template_dir.exists() {
-            // Load specific templates that we know work
-            let template_files = [
+            // Combine all templates into a single collection for unified loading
+            let all_templates = [
+                // Root-level templates
                 "cargo_toml.stub",
                 "main_api.stub", 
                 "main_minimal.stub",
@@ -37,20 +38,7 @@ impl TemplateEngine {
                 "controllers_mod.stub",
                 "services_mod.stub",
                 "module_services.stub",
-            ];
-            
-            for template_file in &template_files {
-                let template_path = template_dir.join(template_file);
-                if template_path.exists() {
-                    let content = std::fs::read_to_string(&template_path)
-                        .map_err(|e| ElifError::Validation { message: format!("Failed to read template {}: {}", template_file, e) })?;
-                    tera.add_raw_template(template_file, &content)
-                        .map_err(|e| ElifError::Validation { message: format!("Failed to register template {}: {}", template_file, e) })?;
-                }
-            }
-            
-            // Load modular templates from modules/ directory
-            let modular_templates = [
+                // Modular templates from modules/ directory
                 "modules/app_module.stub",
                 "modules/app_controller.stub", 
                 "modules/app_service.stub",
@@ -62,13 +50,14 @@ impl TemplateEngine {
                 "modules/dto/mod_dto.stub",
             ];
             
-            for template_file in &modular_templates {
+            // Single loop to load all templates
+            for template_file in &all_templates {
                 let template_path = template_dir.join(template_file);
                 if template_path.exists() {
                     let content = std::fs::read_to_string(&template_path)
-                        .map_err(|e| ElifError::Validation { message: format!("Failed to read modular template {}: {}", template_file, e) })?;
+                        .map_err(|e| ElifError::Validation { message: format!("Failed to read template {}: {}", template_file, e) })?;
                     tera.add_raw_template(template_file, &content)
-                        .map_err(|e| ElifError::Validation { message: format!("Failed to register modular template {}: {}", template_file, e) })?;
+                        .map_err(|e| ElifError::Validation { message: format!("Failed to register template {}: {}", template_file, e) })?;
                 }
             }
         } else {
