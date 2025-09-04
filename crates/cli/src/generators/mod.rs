@@ -104,6 +104,25 @@ impl TemplateEngine {
             // Add modular template
             tera.add_raw_template("main_modular.stub", include_str!("../../templates/main_modular.stub"))
                 .map_err(|e| ElifError::Validation { message: format!("Failed to register main_modular template: {}", e) })?;
+            // Add module templates
+            tera.add_raw_template("modules/app_module.stub", include_str!("../../templates/modules/app_module.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register modules/app_module template: {}", e) })?;
+            tera.add_raw_template("modules/app_controller.stub", include_str!("../../templates/modules/app_controller.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register modules/app_controller template: {}", e) })?;
+            tera.add_raw_template("modules/app_service.stub", include_str!("../../templates/modules/app_service.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register modules/app_service template: {}", e) })?;
+            tera.add_raw_template("modules/feature_module.stub", include_str!("../../templates/modules/feature_module.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register modules/feature_module template: {}", e) })?;
+            tera.add_raw_template("modules/module_controller.stub", include_str!("../../templates/modules/module_controller.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register modules/module_controller template: {}", e) })?;
+            tera.add_raw_template("modules/module_service.stub", include_str!("../../templates/modules/module_service.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register modules/module_service template: {}", e) })?;
+            tera.add_raw_template("modules/dto/create_dto.stub", include_str!("../../templates/modules/dto/create_dto.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register modules/dto/create_dto template: {}", e) })?;
+            tera.add_raw_template("modules/dto/update_dto.stub", include_str!("../../templates/modules/dto/update_dto.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register modules/dto/update_dto template: {}", e) })?;
+            tera.add_raw_template("modules/dto/mod_dto.stub", include_str!("../../templates/modules/dto/mod_dto.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register modules/dto/mod_dto template: {}", e) })?;
         }
         
         // Register filters (Tera equivalent of Handlebars helpers)
