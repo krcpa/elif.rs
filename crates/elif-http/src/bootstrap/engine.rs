@@ -2,9 +2,9 @@
 //! container configuration, and server startup.
 
 use crate::{
-    bootstrap::{BootstrapError, BootstrapResult},
+    bootstrap::{BootstrapError, BootstrapResult, RouteValidator, RouteRegistration, ParamDef},
     config::HttpConfig,
-    routing::ElifRouter,
+    routing::{ElifRouter, RouteDefinition, HttpMethod},
     server::Server,
     Middleware,
 };
@@ -206,6 +206,9 @@ impl AppBootstrapper {
     async fn configure_router(&self) -> BootstrapResult<ElifRouter> {
         let router = ElifRouter::new();
         
+        // Create route validator for conflict detection
+        let mut validator = RouteValidator::new().with_diagnostics(true);
+        
         // Get load order from ModuleRuntime
         let load_order = self.module_runtime.load_order();
         
@@ -220,13 +223,80 @@ impl AppBootstrapper {
             
             tracing::info!("Bootstrap: Registering controllers for module '{}'", module.name);
             
-            // TODO: Register controllers with router
-            // For now, we'll log the controller names
-            // This will need to be enhanced when we have actual controller instances
-            for controller in &module.controllers {
-                tracing::debug!("Bootstrap: Registering controller '{}'", controller);
+            // Register controllers with route validation
+            for controller_name in &module.controllers {
+                tracing::debug!("Bootstrap: Validating routes for controller '{}'", controller_name);
+                
+                // TODO: When controller metadata is available, extract actual routes
+                // For now, create example route registrations for validation
+                // This demonstrates the integration pattern
+                let example_registration = RouteRegistration {
+                    controller: controller_name.clone(),
+                    handler: "example_handler".to_string(),
+                    middleware: Vec::new(),
+                    parameters: vec![
+                        ParamDef {
+                            name: "id".to_string(),
+                            param_type: "u32".to_string(),
+                            required: true,
+                            constraints: vec!["int".to_string()],
+                        }
+                    ],
+                    definition: RouteDefinition {
+                        id: format!("{}::example", controller_name),
+                        method: HttpMethod::GET,
+                        path: format!("/api/{}", controller_name.to_lowercase()),
+                    },
+                };
+                
+                // Validate route before registration
+                if let Err(validation_error) = validator.register_route(example_registration) {
+                    // Generate detailed error report for conflicts
+                    if let Some(conflicts) = match &validation_error {
+                        crate::bootstrap::RouteValidationError::ConflictDetected { conflicts } => Some(conflicts),
+                        _ => None,
+                    } {
+                        let conflict_report = validator.generate_conflict_report(conflicts);
+                        tracing::error!("Route validation failed:\n{}", conflict_report);
+                        
+                        return Err(BootstrapError::RouteRegistrationFailed {
+                            message: format!("Route conflicts detected in controller '{}': {}", controller_name, conflict_report),
+                        });
+                    } else {
+                        return Err(validation_error.into());
+                    }
+                }
+                
+                // TODO: Actually register with router when controller instances are available
                 // router = router.controller(controller_instance)?;
             }
+        }
+        
+        // Perform final validation across all routes
+        let validation_report = validator.validate_all_routes()
+            .map_err(|e| {
+                if let crate::bootstrap::RouteValidationError::ConflictDetected { conflicts } = &e {
+                    let conflict_report = validator.generate_conflict_report(conflicts);
+                    tracing::error!("Final route validation failed:\n{}", conflict_report);
+                    BootstrapError::RouteRegistrationFailed {
+                        message: format!("Route validation failed: {}", conflict_report),
+                    }
+                } else {
+                    e.into()
+                }
+            })?;
+        
+        // Log validation results
+        tracing::info!("Bootstrap: Route validation completed successfully");
+        tracing::info!("  - Total routes: {}", validation_report.total_routes);
+        tracing::info!("  - Performance score: {}/100", validation_report.performance_score);
+        
+        if validation_report.warnings > 0 {
+            tracing::warn!("  - Validation warnings: {}", validation_report.warnings);
+        }
+        
+        for suggestion in &validation_report.suggestions {
+            tracing::info!("  - Suggestion: {}", suggestion);
         }
         
         tracing::info!("Bootstrap: Router configured with controllers from {} modules", self.modules.len());
