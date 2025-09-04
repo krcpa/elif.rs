@@ -76,12 +76,13 @@ impl AppBootstrapper {
                 ModuleRuntimeError::CircularDependency { cycle, message: _ } => {
                     BootstrapError::CircularDependency { cycle }
                 }
-                ModuleRuntimeError::MissingDependency { module, missing_dependency, message } => {
-                    BootstrapError::ModuleDiscoveryFailed {
-                        message: format!("Module '{}' has missing dependency '{}': {}", module, missing_dependency, message),
+                ModuleRuntimeError::MissingDependency { module, missing_dependency, message: _ } => {
+                    BootstrapError::MissingDependency {
+                        module,
+                        dependency: missing_dependency,
                     }
                 }
-                other => BootstrapError::ModuleDiscoveryFailed {
+                other => BootstrapError::ModuleRegistrationFailed {
                     message: format!("Module dependency resolution failed: {}", other),
                 }
             })?;
