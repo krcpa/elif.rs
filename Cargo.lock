@@ -1695,12 +1695,14 @@ dependencies = [
 name = "elif-macros"
 version = "0.1.1"
 dependencies = [
+ "elif",
  "env_logger",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
  "tokio",
  "tokio-test",
+ "trybuild",
 ]
 
 [[package]]
@@ -1948,7 +1950,7 @@ dependencies = [
 
 [[package]]
 name = "elifrs"
-version = "0.9.8"
+version = "0.10.1"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -8,17 +8,29 @@ elif.rs is designed around a simple philosophy: **maximum productivity with zero
 
 ### 🚀 **Zero Boilerplate Philosophy**
 
+**Application Setup** - True Laravel-style "convention over configuration":
 ```rust
 // Traditional Rust web framework
-app.route("/users", web::post().to(|req: HttpRequest, body: web::Json<User>| async {
-    let user = body.into_inner();
-    // Extract path params manually...
-    // Parse request body manually...  
-    // Handle errors manually...
-    HttpResponse::Ok().json(user)
-}));
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let container = IocContainer::new();
+    let router = Router::new().controller(UserController);
+    let server = Server::new(container, config)?;
+    server.use_router(router);  
+    server.listen("127.0.0.1:3000").await?;
+    Ok(())
+}
 
-// elif.rs way
+// elif.rs way - ZERO boilerplate! ✨
+#[elif::bootstrap(AppModule)]
+async fn main() -> Result<(), HttpError> {
+    // Everything happens automatically!
+}
+```
+
+**Controller Implementation** - Declarative and intuitive:
+```rust
+// elif.rs declarative controllers  
 #[controller("/api/users")]
 impl UserController {
     #[post("")]
@@ -29,7 +41,7 @@ impl UserController {
 }
 ```
 
-**Result**: ~70% less code, type-safe by default, and AI-friendly.
+**Result**: ~80% less code overall, type-safe by default, and AI-friendly.
 
 ### 🎯 **Convention Over Configuration**
 

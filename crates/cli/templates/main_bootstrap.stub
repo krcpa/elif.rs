@@ -1,19 +1,15 @@
-use elif_http::AppBootstrap;
+use elif::prelude::*;
 use modules::app_module::AppModule;
 
 mod modules;
 mod controllers;
 mod services;
 
-#[elif_macros::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[elif::bootstrap(AppModule)]
+async fn main() -> Result<(), HttpError> {
     println!("🚀 Starting {{ project_name }} server...");
     println!("📊 Health check: http://127.0.0.1:3000/health");
     {% if openapi_enabled %}println!("📚 API docs: http://127.0.0.1:3000/docs");{% endif %}
     
-    AppModule::bootstrap()?
-        .listen("127.0.0.1:3000")
-        .await?;
-    
-    Ok(())
+    // Server automatically starts with all routes and services configured! ✨
 }

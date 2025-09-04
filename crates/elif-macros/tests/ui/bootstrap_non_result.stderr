@@ -1,0 +1,8 @@
+error: Bootstrap macro requires functions to return Result<(), HttpError>
+
+💡 Change your function signature to:
+async fn main() -> Result<(), HttpError> {}
+ --> tests/ui/bootstrap_non_result.rs:3:18
+  |
+3 | async fn main() {
+  |                  ^
