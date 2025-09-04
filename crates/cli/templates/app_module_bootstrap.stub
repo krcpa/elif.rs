@@ -1,0 +1,10 @@
+use elif_http_derive::module;
+use crate::controllers::{{ controller_name }};
+use crate::services::{{ service_name }};
+
+#[module(
+    controllers: [{{ controller_name }}],
+    providers: [{{ service_name }}],
+    is_app
+)]
+pub struct AppModule;

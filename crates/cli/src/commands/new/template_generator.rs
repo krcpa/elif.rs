@@ -145,8 +145,8 @@ async fn generate_main_from_template(
     template_data.insert("auth_enabled".to_string(), serde_json::Value::Bool(config.auth_enabled));
     
     let template_name = match config.project_type.as_str() {
-        "API Server" | "api" => "main_minimal.stub", // Use NestJS-style minimal setup
-        "Full-Stack Web App" | "web" => "main_minimal.stub", // Use NestJS-style minimal setup
+        "API Server" | "api" => "main_bootstrap.stub", // Use Laravel-style bootstrap setup
+        "Full-Stack Web App" | "web" => "main_bootstrap.stub", // Use Laravel-style bootstrap setup
         "Minimal Setup" | "minimal" => "main_minimal.stub",
         _ => "main_minimal.stub", // Default to NestJS-style
     };
@@ -306,6 +306,24 @@ async fn generate_controllers_and_services_from_template(
     // Generate services/app_service.rs (NestJS-style)
     let app_service = template_engine.render("app_service.stub", &template_data)?;
     fs::write(app_dir.join("src/services/app_service.rs"), app_service).await?;
+    
+    // Generate modules if enabled
+    if _config.modules_enabled {
+        // Create modules directory
+        fs::create_dir_all(app_dir.join("src/modules")).await?;
+        
+        // Generate modules/mod.rs
+        let modules_mod_content = "pub mod app_module;";
+        fs::write(app_dir.join("src/modules/mod.rs"), modules_mod_content).await?;
+        
+        // Add template variables for bootstrap module
+        template_data.insert("controller_name".to_string(), serde_json::Value::String("UserController".to_string()));
+        template_data.insert("service_name".to_string(), serde_json::Value::String("UserService".to_string()));
+        
+        // Generate modules/app_module.rs using bootstrap template
+        let app_module = template_engine.render("app_module_bootstrap.stub", &template_data)?;
+        fs::write(app_dir.join("src/modules/app_module.rs"), app_module).await?;
+    }
     
     Ok(())
 }

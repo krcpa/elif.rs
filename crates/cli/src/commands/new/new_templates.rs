@@ -118,8 +118,8 @@ pub async fn create_source_files(app_dir: &Path, name: &str) -> Result<(), ElifE
     context.insert("database_enabled", &true);
     context.insert("auth_enabled", &false);
     
-    // Render main.rs from template
-    let main_rs = template_engine.render_with_context("main_api.stub", &context)?;
+    // Render main.rs from bootstrap template (Laravel-style one-liner)
+    let main_rs = template_engine.render_with_context("main_bootstrap.stub", &context)?;
     fs::write(app_dir.join("src/main.rs"), main_rs).await?;
     
     // Create controllers/mod.rs
@@ -142,8 +142,10 @@ pub async fn create_source_files(app_dir: &Path, name: &str) -> Result<(), ElifE
     let modules_mod = "pub mod app_module;";
     fs::write(app_dir.join("src/modules/mod.rs"), modules_mod).await?;
     
-    // Create modules/app_module.rs
-    let app_module = template_engine.render_with_context("module_services.stub", &context)?;
+    // Create modules/app_module.rs with bootstrap-ready module
+    context.insert("controller_name", "UserController");
+    context.insert("service_name", "UserService");
+    let app_module = template_engine.render_with_context("app_module_bootstrap.stub", &context)?;
     fs::write(app_dir.join("src/modules/app_module.rs"), app_module).await?;
     
     // Create minimal placeholder files for directories

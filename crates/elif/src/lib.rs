@@ -30,8 +30,8 @@ pub use elif_core::{
 // Prelude module for convenient imports
 pub mod prelude;
 
-// Macro functionality - disabled for now, will be separate crate
-// pub mod macros;
+// Macro functionality - re-export from elif-macros crate
+pub use elif_macros as macros;
 
 /// Current version of elif.rs
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

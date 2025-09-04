@@ -26,7 +26,9 @@ impl TemplateEngine {
                 "cargo_toml.stub",
                 "main_api.stub", 
                 "main_minimal.stub",
+                "main_bootstrap.stub", // Laravel-style bootstrap template
                 "app_module.stub",
+                "app_module_bootstrap.stub", // Bootstrap-ready module template
                 "app_controller.stub",
                 "app_service.stub",
                 "user_controller.stub",
@@ -81,6 +83,11 @@ impl TemplateEngine {
                 .map_err(|e| ElifError::Validation { message: format!("Failed to register app_controller template: {}", e) })?;
             tera.add_raw_template("app_service.stub", include_str!("../../templates/app_service.stub"))
                 .map_err(|e| ElifError::Validation { message: format!("Failed to register app_service template: {}", e) })?;
+            // Add bootstrap templates
+            tera.add_raw_template("main_bootstrap.stub", include_str!("../../templates/main_bootstrap.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register main_bootstrap template: {}", e) })?;
+            tera.add_raw_template("app_module_bootstrap.stub", include_str!("../../templates/app_module_bootstrap.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register app_module_bootstrap template: {}", e) })?;
         }
         
         // Register filters (Tera equivalent of Handlebars helpers)

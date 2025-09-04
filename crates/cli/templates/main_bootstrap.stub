@@ -1,0 +1,20 @@
+use elif::prelude::*;
+{% if modules_enabled %}use modules::app_module::AppModule;
+
+mod modules;{% endif %}
+mod controllers;
+mod services;
+
+#[elif::main]
+async fn main() -> Result<(), HttpError> {
+    println!("🚀 Starting {{ project_name }} server...");
+    println!("📊 Health check: http://127.0.0.1:3000/health");
+    {% if openapi_enabled %}println!("📚 API docs: http://127.0.0.1:3000/docs");{% endif %}
+    
+    {% if modules_enabled %}AppModule::bootstrap()
+        .listen("127.0.0.1:3000")
+        .await{% else %}// TODO: Add bootstrap module setup
+    Server::new()
+        .listen("127.0.0.1:3000")
+        .await{% endif %}
+}

@@ -6,6 +6,8 @@ description = "A {{ project_type }} built with elif.rs"
 authors = ["Your Name <your.email@example.com>"]
 
 [dependencies]
+# Main elif.rs framework with bootstrap macros
+elif = "0.8.1"
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

@@ -66,8 +66,8 @@ fn generate_files_from_templates(path: &Path, name: &str, _template: &str, modul
     let cargo_toml = template_engine.render_with_context("cargo_toml.stub", &context)?;
     fs::write(path.join("Cargo.toml"), cargo_toml)?;
     
-    // Generate main.rs
-    let main_rs = template_engine.render_with_context("main_api.stub", &context)?;
+    // Generate main.rs with bootstrap template (Laravel-style one-liner)
+    let main_rs = template_engine.render_with_context("main_bootstrap.stub", &context)?;
     fs::write(path.join("src/main.rs"), main_rs)?;
     
     // Generate controllers and services
@@ -87,7 +87,10 @@ fn generate_files_from_templates(path: &Path, name: &str, _template: &str, modul
         let modules_mod = "pub mod app_module;";
         fs::write(path.join("src/modules/mod.rs"), modules_mod)?;
         
-        let app_module = template_engine.render_with_context("module_services.stub", &context)?;
+        // Add template variables for bootstrap module
+        context.insert("controller_name", "UserController");
+        context.insert("service_name", "UserService");
+        let app_module = template_engine.render_with_context("app_module_bootstrap.stub", &context)?;
         fs::write(path.join("src/modules/app_module.rs"), app_module)?;
     }
     

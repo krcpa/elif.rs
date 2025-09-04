@@ -1,0 +1,32 @@
+[package]
+name = "elif-macros"
+version = "0.1.0"
+edition = "2021"
+description = "Procedural macros for elif.rs framework"
+license = "MIT"
+authors = ["krcpa <krcpa@users.noreply.github.com>"]
+repository = "https://github.com/krcpa/elif.rs"
+homepage = "https://github.com/krcpa/elif.rs"
+documentation = "https://docs.rs/elif-macros"
+keywords = ["web", "framework", "macro", "proc-macro"]
+categories = ["web-programming::http-server", "development-tools::procedural-macro-helpers"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# Proc macro dependencies
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
+
+# Optional dependencies for error handling
+tokio = { workspace = true, optional = true }
+env_logger = { version = "0.10", optional = true }
+
+[features]
+default = ["runtime"]
+runtime = ["tokio", "env_logger"]
+
+[dev-dependencies]
+tokio-test = "0.4"

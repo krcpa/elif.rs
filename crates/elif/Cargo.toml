@@ -18,11 +18,12 @@ elif-http = { version = "0.8.1", path = "../elif-http" }
 elif-orm = { version = "0.7.0", path = "../orm" }
 elif-auth = { version = "0.4.0", path = "../elif-auth" }
 elif-cache = { version = "0.3.0", path = "../elif-cache" }
+elif-macros = { version = "0.1.0", path = "../elif-macros" }
 
-# Macro dependencies
-proc-macro2 = "1.0"
-quote = "1.0"
-syn = { version = "2.0", features = ["full"] }
+# These are no longer needed since macros are in separate crate
+# proc-macro2 = "1.0"
+# quote = "1.0"
+# syn = { version = "2.0", features = ["full"] }
 
 # Common dependencies for prelude
 serde = { workspace = true }
