@@ -1,6 +1,6 @@
 use elif_http::{ElifRequest, ElifResponse, HttpResult, ElifController, ControllerRoute, HttpMethod, ParamType};
 use elif_http::controller::RouteParam;
-use elif_http_derive::{controller, get, post, put, delete};
+use elif_http_derive::{controller, get, post, put, delete, param, body};
 use async_trait::async_trait;
 use super::{{ feature_name }}_service::{{ feature_name_pascal }}Service;
 use super::dto::{Create{{ feature_name_pascal }}Dto, Update{{ feature_name_pascal }}Dto};
@@ -23,30 +23,30 @@ impl {{ feature_name_pascal }}Controller {
     }
     
     #[get("/{id}")]
-    pub async fn show(&self, req: ElifRequest) -> HttpResult<ElifResponse> {
-        let id: i32 = req.path_param_int("id").map_err(|_| elif_http::HttpError::bad_request("Invalid ID parameter"))?;
+    #[param(id: int)]
+    pub async fn show(&self, id: i32, req: ElifRequest) -> HttpResult<ElifResponse> {
         let item = self.service.find_by_id(id as u32).await?;
         Ok(ElifResponse::ok().json(&item)?)
     }
     
     #[post("")]
-    pub async fn create(&self, req: ElifRequest) -> HttpResult<ElifResponse> {
-        let dto: Create{{ feature_name_pascal }}Dto = req.json()?;
-        let item = self.service.create(dto).await?;
+    #[body(data: Create{{ feature_name_pascal }}Dto)]
+    pub async fn create(&self, data: Create{{ feature_name_pascal }}Dto, req: ElifRequest) -> HttpResult<ElifResponse> {
+        let item = self.service.create(data).await?;
         Ok(ElifResponse::created().json(&item)?)
     }
     
     #[put("/{id}")]
-    pub async fn update(&self, req: ElifRequest) -> HttpResult<ElifResponse> {
-        let id: i32 = req.path_param_int("id").map_err(|_| elif_http::HttpError::bad_request("Invalid ID parameter"))?;
-        let dto: Update{{ feature_name_pascal }}Dto = req.json()?;
-        let item = self.service.update(id as u32, dto).await?;
+    #[param(id: int)]
+    #[body(data: Update{{ feature_name_pascal }}Dto)]
+    pub async fn update(&self, id: i32, data: Update{{ feature_name_pascal }}Dto, req: ElifRequest) -> HttpResult<ElifResponse> {
+        let item = self.service.update(id as u32, data).await?;
         Ok(ElifResponse::ok().json(&item)?)
     }
     
     #[delete("/{id}")]
-    pub async fn delete(&self, req: ElifRequest) -> HttpResult<ElifResponse> {
-        let id: i32 = req.path_param_int("id").map_err(|_| elif_http::HttpError::bad_request("Invalid ID parameter"))?;
+    #[param(id: int)]
+    pub async fn delete(&self, id: i32, req: ElifRequest) -> HttpResult<ElifResponse> {
         self.service.delete(id as u32).await?;
         Ok(ElifResponse::no_content())
     }

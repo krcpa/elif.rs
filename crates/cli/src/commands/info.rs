@@ -84,7 +84,7 @@ async fn display_framework_info() -> Result<(), ElifError> {
     println!("      • Declarative Controllers with #[controller] macro");
     println!("      • Complete ORM with Migrations & Seeding");
     println!("      • Built-in Authentication & Authorization");
-    println!("      • OpenAPI/Swagger Integration");
+    println!("      • OpenAPI Documentation Integration");
     println!("      • Hot Reload Development Mode");
     println!("      • Production-Ready CLI Tools");
     println!("      • Framework Management & Health Monitoring");
@@ -365,7 +365,7 @@ async fn discover_features() -> Result<Vec<String>, ElifError> {
             features.push("Email Services".to_string());
         }
         if cargo_content.contains("elif-openapi") {
-            features.push("OpenAPI/Swagger".to_string());
+            features.push("OpenAPI Documentation".to_string());
         }
     }
     

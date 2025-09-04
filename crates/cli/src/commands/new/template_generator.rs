@@ -139,7 +139,7 @@ async fn generate_main_from_template(
     template_data.insert("database_enabled".to_string(), serde_json::Value::Bool(config.database_enabled));
     template_data.insert("auth_enabled".to_string(), serde_json::Value::Bool(config.auth_enabled));
     template_data.insert("http_enabled".to_string(), serde_json::Value::Bool(config.project_type != "minimal"));
-    template_data.insert("openapi_enabled".to_string(), serde_json::Value::Bool(config.features.contains(&"OpenAPI/Swagger".to_string())));
+    template_data.insert("openapi_enabled".to_string(), serde_json::Value::Bool(config.features.contains(&"OpenAPI Documentation".to_string())));
     
     let template_name = match config.project_type.as_str() {
         "Minimal Setup" | "minimal" => "main_minimal.stub",
