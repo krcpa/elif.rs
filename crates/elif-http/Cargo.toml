@@ -13,7 +13,7 @@ categories = ["web-programming", "network-programming"]
 
 [dependencies]
 # Framework dependencies
-elif-core = { version = "0.6.0", path = "../core" }
+elif-core = { version = "0.6.1", path = "../core" }
 elif-auth = { version = "0.4.0", path = "../elif-auth", optional = true }
 elif-http-derive = { version = "0.2.0", path = "../elif-http-derive", optional = true }
 

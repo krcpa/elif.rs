@@ -13,7 +13,7 @@ categories = ["web-programming::http-server"]
 
 [dependencies]
 # Re-export sub-packages (umbrella package depends on all others)
-elif-core = { version = "0.6.0", path = "../core" }
+elif-core = { version = "0.6.1", path = "../core" }
 elif-http = { version = "0.8.2", path = "../elif-http" }
 elif-orm = { version = "0.7.0", path = "../orm" }
 elif-auth = { version = "0.4.0", path = "../elif-auth" }
