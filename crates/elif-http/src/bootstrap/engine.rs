@@ -10,7 +10,7 @@ use crate::{
 };
 use elif_core::{
     container::IocContainer,
-    modules::{get_global_module_registry, CompileTimeModuleMetadata},
+    modules::{get_global_module_registry, CompileTimeModuleMetadata, ModuleDescriptor, ModuleRuntime, ModuleRuntimeError},
 };
 use std::{future::Future, net::SocketAddr, pin::Pin};
 
@@ -18,7 +18,7 @@ use std::{future::Future, net::SocketAddr, pin::Pin};
 ///
 /// This struct provides a fluent API for configuring and starting an elif.rs application:
 /// - Discovers all modules automatically via the compile-time registry
-/// - Resolves module dependencies 
+/// - Resolves module dependencies using ModuleRuntime with enhanced error handling
 /// - Configures the DI container with all providers
 /// - Registers all controllers and their routes
 /// - Sets up middleware pipeline
@@ -27,8 +27,8 @@ use std::{future::Future, net::SocketAddr, pin::Pin};
 pub struct AppBootstrapper {
     /// Discovered module metadata from compile-time registry
     modules: Vec<CompileTimeModuleMetadata>,
-    /// Resolved dependency order for module loading
-    load_order: Vec<String>,
+    /// Runtime module system for enhanced dependency resolution and lifecycle management
+    module_runtime: ModuleRuntime,
     /// HTTP server configuration
     config: HttpConfig,
     /// Middleware stack to apply
@@ -42,12 +42,13 @@ impl AppBootstrapper {
     ///
     /// This method:
     /// 1. Gets all modules from the global compile-time registry
-    /// 2. Resolves their dependency order
-    /// 3. Sets up default configuration
+    /// 2. Converts them to ModuleDescriptors for ModuleRuntime
+    /// 3. Uses ModuleRuntime for enhanced dependency resolution and lifecycle management
+    /// 4. Sets up default configuration
     pub fn new() -> BootstrapResult<Self> {
         let registry = get_global_module_registry();
         
-        // Get all modules and resolve dependency order
+        // Get all modules from compile-time registry
         let modules: Vec<CompileTimeModuleMetadata> = registry.all_modules()
             .into_iter()
             .cloned()
@@ -59,25 +60,58 @@ impl AppBootstrapper {
             });
         }
         
-        // Resolve dependency order
-        let ordered_modules = registry.resolve_dependency_order()
-            .map_err(|e| BootstrapError::CircularDependency { cycle: e })?;
+        // Create ModuleRuntime and register all modules
+        let mut module_runtime = ModuleRuntime::new();
+        for module_metadata in &modules {
+            let descriptor = Self::convert_metadata_to_descriptor(module_metadata);
+            module_runtime.register_module(descriptor)
+                .map_err(|e| BootstrapError::ModuleRegistrationFailed {
+                    message: format!("Failed to register module '{}': {}", module_metadata.name, e),
+                })?;
+        }
         
-        let load_order: Vec<String> = ordered_modules
-            .into_iter()
-            .map(|m| m.name.clone())
-            .collect();
+        // Calculate load order using ModuleRuntime's sophisticated dependency resolution
+        let load_order = module_runtime.calculate_load_order()
+            .map_err(|e| match e {
+                ModuleRuntimeError::CircularDependency { cycle, message: _ } => {
+                    BootstrapError::CircularDependency { cycle }
+                }
+                ModuleRuntimeError::MissingDependency { module, missing_dependency, message: _ } => {
+                    BootstrapError::MissingDependency {
+                        module,
+                        dependency: missing_dependency,
+                    }
+                }
+                other => BootstrapError::ModuleRegistrationFailed {
+                    message: format!("Module dependency resolution failed: {}", other),
+                }
+            })?;
         
         tracing::info!("Bootstrap: Discovered {} modules", modules.len());
-        tracing::info!("Bootstrap: Load order: {:?}", load_order);
+        tracing::info!("Bootstrap: Load order resolved: {:?}", load_order);
         
         Ok(AppBootstrapper {
             modules,
-            load_order,
+            module_runtime,
             config: HttpConfig::default(),
             middleware: Vec::new(),
             container: None,
         })
+    }
+    
+    /// Convert CompileTimeModuleMetadata to ModuleDescriptor for ModuleRuntime
+    fn convert_metadata_to_descriptor(metadata: &CompileTimeModuleMetadata) -> ModuleDescriptor {
+        ModuleDescriptor {
+            name: metadata.name.clone(),
+            version: None,
+            description: None,
+            providers: Vec::new(), // CompileTimeModuleMetadata only has provider names, not full descriptors
+            controllers: Vec::new(), // CompileTimeModuleMetadata only has controller names, not full descriptors
+            imports: metadata.imports.clone(),
+            exports: metadata.exports.clone(),
+            dependencies: metadata.imports.clone(), // In this context, imports are dependencies
+            is_optional: false,
+        }
     }
     
     /// Configure the HTTP server with custom configuration
@@ -101,12 +135,12 @@ impl AppBootstrapper {
     /// Start the HTTP server on the specified address
     ///
     /// This method performs the complete bootstrap sequence:
-    /// 1. Configures the DI container with all module providers
+    /// 1. Configures the DI container with all module providers using ModuleRuntime
     /// 2. Creates and configures the router with all controller routes
     /// 3. Sets up the middleware pipeline
     /// 4. Starts the HTTP server
     pub fn listen(
-        self,
+        mut self,
         addr: impl Into<SocketAddr> + Send + 'static,
     ) -> Pin<Box<dyn Future<Output = BootstrapResult<()>> + Send>> {
         Box::pin(async move {
@@ -114,7 +148,7 @@ impl AppBootstrapper {
             
             tracing::info!("Bootstrap: Starting server on {}", addr);
             
-            // Step 1: Configure DI container
+            // Step 1: Configure DI container using ModuleRuntime
             let container = self.configure_container().await?;
             
             // Step 2: Create and configure router
@@ -145,8 +179,8 @@ impl AppBootstrapper {
         })
     }
     
-    /// Configure the DI container with all module providers
-    async fn configure_container(&self) -> BootstrapResult<IocContainer> {
+    /// Configure the DI container with all module providers using ModuleRuntime
+    async fn configure_container(&mut self) -> BootstrapResult<IocContainer> {
         let mut container = if let Some(_provided_container) = &self.container {
             // TODO: Proper container merging/extension when IocContainer supports it
             // For now, we create a new container and document this limitation
@@ -157,33 +191,14 @@ impl AppBootstrapper {
             IocContainer::new()
         };
         
-        // Configure container with providers from each module in dependency order
-        for module_name in &self.load_order {
-            let module = self.modules
-                .iter()
-                .find(|m| m.name == *module_name)
-                .ok_or_else(|| BootstrapError::ContainerConfigurationFailed {
-                    message: format!("Module '{}' not found in discovery results", module_name),
-                })?;
-            
-            tracing::info!("Bootstrap: Configuring providers for module '{}'", module.name);
-            
-            // TODO: Register providers with container
-            // For now, we'll register the module providers by name
-            // This will need to be enhanced when we have actual provider instances
-            for provider in &module.providers {
-                tracing::debug!("Bootstrap: Registering provider '{}'", provider);
-                // container.register_provider(provider)?;
-            }
-        }
-        
-        // Build the container
-        container.build()
+        // Use ModuleRuntime's sophisticated dependency resolution and container configuration
+        self.module_runtime.resolve_dependencies(&mut container)
+            .await
             .map_err(|e| BootstrapError::ContainerConfigurationFailed {
-                message: format!("Failed to build container: {}", e),
+                message: format!("ModuleRuntime dependency resolution failed: {}", e),
             })?;
         
-        tracing::info!("Bootstrap: Container configured with {} modules", self.modules.len());
+        tracing::info!("Bootstrap: Container configured with {} modules using ModuleRuntime", self.modules.len());
         Ok(container)
     }
     
@@ -191,8 +206,11 @@ impl AppBootstrapper {
     async fn configure_router(&self) -> BootstrapResult<ElifRouter> {
         let router = ElifRouter::new();
         
+        // Get load order from ModuleRuntime
+        let load_order = self.module_runtime.load_order();
+        
         // Register controllers from each module in dependency order
-        for module_name in &self.load_order {
+        for module_name in load_order {
             let module = self.modules
                 .iter()
                 .find(|m| m.name == *module_name)
@@ -220,9 +238,9 @@ impl AppBootstrapper {
         &self.modules
     }
     
-    /// Get module load order (for debugging/introspection)
+    /// Get module load order from ModuleRuntime (for debugging/introspection)
     pub fn load_order(&self) -> &[String] {
-        &self.load_order
+        self.module_runtime.load_order()
     }
 }
 

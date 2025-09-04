@@ -408,6 +408,11 @@ impl ModuleRuntime {
         Ok(sorted_modules)
     }
 
+    /// Get the current module load order
+    pub fn load_order(&self) -> &[String] {
+        &self.load_order
+    }
+
     /// Topological sort implementation using Kahn's algorithm for better error reporting
     fn topological_sort(&self) -> Result<Vec<String>, ModuleRuntimeError> {
         let mut in_degree: HashMap<String, usize> = HashMap::new();
@@ -986,6 +991,19 @@ impl ModuleRuntime {
 impl Default for ModuleRuntime {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl std::fmt::Debug for ModuleRuntime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ModuleRuntime")
+            .field("modules", &self.modules)
+            .field("dependency_graph", &self.dependency_graph)
+            .field("load_order", &self.load_order)
+            .field("metrics", &self.metrics)
+            .field("lifecycle_hooks", &format!("{} hooks", self.lifecycle_hooks.len()))
+            .field("health_check_config", &self.health_check_config)
+            .finish()
     }
 }
 

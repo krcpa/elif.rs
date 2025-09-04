@@ -24,11 +24,14 @@ pub enum BootstrapError {
     #[error("Module discovery failed: {message}")]
     ModuleDiscoveryFailed { message: String },
     
-    #[error("Circular dependency detected: {cycle}")]
-    CircularDependency { cycle: String },
+    #[error("Circular dependency detected: {cycle:?}")]
+    CircularDependency { cycle: Vec<String> },
     
     #[error("Missing dependency: module '{module}' depends on '{dependency}' which is not registered")]
     MissingDependency { module: String, dependency: String },
+    
+    #[error("Module registration failed: {message}")]
+    ModuleRegistrationFailed { message: String },
     
     #[error("Container configuration failed: {message}")]
     ContainerConfigurationFailed { message: String },
