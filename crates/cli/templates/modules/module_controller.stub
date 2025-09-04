@@ -23,9 +23,9 @@ impl {{ feature_name_pascal }}Controller {
     }
     
     #[get("/{id}")]
-    #[param(id: int)]
-    pub async fn show(&self, id: i32, req: ElifRequest) -> HttpResult<ElifResponse> {
-        let item = self.service.find_by_id(id as u32).await?;
+    #[param(id: uint)]
+    pub async fn show(&self, id: u32, req: ElifRequest) -> HttpResult<ElifResponse> {
+        let item = self.service.find_by_id(id).await?;
         Ok(ElifResponse::ok().json(&item)?)
     }
     
@@ -37,17 +37,17 @@ impl {{ feature_name_pascal }}Controller {
     }
     
     #[put("/{id}")]
-    #[param(id: int)]
+    #[param(id: uint)]
     #[body(data: Update{{ feature_name_pascal }}Dto)]
-    pub async fn update(&self, id: i32, data: Update{{ feature_name_pascal }}Dto, req: ElifRequest) -> HttpResult<ElifResponse> {
-        let item = self.service.update(id as u32, data).await?;
+    pub async fn update(&self, id: u32, data: Update{{ feature_name_pascal }}Dto, req: ElifRequest) -> HttpResult<ElifResponse> {
+        let item = self.service.update(id, data).await?;
         Ok(ElifResponse::ok().json(&item)?)
     }
     
     #[delete("/{id}")]
-    #[param(id: int)]
-    pub async fn delete(&self, id: i32, req: ElifRequest) -> HttpResult<ElifResponse> {
-        self.service.delete(id as u32).await?;
+    #[param(id: uint)]
+    pub async fn delete(&self, id: u32, req: ElifRequest) -> HttpResult<ElifResponse> {
+        self.service.delete(id).await?;
         Ok(ElifResponse::no_content())
     }
 }
