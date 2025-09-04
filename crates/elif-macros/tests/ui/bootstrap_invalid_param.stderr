@@ -1,0 +1,11 @@
+error: Unknown bootstrap parameter 'invalid_param'. Valid parameters are: addr, config, middleware
+
+💡 Usage examples:
+• #[elif::bootstrap(AppModule)]
+• #[elif::bootstrap(AppModule, addr = "127.0.0.1:3000")]
+• #[elif::bootstrap(AppModule, config = my_config())]
+• #[elif::bootstrap(AppModule, middleware = [cors(), auth()])]
+ --> tests/ui/bootstrap_invalid_param.rs:3:25
+  |
+3 | #[elif::bootstrap(AppModule, invalid_param = "test")]
+  |                         ^^^^^^^^^^^^^
