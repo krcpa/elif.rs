@@ -41,8 +41,16 @@ pub fn main(_args: TokenStream, input: TokenStream) -> TokenStream {
     let fn_block = &input_fn.block;
     let fn_inputs = &input_fn.sig.inputs;
     
-    // Check if function returns Result
-    let returns_result = matches!(input_fn.sig.output, ReturnType::Type(_, _));
+    // Check if function returns Result (more precise detection)
+    let returns_result = if let ReturnType::Type(_, ty) = &input_fn.sig.output {
+        if let syn::Type::Path(type_path) = &**ty {
+            type_path.path.segments.last().map_or(false, |s| s.ident == "Result")
+        } else {
+            false
+        }
+    } else {
+        false
+    };
     
     let expanded = if returns_result {
         // Function returns Result - handle bootstrap/HTTP errors properly

@@ -91,7 +91,7 @@ pub async fn run_interactive_wizard() -> Result<ProjectConfig, ElifError> {
     let features = get_additional_features(&project_type).await?;
     
     // Step 6: Module system
-    let modules_enabled = get_module_system_preference(&project_type).await?;
+    let modules_enabled = true; // Module system is always enabled
     
     // Step 7: Configuration summary
     let config = ProjectConfig {
@@ -382,33 +382,6 @@ async fn get_additional_features(project_type: &str) -> Result<Vec<String>, Elif
     Ok(features.into_iter().map(|(name, _)| name.to_string()).collect())
 }
 
-async fn get_module_system_preference(project_type: &str) -> Result<bool, ElifError> {
-    if project_type == "minimal" {
-        return Ok(false);
-    }
-    
-    println!();
-    println!("{}{}", GEAR, style("Module System").bold().cyan());
-    println!();
-    
-    println!("{}",
-        style("The elif.rs module system provides Laravel-style dependency injection")
-            .dim()
-    );
-    println!("{}",
-        style("and automatic service registration with zero boilerplate.")
-            .dim()
-    );
-    println!();
-    
-    let enable_modules = Confirm::new("Enable the module system?")
-        .with_default(true)
-        .with_help_message("Recommended for all but the simplest applications")
-        .prompt()
-        .map_err(|e| ElifError::new(&format!("Failed to get module preference: {}", e)))?;
-    
-    Ok(enable_modules)
-}
 
 async fn show_configuration_summary(config: &ProjectConfig) -> Result<(), ElifError> {
     println!();
@@ -444,7 +417,7 @@ async fn show_configuration_summary(config: &ProjectConfig) -> Result<(), ElifEr
     );
     println!("{}{}",
         style("║  🧩 Module System:  ").dim(),
-        style(&format!("{:<38} ║", if config.modules_enabled { "Enabled" } else { "Disabled" })).cyan()
+        style(&format!("{:<38} ║", "Enabled (always)")).cyan()
     );
     
     if !config.features.is_empty() {

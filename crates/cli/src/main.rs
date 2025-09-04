@@ -37,9 +37,7 @@ enum Commands {
         #[arg(long)]
         template: Option<String>,
         
-        /// Include module system setup
-        #[arg(long)]
-        modules: bool,
+        // Module system is always enabled
     },
 
     /// Create a new elif application with module system templates
@@ -303,9 +301,7 @@ enum CreateCommands {
         #[arg(long, default_value = "web")]
         template: String,
 
-        /// Include module system setup
-        #[arg(long)]
-        modules: bool,
+        // Module system is always enabled
     },
 }
 
@@ -811,14 +807,14 @@ async fn main() -> Result<(), ElifError> {
             project_type: _,
             path,
             template,
-            modules,
+            // modules always enabled
         } => {
             if non_interactive {
                 // Use provided arguments or defaults for non-interactive mode
                 let app_name = name.unwrap_or_else(|| "my-app".to_string());
                 let app_template = template.unwrap_or_else(|| "api".to_string());
                 
-                commands::create::app(&app_name, path.as_deref(), &app_template, modules).await?;
+                commands::create::app(&app_name, path.as_deref(), &app_template).await?;
             } else {
                 // Run interactive wizard
                 commands::new::run_simple_wizard().await?;
@@ -831,9 +827,9 @@ async fn main() -> Result<(), ElifError> {
                 name,
                 path,
                 template,
-                modules,
+                // modules always enabled
             } => {
-                commands::create::app(&name, path.as_deref(), &template, modules).await?;
+                commands::create::app(&name, path.as_deref(), &template).await?;
             }
         },
 

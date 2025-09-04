@@ -6,7 +6,6 @@ use console::style;
 pub struct ProjectConfig {
     pub name: String,
     pub project_type: String,
-    pub modules_enabled: bool,
     pub database_enabled: bool,
     pub database_type: String,
     pub database_name: Option<String>,
@@ -46,11 +45,7 @@ pub async fn run_simple_wizard() -> Result<(), ElifError> {
         .prompt()
         .map_err(|e| ElifError::validation(&format!("Failed to get database preference: {}", e)))?;
 
-    // Get modules preference
-    let use_modules = Confirm::new("Enable module system?")
-        .with_default(true)
-        .prompt()
-        .map_err(|e| ElifError::validation(&format!("Failed to get module preference: {}", e)))?;
+    // Module system is always enabled (Laravel/NestJS-style)
 
     // Show summary
     println!();
@@ -58,7 +53,7 @@ pub async fn run_simple_wizard() -> Result<(), ElifError> {
     println!("  📦 Project: {}", style(&name).cyan());
     println!("  🏗️  Type: {}", style(project_type).cyan());
     println!("  🗄️  Database: {}", style(if use_database { "Yes" } else { "No" }).cyan());
-    println!("  🧩 Modules: {}", style(if use_modules { "Yes" } else { "No" }).cyan());
+    println!("  🧩 Modules: {}", style("Yes (always enabled)").cyan());
     println!();
 
     let confirmed = Confirm::new("Create project?")
@@ -85,7 +80,6 @@ pub async fn run_simple_wizard() -> Result<(), ElifError> {
     let config = ProjectConfig {
         name: name.clone(),
         project_type: project_type.to_string(),
-        modules_enabled: use_modules,
         database_enabled: use_database,
         database_type: if use_database { "postgresql".to_string() } else { "none".to_string() },
         database_name: if use_database { Some(format!("{}_development", name)) } else { None },

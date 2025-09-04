@@ -21,9 +21,7 @@ pub async fn generate_project_from_template(config: &ProjectConfig) -> Result<()
     println!("🚀 Creating elif.rs application '{}'", config.name);
     println!("📁 Path: {}", app_dir.display());
     println!("📋 Template: {}", config.project_type);
-    if config.modules_enabled {
-        println!("🧩 Including module system setup");
-    }
+    println!("🧩 Including module system setup");
     
     // Create directory structure
     create_directory_structure(app_dir, config).await?;
@@ -45,9 +43,6 @@ pub async fn generate_project_from_template(config: &ProjectConfig) -> Result<()
     println!("\n✅ Successfully created elif.rs application '{}'", config.name);
     println!("\n📖 Next steps:");
     println!("   cd {}", config.name);
-    if config.modules_enabled {
-        println!("   elifrs add module AppModule --controllers=AppController");
-    }
     println!("   elifrs dev");
     println!("\n🎯 Happy coding with elif.rs - The Laravel of Rust! 🦀");
     
@@ -111,7 +106,7 @@ async fn generate_cargo_toml_from_template(
     template_data.insert("project_name".to_string(), serde_json::Value::String(config.name.clone()));
     template_data.insert("project_type".to_string(), serde_json::Value::String(format_project_type(&config.project_type)));
     template_data.insert("http_enabled".to_string(), serde_json::Value::Bool(config.project_type != "minimal"));
-    template_data.insert("modules_enabled".to_string(), serde_json::Value::Bool(config.modules_enabled));
+    template_data.insert("modules_enabled".to_string(), serde_json::Value::Bool(true));
     template_data.insert("database_enabled".to_string(), serde_json::Value::Bool(config.database_enabled));
     template_data.insert("auth_enabled".to_string(), serde_json::Value::Bool(config.auth_enabled));
     template_data.insert("jwt_enabled".to_string(), serde_json::Value::Bool(config.jwt_enabled));
@@ -140,15 +135,13 @@ async fn generate_main_from_template(
 ) -> Result<(), ElifError> {
     let mut template_data = HashMap::new();
     template_data.insert("project_name".to_string(), serde_json::Value::String(config.name.clone()));
-    template_data.insert("modules_enabled".to_string(), serde_json::Value::Bool(config.modules_enabled));
+    template_data.insert("modules_enabled".to_string(), serde_json::Value::Bool(true));
     template_data.insert("database_enabled".to_string(), serde_json::Value::Bool(config.database_enabled));
     template_data.insert("auth_enabled".to_string(), serde_json::Value::Bool(config.auth_enabled));
     
     let template_name = match config.project_type.as_str() {
-        "API Server" | "api" => "main_bootstrap.stub", // Use Laravel-style bootstrap setup
-        "Full-Stack Web App" | "web" => "main_bootstrap.stub", // Use Laravel-style bootstrap setup
         "Minimal Setup" | "minimal" => "main_minimal.stub",
-        _ => "main_minimal.stub", // Default to NestJS-style
+        _ => "main_bootstrap.stub" // Always use Laravel-style bootstrap setup
     };
     
     let main_content = template_engine.render(template_name, &template_data)?;
@@ -295,35 +288,41 @@ async fn generate_controllers_and_services_from_template(
     let mut template_data = HashMap::new();
     template_data.insert("project_name".to_string(), serde_json::Value::String(_config.name.clone()));
     
-    // Generate simple controllers/mod.rs (placeholder for future)
-    let controllers_mod_content = "// Controllers will be added here\n// Use elifrs generate controller to create new controllers";
+    // Generate controllers/mod.rs with UserController
+    let controllers_mod_content = "pub mod user_controller;\n\npub use user_controller::UserController;";
     fs::write(app_dir.join("src/controllers/mod.rs"), controllers_mod_content).await?;
     
-    // Generate simple services/mod.rs for app service
-    let services_mod_content = "pub mod app_service;\n\npub use app_service::AppService;";
+    // Generate controllers/user_controller.rs stub
+    let user_controller_content = "use elif_http::{ElifRequest, ElifResponse, HttpResult};\nuse elif_http_derive::{controller, get};\n\n#[controller(\"/api/users\")]\npub struct UserController;\n\nimpl UserController {\n    #[get(\"\")]\n    pub async fn index(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {\n        let users = vec![\"Alice\", \"Bob\", \"Charlie\"];\n        Ok(ElifResponse::ok().json(&users)?)\n    }\n}";
+    fs::write(app_dir.join("src/controllers/user_controller.rs"), user_controller_content).await?;
+    
+    // Generate services/mod.rs for user service
+    let services_mod_content = "pub mod app_service;\npub mod user_service;\n\npub use app_service::AppService;\npub use user_service::UserService;";
     fs::write(app_dir.join("src/services/mod.rs"), services_mod_content).await?;
+    
+    // Generate services/user_service.rs stub
+    let user_service_content = "#[derive(Clone)]\npub struct UserService;\n\nimpl UserService {\n    pub fn new() -> Self {\n        Self\n    }\n    \n    pub async fn get_users(&self) -> Vec<String> {\n        vec![\"Alice\".to_string(), \"Bob\".to_string(), \"Charlie\".to_string()]\n    }\n}";
+    fs::write(app_dir.join("src/services/user_service.rs"), user_service_content).await?;
     
     // Generate services/app_service.rs (NestJS-style)
     let app_service = template_engine.render("app_service.stub", &template_data)?;
     fs::write(app_dir.join("src/services/app_service.rs"), app_service).await?;
     
-    // Generate modules if enabled
-    if _config.modules_enabled {
-        // Create modules directory
-        fs::create_dir_all(app_dir.join("src/modules")).await?;
-        
-        // Generate modules/mod.rs
-        let modules_mod_content = "pub mod app_module;";
-        fs::write(app_dir.join("src/modules/mod.rs"), modules_mod_content).await?;
-        
-        // Add template variables for bootstrap module
-        template_data.insert("controller_name".to_string(), serde_json::Value::String("UserController".to_string()));
-        template_data.insert("service_name".to_string(), serde_json::Value::String("UserService".to_string()));
-        
-        // Generate modules/app_module.rs using bootstrap template
-        let app_module = template_engine.render("app_module_bootstrap.stub", &template_data)?;
-        fs::write(app_dir.join("src/modules/app_module.rs"), app_module).await?;
-    }
+    // Always generate modules (modules are now the default and only option)
+    // Create modules directory
+    fs::create_dir_all(app_dir.join("src/modules")).await?;
+    
+    // Generate modules/mod.rs
+    let modules_mod_content = "pub mod app_module;";
+    fs::write(app_dir.join("src/modules/mod.rs"), modules_mod_content).await?;
+    
+    // Add template variables for bootstrap module
+    template_data.insert("controller_name".to_string(), serde_json::Value::String("UserController".to_string()));
+    template_data.insert("service_name".to_string(), serde_json::Value::String("UserService".to_string()));
+    
+    // Generate modules/app_module.rs using bootstrap template
+    let app_module = template_engine.render("app_module_bootstrap.stub", &template_data)?;
+    fs::write(app_dir.join("src/modules/app_module.rs"), app_module).await?;
     
     Ok(())
 }
