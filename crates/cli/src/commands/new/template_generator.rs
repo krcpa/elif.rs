@@ -313,7 +313,7 @@ async fn generate_app_module_files(
     let app_path = app_dir.join("src/modules/app");
     
     // Generate app/mod.rs
-    let app_mod_content = "pub mod app_module;\npub mod app_controller;\npub mod app_service;\n\npub use app_module::AppModule;\npub use app_controller::AppController;\npub use app_service::AppService;";
+    let app_mod_content = "pub mod app_module;\npub mod app_controller;\npub mod app_service;\n\npub use app_module::AppModule;";
     fs::write(app_path.join("mod.rs"), app_mod_content).await?;
     
     // Generate app module files using templates
@@ -338,12 +338,12 @@ async fn generate_users_module_files(
     
     // Create template data for users module
     let mut users_template_data = template_data.clone();
-    users_template_data.insert("feature_name".to_string(), serde_json::Value::String("user".to_string()));
-    users_template_data.insert("feature_name_pascal".to_string(), serde_json::Value::String("User".to_string()));
+    users_template_data.insert("feature_name".to_string(), serde_json::Value::String("users".to_string()));
+    users_template_data.insert("feature_name_pascal".to_string(), serde_json::Value::String("Users".to_string()));
     users_template_data.insert("feature_name_plural".to_string(), serde_json::Value::String("users".to_string()));
     
     // Generate users/mod.rs
-    let users_mod_content = "pub mod users_module;\npub mod users_controller;\npub mod users_service;\npub mod dto;\n\npub use users_module::UsersModule;\npub use users_controller::UsersController;\npub use users_service::UsersService;";
+    let users_mod_content = "pub mod users_module;\npub mod users_controller;\npub mod users_service;\npub mod dto;\n\npub use users_module::UsersModule;";
     fs::write(users_path.join("mod.rs"), users_mod_content).await?;
     
     // Generate users module files using templates
@@ -361,10 +361,10 @@ async fn generate_users_module_files(
     fs::write(users_path.join("dto/mod.rs"), dto_mod).await?;
     
     let create_dto = template_engine.render("modules/dto/create_dto.stub", &users_template_data)?;
-    fs::write(users_path.join("dto/create_user.rs"), create_dto).await?;
+    fs::write(users_path.join("dto/create_users.rs"), create_dto).await?;
     
     let update_dto = template_engine.render("modules/dto/update_dto.stub", &users_template_data)?;
-    fs::write(users_path.join("dto/update_user.rs"), update_dto).await?;
+    fs::write(users_path.join("dto/update_users.rs"), update_dto).await?;
     
     Ok(())
 }

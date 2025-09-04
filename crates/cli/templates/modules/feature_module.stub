@@ -1,8 +1,6 @@
-use elif_core::Module;
 use super::{{ feature_name }}_controller::{{ feature_name_pascal }}Controller;
 use super::{{ feature_name }}_service::{{ feature_name_pascal }}Service;
 
-#[derive(Module)]
 pub struct {{ feature_name_pascal }}Module {
     pub controller: {{ feature_name_pascal }}Controller,
     pub service: {{ feature_name_pascal }}Service,

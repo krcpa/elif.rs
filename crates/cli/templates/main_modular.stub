@@ -1,6 +1,8 @@
-use elif_http::{Server, Router, HttpConfig, IocContainer};
-use modules::app::{AppController, AppModule};
-{% if http_enabled %}use modules::users::{UsersController, UsersModule};{% endif %}
+use elif_http::{Server, HttpConfig};
+use elif_http::routing::Router;
+use elif_core::IocContainer;
+use modules::app::AppModule;
+{% if http_enabled %}use modules::users::UsersModule;{% endif %}
 
 mod modules;
 
@@ -27,10 +29,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = HttpConfig::default();
     
     // Start server
-    Server::new(container, config)?
-        .router(router)
-        .listen("127.0.0.1:3000")
-        .await?;
+    let mut server = Server::new(container, config)?;
+    server.use_router(router);
+    server.listen("127.0.0.1:3000").await?;
     
     Ok(())
 }

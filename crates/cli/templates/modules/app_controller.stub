@@ -1,13 +1,15 @@
-use elif_http::{ElifRequest, ElifResponse, HttpResult};
+use elif_http::{ElifRequest, ElifResponse, HttpResult, ElifController, ControllerRoute, HttpMethod, ParamType};
+use elif_http::controller::RouteParam;
 use elif_http_derive::{controller, get};
+use async_trait::async_trait;
 use super::app_service::AppService;
 
-#[derive(Default)]
-#[controller("/")]
+#[derive(Clone, Default)]
 pub struct AppController {
     service: AppService,
 }
 
+#[controller("/")]
 impl AppController {
     pub fn new(service: AppService) -> Self {
         Self { service }

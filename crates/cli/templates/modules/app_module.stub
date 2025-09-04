@@ -1,8 +1,6 @@
-use elif_core::Module;
 use super::app_controller::AppController;
 use super::app_service::AppService;
 
-#[derive(Module)]
 pub struct AppModule {
     pub controller: AppController,
     pub service: AppService,

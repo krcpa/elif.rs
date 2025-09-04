@@ -1,14 +1,16 @@
-use elif_http::{ElifRequest, ElifResponse, HttpResult};
+use elif_http::{ElifRequest, ElifResponse, HttpResult, ElifController, ControllerRoute, HttpMethod, ParamType};
+use elif_http::controller::RouteParam;
 use elif_http_derive::{controller, get, post, put, delete};
+use async_trait::async_trait;
 use super::{{ feature_name }}_service::{{ feature_name_pascal }}Service;
 use super::dto::{Create{{ feature_name_pascal }}Dto, Update{{ feature_name_pascal }}Dto};
 
-#[derive(Default)]
-#[controller("/api/{{ feature_name_plural }}")]
+#[derive(Clone, Default)]
 pub struct {{ feature_name_pascal }}Controller {
     service: {{ feature_name_pascal }}Service,
 }
 
+#[controller("/api/{{ feature_name_plural }}")]
 impl {{ feature_name_pascal }}Controller {
     pub fn new(service: {{ feature_name_pascal }}Service) -> Self {
         Self { service }
