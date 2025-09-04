@@ -101,6 +101,9 @@ impl TemplateEngine {
                 .map_err(|e| ElifError::Validation { message: format!("Failed to register main_bootstrap template: {}", e) })?;
             tera.add_raw_template("app_module_bootstrap.stub", include_str!("../../templates/app_module_bootstrap.stub"))
                 .map_err(|e| ElifError::Validation { message: format!("Failed to register app_module_bootstrap template: {}", e) })?;
+            // Add modular template
+            tera.add_raw_template("main_modular.stub", include_str!("../../templates/main_modular.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register main_modular template: {}", e) })?;
         }
         
         // Register filters (Tera equivalent of Handlebars helpers)
