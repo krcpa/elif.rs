@@ -305,28 +305,62 @@ async fn generate_controllers_and_services_from_template(
     Ok(())
 }
 
+/// Generic module file generation configuration
+struct ModuleConfig {
+    /// Module name (e.g., "app", "users")
+    name: String,
+    /// mod.rs content
+    mod_content: String,
+    /// Template data for this specific module
+    template_data: HashMap<String, serde_json::Value>,
+    /// List of (template_path, output_filename) pairs
+    template_files: Vec<(String, String)>,
+}
+
+/// Generic helper function to generate module files from templates
+async fn generate_module_files(
+    app_dir: &Path,
+    template_engine: &TemplateEngine,
+    config: ModuleConfig,
+) -> Result<(), ElifError> {
+    let module_path = app_dir.join("src/modules").join(&config.name);
+    
+    // Generate mod.rs
+    fs::write(module_path.join("mod.rs"), config.mod_content).await?;
+    
+    // Generate all template files
+    for (template_path, output_filename) in config.template_files {
+        let rendered_content = template_engine.render(&template_path, &config.template_data)?;
+        let output_path = module_path.join(&output_filename);
+        
+        // Create parent directories if they don't exist
+        if let Some(parent) = output_path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+        
+        fs::write(output_path, rendered_content).await?;
+    }
+    
+    Ok(())
+}
+
 async fn generate_app_module_files(
     app_dir: &Path,
     template_engine: &TemplateEngine,
     template_data: &HashMap<String, serde_json::Value>,
 ) -> Result<(), ElifError> {
-    let app_path = app_dir.join("src/modules/app");
+    let config = ModuleConfig {
+        name: "app".to_string(),
+        mod_content: "pub mod app_module;\npub mod app_controller;\npub mod app_service;\n\npub use app_module::AppModule;".to_string(),
+        template_data: template_data.clone(),
+        template_files: vec![
+            ("modules/app_module.stub".to_string(), "app_module.rs".to_string()),
+            ("modules/app_controller.stub".to_string(), "app_controller.rs".to_string()),
+            ("modules/app_service.stub".to_string(), "app_service.rs".to_string()),
+        ],
+    };
     
-    // Generate app/mod.rs
-    let app_mod_content = "pub mod app_module;\npub mod app_controller;\npub mod app_service;\n\npub use app_module::AppModule;";
-    fs::write(app_path.join("mod.rs"), app_mod_content).await?;
-    
-    // Generate app module files using templates
-    let app_module = template_engine.render("modules/app_module.stub", template_data)?;
-    fs::write(app_path.join("app_module.rs"), app_module).await?;
-    
-    let app_controller = template_engine.render("modules/app_controller.stub", template_data)?;
-    fs::write(app_path.join("app_controller.rs"), app_controller).await?;
-    
-    let app_service = template_engine.render("modules/app_service.stub", template_data)?;
-    fs::write(app_path.join("app_service.rs"), app_service).await?;
-    
-    Ok(())
+    generate_module_files(app_dir, template_engine, config).await
 }
 
 async fn generate_users_module_files(
@@ -334,37 +368,25 @@ async fn generate_users_module_files(
     template_engine: &TemplateEngine,
     template_data: &HashMap<String, serde_json::Value>,
 ) -> Result<(), ElifError> {
-    let users_path = app_dir.join("src/modules/users");
-    
     // Create template data for users module
     let mut users_template_data = template_data.clone();
     users_template_data.insert("feature_name".to_string(), serde_json::Value::String("users".to_string()));
     users_template_data.insert("feature_name_pascal".to_string(), serde_json::Value::String("Users".to_string()));
     users_template_data.insert("feature_name_plural".to_string(), serde_json::Value::String("users".to_string()));
     
-    // Generate users/mod.rs
-    let users_mod_content = "pub mod users_module;\npub mod users_controller;\npub mod users_service;\npub mod dto;\n\npub use users_module::UsersModule;";
-    fs::write(users_path.join("mod.rs"), users_mod_content).await?;
+    let config = ModuleConfig {
+        name: "users".to_string(),
+        mod_content: "pub mod users_module;\npub mod users_controller;\npub mod users_service;\npub mod dto;\n\npub use users_module::UsersModule;".to_string(),
+        template_data: users_template_data,
+        template_files: vec![
+            ("modules/feature_module.stub".to_string(), "users_module.rs".to_string()),
+            ("modules/module_controller.stub".to_string(), "users_controller.rs".to_string()),
+            ("modules/module_service.stub".to_string(), "users_service.rs".to_string()),
+            ("modules/dto/mod_dto.stub".to_string(), "dto/mod.rs".to_string()),
+            ("modules/dto/create_dto.stub".to_string(), "dto/create_users.rs".to_string()),
+            ("modules/dto/update_dto.stub".to_string(), "dto/update_users.rs".to_string()),
+        ],
+    };
     
-    // Generate users module files using templates
-    let users_module = template_engine.render("modules/feature_module.stub", &users_template_data)?;
-    fs::write(users_path.join("users_module.rs"), users_module).await?;
-    
-    let users_controller = template_engine.render("modules/module_controller.stub", &users_template_data)?;
-    fs::write(users_path.join("users_controller.rs"), users_controller).await?;
-    
-    let users_service = template_engine.render("modules/module_service.stub", &users_template_data)?;
-    fs::write(users_path.join("users_service.rs"), users_service).await?;
-    
-    // Generate DTOs
-    let dto_mod = template_engine.render("modules/dto/mod_dto.stub", &users_template_data)?;
-    fs::write(users_path.join("dto/mod.rs"), dto_mod).await?;
-    
-    let create_dto = template_engine.render("modules/dto/create_dto.stub", &users_template_data)?;
-    fs::write(users_path.join("dto/create_users.rs"), create_dto).await?;
-    
-    let update_dto = template_engine.render("modules/dto/update_dto.stub", &users_template_data)?;
-    fs::write(users_path.join("dto/update_users.rs"), update_dto).await?;
-    
-    Ok(())
+    generate_module_files(app_dir, template_engine, config).await
 }
