@@ -55,10 +55,12 @@ async fn create_directory_structure(app_dir: &Path, config: &ProjectConfig) -> R
         "tests",
     ];
     
-    // Always include NestJS-style basic directories
+    // NestJS-style modular directory structure
     dirs.extend(vec![
-        "src/controllers",
-        "src/services",
+        "src/modules",
+        "src/modules/app",
+        "src/modules/users",
+        "src/modules/users/dto",
     ]);
 
     // Add extra directories based on project type  
@@ -78,8 +80,6 @@ async fn create_directory_structure(app_dir: &Path, config: &ProjectConfig) -> R
             dirs.push("docs");
         }
     }
-    
-    // Module system is now built-in to NestJS-style structure (app_module.rs in src/)
     
     // Add database directories if database is enabled
     if config.database_enabled {
@@ -138,10 +138,12 @@ async fn generate_main_from_template(
     template_data.insert("modules_enabled".to_string(), serde_json::Value::Bool(true));
     template_data.insert("database_enabled".to_string(), serde_json::Value::Bool(config.database_enabled));
     template_data.insert("auth_enabled".to_string(), serde_json::Value::Bool(config.auth_enabled));
+    template_data.insert("http_enabled".to_string(), serde_json::Value::Bool(config.project_type != "minimal"));
+    template_data.insert("openapi_enabled".to_string(), serde_json::Value::Bool(config.features.contains(&"OpenAPI Documentation".to_string())));
     
     let template_name = match config.project_type.as_str() {
         "Minimal Setup" | "minimal" => "main_minimal.stub",
-        _ => "main_bootstrap.stub" // Always use Laravel-style bootstrap setup
+        _ => "main_modular.stub" // Use new modular structure
     };
     
     let main_content = template_engine.render(template_name, &template_data)?;
@@ -282,47 +284,109 @@ fn initialize_git_repository(app_dir: &Path) -> Result<(), ElifError> {
 
 async fn generate_controllers_and_services_from_template(
     app_dir: &Path,
-    _config: &ProjectConfig,
+    config: &ProjectConfig,
     template_engine: &TemplateEngine,
 ) -> Result<(), ElifError> {
     let mut template_data = HashMap::new();
-    template_data.insert("project_name".to_string(), serde_json::Value::String(_config.name.clone()));
+    template_data.insert("project_name".to_string(), serde_json::Value::String(config.name.clone()));
     
-    // Generate controllers/mod.rs with UserController
-    let controllers_mod_content = "pub mod user_controller;\n\npub use user_controller::UserController;";
-    fs::write(app_dir.join("src/controllers/mod.rs"), controllers_mod_content).await?;
-    
-    // Generate controllers/user_controller.rs stub
-    let user_controller_content = "use elif_http::{ElifRequest, ElifResponse, HttpResult};\nuse elif_http_derive::{controller, get};\n\n#[controller(\"/api/users\")]\npub struct UserController;\n\nimpl UserController {\n    #[get(\"\")]\n    pub async fn index(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {\n        let users = vec![\"Alice\", \"Bob\", \"Charlie\"];\n        Ok(ElifResponse::ok().json(&users)?)\n    }\n}";
-    fs::write(app_dir.join("src/controllers/user_controller.rs"), user_controller_content).await?;
-    
-    // Generate services/mod.rs for user service
-    let services_mod_content = "pub mod app_service;\npub mod user_service;\n\npub use app_service::AppService;\npub use user_service::UserService;";
-    fs::write(app_dir.join("src/services/mod.rs"), services_mod_content).await?;
-    
-    // Generate services/user_service.rs stub
-    let user_service_content = "#[derive(Clone)]\npub struct UserService;\n\nimpl UserService {\n    pub fn new() -> Self {\n        Self\n    }\n    \n    pub async fn get_users(&self) -> Vec<String> {\n        vec![\"Alice\".to_string(), \"Bob\".to_string(), \"Charlie\".to_string()]\n    }\n}";
-    fs::write(app_dir.join("src/services/user_service.rs"), user_service_content).await?;
-    
-    // Generate services/app_service.rs (NestJS-style)
-    let app_service = template_engine.render("app_service.stub", &template_data)?;
-    fs::write(app_dir.join("src/services/app_service.rs"), app_service).await?;
-    
-    // Always generate modules (modules are now the default and only option)
-    // Create modules directory
-    fs::create_dir_all(app_dir.join("src/modules")).await?;
-    
-    // Generate modules/mod.rs
-    let modules_mod_content = "pub mod app_module;";
+    // Generate main modules/mod.rs
+    let modules_mod_content = "pub mod app;\npub mod users;";
     fs::write(app_dir.join("src/modules/mod.rs"), modules_mod_content).await?;
     
-    // Add template variables for bootstrap module
-    template_data.insert("controller_name".to_string(), serde_json::Value::String("UserController".to_string()));
-    template_data.insert("service_name".to_string(), serde_json::Value::String("UserService".to_string()));
+    // Generate app module files
+    generate_app_module_files(app_dir, template_engine, &template_data).await?;
     
-    // Generate modules/app_module.rs using bootstrap template
-    let app_module = template_engine.render("app_module_bootstrap.stub", &template_data)?;
-    fs::write(app_dir.join("src/modules/app_module.rs"), app_module).await?;
+    // Generate users module files if http is enabled
+    if config.project_type != "minimal" {
+        generate_users_module_files(app_dir, template_engine, &template_data).await?;
+    }
     
     Ok(())
+}
+
+/// Generic module file generation configuration
+struct ModuleConfig {
+    /// Module name (e.g., "app", "users")
+    name: String,
+    /// mod.rs content
+    mod_content: String,
+    /// Template data for this specific module
+    template_data: HashMap<String, serde_json::Value>,
+    /// List of (template_path, output_filename) pairs
+    template_files: Vec<(String, String)>,
+}
+
+/// Generic helper function to generate module files from templates
+async fn generate_module_files(
+    app_dir: &Path,
+    template_engine: &TemplateEngine,
+    config: ModuleConfig,
+) -> Result<(), ElifError> {
+    let module_path = app_dir.join("src/modules").join(&config.name);
+    
+    // Generate mod.rs
+    fs::write(module_path.join("mod.rs"), config.mod_content).await?;
+    
+    // Generate all template files
+    for (template_path, output_filename) in config.template_files {
+        let rendered_content = template_engine.render(&template_path, &config.template_data)?;
+        let output_path = module_path.join(&output_filename);
+        
+        // Create parent directories if they don't exist
+        if let Some(parent) = output_path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+        
+        fs::write(output_path, rendered_content).await?;
+    }
+    
+    Ok(())
+}
+
+async fn generate_app_module_files(
+    app_dir: &Path,
+    template_engine: &TemplateEngine,
+    template_data: &HashMap<String, serde_json::Value>,
+) -> Result<(), ElifError> {
+    let config = ModuleConfig {
+        name: "app".to_string(),
+        mod_content: "pub mod app_module;\npub mod app_controller;\npub mod app_service;\n\npub use app_module::AppModule;".to_string(),
+        template_data: template_data.clone(),
+        template_files: vec![
+            ("modules/app_module.stub".to_string(), "app_module.rs".to_string()),
+            ("modules/app_controller.stub".to_string(), "app_controller.rs".to_string()),
+            ("modules/app_service.stub".to_string(), "app_service.rs".to_string()),
+        ],
+    };
+    
+    generate_module_files(app_dir, template_engine, config).await
+}
+
+async fn generate_users_module_files(
+    app_dir: &Path,
+    template_engine: &TemplateEngine,
+    template_data: &HashMap<String, serde_json::Value>,
+) -> Result<(), ElifError> {
+    // Create template data for users module
+    let mut users_template_data = template_data.clone();
+    users_template_data.insert("feature_name".to_string(), serde_json::Value::String("users".to_string()));
+    users_template_data.insert("feature_name_pascal".to_string(), serde_json::Value::String("Users".to_string()));
+    users_template_data.insert("feature_name_plural".to_string(), serde_json::Value::String("users".to_string()));
+    
+    let config = ModuleConfig {
+        name: "users".to_string(),
+        mod_content: "pub mod users_module;\npub mod users_controller;\npub mod users_service;\npub mod dto;\n\npub use users_module::UsersModule;".to_string(),
+        template_data: users_template_data,
+        template_files: vec![
+            ("modules/feature_module.stub".to_string(), "users_module.rs".to_string()),
+            ("modules/module_controller.stub".to_string(), "users_controller.rs".to_string()),
+            ("modules/module_service.stub".to_string(), "users_service.rs".to_string()),
+            ("modules/dto/mod_dto.stub".to_string(), "dto/mod.rs".to_string()),
+            ("modules/dto/create_dto.stub".to_string(), "dto/create_users.rs".to_string()),
+            ("modules/dto/update_dto.stub".to_string(), "dto/update_users.rs".to_string()),
+        ],
+    };
+    
+    generate_module_files(app_dir, template_engine, config).await
 }

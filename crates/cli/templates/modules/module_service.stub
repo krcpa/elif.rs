@@ -1,0 +1,77 @@
+use super::dto::{Create{{ feature_name_pascal }}Dto, Update{{ feature_name_pascal }}Dto};
+use elif_http::HttpError;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct {{ feature_name_pascal }} {
+    pub id: u32,
+    pub name: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Clone, Default)]
+pub struct {{ feature_name_pascal }}Service {
+    // In a real implementation, this would contain a database connection
+    items: std::sync::Arc<std::sync::Mutex<Vec<{{ feature_name_pascal }}>>>,
+}
+
+impl {{ feature_name_pascal }}Service {
+    pub fn new() -> Self {
+        Self {
+            items: std::sync::Arc::new(std::sync::Mutex::new(vec![])),
+        }
+    }
+    
+    pub async fn find_all(&self) -> Vec<{{ feature_name_pascal }}> {
+        self.items.lock().unwrap().clone()
+    }
+    
+    pub async fn find_by_id(&self, id: u32) -> Result<{{ feature_name_pascal }}, HttpError> {
+        let items = self.items.lock().unwrap();
+        items.iter()
+            .find(|item| item.id == id)
+            .cloned()
+            .ok_or_else(|| HttpError::not_found(&format!("{{ feature_name_pascal }} with id {} not found", id)))
+    }
+    
+    pub async fn create(&self, dto: Create{{ feature_name_pascal }}Dto) -> Result<{{ feature_name_pascal }}, HttpError> {
+        let mut items = self.items.lock().unwrap();
+        let id = items.len() as u32 + 1;
+        let now = chrono::Utc::now();
+        
+        let item = {{ feature_name_pascal }} {
+            id,
+            name: dto.name,
+            created_at: now,
+            updated_at: now,
+        };
+        
+        items.push(item.clone());
+        Ok(item)
+    }
+    
+    pub async fn update(&self, id: u32, dto: Update{{ feature_name_pascal }}Dto) -> Result<{{ feature_name_pascal }}, HttpError> {
+        let mut items = self.items.lock().unwrap();
+        let item = items.iter_mut()
+            .find(|item| item.id == id)
+            .ok_or_else(|| HttpError::not_found(&format!("{{ feature_name_pascal }} with id {} not found", id)))?;
+            
+        if let Some(name) = dto.name {
+            item.name = name;
+        }
+        item.updated_at = chrono::Utc::now();
+        
+        Ok(item.clone())
+    }
+    
+    pub async fn delete(&self, id: u32) -> Result<(), HttpError> {
+        let mut items = self.items.lock().unwrap();
+        let index = items.iter()
+            .position(|item| item.id == id)
+            .ok_or_else(|| HttpError::not_found(&format!("{{ feature_name_pascal }} with id {} not found", id)))?;
+            
+        items.remove(index);
+        Ok(())
+    }
+}

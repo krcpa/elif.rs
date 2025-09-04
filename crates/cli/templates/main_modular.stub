@@ -1,0 +1,37 @@
+use elif_http::{Server, HttpConfig};
+use elif_http::routing::Router;
+use elif_core::IocContainer;
+use modules::app::AppModule;
+{% if http_enabled %}use modules::users::UsersModule;{% endif %}
+
+mod modules;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
+    
+    println!("🚀 Starting {{ project_name }} server...");
+    println!("📊 Health check: http://127.0.0.1:3000/health");
+    {% if http_enabled %}println!("👥 Users API: http://127.0.0.1:3000/api/users");{% endif %}
+    {% if openapi_enabled %}println!("📚 API docs: http://127.0.0.1:3000/docs");{% endif %}
+    
+    // Initialize modules
+    let app_module = AppModule::new();
+    {% if http_enabled %}let users_module = UsersModule::new();{% endif %}
+    
+    // Create router with controllers
+    let router = Router::new()
+        .controller(app_module.controller)
+        {% if http_enabled %}.controller(users_module.controller){% endif %};
+    
+    // Create IoC container and HTTP config
+    let container = IocContainer::new();
+    let config = HttpConfig::default();
+    
+    // Start server
+    let mut server = Server::new(container, config)?;
+    server.use_router(router);
+    server.listen("127.0.0.1:3000").await?;
+    
+    Ok(())
+}

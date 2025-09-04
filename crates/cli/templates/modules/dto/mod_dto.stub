@@ -1,0 +1,5 @@
+pub mod create_{{ feature_name }};
+pub mod update_{{ feature_name }};
+
+pub use create_{{ feature_name }}::Create{{ feature_name_pascal }}Dto;
+pub use update_{{ feature_name }}::Update{{ feature_name_pascal }}Dto;

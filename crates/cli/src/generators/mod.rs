@@ -21,12 +21,14 @@ impl TemplateEngine {
             .join("crates/cli/templates");
             
         if template_dir.exists() {
-            // Load specific templates that we know work
-            let template_files = [
+            // Combine all templates into a single collection for unified loading
+            let all_templates = [
+                // Root-level templates
                 "cargo_toml.stub",
                 "main_api.stub", 
                 "main_minimal.stub",
                 "main_bootstrap.stub", // Laravel-style bootstrap template
+                "main_modular.stub", // New modular structure template
                 "app_module.stub",
                 "app_module_bootstrap.stub", // Bootstrap-ready module template
                 "app_controller.stub",
@@ -36,9 +38,20 @@ impl TemplateEngine {
                 "controllers_mod.stub",
                 "services_mod.stub",
                 "module_services.stub",
+                // Modular templates from modules/ directory
+                "modules/app_module.stub",
+                "modules/app_controller.stub", 
+                "modules/app_service.stub",
+                "modules/feature_module.stub",
+                "modules/module_controller.stub",
+                "modules/module_service.stub",
+                "modules/dto/create_dto.stub",
+                "modules/dto/update_dto.stub", 
+                "modules/dto/mod_dto.stub",
             ];
             
-            for template_file in &template_files {
+            // Single loop to load all templates
+            for template_file in &all_templates {
                 let template_path = template_dir.join(template_file);
                 if template_path.exists() {
                     let content = std::fs::read_to_string(&template_path)

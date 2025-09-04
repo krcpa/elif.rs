@@ -1,0 +1,32 @@
+use elif_http::{ElifRequest, ElifResponse, HttpResult, ElifController, ControllerRoute, HttpMethod, ParamType};
+use elif_http::controller::RouteParam;
+use elif_http_derive::{controller, get};
+use async_trait::async_trait;
+use super::app_service::AppService;
+
+#[derive(Clone, Default)]
+pub struct AppController {
+    service: AppService,
+}
+
+#[controller("/")]
+impl AppController {
+    pub fn new(service: AppService) -> Self {
+        Self { service }
+    }
+
+    #[get("")]
+    pub async fn index(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {
+        let message = self.service.get_welcome_message().await;
+        Ok(ElifResponse::ok().json(&serde_json::json!({
+            "message": message,
+            "status": "ok"
+        }))?)
+    }
+
+    #[get("/health")]
+    pub async fn health(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {
+        let health_info = self.service.get_health_status().await;
+        Ok(ElifResponse::ok().json(&health_info)?)
+    }
+}

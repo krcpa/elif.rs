@@ -1,0 +1,19 @@
+use super::{{ feature_name }}_controller::{{ feature_name_pascal }}Controller;
+use super::{{ feature_name }}_service::{{ feature_name_pascal }}Service;
+
+pub struct {{ feature_name_pascal }}Module {
+    pub controller: {{ feature_name_pascal }}Controller,
+    pub service: {{ feature_name_pascal }}Service,
+}
+
+impl {{ feature_name_pascal }}Module {
+    pub fn new() -> Self {
+        let service = {{ feature_name_pascal }}Service::new();
+        let controller = {{ feature_name_pascal }}Controller::new(service.clone());
+        
+        Self {
+            controller,
+            service,
+        }
+    }
+}
