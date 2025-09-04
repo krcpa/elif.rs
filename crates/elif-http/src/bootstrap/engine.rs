@@ -2,9 +2,9 @@
 //! container configuration, and server startup.
 
 use crate::{
-    bootstrap::{BootstrapError, BootstrapResult, RouteValidator, RouteRegistration, ParamDef},
+    bootstrap::{BootstrapError, BootstrapResult, RouteValidator},
     config::HttpConfig,
-    routing::{ElifRouter, RouteDefinition, HttpMethod},
+    routing::ElifRouter,
     server::Server,
     Middleware,
 };
@@ -207,7 +207,7 @@ impl AppBootstrapper {
         let router = ElifRouter::new();
         
         // Create route validator for conflict detection
-        let mut validator = RouteValidator::new().with_diagnostics(true);
+        let validator = RouteValidator::new().with_diagnostics(true);
         
         // Get load order from ModuleRuntime
         let load_order = self.module_runtime.load_order();
@@ -223,49 +223,18 @@ impl AppBootstrapper {
             
             tracing::info!("Bootstrap: Registering controllers for module '{}'", module.name);
             
-            // Register controllers with route validation
+            // Register controllers - route validation will be integrated when controller 
+            // metadata extraction is available (issue #386)
             for controller_name in &module.controllers {
-                tracing::debug!("Bootstrap: Validating routes for controller '{}'", controller_name);
+                tracing::debug!("Bootstrap: Preparing controller '{}' for registration", controller_name);
                 
-                // TODO: When controller metadata is available, extract actual routes
-                // For now, create example route registrations for validation
-                // This demonstrates the integration pattern
-                let example_registration = RouteRegistration {
-                    controller: controller_name.clone(),
-                    handler: "example_handler".to_string(),
-                    middleware: Vec::new(),
-                    parameters: vec![
-                        ParamDef {
-                            name: "id".to_string(),
-                            param_type: "u32".to_string(),
-                            required: true,
-                            constraints: vec!["int".to_string()],
-                        }
-                    ],
-                    definition: RouteDefinition {
-                        id: format!("{}::example", controller_name),
-                        method: HttpMethod::GET,
-                        path: format!("/api/{}", controller_name.to_lowercase()),
-                    },
-                };
+                // TODO: Extract actual route metadata from controller when #386 is completed
+                // TODO: Validate extracted routes with validator.register_route(route_registration)
+                // TODO: Generate detailed conflict reports on validation failures
                 
-                // Validate route before registration
-                if let Err(validation_error) = validator.register_route(example_registration) {
-                    // Generate detailed error report for conflicts
-                    if let Some(conflicts) = match &validation_error {
-                        crate::bootstrap::RouteValidationError::ConflictDetected { conflicts } => Some(conflicts),
-                        _ => None,
-                    } {
-                        let conflict_report = validator.generate_conflict_report(conflicts);
-                        tracing::error!("Route validation failed:\n{}", conflict_report);
-                        
-                        return Err(BootstrapError::RouteRegistrationFailed {
-                            message: format!("Route conflicts detected in controller '{}': {}", controller_name, conflict_report),
-                        });
-                    } else {
-                        return Err(validation_error.into());
-                    }
-                }
+                // For now, just log the controller discovery without creating fake routes
+                // that would cause false conflicts in the validation system
+                tracing::info!("Bootstrap: Controller '{}' discovered and ready for route extraction", controller_name);
                 
                 // TODO: Actually register with router when controller instances are available
                 // router = router.controller(controller_instance)?;
@@ -316,10 +285,20 @@ impl AppBootstrapper {
 
 impl Default for AppBootstrapper {
     fn default() -> Self {
-        Self::new().unwrap_or_else(|e| {
-            tracing::error!("Failed to create default AppBootstrapper: {}", e);
-            panic!("Failed to create default AppBootstrapper: {}", e);
-        })
+        match Self::new() {
+            Ok(bootstrapper) => bootstrapper,
+            Err(e) => {
+                tracing::error!("Failed to create default AppBootstrapper: {}", e);
+                // Return a minimal bootstrapper instead of panicking
+                Self {
+                    modules: Vec::new(),
+                    module_runtime: ModuleRuntime::new(),
+                    config: HttpConfig::default(),
+                    middleware: Vec::new(),
+                    container: None,
+                }
+            }
+        }
     }
 }
 
@@ -384,7 +363,8 @@ mod tests {
                 assert!(message.contains("No modules found"));
             }
             Err(other) => {
-                panic!("Unexpected error type: {:?}", other);
+                eprintln!("Unexpected error type in test: {:?}", other);
+                assert!(false, "Unexpected error type: {:?}", other);
             }
         }
     }

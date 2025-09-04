@@ -265,23 +265,8 @@ impl RouteValidator {
 
     /// Analyze conflict between two route registrations
     fn analyze_conflict(&self, route1: &RouteRegistration, route2: &RouteRegistration) -> Result<RouteConflict, RouteValidationError> {
-        let route_info1 = RouteInfo {
-            method: route1.definition.method.clone(),
-            path: route1.definition.path.clone(),
-            controller: route1.controller.clone(),
-            handler: route1.handler.clone(),
-            middleware: route1.middleware.clone(),
-            parameters: route1.parameters.clone(),
-        };
-
-        let route_info2 = RouteInfo {
-            method: route2.definition.method.clone(),
-            path: route2.definition.path.clone(),
-            controller: route2.controller.clone(),
-            handler: route2.handler.clone(),
-            middleware: route2.middleware.clone(),
-            parameters: route2.parameters.clone(),
-        };
+        let route_info1 = self.create_route_info(route1);
+        let route_info2 = self.create_route_info(route2);
 
         let conflict_type = if route1.definition.path == route2.definition.path {
             if self.parameters_conflict(&route1.parameters, &route2.parameters) {
@@ -303,6 +288,18 @@ impl RouteValidator {
         })
     }
 
+    /// Helper to create RouteInfo from RouteRegistration to reduce repetitive cloning
+    fn create_route_info(&self, registration: &RouteRegistration) -> RouteInfo {
+        RouteInfo {
+            method: registration.definition.method.clone(),
+            path: registration.definition.path.clone(),
+            controller: registration.controller.clone(),
+            handler: registration.handler.clone(),
+            middleware: registration.middleware.clone(),
+            parameters: registration.parameters.clone(),
+        }
+    }
+
     /// Check if parameters conflict between routes
     fn parameters_conflict(&self, params1: &[ParamDef], params2: &[ParamDef]) -> bool {
         for param1 in params1 {
@@ -316,19 +313,34 @@ impl RouteValidator {
     }
 
     /// Check for parameter conflicts across all routes
-    fn check_parameter_conflicts(&self, _conflicts: &mut Vec<RouteConflict>) {
-        let mut param_types: HashMap<String, (String, String)> = HashMap::new();
+    fn check_parameter_conflicts(&self, conflicts: &mut Vec<RouteConflict>) {
+        let mut param_types: HashMap<String, (String, String, &RouteRegistration)> = HashMap::new();
         
         for registration in self.routes.values() {
             for param in &registration.parameters {
                 let key = format!("{}:{}", registration.definition.path, param.name);
-                if let Some((existing_type, _existing_controller)) = param_types.get(&key) {
+                if let Some((existing_type, _existing_controller, existing_registration)) = param_types.get(&key) {
                     if existing_type != &param.param_type {
-                        // Found parameter conflict - would need to create RouteConflict
-                        // This is simplified for now
+                        // Found parameter conflict - create RouteConflict using helper
+                        let route_info1 = self.create_route_info(existing_registration);
+                        let route_info2 = self.create_route_info(registration);
+
+                        let conflict = RouteConflict {
+                            route1: route_info1,
+                            route2: route_info2,
+                            conflict_type: ConflictType::ParameterMismatch,
+                            resolution_suggestions: vec![
+                                ConflictResolution::RenameParameter { 
+                                    from: param.name.clone(), 
+                                    to: format!("{}_param", param.name) 
+                                },
+                            ],
+                        };
+                        
+                        conflicts.push(conflict);
                     }
                 } else {
-                    param_types.insert(key, (param.param_type.clone(), registration.controller.clone()));
+                    param_types.insert(key, (param.param_type.clone(), registration.controller.clone(), registration));
                 }
             }
         }
@@ -337,24 +349,26 @@ impl RouteValidator {
     /// Check for middleware conflicts
     fn check_middleware_conflicts(&self, warnings: &mut Vec<String>) {
         // Group routes by path pattern to check middleware consistency
-        let mut path_middleware: HashMap<String, Vec<(String, Vec<String>)>> = HashMap::new();
+        let mut path_middleware: HashMap<&str, Vec<(&str, &[String])>> = HashMap::new();
         
         for registration in self.routes.values() {
-            let path = &registration.definition.path;
+            let path = registration.definition.path.as_str();
             path_middleware
-                .entry(path.clone())
+                .entry(path)
                 .or_default()
-                .push((registration.controller.clone(), registration.middleware.clone()));
+                .push((registration.controller.as_str(), &registration.middleware));
         }
 
         for (path, controllers) in path_middleware {
             if controllers.len() > 1 {
-                let middleware_sets: HashSet<Vec<String>> = controllers.iter().map(|(_, mw)| mw.clone()).collect();
+                let middleware_sets: HashSet<&[String]> = controllers.iter().map(|(_, mw)| *mw).collect();
                 if middleware_sets.len() > 1 {
-                    warnings.push(format!(
-                        "Inconsistent middleware for path {}: controllers have different middleware requirements",
-                        path
-                    ));
+                    // Use static string concatenation to avoid format! overhead
+                    let mut warning = String::with_capacity(100);
+                    warning.push_str("Inconsistent middleware for path ");
+                    warning.push_str(path);
+                    warning.push_str(": controllers have different middleware requirements");
+                    warnings.push(warning);
                 }
             }
         }
@@ -366,16 +380,20 @@ impl RouteValidator {
             warnings.push("Large number of routes (>1000) may impact performance".to_string());
         }
 
-        // Check for overly complex patterns
-        for registration in self.routes.values() {
+        // Check for overly complex patterns - avoid format! in hot path
+        let complex_routes: Vec<_> = self.routes.values()
+            .filter(|reg| reg.parameters.len() > 5)
+            .collect();
+        
+        for registration in complex_routes {
             let param_count = registration.parameters.len();
-            if param_count > 5 {
-                warnings.push(format!(
-                    "Route {} has {} parameters, consider simplifying",
-                    registration.definition.path,
-                    param_count
-                ));
-            }
+            let mut warning = String::with_capacity(80);
+            warning.push_str("Route ");
+            warning.push_str(&registration.definition.path);
+            warning.push_str(" has ");
+            warning.push_str(&param_count.to_string());
+            warning.push_str(" parameters, consider simplifying");
+            warnings.push(warning);
         }
     }
 
