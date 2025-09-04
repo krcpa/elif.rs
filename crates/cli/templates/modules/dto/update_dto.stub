@@ -1,0 +1,6 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Update{{ feature_name_pascal }}Dto {
+    pub name: Option<String>,
+}

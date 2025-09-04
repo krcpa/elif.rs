@@ -27,6 +27,7 @@ impl TemplateEngine {
                 "main_api.stub", 
                 "main_minimal.stub",
                 "main_bootstrap.stub", // Laravel-style bootstrap template
+                "main_modular.stub", // New modular structure template
                 "app_module.stub",
                 "app_module_bootstrap.stub", // Bootstrap-ready module template
                 "app_controller.stub",
@@ -45,6 +46,29 @@ impl TemplateEngine {
                         .map_err(|e| ElifError::Validation { message: format!("Failed to read template {}: {}", template_file, e) })?;
                     tera.add_raw_template(template_file, &content)
                         .map_err(|e| ElifError::Validation { message: format!("Failed to register template {}: {}", template_file, e) })?;
+                }
+            }
+            
+            // Load modular templates from modules/ directory
+            let modular_templates = [
+                "modules/app_module.stub",
+                "modules/app_controller.stub", 
+                "modules/app_service.stub",
+                "modules/feature_module.stub",
+                "modules/module_controller.stub",
+                "modules/module_service.stub",
+                "modules/dto/create_dto.stub",
+                "modules/dto/update_dto.stub", 
+                "modules/dto/mod_dto.stub",
+            ];
+            
+            for template_file in &modular_templates {
+                let template_path = template_dir.join(template_file);
+                if template_path.exists() {
+                    let content = std::fs::read_to_string(&template_path)
+                        .map_err(|e| ElifError::Validation { message: format!("Failed to read modular template {}: {}", template_file, e) })?;
+                    tera.add_raw_template(template_file, &content)
+                        .map_err(|e| ElifError::Validation { message: format!("Failed to register modular template {}: {}", template_file, e) })?;
                 }
             }
         } else {

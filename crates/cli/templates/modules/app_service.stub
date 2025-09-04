@@ -1,0 +1,22 @@
+use serde_json::Value;
+
+#[derive(Clone, Default)]
+pub struct AppService;
+
+impl AppService {
+    pub fn new() -> Self {
+        Self
+    }
+    
+    pub async fn get_welcome_message(&self) -> String {
+        "Welcome to {{ project_name }}! 🚀".to_string()
+    }
+    
+    pub async fn get_health_status(&self) -> Value {
+        serde_json::json!({
+            "status": "healthy",
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "service": "{{ project_name }}"
+        })
+    }
+}

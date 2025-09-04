@@ -1,0 +1,51 @@
+use elif_http::{ElifRequest, ElifResponse, HttpResult};
+use elif_http_derive::{controller, get, post, put, delete};
+use super::{{ feature_name }}_service::{{ feature_name_pascal }}Service;
+use super::dto::{Create{{ feature_name_pascal }}Dto, Update{{ feature_name_pascal }}Dto};
+
+#[derive(Default)]
+#[controller("/api/{{ feature_name_plural }}")]
+pub struct {{ feature_name_pascal }}Controller {
+    service: {{ feature_name_pascal }}Service,
+}
+
+impl {{ feature_name_pascal }}Controller {
+    pub fn new(service: {{ feature_name_pascal }}Service) -> Self {
+        Self { service }
+    }
+
+    #[get("")]
+    pub async fn index(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {
+        let items = self.service.find_all().await;
+        Ok(ElifResponse::ok().json(&items)?)
+    }
+    
+    #[get("/{id}")]
+    pub async fn show(&self, req: ElifRequest) -> HttpResult<ElifResponse> {
+        let id: i32 = req.path_param_int("id").map_err(|_| elif_http::HttpError::bad_request("Invalid ID parameter"))?;
+        let item = self.service.find_by_id(id as u32).await?;
+        Ok(ElifResponse::ok().json(&item)?)
+    }
+    
+    #[post("")]
+    pub async fn create(&self, req: ElifRequest) -> HttpResult<ElifResponse> {
+        let dto: Create{{ feature_name_pascal }}Dto = req.json()?;
+        let item = self.service.create(dto).await?;
+        Ok(ElifResponse::created().json(&item)?)
+    }
+    
+    #[put("/{id}")]
+    pub async fn update(&self, req: ElifRequest) -> HttpResult<ElifResponse> {
+        let id: i32 = req.path_param_int("id").map_err(|_| elif_http::HttpError::bad_request("Invalid ID parameter"))?;
+        let dto: Update{{ feature_name_pascal }}Dto = req.json()?;
+        let item = self.service.update(id as u32, dto).await?;
+        Ok(ElifResponse::ok().json(&item)?)
+    }
+    
+    #[delete("/{id}")]
+    pub async fn delete(&self, req: ElifRequest) -> HttpResult<ElifResponse> {
+        let id: i32 = req.path_param_int("id").map_err(|_| elif_http::HttpError::bad_request("Invalid ID parameter"))?;
+        self.service.delete(id as u32).await?;
+        Ok(ElifResponse::no_content())
+    }
+}
