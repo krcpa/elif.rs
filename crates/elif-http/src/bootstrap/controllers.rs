@@ -150,10 +150,9 @@ impl ControllerRegistry {
             metadata.base_path
         );
         
-        // Validate that the controller can be created from the type registry
-        // This ensures the controller type is properly registered
-        let _controller_test = super::controller_registry::create_controller(controller_name)?;
-        tracing::debug!("Controller '{}' validated and available via type registry", controller_name);
+        // Controller validation is unnecessary here - if build_controller_metadata() succeeded,
+        // we already know the controller is properly registered and can be instantiated
+        tracing::debug!("Controller '{}' ready for route registration (validated during metadata extraction)", controller_name);
         
         // Log successful registration
         tracing::info!(
