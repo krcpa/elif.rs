@@ -166,22 +166,22 @@ pub fn create_controller(name: &str) -> Result<Box<dyn ElifController>, Bootstra
 /// Helper macro for auto-registering controllers
 ///
 /// This macro is used by the #[controller] derive macro to automatically
-/// register controller types at compile time.
+/// register controller types at static initialization time using ctor.
 #[macro_export]
 macro_rules! __controller_auto_register {
     ($name:literal, $type:ty) => {
-        // Use inventory pattern to ensure registration happens at static init time
-        static _CONTROLLER_REGISTRATION: ::once_cell::sync::Lazy<()> = ::once_cell::sync::Lazy::new(|| {
+        // Use ctor to run registration at static initialization time
+        // This ensures controllers are registered before main() runs
+        #[::ctor::ctor]
+        fn __register_controller() {
             ::elif_http::bootstrap::register_controller_type(
                 $name,
-                || Box::new(<$type>::new())
+                || {
+                    // Create the controller instance
+                    // This will cause a compile-time error if new() doesn't exist
+                    Box::new(<$type>::new()) as Box<dyn ::elif_http::controller::ElifController>
+                }
             );
-        });
-
-        // Force initialization by referencing the static
-        #[allow(dead_code)]
-        fn __force_controller_registration() {
-            ::once_cell::sync::Lazy::force(&_CONTROLLER_REGISTRATION);
         }
     };
 }
