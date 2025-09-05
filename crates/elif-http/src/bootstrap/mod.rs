@@ -11,11 +11,13 @@
 //! ```
 
 pub mod app_module;
+pub mod controller_registry;
 pub mod controllers;
 pub mod engine;
 pub mod route_validator;
 
 pub use app_module::*;
+pub use controller_registry::*;
 pub use controllers::*;
 pub use engine::*;
 pub use route_validator::*;
