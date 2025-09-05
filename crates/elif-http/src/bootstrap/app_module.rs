@@ -39,6 +39,15 @@ pub enum BootstrapError {
     #[error("Route registration failed: {message}")]
     RouteRegistrationFailed { message: String },
     
+    #[error("Controller not found: '{name}'. {hint}")]
+    ControllerNotFound { name: String, hint: String },
+    
+    #[error("Controller registration failed: {message}")]
+    ControllerRegistrationFailed { message: String },
+    
+    #[error("Controller metadata extraction failed: {message}")]
+    ControllerMetadataFailed { message: String },
+    
     #[error("Server startup failed: {message}")]
     ServerStartupFailed { message: String },
     

@@ -2,9 +2,9 @@
 //! container configuration, and server startup.
 
 use crate::{
-    bootstrap::{BootstrapError, BootstrapResult, RouteValidator, RouteRegistration, ParamDef},
+    bootstrap::{BootstrapError, BootstrapResult, ControllerRegistry},
     config::HttpConfig,
-    routing::{ElifRouter, RouteDefinition, HttpMethod},
+    routing::ElifRouter,
     server::Server,
     Middleware,
 };
@@ -12,7 +12,7 @@ use elif_core::{
     container::IocContainer,
     modules::{get_global_module_registry, CompileTimeModuleMetadata, ModuleDescriptor, ModuleRuntime, ModuleRuntimeError},
 };
-use std::{future::Future, net::SocketAddr, pin::Pin};
+use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc};
 
 /// The main bootstrap orchestrator that handles the complete app startup process
 ///
@@ -151,11 +151,14 @@ impl AppBootstrapper {
             // Step 1: Configure DI container using ModuleRuntime
             let container = self.configure_container().await?;
             
-            // Step 2: Create and configure router
-            let router = self.configure_router().await?;
+            // Step 2: Create and configure router with container access
+            let router = self.configure_router(&container).await?;
             
             // Step 3: Create and start server
-            let mut server = Server::new(container, self.config)
+            // Note: Creating a new container for server since IocContainer doesn't implement Clone
+            // This will be enhanced once the IoC container supports better sharing patterns
+            let server_container = IocContainer::new();
+            let mut server = Server::new(server_container, self.config)
                 .map_err(|e| BootstrapError::ServerStartupFailed {
                     message: format!("Failed to create server: {}", e),
                 })?;
@@ -180,7 +183,7 @@ impl AppBootstrapper {
     }
     
     /// Configure the DI container with all module providers using ModuleRuntime
-    async fn configure_container(&mut self) -> BootstrapResult<IocContainer> {
+    async fn configure_container(&mut self) -> BootstrapResult<Arc<IocContainer>> {
         let mut container = if let Some(_provided_container) = &self.container {
             // TODO: Proper container merging/extension when IocContainer supports it
             // For now, we create a new container and document this limitation
@@ -199,107 +202,47 @@ impl AppBootstrapper {
             })?;
         
         tracing::info!("Bootstrap: Container configured with {} modules using ModuleRuntime", self.modules.len());
-        Ok(container)
+        Ok(Arc::new(container))
     }
     
     /// Configure the router with all controller routes
-    async fn configure_router(&self) -> BootstrapResult<ElifRouter> {
-        let router = ElifRouter::new();
+    async fn configure_router(&self, container: &Arc<IocContainer>) -> BootstrapResult<ElifRouter> {
+        let mut router = ElifRouter::new();
         
-        // Create route validator for conflict detection
-        let mut validator = RouteValidator::new().with_diagnostics(true);
-        
-        // Get load order from ModuleRuntime
-        let load_order = self.module_runtime.load_order();
-        
-        // Register controllers from each module in dependency order
-        for module_name in load_order {
-            let module = self.modules
-                .iter()
-                .find(|m| m.name == *module_name)
-                .ok_or_else(|| BootstrapError::RouteRegistrationFailed {
-                    message: format!("Module '{}' not found in discovery results", module_name),
-                })?;
-            
-            tracing::info!("Bootstrap: Registering controllers for module '{}'", module.name);
-            
-            // Register controllers with route validation
-            for controller_name in &module.controllers {
-                tracing::debug!("Bootstrap: Validating routes for controller '{}'", controller_name);
-                
-                // TODO: When controller metadata is available, extract actual routes
-                // For now, create example route registrations for validation
-                // This demonstrates the integration pattern
-                let example_registration = RouteRegistration {
-                    controller: controller_name.clone(),
-                    handler: "example_handler".to_string(),
-                    middleware: Vec::new(),
-                    parameters: vec![
-                        ParamDef {
-                            name: "id".to_string(),
-                            param_type: "u32".to_string(),
-                            required: true,
-                            constraints: vec!["int".to_string()],
-                        }
-                    ],
-                    definition: RouteDefinition {
-                        id: format!("{}::example", controller_name),
-                        method: HttpMethod::GET,
-                        path: format!("/api/{}", controller_name.to_lowercase()),
-                    },
-                };
-                
-                // Validate route before registration
-                if let Err(validation_error) = validator.register_route(example_registration) {
-                    // Generate detailed error report for conflicts
-                    if let Some(conflicts) = match &validation_error {
-                        crate::bootstrap::RouteValidationError::ConflictDetected { conflicts } => Some(conflicts),
-                        _ => None,
-                    } {
-                        let conflict_report = validator.generate_conflict_report(conflicts);
-                        tracing::error!("Route validation failed:\n{}", conflict_report);
-                        
-                        return Err(BootstrapError::RouteRegistrationFailed {
-                            message: format!("Route conflicts detected in controller '{}': {}", controller_name, conflict_report),
-                        });
-                    } else {
-                        return Err(validation_error.into());
-                    }
-                }
-                
-                // TODO: Actually register with router when controller instances are available
-                // router = router.controller(controller_instance)?;
-            }
-        }
-        
-        // Perform final validation across all routes
-        let validation_report = validator.validate_all_routes()
-            .map_err(|e| {
-                if let crate::bootstrap::RouteValidationError::ConflictDetected { conflicts } = &e {
-                    let conflict_report = validator.generate_conflict_report(conflicts);
-                    tracing::error!("Final route validation failed:\n{}", conflict_report);
-                    BootstrapError::RouteRegistrationFailed {
-                        message: format!("Route validation failed: {}", conflict_report),
-                    }
-                } else {
-                    e.into()
-                }
+        // Create ControllerRegistry with IoC container access
+        let controller_registry = ControllerRegistry::from_modules(&self.modules, container.clone())
+            .map_err(|e| BootstrapError::ControllerRegistrationFailed {
+                message: format!("Failed to create controller registry: {}", e),
             })?;
         
-        // Log validation results
-        tracing::info!("Bootstrap: Route validation completed successfully");
-        tracing::info!("  - Total routes: {}", validation_report.total_routes);
-        tracing::info!("  - Performance score: {}/100", validation_report.performance_score);
+        tracing::info!("Bootstrap: Created controller registry with {} controllers", 
+                      controller_registry.get_controller_names().len());
         
-        if validation_report.warnings > 0 {
-            tracing::warn!("  - Validation warnings: {}", validation_report.warnings);
+        // Validate all routes for conflicts before registration
+        if let Err(conflicts) = controller_registry.validate_routes() {
+            let mut error_message = String::new();
+            for conflict in &conflicts {
+                error_message.push_str(&format!("\n  - {}/{}: {} vs {}/{}", 
+                    conflict.route1.method, conflict.route1.path,
+                    conflict.route1.controller,
+                    conflict.route2.method, conflict.route2.path));
+            }
+            
+            return Err(BootstrapError::RouteRegistrationFailed {
+                message: format!("Route conflicts detected:{}", error_message),
+            });
         }
         
-        for suggestion in &validation_report.suggestions {
-            tracing::info!("  - Suggestion: {}", suggestion);
-        }
+        // Register all controllers automatically
+        router = controller_registry.register_all_routes(router)
+            .map_err(|e| BootstrapError::ControllerRegistrationFailed {
+                message: format!("Failed to register controller routes: {}", e),
+            })?;
         
+        tracing::info!("Bootstrap: Successfully registered {} controller routes", 
+                      controller_registry.total_routes());
         tracing::info!("Bootstrap: Router configured with controllers from {} modules", self.modules.len());
+        
         Ok(router)
     }
     
