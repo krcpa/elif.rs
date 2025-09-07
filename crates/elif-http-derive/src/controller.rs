@@ -165,6 +165,7 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {}
         };
 
+
         // Generate the expanded code with ElifController trait implementation
         // Using async-trait for proper async method support
         let expanded = quote! {
@@ -202,6 +203,13 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #ioc_controllable_impl
+
+            // Auto-register the controller type using inventory pattern
+            // This creates a static that gets initialized when the binary loads
+            ::elif_http::__controller_auto_register! {
+                #struct_name,
+                #self_ty
+            }
         };
 
         TokenStream::from(expanded)
