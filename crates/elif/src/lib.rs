@@ -32,7 +32,7 @@ pub mod prelude;
 
 // Macro functionality - re-export from elif-macros crate
 pub use elif_macros as macros;
-pub use elif_macros::{bootstrap, main};
+pub use elif_macros::main;
 
 /// Current version of elif.rs
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
