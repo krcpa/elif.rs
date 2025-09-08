@@ -6,6 +6,12 @@ use elif_http_derive::{controller, get};
 // Test controller just for metadata extraction
 pub struct TypedController;
 
+impl TypedController {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
 #[controller("/api/typed")]
 impl TypedController {
     // Test basic route with parameter

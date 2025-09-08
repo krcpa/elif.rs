@@ -6,6 +6,12 @@ use elif_http_derive::{controller, get, post};
 // Test controller with various parameter scenarios
 pub struct TestController;
 
+impl TestController {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
 #[controller("/api/test")]
 impl TestController {
     // Test 1: Basic parameter extraction without type annotation

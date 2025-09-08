@@ -169,17 +169,17 @@ pub fn create_controller(name: &str) -> Result<Box<dyn ElifController>, Bootstra
 /// register controller types at static initialization time using ctor.
 #[macro_export]
 macro_rules! __controller_auto_register {
-    ($name:literal, $type:ty) => {
+    ($name:expr, $type:ty) => {
         // Use ctor to run registration at static initialization time
         // This ensures controllers are registered before main() runs
         #[::ctor::ctor]
         fn __register_controller() {
-            ::elif_http::bootstrap::register_controller_type(
+            $crate::bootstrap::controller_registry::register_controller_type(
                 $name,
                 || {
                     // Create the controller instance
                     // This will cause a compile-time error if new() doesn't exist
-                    Box::new(<$type>::new()) as Box<dyn ::elif_http::controller::ElifController>
+                    Box::new(<$type>::new()) as Box<dyn $crate::controller::ElifController>
                 }
             );
         }
