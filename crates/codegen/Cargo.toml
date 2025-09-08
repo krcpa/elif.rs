@@ -12,7 +12,7 @@ keywords = ["codegen", "web", "framework", "ai", "llm"]
 categories = ["web-programming", "development-tools"]
 
 [dependencies]
-elif-core = { version = "0.7.0", path = "../core" }
+elif-core = { version = "0.7.1", path = "../core" }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 tinytemplate = { workspace = true }

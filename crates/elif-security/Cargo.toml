@@ -13,7 +13,7 @@ categories = ["web-programming", "authentication"]
 
 [dependencies]
 # Core framework dependencies
-elif-core = { version = "0.7.0", path = "../core" }
+elif-core = { version = "0.7.1", path = "../core" }
 elif-http = { version = "0.8.1", path = "../elif-http" }
 service-builder = "0.3.0"
 

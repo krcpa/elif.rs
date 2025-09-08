@@ -17,10 +17,10 @@ name = "elifrs"
 path = "src/main.rs"
 
 [dependencies]
-elif-core = { version = "0.7.0", path = "../core" }
+elif-core = { version = "0.7.1", path = "../core" }
 elif-codegen = { version = "0.4.0", path = "../codegen" }
 elif-introspect = { version = "0.3.0", path = "../introspect" }
-elif-orm = { version = "0.7.0", path = "../orm" }
+elif-orm = { version = "0.7.1", path = "../orm" }
 elif-openapi = { version = "0.2.0", path = "../elif-openapi" }
 sqlx = { workspace = true }
 clap = { workspace = true }

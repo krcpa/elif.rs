@@ -468,6 +468,11 @@ impl ProviderConfigurator {
     pub fn container_mut(&mut self) -> &mut IocContainer {
         &mut self.container
     }
+    
+    /// Get reference to the providers list
+    pub fn providers(&self) -> &[ProviderMetadata] {
+        &self.providers
+    }
 }
 
 #[cfg(test)]
