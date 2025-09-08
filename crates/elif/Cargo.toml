@@ -16,7 +16,7 @@ categories = ["web-programming::http-server"]
 elif-core = { version = "0.7.1", path = "../core" }
 elif-http = { version = "0.8.2", path = "../elif-http" }
 elif-orm = { version = "0.7.1", path = "../orm" }
-elif-auth = { version = "0.4.0", path = "../elif-auth" }
+elif-auth = { version = "0.4.1", path = "../elif-auth" }
 elif-cache = { version = "0.3.0", path = "../elif-cache" }
 elif-macros = { version = "0.1.1", path = "../elif-macros" }
 

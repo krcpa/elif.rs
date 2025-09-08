@@ -1,6 +1,6 @@
 [package]
 name = "elif-auth"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "Authentication and authorization system for elif.rs framework - JWT, sessions, RBAC, password hashing, and middleware"
 license = "MIT OR Apache-2.0"
