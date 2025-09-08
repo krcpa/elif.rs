@@ -17,6 +17,8 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::pin::Pin;
+use std::future::Future;
 use elif_core::modules::CompileTimeModuleMetadata;
 use elif_core::container::IocContainer;
 use crate::controller::ControllerRoute;
@@ -150,6 +152,10 @@ impl ControllerRegistry {
             metadata.base_path
         );
         
+        // Create controller instance once and share it across all its routes
+        let controller = super::controller_registry::create_controller(controller_name)?;
+        let controller_arc = std::sync::Arc::new(controller);
+
         // Register each route with the HTTP router
         for route in &metadata.routes {
             let full_path = self.combine_paths(&metadata.base_path, &route.path);
@@ -162,8 +168,16 @@ impl ControllerRegistry {
                 route.handler_name
             );
             
-            // Create controller handler function that dispatches to the specific method
-            let handler = self.create_controller_handler(controller_name, &route.handler_name)?;
+            // Create a handler that captures the shared controller instance
+            let controller_clone = std::sync::Arc::clone(&controller_arc);
+            let method_name = route.handler_name.clone();
+            let handler = move |request: crate::request::ElifRequest| {
+                let controller_for_request = std::sync::Arc::clone(&controller_clone);
+                let method_for_request = method_name.clone();
+                Box::pin(async move {
+                    controller_for_request.handle_request_dyn(method_for_request, request).await
+                }) as Pin<Box<dyn Future<Output = crate::errors::HttpResult<crate::response::ElifResponse>> + Send>>
+            };
             
             // Register route based on HTTP method
             router = match route.method {
@@ -317,37 +331,6 @@ impl ControllerRegistry {
         }
     }
 
-    /// Create a controller handler function for a specific method
-    pub fn create_controller_handler(
-        &self,
-        controller_name: &str,
-        method_name: &str,
-    ) -> Result<impl Fn(crate::request::ElifRequest) -> std::pin::Pin<Box<dyn std::future::Future<Output = crate::errors::HttpResult<crate::response::ElifResponse>> + Send>> + Clone + Send + Sync + 'static, BootstrapError> {
-        use crate::request::ElifRequest;
-        use crate::response::ElifResponse;
-        use crate::errors::HttpResult;
-        use std::sync::Arc;
-        use std::pin::Pin;
-        use std::future::Future;
-
-        // Create a controller instance using the type registry
-        let controller = super::controller_registry::create_controller(controller_name)?;
-        let controller_arc: Arc<Box<dyn crate::controller::ElifController>> = Arc::new(controller);
-        let method_name = method_name.to_string();
-
-        // Create and return the handler closure
-        let handler = move |request: ElifRequest| {
-            let controller_arc_clone = Arc::clone(&controller_arc);
-            let method_name = method_name.clone();
-            
-            Box::pin(async move {
-                // Use the new dynamic dispatch method that works with trait objects
-                controller_arc_clone.handle_request_dyn(method_name, request).await
-            }) as Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>
-        };
-
-        Ok(handler)
-    }
 }
 
 /// Convert from existing ControllerRoute to our RouteMetadata

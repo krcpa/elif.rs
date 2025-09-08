@@ -74,11 +74,17 @@ for route in &metadata.routes {
 
 ## Performance Characteristics
 
-### ✅ Efficient Implementation
-- Controller instances created once during bootstrap (not per-request)
-- Thread-safe Arc-wrapped controllers for concurrent access
-- Minimal overhead HTTP handler dispatch
+### ✅ Efficient Implementation  
+- **Single controller instance per controller** (not per route) - Major performance optimization
+- Controller instances created once during bootstrap (not per-request) 
+- Thread-safe Arc-wrapped controllers shared across all routes for concurrent access
+- Minimal overhead HTTP handler dispatch via closure capture
 - Route registration happens at startup, not runtime
+
+### Performance Fix Applied
+**Issue Fixed**: Initial implementation incorrectly created one controller instance per route  
+**Solution**: Controller instantiated once and Arc-wrapped instance shared across all its route handlers  
+**Impact**: Eliminates unnecessary instantiations and prevents unexpected behavior from state management
 
 ### Benchmarking Results
 - **<5ms dispatch overhead** achieved for typical controller calls
