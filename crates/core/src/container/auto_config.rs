@@ -149,21 +149,22 @@ pub struct ValidationReport {
 
 impl ValidationReport {
     /// Create validation report from provider configurator
-    pub fn from_configurator(_configurator: &ProviderConfigurator) -> Self {
+    pub fn from_configurator(configurator: &ProviderConfigurator) -> Self {
         let mut providers_by_lifetime = HashMap::new();
-        let issues = Vec::new();
-        
-        // Count providers by lifetime (this would need access to configurator internals)
-        providers_by_lifetime.insert(ServiceLifetime::Singleton, 0);
-        providers_by_lifetime.insert(ServiceLifetime::Scoped, 0);
-        providers_by_lifetime.insert(ServiceLifetime::Transient, 0);
-        
-        // For now, create a basic report
+
+        // This assumes a `providers()` method is added to `ProviderConfigurator`
+        for provider in configurator.providers() {
+            let lifetime = provider.lifetime.unwrap_or(ServiceLifetime::Transient);
+            *providers_by_lifetime.entry(lifetime).or_default() += 1;
+        }
+
+        // For now, create a partial report
+        // TODO: Calculate dependency_graph_depth and potential_issues
         Self {
-            total_providers: 0, // Would be filled from configurator
+            total_providers: configurator.providers().len(),
             providers_by_lifetime,
             dependency_graph_depth: 0,
-            potential_issues: issues,
+            potential_issues: Vec::new(),
         }
     }
     
