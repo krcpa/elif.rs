@@ -36,7 +36,8 @@ pub use serde::{Deserialize, Serialize};
 pub use async_trait::async_trait;
 
 // Macros
-pub use crate::{bootstrap, main};
+pub use crate::main;
+pub use elif_macros::bootstrap;
 
 // Bootstrap traits
 pub use elif_http::AppBootstrap;
