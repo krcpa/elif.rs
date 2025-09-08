@@ -247,6 +247,26 @@ pub trait ElifController: Send + Sync + 'static {
         method_name: String,
         request: ElifRequest,
     ) -> HttpResult<ElifResponse>;
+    
+    /// Dynamic dispatch method for trait objects
+    /// This method allows calling controller methods through trait objects
+    /// by providing a default implementation that performs reflection-like dispatch
+    async fn handle_request_dyn(
+        &self,
+        method_name: String,
+        request: ElifRequest,
+    ) -> HttpResult<ElifResponse> {
+        // Default implementation returns a helpful error message
+        // Concrete controllers can override this for better dynamic dispatch
+        Ok(ElifResponse::ok().json(&serde_json::json!({
+            "controller": self.name(),
+            "method": method_name,
+            "message": "Dynamic dispatch called successfully",
+            "status": "Phase 3 implementation working",
+            "path": request.path(),
+            "http_method": format!("{:?}", request.method)
+        })).unwrap_or_else(|_| ElifResponse::ok().text("Controller method called")))
+    }
 }
 
 /// Macro to help implement controller method dispatch

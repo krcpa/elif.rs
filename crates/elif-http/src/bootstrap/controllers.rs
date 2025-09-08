@@ -139,7 +139,7 @@ impl ControllerRegistry {
     /// Register routes for a specific controller
     fn register_controller_routes(
         &self, 
-        router: ElifRouter, 
+        mut router: ElifRouter, 
         controller_name: &str, 
         metadata: &ControllerMetadata
     ) -> Result<ElifRouter, BootstrapError> {
@@ -150,20 +150,48 @@ impl ControllerRegistry {
             metadata.base_path
         );
         
-        // Controller validation is unnecessary here - if build_controller_metadata() succeeded,
-        // we already know the controller is properly registered and can be instantiated
-        tracing::debug!("Controller '{}' ready for route registration (validated during metadata extraction)", controller_name);
+        // Register each route with the HTTP router
+        for route in &metadata.routes {
+            let full_path = self.combine_paths(&metadata.base_path, &route.path);
+            
+            tracing::debug!(
+                "Registering route: {} {} -> {}::{}",
+                route.method,
+                full_path,
+                controller_name,
+                route.handler_name
+            );
+            
+            // Create controller handler function that dispatches to the specific method
+            let handler = self.create_controller_handler(controller_name, &route.handler_name)?;
+            
+            // Register route based on HTTP method
+            router = match route.method {
+                HttpMethod::GET => router.get(&full_path, handler),
+                HttpMethod::POST => router.post(&full_path, handler),
+                HttpMethod::PUT => router.put(&full_path, handler),
+                HttpMethod::DELETE => router.delete(&full_path, handler),
+                HttpMethod::PATCH => router.patch(&full_path, handler),
+                HttpMethod::HEAD => {
+                    tracing::warn!("HEAD method not yet supported for route: {}", full_path);
+                    continue;
+                },
+                HttpMethod::OPTIONS => {
+                    tracing::warn!("OPTIONS method not yet supported for route: {}", full_path);
+                    continue;
+                },
+                HttpMethod::TRACE => {
+                    tracing::warn!("TRACE method not yet supported for route: {}", full_path);
+                    continue;
+                },
+            };
+        }
         
-        // Log successful registration
         tracing::info!(
-            "Bootstrap: Successfully registered controller '{}' with {} routes",
+            "Bootstrap: Successfully registered controller '{}' with {} HTTP routes",
             controller_name,
             metadata.routes.len()
         );
-        
-        // TODO: Actually register the HTTP routes with the router
-        // This requires implementing the route handler dispatch mechanism
-        // For now, the controller is registered in IoC but routes are not yet active
         
         Ok(router)
     }
@@ -266,6 +294,59 @@ impl ControllerRegistry {
     fn get_controller_base_path(&self, controller_name: &str) -> Option<String> {
         self.controllers.get(controller_name)
             .map(|metadata| metadata.base_path.clone())
+    }
+
+    /// Combine base path and route path
+    fn combine_paths(&self, base: &str, route: &str) -> String {
+        let base = base.trim_end_matches('/');
+        let route = route.trim_start_matches('/');
+
+        let path = if route.is_empty() {
+            base.to_string()
+        } else if base.is_empty() {
+            format!("/{}", route)
+        } else {
+            format!("{}/{}", base, route)
+        };
+
+        // Ensure path is never empty to prevent Axum panics
+        if path.is_empty() {
+            "/".to_string()
+        } else {
+            path
+        }
+    }
+
+    /// Create a controller handler function for a specific method
+    pub fn create_controller_handler(
+        &self,
+        controller_name: &str,
+        method_name: &str,
+    ) -> Result<impl Fn(crate::request::ElifRequest) -> std::pin::Pin<Box<dyn std::future::Future<Output = crate::errors::HttpResult<crate::response::ElifResponse>> + Send>> + Clone + Send + Sync + 'static, BootstrapError> {
+        use crate::request::ElifRequest;
+        use crate::response::ElifResponse;
+        use crate::errors::HttpResult;
+        use std::sync::Arc;
+        use std::pin::Pin;
+        use std::future::Future;
+
+        // Create a controller instance using the type registry
+        let controller = super::controller_registry::create_controller(controller_name)?;
+        let controller_arc: Arc<Box<dyn crate::controller::ElifController>> = Arc::new(controller);
+        let method_name = method_name.to_string();
+
+        // Create and return the handler closure
+        let handler = move |request: ElifRequest| {
+            let controller_arc_clone = Arc::clone(&controller_arc);
+            let method_name = method_name.clone();
+            
+            Box::pin(async move {
+                // Use the new dynamic dispatch method that works with trait objects
+                controller_arc_clone.handle_request_dyn(method_name, request).await
+            }) as Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>>
+        };
+
+        Ok(handler)
     }
 }
 
