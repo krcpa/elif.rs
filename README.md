@@ -7,6 +7,8 @@
 [![Build Status](https://img.shields.io/badge/build-passing-green.svg)](https://github.com/krcpa/elif.rs)
 [![Crates.io](https://img.shields.io/crates/v/elif-http.svg)](https://crates.io/crates/elif-http)
 
+> **⚠️ IMPORTANT NOTICE**: This project is under **heavy active development**. APIs may change, features are being added rapidly, and breaking changes can occur between versions. While the core functionality is stable, please pin to specific versions in production and expect frequent updates.
+
 **elif.rs** combines Rust's performance and safety with exceptional developer experience. Convention over configuration, zero boilerplate, and intuitive APIs that maximize productivity.
 
 ## 🚀 5-Second Quick Start
@@ -301,29 +303,35 @@ async fn test_user_api() {
 - **`elif-http`** `v0.8.2` - HTTP server, routing, middleware + declarative macros
 - **`elif-http-derive`** `v0.2.0` - Controller and module derivation macros
 - **`elif-macros`** `v0.1.1` - Bootstrap and main function macros
-- **`elif-core`** `v0.6.1` - Dependency injection and IoC container
+- **`elif-core`** `v0.7.0` - Dependency injection and IoC container with auto-configuration
+- **`elifrs`** `v0.10.3` - Powerful CLI with modular project generation
 - **`elif-orm`** `v0.7.0` - Type-safe ORM with relationships
 - **`elif-auth`** `v0.4.0` - Authentication and authorization
 - **`elif-cache`** `v0.3.0` - Caching with multiple backends
 
 ### **CLI & Development Tools**
-- **`elifrs`** CLI - Powerful command-line interface
-- **Modular project generation** with clean structure  
+- **`elifrs`** `v0.10.3` - Enhanced CLI with auto-configuration support
+- **Modular project generation** with NestJS-style module discovery  
+- **Provider auto-configuration** with dependency injection optimization
+- **Controller auto-registration** with route conflict detection
 - **AI-powered code generation** from natural language specs
 - **Hot reload development** with automatic recompilation
 - **Built-in testing framework** with mocking support
 
-## 🗺️ Current State (v0.8.2)
+## 🗺️ Current State (v0.8.2+)
 
 ### ✅ **Production Ready**
 - **Zero-boilerplate bootstrap** with `#[elif::bootstrap]` macro
-- **Modular system** with automatic discovery
+- **Advanced modular system** with automatic discovery and optimization
+- **Provider auto-configuration** with intelligent dependency resolution
+- **Controller auto-registration** with performance optimization
+- **Route conflict detection** integrated with bootstrap system
 - **Declarative controllers** with 70% less boilerplate
 - **Full dependency injection** with compile-time validation
 - **Type-safe ORM** with PostgreSQL support
 - **Comprehensive middleware system** with built-in security
 - **Hot reload development** with `elifrs serve --reload`
-- **Complete CLI tooling** with powerful generators
+- **Complete CLI tooling** with enhanced generators (v0.10.3)
 
 ### 🔄 **Coming in v0.9.0** 
 - **WebSocket channels** for real-time features
