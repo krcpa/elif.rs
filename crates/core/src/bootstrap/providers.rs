@@ -380,7 +380,7 @@ impl ProviderConfigurator {
                     }
                 } else if *rec_stack.get(dependency).unwrap_or(&false) {
                     // Found cycle
-                    let cycle_start = path.iter().position(|s| s == dependency).unwrap_or(0);
+                    let cycle_start = path.iter().position(|s| s == dependency).expect("Dependency in recursion stack must be in path");
                     let mut cycle = path[cycle_start..].to_vec();
                     cycle.push(dependency.to_string());
                     return Ok(Some(cycle));
