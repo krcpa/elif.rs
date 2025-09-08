@@ -48,9 +48,16 @@ pub enum ProviderType {
     /// Concrete service implementation
     Concrete(String),
     /// Trait/interface implementation
-    Trait(String, String), // (trait_name, impl_name)
-    /// Named service implementation
-    Named(String, String), // (service_name, name)
+    Trait {
+        trait_name: String,
+        impl_name: String,
+    },
+    /// Named trait implementation with explicit naming
+    NamedTrait {
+        trait_name: String,
+        impl_name: String,
+        name: String,
+    },
 }
 
 /// Provider metadata extracted from module declarations
@@ -74,16 +81,23 @@ impl ProviderMetadata {
     /// Create new provider metadata for trait implementation
     pub fn trait_impl(trait_name: String, impl_name: String) -> Self {
         Self {
-            service_type: ProviderType::Trait(trait_name, impl_name),
+            service_type: ProviderType::Trait {
+                trait_name,
+                impl_name,
+            },
             lifetime: None,
             dependencies: Vec::new(),
         }
     }
     
-    /// Create new provider metadata for named service
-    pub fn named(service_name: String, name: String) -> Self {
+    /// Create new provider metadata for named trait implementation
+    pub fn named_trait(trait_name: String, impl_name: String, name: String) -> Self {
         Self {
-            service_type: ProviderType::Named(service_name, name),
+            service_type: ProviderType::NamedTrait {
+                trait_name,
+                impl_name,
+                name,
+            },
             lifetime: None,
             dependencies: Vec::new(),
         }
@@ -161,10 +175,10 @@ impl ProviderConfigurator {
         // Handle different provider declaration patterns:
         // - "UserService" -> Concrete service
         // - "dyn EmailService => SmtpEmailService" -> Trait mapping
-        // - "dyn EmailService => SmtpEmailService @ smtp" -> Named service
+        // - "dyn EmailService => SmtpEmailService @ smtp" -> Named trait service
         
         if let Some(arrow_pos) = provider_str.find(" => ") {
-            // Trait mapping or named service
+            // Trait mapping or named trait service
             let trait_part = provider_str[..arrow_pos].trim();
             let impl_part = provider_str[arrow_pos + 4..].trim();
             
@@ -175,11 +189,11 @@ impl ProviderConfigurator {
                 trait_part.to_string()
             };
             
-            // Check for named service (@ symbol)
+            // Check for named trait service (@ symbol)
             if let Some(at_pos) = impl_part.find(" @ ") {
                 let impl_name = impl_part[..at_pos].trim().to_string();
-                let service_name = impl_part[at_pos + 3..].trim().to_string();
-                Ok(ProviderMetadata::named(impl_name, service_name))
+                let name = impl_part[at_pos + 3..].trim().to_string();
+                Ok(ProviderMetadata::named_trait(trait_name, impl_name, name))
             } else {
                 Ok(ProviderMetadata::trait_impl(trait_name, impl_part.to_string()))
             }
@@ -195,8 +209,8 @@ impl ProviderConfigurator {
             if provider.lifetime.is_none() {
                 let service_name = match &provider.service_type {
                     ProviderType::Concrete(name) => name,
-                    ProviderType::Trait(_, impl_name) => impl_name,
-                    ProviderType::Named(service_name, _) => service_name,
+                    ProviderType::Trait { impl_name, .. } => impl_name,
+                    ProviderType::NamedTrait { impl_name, .. } => impl_name,
                 };
                 
                 let lifetime = self.conventions.get_lifetime_for_type(service_name);
@@ -208,37 +222,61 @@ impl ProviderConfigurator {
     
     /// Validate all dependencies can be resolved
     pub fn validate_dependencies(&self) -> Result<(), DependencyError> {
-        // Build service registry
+        // Build service registry with proper keys for different provider types
         let mut services: HashMap<String, &ProviderMetadata> = HashMap::new();
+        let mut named_services: HashMap<String, &ProviderMetadata> = HashMap::new();
         
+        // Register services by their resolution keys
         for provider in &self.providers {
-            let service_name = match &provider.service_type {
-                ProviderType::Concrete(name) => name.clone(),
-                ProviderType::Trait(trait_name, _) => trait_name.clone(),
-                ProviderType::Named(_, name) => name.clone(),
-            };
-            services.insert(service_name, provider);
+            match &provider.service_type {
+                ProviderType::Concrete(name) => {
+                    services.insert(name.clone(), provider);
+                }
+                ProviderType::Trait { trait_name, .. } => {
+                    services.insert(trait_name.clone(), provider);
+                }
+                ProviderType::NamedTrait { trait_name, name, .. } => {
+                    // Named services can be resolved both by trait name and by qualified name
+                    let qualified_name = format!("{}@{}", trait_name, name);
+                    services.insert(qualified_name.clone(), provider);
+                    named_services.insert(name.clone(), provider);
+                    
+                    // Also make available by trait name if no other implementation exists
+                    if !services.contains_key(trait_name) {
+                        services.insert(trait_name.clone(), provider);
+                    }
+                }
+            }
         }
         
         // Check each service's dependencies
         for provider in &self.providers {
-            let service_name = match &provider.service_type {
-                ProviderType::Concrete(name) => name.clone(),
-                ProviderType::Trait(trait_name, _) => trait_name.clone(),
-                ProviderType::Named(_, name) => name.clone(),
-            };
+            let service_key = self.get_service_key(&provider.service_type);
             
             for dependency in &provider.dependencies {
-                if !services.contains_key(dependency) {
+                // Try to resolve dependency in multiple ways:
+                // 1. Direct service name
+                // 2. Named service lookup
+                // 3. Qualified name lookup
+                let dep_provider = services.get(dependency)
+                    .or_else(|| named_services.get(dependency))
+                    .or_else(|| {
+                        // Try to find by qualified name pattern (trait@name)
+                        if dependency.contains('@') {
+                            services.get(dependency)
+                        } else {
+                            None
+                        }
+                    });
+                
+                if let Some(dep_provider) = dep_provider {
+                    // Check lifetime compatibility
+                    self.validate_lifetime_compatibility(provider, dep_provider, &service_key, dependency)?;
+                } else {
                     return Err(DependencyError::MissingDependency {
-                        service: service_name.clone(),
+                        service: service_key,
                         dependency: dependency.clone(),
                     });
-                }
-                
-                // Check lifetime compatibility
-                if let Some(dep_provider) = services.get(dependency) {
-                    self.validate_lifetime_compatibility(provider, dep_provider, &service_name, dependency)?;
                 }
             }
         }
@@ -247,6 +285,17 @@ impl ProviderConfigurator {
         self.detect_circular_dependencies(&services)?;
         
         Ok(())
+    }
+    
+    /// Get the service key for dependency resolution
+    fn get_service_key(&self, provider_type: &ProviderType) -> String {
+        match provider_type {
+            ProviderType::Concrete(name) => name.clone(),
+            ProviderType::Trait { trait_name, .. } => trait_name.clone(),
+            ProviderType::NamedTrait { trait_name, name, .. } => {
+                format!("{}@{}", trait_name, name)
+            }
+        }
     }
     
     /// Validate service lifetime compatibility
@@ -358,11 +407,11 @@ impl ProviderConfigurator {
                     // to actually register the concrete types
                     self.register_concrete_service(service_type, lifetime)?;
                 }
-                ProviderType::Trait(trait_type, impl_type) => {
-                    self.register_trait_service(trait_type, impl_type, lifetime)?;
+                ProviderType::Trait { trait_name, impl_name } => {
+                    self.register_trait_service(trait_name, impl_name, lifetime)?;
                 }
-                ProviderType::Named(service_type, name) => {
-                    self.register_named_service(service_type, name, lifetime)?;
+                ProviderType::NamedTrait { trait_name, impl_name, name } => {
+                    self.register_named_trait_service(trait_name, impl_name, name, lifetime)?;
                 }
             }
         }
@@ -391,16 +440,17 @@ impl ProviderConfigurator {
         Ok(())
     }
     
-    /// Register a named service (placeholder implementation)
-    fn register_named_service(
+    /// Register a named trait service (placeholder implementation)
+    fn register_named_trait_service(
         &mut self,
-        _service_type: &str,
+        _trait_name: &str,
+        _impl_name: &str,
         _name: &str,
         _lifetime: ServiceLifetime,
     ) -> Result<(), ConfigError> {
-        // TODO: Implement actual named service registration using codegen or reflection
+        // TODO: Implement actual named trait service registration using codegen or reflection
         // For now, this is a placeholder that would be filled in with actual
-        // container.bind_named::<ServiceType>(name) calls
+        // container.bind_named_trait::<TraitType, ImplType>(name) calls
         Ok(())
     }
     
@@ -442,7 +492,7 @@ mod tests {
         let provider = configurator.parse_provider_declaration("dyn EmailService => SmtpEmailService").unwrap();
         
         match provider.service_type {
-            ProviderType::Trait(trait_name, impl_name) => {
+            ProviderType::Trait { trait_name, impl_name } => {
                 assert_eq!(trait_name, "EmailService");
                 assert_eq!(impl_name, "SmtpEmailService");
             }
@@ -451,16 +501,17 @@ mod tests {
     }
     
     #[test]
-    fn test_parse_named_provider() {
+    fn test_parse_named_trait_provider() {
         let configurator = ProviderConfigurator::new(IocContainer::new());
         let provider = configurator.parse_provider_declaration("dyn EmailService => SmtpEmailService @ smtp").unwrap();
         
         match provider.service_type {
-            ProviderType::Named(service_name, name) => {
-                assert_eq!(service_name, "SmtpEmailService");
+            ProviderType::NamedTrait { trait_name, impl_name, name } => {
+                assert_eq!(trait_name, "EmailService");
+                assert_eq!(impl_name, "SmtpEmailService");
                 assert_eq!(name, "smtp");
             }
-            _ => panic!("Expected named provider"),
+            _ => panic!("Expected named trait provider"),
         }
     }
     
@@ -495,7 +546,30 @@ mod tests {
                     };
                     assert_eq!(provider.lifetime, Some(expected_lifetime));
                 }
-                _ => {}
+                ProviderType::Trait { impl_name, .. } => {
+                    let expected_lifetime = if impl_name.ends_with("Service") {
+                        ServiceLifetime::Singleton
+                    } else if impl_name.ends_with("Repository") {
+                        ServiceLifetime::Scoped
+                    } else if impl_name.ends_with("Factory") {
+                        ServiceLifetime::Transient
+                    } else {
+                        ServiceLifetime::Transient
+                    };
+                    assert_eq!(provider.lifetime, Some(expected_lifetime));
+                }
+                ProviderType::NamedTrait { impl_name, .. } => {
+                    let expected_lifetime = if impl_name.ends_with("Service") {
+                        ServiceLifetime::Singleton
+                    } else if impl_name.ends_with("Repository") {
+                        ServiceLifetime::Scoped
+                    } else if impl_name.ends_with("Factory") {
+                        ServiceLifetime::Transient
+                    } else {
+                        ServiceLifetime::Transient
+                    };
+                    assert_eq!(provider.lifetime, Some(expected_lifetime));
+                }
             }
         }
     }
@@ -586,5 +660,95 @@ mod tests {
             }
             _ => panic!("Expected CircularDependency error"),
         }
+    }
+    
+    #[test]
+    fn test_named_trait_dependency_resolution() {
+        let mut configurator = ProviderConfigurator::new(IocContainer::new());
+        
+        // Create a named trait provider and a service that depends on it
+        configurator.providers.push(
+            ProviderMetadata::named_trait(
+                "EmailService".to_string(),
+                "SmtpEmailService".to_string(),
+                "smtp".to_string()
+            )
+        );
+        
+        // UserController depends on EmailService@smtp (qualified name)
+        configurator.providers.push(
+            ProviderMetadata::concrete("UserController".to_string())
+                .with_dependency("EmailService@smtp".to_string()),
+        );
+        
+        // NotificationService depends on EmailService (should resolve to the named trait)
+        configurator.providers.push(
+            ProviderMetadata::concrete("NotificationService".to_string())
+                .with_dependency("EmailService".to_string()),
+        );
+        
+        let result = configurator.validate_dependencies();
+        assert!(result.is_ok(), "Dependency validation should succeed for named traits");
+    }
+    
+    #[test]
+    fn test_multiple_named_trait_implementations() {
+        let mut configurator = ProviderConfigurator::new(IocContainer::new());
+        
+        // Create multiple named implementations of the same trait
+        configurator.providers.push(
+            ProviderMetadata::named_trait(
+                "EmailService".to_string(),
+                "SmtpEmailService".to_string(),
+                "smtp".to_string()
+            )
+        );
+        
+        configurator.providers.push(
+            ProviderMetadata::named_trait(
+                "EmailService".to_string(),
+                "SendGridEmailService".to_string(),
+                "sendgrid".to_string()
+            )
+        );
+        
+        // Controller depending on specific named implementation
+        configurator.providers.push(
+            ProviderMetadata::concrete("UserController".to_string())
+                .with_dependency("EmailService@smtp".to_string()),
+        );
+        
+        // Another controller depending on different implementation
+        configurator.providers.push(
+            ProviderMetadata::concrete("AdminController".to_string())
+                .with_dependency("EmailService@sendgrid".to_string()),
+        );
+        
+        let result = configurator.validate_dependencies();
+        assert!(result.is_ok(), "Multiple named trait implementations should resolve correctly");
+    }
+    
+    #[test]
+    fn test_service_key_generation() {
+        let configurator = ProviderConfigurator::new(IocContainer::new());
+        
+        // Test concrete service key
+        let concrete_key = configurator.get_service_key(&ProviderType::Concrete("UserService".to_string()));
+        assert_eq!(concrete_key, "UserService");
+        
+        // Test trait service key
+        let trait_key = configurator.get_service_key(&ProviderType::Trait {
+            trait_name: "EmailService".to_string(),
+            impl_name: "SmtpEmailService".to_string(),
+        });
+        assert_eq!(trait_key, "EmailService");
+        
+        // Test named trait service key
+        let named_key = configurator.get_service_key(&ProviderType::NamedTrait {
+            trait_name: "EmailService".to_string(),
+            impl_name: "SmtpEmailService".to_string(),
+            name: "smtp".to_string(),
+        });
+        assert_eq!(named_key, "EmailService@smtp");
     }
 }

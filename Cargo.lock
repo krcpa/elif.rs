@@ -1445,7 +1445,7 @@ dependencies = [
  "async-trait",
  "elif-auth",
  "elif-cache",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "elif-http 0.8.2",
  "elif-macros",
  "elif-orm 0.7.0",
@@ -1466,7 +1466,7 @@ dependencies = [
  "base32",
  "bcrypt",
  "chrono",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "elif-orm 0.7.0",
  "jsonwebtoken",
  "qrcode",
@@ -1493,7 +1493,7 @@ dependencies = [
  "chrono",
  "criterion",
  "dashmap",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "futures",
  "hex",
  "lru",
@@ -1517,7 +1517,7 @@ name = "elif-codegen"
 version = "0.4.0"
 dependencies = [
  "anyhow",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "regex",
  "serde",
  "serde_yaml",
@@ -1545,7 +1545,7 @@ dependencies = [
 
 [[package]]
 name = "elif-core"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1568,7 +1568,7 @@ dependencies = [
 name = "elif-core-derive"
 version = "0.1.0"
 dependencies = [
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -1584,7 +1584,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "chrono",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "elif-queue",
  "flate2",
  "lettre",
@@ -1651,7 +1651,7 @@ dependencies = [
  "chrono",
  "ctor",
  "elif-auth",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "elif-http-derive",
  "elif-testing 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-util",
@@ -1684,7 +1684,7 @@ name = "elif-http-derive"
 version = "0.2.0"
 dependencies = [
  "async-trait",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "elif-http 0.8.2",
  "proc-macro2",
  "quote",
@@ -1697,7 +1697,7 @@ name = "elif-introspect"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "serde",
  "serde_json",
 ]
@@ -1723,7 +1723,7 @@ dependencies = [
  "anyhow",
  "axum",
  "chrono",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "elif-http 0.8.2",
  "elif-openapi-derive",
  "elif-orm 0.7.0",
@@ -1765,7 +1765,7 @@ dependencies = [
  "chrono",
  "criterion",
  "dashmap",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "once_cell",
  "rand 0.8.5",
  "serde",
@@ -1816,7 +1816,7 @@ dependencies = [
  "criterion",
  "cron",
  "dashmap",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "futures",
  "parking_lot",
  "rand 0.8.5",
@@ -1839,7 +1839,7 @@ version = "0.3.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "elif-http 0.8.2",
  "html-escape",
  "http 1.3.1",
@@ -1870,7 +1870,7 @@ dependencies = [
  "chrono",
  "criterion",
  "elif-auth",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "filetime",
  "futures",
  "image 0.24.9",
@@ -1896,7 +1896,7 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "elif-http 0.8.2",
  "elif-orm 0.7.0",
  "hyper 1.7.0",
@@ -1971,7 +1971,7 @@ dependencies = [
  "crossbeam-channel",
  "csv",
  "elif-codegen",
- "elif-core 0.6.1",
+ "elif-core 0.7.0",
  "elif-introspect",
  "elif-openapi",
  "elif-orm 0.7.0",

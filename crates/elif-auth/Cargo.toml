@@ -14,7 +14,7 @@ readme = "README.md"
 
 [dependencies]
 # Framework dependencies
-elif-core = { path = "../core", version = "0.6.0" }
+elif-core = { path = "../core", version = "0.7.0" }
 elif-orm = { path = "../orm", version = "0.7.0" }
 
 # Database
