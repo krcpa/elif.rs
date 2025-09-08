@@ -65,16 +65,22 @@ impl Parse for ParamSpec {
         let param_type = match type_name.as_str() {
             "string" => ParamType::String,
             "int" => ParamType::Int,
+            "i32" => ParamType::Int,
+            "i64" => ParamType::Int,
             "uint" => ParamType::UInt,
+            "u32" => ParamType::UInt,
+            "u64" => ParamType::UInt,
             "float" => ParamType::Float,
+            "f32" => ParamType::Float,
+            "f64" => ParamType::Float,
             "bool" => ParamType::Bool,
             "uuid" => ParamType::Uuid,
             _ => {
                 return Err(syn::Error::new_spanned(
                     type_ident,
                     format!(
-                        "Unsupported parameter type '{}'. Supported types: string, int, uint, float, bool, uuid. \
-                        Hint: Use #[param({}: string)] for string parameters or #[param({}: int)] for integer parameters.", 
+                        "Unsupported parameter type '{}'. Supported types: string, int, i32, i64, uint, u32, u64, float, f32, f64, bool, uuid. \
+                        Hint: Use #[param({}: string)] for string parameters or #[param({}: u32)] for u32 parameters.", 
                         type_name, 
                         name, 
                         name
@@ -196,6 +202,7 @@ pub fn get_recommended_param_type(param_type: &ParamType) -> &'static str {
         ParamType::Uuid => "uuid",
     }
 }
+
 
 /// Validate that function signature is compatible with the specified body type
 /// NOTE: This function is deprecated - use validate_body_param_consistency for new parameter injection system
@@ -320,7 +327,7 @@ pub fn param_impl(args: TokenStream, input: TokenStream) -> TokenStream {
             Err(err) => {
                 return syn::Error::new(
                     err.span(),
-                    format!("Invalid param specification: {}. Hint: Use #[param(id: int)] or #[param(name: string)]", err)
+                    format!("Invalid param specification: {}. Hint: Use #[param(id: u32)] or #[param(name: string)]", err)
                 )
                 .to_compile_error()
                 .into();
@@ -342,6 +349,7 @@ pub fn param_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     }
 
+    // The #[param] macro only provides metadata - actual injection is handled by HTTP method macros
     let expanded = quote! {
         #input_fn
     };
