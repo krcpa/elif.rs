@@ -22,6 +22,7 @@
 //! use elif_core::container::{ServiceToken, IocContainer};
 //! use std::sync::Arc;
 //!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Define a service trait
 //! trait EmailService: Send + Sync {
 //!     fn send(&self, to: &str, subject: &str, body: &str) -> Result<(), String>;
@@ -34,6 +35,7 @@
 //! }
 //!
 //! // Define implementations
+//! #[derive(Default)]
 //! struct SmtpEmailService;
 //! impl EmailService for SmtpEmailService {
 //!     fn send(&self, to: &str, subject: &str, body: &str) -> Result<(), String> {
@@ -44,12 +46,15 @@
 //!
 //! // Register with container
 //! let mut container = IocContainer::new();
-//! container.bind_token::<EmailNotificationToken, SmtpEmailService>();
-//! container.build().unwrap();
+//! container.bind_token::<EmailNotificationToken, SmtpEmailService>()?;
+//! container.build()?;
 //!
-//! // Resolve via token
-//! let service = container.resolve_by_token::<EmailNotificationToken>().unwrap();
-//! service.send("user@example.com", "Welcome", "Hello!")?;
+//! // Note: Trait object resolution is not yet fully implemented
+//! // This will be available in a future version:
+//! // let service = container.resolve_by_token::<EmailNotificationToken>()?;
+//! // service.send("user@example.com", "Welcome", "Hello!")?;
+//! # Ok(())
+//! # }
 //! ```
 
 use crate::container::descriptor::ServiceId;
@@ -79,6 +84,9 @@ use std::marker::PhantomData;
 ///
 /// ### Basic Trait Token
 /// ```rust
+/// use elif_core::container::ServiceToken;
+/// 
+/// trait Database: Send + Sync {}
 /// struct DatabaseToken;
 /// impl ServiceToken for DatabaseToken {
 ///     type Service = dyn Database;
@@ -87,6 +95,12 @@ use std::marker::PhantomData;
 ///
 /// ### Specialized Service Token
 /// ```rust
+/// use elif_core::container::ServiceToken;
+/// 
+/// trait CacheService: Send + Sync {
+///     fn get(&self, key: &str) -> Option<String>;
+/// }
+/// 
 /// struct CacheToken;
 /// impl ServiceToken for CacheToken {
 ///     type Service = dyn CacheService;
@@ -94,7 +108,9 @@ use std::marker::PhantomData;
 ///
 /// struct RedisCache;
 /// impl CacheService for RedisCache {
-///     // implementation
+///     fn get(&self, _key: &str) -> Option<String> {
+///         None // Mock implementation
+///     }
 /// }
 /// ```
 pub trait ServiceToken: Send + Sync + 'static {

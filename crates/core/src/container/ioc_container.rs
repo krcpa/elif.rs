@@ -614,12 +614,14 @@ impl IocContainer {
     /// }
     ///
     /// // Implementation
+    /// #[derive(Default)]
     /// struct SmtpService;
     /// impl EmailService for SmtpService {}
     ///
     /// // Bind token to implementation
     /// let mut container = IocContainer::new();
-    /// container.bind_token::<EmailToken, SmtpService>();
+    /// container.bind_token::<EmailToken, SmtpService>()?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn bind_token<Token, Impl>(&mut self) -> Result<&mut Self, CoreError>
     where
@@ -752,8 +754,37 @@ impl IocContainer {
     ///
     /// ## Example
     /// ```rust
-    /// let service = container.resolve_by_token::<EmailToken>()?;
-    /// service.send("user@example.com", "Welcome", "Hello world!");
+    /// use std::sync::Arc;
+    /// use elif_core::container::{IocContainer, ServiceToken};
+    ///
+    /// // Define service trait and token
+    /// trait EmailService: Send + Sync {
+    ///     fn send(&self, to: &str, subject: &str, body: &str) -> Result<(), String>;
+    /// }
+    /// struct EmailToken;
+    /// impl ServiceToken for EmailToken {
+    ///     type Service = dyn EmailService;
+    /// }
+    ///
+    /// // Implementation
+    /// #[derive(Default)]
+    /// struct SmtpService;
+    /// impl EmailService for SmtpService {
+    ///     fn send(&self, _to: &str, _subject: &str, _body: &str) -> Result<(), String> {
+    ///         Ok(()) // Mock implementation
+    ///     }
+    /// }
+    ///
+    /// // Setup and resolve
+    /// let mut container = IocContainer::new();
+    /// container.bind_token::<EmailToken, SmtpService>()?;
+    /// container.build()?;
+    /// 
+    /// // Note: Trait object resolution is not yet fully implemented
+    /// // This will be available in a future version:
+    /// // let service: Arc<dyn EmailService> = container.resolve_by_token::<EmailToken>()?;
+    /// // service.send("user@example.com", "Welcome", "Hello world!")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn resolve_by_token<Token>(&self) -> Result<Arc<Token::Service>, CoreError>
     where
