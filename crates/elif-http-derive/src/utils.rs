@@ -229,10 +229,18 @@ pub fn extract_middleware_from_attrs(attrs: &[Attribute]) -> Vec<String> {
 pub fn convert_param_type_to_routing(param_type: &str) -> String {
     match param_type {
         "string" => "String".to_string(),
+        "String" => "String".to_string(),
         "int" => "Integer".to_string(),
+        "i32" => "Integer".to_string(),
+        "i64" => "Integer".to_string(),
         "uint" => "Integer".to_string(),
+        "u32" => "Integer".to_string(),
+        "u64" => "Integer".to_string(),
         "uuid" => "Uuid".to_string(),
+        "Uuid" => "Uuid".to_string(),
         "float" => "String".to_string(), // Float not in routing::ParamType yet
+        "f32" => "String".to_string(),
+        "f64" => "String".to_string(),
         "bool" => "String".to_string(),  // Bool not in routing::ParamType yet
         _ => "String".to_string(),       // Default fallback
     }

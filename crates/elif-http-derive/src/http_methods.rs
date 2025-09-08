@@ -207,12 +207,12 @@ fn generate_injected_method(
                     syn::Pat::Ident(pat_ident) => {
                         let param_name = pat_ident.ident.to_string();
 
-                        // Handle underscore-prefixed parameters as intentionally unused
-                        if param_name.starts_with('_') {
-                            // Skip validation for underscore-prefixed parameters
-                            let param_ident = &pat_ident.ident;
+                        // Check parameter type and role
+                        if param_type_str.contains("ElifRequest") {
+                            // This is the request parameter - pass it through
+                            call_args.push(quote! { request });
                             modified_inputs.push(input.clone());
-                            call_args.push(quote! { #param_ident });
+                            has_existing_request_param = true;
                         } else if path_params.contains(&param_name) {
                             // This is a path parameter - generate extraction code
                             let param_ident = &pat_ident.ident;
@@ -225,11 +225,6 @@ fn generate_injected_method(
                         });
                             call_args.push(quote! { #param_ident });
                             modified_inputs.push(input.clone());
-                        } else if param_type_str.contains("ElifRequest") {
-                            // This is the request parameter - pass it through
-                            call_args.push(quote! { request });
-                            modified_inputs.push(input.clone());
-                            has_existing_request_param = true;
                         } else if let Some((body_param_name, _)) = &body_param {
                             if param_name == *body_param_name {
                                 // This is a body parameter - will be handled below
@@ -471,20 +466,33 @@ fn get_extraction_method(
     // Check if we have explicit type information from #[param] attribute
     if let Some(param_type) = param_types.get(param_name) {
         return match param_type.as_str() {
-            "Integer" => quote::format_ident!("path_param_int"),
+            "Integer" => {
+                // For Integer type, check the actual Rust type to determine extraction method
+                if rust_type.contains("u32") {
+                    quote::format_ident!("path_param_u32")
+                } else if rust_type.contains("u64") {
+                    quote::format_ident!("path_param_u64")
+                } else if rust_type.contains("i64") {
+                    quote::format_ident!("path_param_i64")
+                } else {
+                    quote::format_ident!("path_param_int") // default to i32
+                }
+            },
             "String" => quote::format_ident!("path_param_string"),
-            "Uuid" => quote::format_ident!("path_param_uuid"), // UUID should be parsed with its specific method
-            _ => quote::format_ident!("path_param_string"),    // Default to string
+            "Uuid" => quote::format_ident!("path_param_uuid"),
+            _ => quote::format_ident!("path_param_string"), // Default to string
         };
     }
 
     // Fall back to inferring from Rust type
-    if rust_type.contains("i32")
-        || rust_type.contains("u32")
-        || rust_type.contains("i64")
-        || rust_type.contains("u64")
-    {
+    if rust_type.contains("i32") {
         quote::format_ident!("path_param_int")
+    } else if rust_type.contains("u32") {
+        quote::format_ident!("path_param_u32")
+    } else if rust_type.contains("i64") {
+        quote::format_ident!("path_param_i64")
+    } else if rust_type.contains("u64") {
+        quote::format_ident!("path_param_u64")
     } else {
         quote::format_ident!("path_param_string")
     }
