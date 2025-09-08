@@ -1,3 +1,4 @@
+pub mod bootstrap;
 pub mod config;
 pub mod container;
 pub mod errors;
@@ -8,6 +9,10 @@ pub mod providers;
 pub mod specs;
 
 // Re-export key types for convenience (specific exports to avoid ambiguity)
+pub use bootstrap::{
+    AutoConfigBuilder, ConfigError as BootstrapConfigError, ConfigurationRule, ContainerAutoConfig, ProviderConfigurator,
+    ValidationReport as BootstrapValidationReport,
+};
 pub use errors::{ApiError, ApiErrorResponse, CoreError, ErrorDefinition};
 pub use foundation::{
     Finalizable, FrameworkComponent, Initializable, LifecycleManager, LifecycleState,

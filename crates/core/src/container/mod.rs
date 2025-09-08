@@ -2,6 +2,7 @@
 pub mod activation_strategy_test;
 pub mod advanced_binding_examples;
 pub mod api_demo;
+pub mod auto_config;
 pub mod autowiring;
 pub mod autowiring_example;
 pub mod binding;
@@ -84,4 +85,10 @@ pub use validation::{
 };
 pub use visualization::{
     DependencyVisualizer, ServiceExplorer, VisualizationFormat, VisualizationStyle,
+};
+
+// Auto-configuration exports
+pub use auto_config::{
+    AutoConfigBuilder, ContainerAutoConfig, ValidationIssue, ConfigurationRule,
+    ValidationReport as AutoConfigValidationReport,
 };
