@@ -263,16 +263,6 @@ my-app/
 └── Cargo.toml                   # Minimal dependencies
 ```
 
-## 🚀 Performance - Great DX, Rust Speed
-
-**Benchmarks**:
-- **200k+ req/sec** - Simple JSON endpoints
-- **150k req/sec** - Full middleware pipeline  
-- **100k req/sec** - Database queries with ORM
-- **~5μs** - Request routing overhead
-- **~10μs** - Dependency injection overhead
-
-Built on **Axum + Hyper** for production performance with **zero runtime cost** from our high-level abstractions.
 
 ## 🧪 Framework-Native Testing
 
@@ -320,18 +310,6 @@ async fn test_user_api() {
 
 ## 🗺️ Current State (v0.8.2+)
 
-### ✅ **Production Ready**
-- **Zero-boilerplate bootstrap** with `#[elif::bootstrap]` macro
-- **Advanced modular system** with automatic discovery and optimization
-- **Provider auto-configuration** with intelligent dependency resolution
-- **Controller auto-registration** with performance optimization
-- **Route conflict detection** integrated with bootstrap system
-- **Declarative controllers** with 70% less boilerplate
-- **Full dependency injection** with compile-time validation
-- **Type-safe ORM** with PostgreSQL support
-- **Comprehensive middleware system** with built-in security
-- **Hot reload development** with `elifrs serve --reload`
-- **Complete CLI tooling** with enhanced generators (v0.10.3)
 
 ### 🔄 **Coming in v0.9.0** 
 - **WebSocket channels** for real-time features
@@ -340,33 +318,8 @@ async fn test_user_api() {
 - **Enhanced ORM relationships** with eager loading optimization
 - **Background job processing** with Redis/database queues
 
-## 🤝 Contributing
 
-elif.rs is built by the community, for the community. We welcome contributions!
 
-**Quick Start for Contributors**:
-1. Fork the repository
-2. Check [current issues](https://github.com/krcpa/elif.rs/issues) and [roadmap](https://github.com/krcpa/elif.rs/projects)
-3. Join our [Discord](https://discord.gg/elifrs) for discussions
-4. AI tools encouraged for development! 🤖
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-
-## 📚 Documentation & Learning
-
-- 🚀 **[5-Minute Quickstart](docs/getting-started/zero-boilerplate-quickstart.md)** - Complete API in 5 minutes
-- 📖 **[Bootstrap Guide](docs/getting-started/bootstrap-macro.md)** - Master the `#[elif::bootstrap]` macro
-- 🏗️ **[Framework Guide](CLAUDE.md)** - Comprehensive development documentation  
-- 📋 **[Examples](examples/)** - Working code examples for every feature
-- 🔗 **[API Reference](https://docs.rs/elif-http)** - Complete API documentation
-- 🎯 **[AI Patterns](mcp-patterns/)** - Optimized patterns for AI development
-
-## 💬 Community & Support
-
-- 💭 **[Discord](https://discord.gg/elifrs)** - Community chat and support
-- 🐛 **[GitHub Issues](https://github.com/krcpa/elif.rs/issues)** - Bug reports and feature requests  
-- 📖 **[Discussions](https://github.com/krcpa/elif.rs/discussions)** - Questions and community help
-- 🐦 **[Twitter](https://twitter.com/elif_rs)** - Updates and announcements
 
 ## 📄 License
 
@@ -376,10 +329,9 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 <p align="center">
 <strong>elif.rs</strong><br>
-Convention over Configuration • Zero Boilerplate • AI-Native • Production Ready<br>
+Convention over Configuration • Zero Boilerplate • AI-Native<br>
 <br>
 <a href="https://elif.rs">elif.rs</a> • 
 <a href="https://github.com/krcpa/elif.rs">GitHub</a> • 
-<a href="https://docs.rs/elif-http">Docs</a> • 
-<a href="https://discord.gg/elifrs">Discord</a>
+<a href="https://docs.rs/elif-http">Docs</a>
 </p>
