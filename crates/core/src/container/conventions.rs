@@ -99,7 +99,7 @@ impl ServiceConventions {
     }
 
     /// Get lifetime for a service type name
-    pub fn get_lifetime_for_type(&self, type_name: &str) -> ServiceScope {
+    pub fn get_lifetime_for_type(&self, type_name: &str) -> crate::container::ServiceLifetime {
         // Check custom rules first (higher priority)
         for rule in &self.custom_rules {
             if let Some(lifetime) = rule.get_lifetime(type_name) {
