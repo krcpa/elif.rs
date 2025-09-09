@@ -1188,7 +1188,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-elif = {{ git = "https://github.com/krcpa/elif.rs" }}
+elif = "0.8.4"
 serde = {{ version = "1.0", features = ["derive"] }}
 tokio = {{ version = "1.0", features = ["full"] }}
 

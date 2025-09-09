@@ -1,6 +1,6 @@
 [package]
 name = "elifrs"
-version = "0.11.2"
+version = "0.11.3"
 edition = "2021"
 description = "elif.rs CLI - Convention over configuration web framework tooling with zero-boilerplate project generation"
 license = "MIT"

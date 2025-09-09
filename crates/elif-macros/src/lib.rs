@@ -72,7 +72,7 @@ pub fn main(_args: TokenStream, input: TokenStream) -> TokenStream {
                 let _ = env_logger::try_init();
                 
                 // Define the original async function inline
-                async fn #fn_name(#fn_inputs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> #fn_block
+                async fn #fn_name(#fn_inputs) -> Result<(), Box<dyn std::error::Error>> #fn_block
                 
                 // Run it and handle errors
                 match #fn_name().await {
@@ -344,15 +344,19 @@ pub fn bootstrap(args: TokenStream, input: TokenStream) -> TokenStream {
         // Backward compatibility: use AppModule::bootstrap()
         quote! {
             let bootstrapper = #app_module::bootstrap()
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
                 #config_setup
                 #middleware_setup;
         }
     } else {
-        // New auto-discovery mode: use AppBootstrapper directly
+        // New auto-discovery mode: use AppBootstrapper through elif prelude
         quote! {
-            let bootstrapper = elif_http::bootstrap::AppBootstrapper::new()
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+            let bootstrapper = {
+                // Import AppBootstrapper in local scope to avoid import issues
+                use elif::prelude::AppBootstrapper;
+                AppBootstrapper::new()
+            }
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
                 #config_setup
                 #middleware_setup;
         }
@@ -370,7 +374,7 @@ pub fn bootstrap(args: TokenStream, input: TokenStream) -> TokenStream {
             let _ = env_logger::try_init();
             
             // Define the original async function inline for any custom setup
-            async fn #fn_name(#fn_inputs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            async fn #fn_name(#fn_inputs) -> Result<(), Box<dyn std::error::Error>> {
                 // Generate bootstrap code (auto-discovery or backward compatibility)
                 #bootstrap_code
                 
@@ -378,7 +382,7 @@ pub fn bootstrap(args: TokenStream, input: TokenStream) -> TokenStream {
                 bootstrapper
                     .listen(#address.parse().expect("Invalid socket address"))
                     .await
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
                 
                 Ok(())
             }
