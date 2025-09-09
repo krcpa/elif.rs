@@ -27,6 +27,26 @@ cargo run
 
 Your API server starts at `http://localhost:3000` with **zero configuration** 🎉
 
+## 🆕 Zero-Boilerplate Bootstrap
+
+The new `#[elif::bootstrap]` macro requires **zero configuration**:
+
+```rust
+use elif::prelude::*;
+
+#[elif::bootstrap]  // ← That's it!
+async fn main() -> Result<(), HttpError> {
+    // Everything happens automatically:
+    // ✨ Controllers auto-discovered
+    // ✨ Dependencies auto-injected  
+    // ✨ Routes auto-registered
+    // ✨ Server auto-started
+    Ok(())
+}
+```
+
+**No AppModule. No configuration. No boilerplate. Just works.**
+
 ## ⚡ True Zero-Boilerplate Experience
 
 Build production-ready APIs with minimal code:
@@ -106,10 +126,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### After: elif.rs Way 
 ```rust
-#[elif::bootstrap(AppModule)]
+use elif::prelude::*;
+
+#[elif::bootstrap]  // ← Zero boilerplate!
 async fn main() -> Result<(), HttpError> {
     println!("🚀 Server starting!");
-    // Everything automatic!
+    // Everything automatic:
+    // - Controllers auto-discovered and registered
+    // - IoC container auto-configured
+    // - Router setup automatically
+    // - Server starts on 127.0.0.1:3000
+    Ok(())
 }
 ```
 
@@ -120,13 +147,15 @@ async fn main() -> Result<(), HttpError> {
 Need custom settings? elif.rs scales with your needs:
 
 ```rust
-// Development setup
-#[elif::bootstrap(AppModule)]
-async fn main() -> Result<(), HttpError> {}
+// Development setup - zero boilerplate!
+#[elif::bootstrap]
+async fn main() -> Result<(), HttpError> {
+    // Everything auto-configured!
+    Ok(())
+}
 
 // Production setup with custom config
 #[elif::bootstrap(
-    AppModule,
     addr = "0.0.0.0:8080",
     config = HttpConfig::production(),
     middleware = [cors(), auth(), rate_limiting(), logging()]
@@ -135,6 +164,7 @@ async fn main() -> Result<(), HttpError> {
     run_migrations().await?;
     warm_caches().await?;
     println!("🚀 Production server ready!");
+    Ok(())
 }
 ```
 
