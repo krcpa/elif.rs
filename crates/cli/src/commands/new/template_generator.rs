@@ -44,7 +44,7 @@ pub async fn generate_project_from_template(config: &ProjectConfig) -> Result<()
     println!("\n📖 Next steps:");
     println!("   cd {}", config.name);
     println!("   elifrs dev");
-    println!("\n🎯 Happy coding with elif.rs - The Laravel of Rust! 🦀");
+    println!("\n🎯 Happy coding with elif.rs - LLM-friendly Rust web development! 🦀");
     
     Ok(())
 }
