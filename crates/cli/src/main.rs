@@ -7,6 +7,7 @@ use clap::{Parser, Subcommand};
 use elif_core::ElifError;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 #[derive(Parser)]
 #[command(name = "elif")]
@@ -22,6 +23,13 @@ enum Commands {
     New {
         /// Application name
         name: String,
+    },
+
+    /// Upgrade elifrs CLI to the latest version
+    Upgrade {
+        /// Force upgrade even if already on latest version
+        #[arg(long)]
+        force: bool,
     },
 
     /// Create a new elif application with module system templates
@@ -790,6 +798,11 @@ async fn main() -> Result<(), ElifError> {
             create_new_app(&name).await?;
         }
 
+        // ========== Upgrade Command: Self-Update CLI ==========
+        Commands::Upgrade { force } => {
+            update_cli(force).await?;
+        }
+
         // ========== Original Elif.rs Command Structure ==========
         Commands::Create { create_command } => match create_command {
             CreateCommands::App {
@@ -1251,4 +1264,98 @@ Cargo.lock
     println!("   http://127.0.0.1:3000/api/hello");
     
     Ok(())
+}
+
+/// Update the elifrs CLI to the latest version
+async fn update_cli(force: bool) -> Result<(), ElifError> {
+    const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+    
+    println!("🔍 Checking for elifrs updates...");
+    println!("   Current version: v{}", CURRENT_VERSION);
+    
+    // Check latest version on crates.io
+    let output = Command::new("cargo")
+        .args(&["search", "elifrs", "--limit", "1"])
+        .output()
+        .map_err(|e| ElifError::validation(&format!("Failed to check for updates: {}", e)))?;
+    
+    if !output.status.success() {
+        return Err(ElifError::validation("Failed to query crates.io for latest version"));
+    }
+    
+    let search_output = String::from_utf8_lossy(&output.stdout);
+    let latest_version = extract_latest_version(&search_output)?;
+    
+    println!("   Latest version: v{}", latest_version);
+    
+    if !force && latest_version == CURRENT_VERSION {
+        println!("✅ You're already on the latest version!");
+        return Ok(());
+    }
+    
+    if !force && is_newer_version(&latest_version, CURRENT_VERSION)? {
+        println!("⬆️  Update available: v{} → v{}", CURRENT_VERSION, latest_version);
+    } else if force {
+        println!("🔄 Force updating to v{}", latest_version);
+    } else {
+        println!("✅ You're already on the latest version!");
+        return Ok(());
+    }
+    
+    // Perform the update
+    println!("📦 Installing elifrs v{}...", latest_version);
+    
+    let install_output = Command::new("cargo")
+        .args(&["install", "elifrs", "--force"])
+        .output()
+        .map_err(|e| ElifError::validation(&format!("Failed to install update: {}", e)))?;
+    
+    if !install_output.status.success() {
+        let error_msg = String::from_utf8_lossy(&install_output.stderr);
+        return Err(ElifError::validation(&format!("Installation failed: {}", error_msg)));
+    }
+    
+    println!("✅ Successfully updated to elifrs v{}!", latest_version);
+    println!("🎉 Run 'elifrs --version' to verify the update");
+    
+    Ok(())
+}
+
+/// Extract the latest version from cargo search output
+fn extract_latest_version(search_output: &str) -> Result<String, ElifError> {
+    // Parse output like: elifrs = "0.11.0"    # description
+    for line in search_output.lines() {
+        if line.starts_with("elifrs = ") {
+            if let Some(version_part) = line.split('"').nth(1) {
+                return Ok(version_part.to_string());
+            }
+        }
+    }
+    
+    Err(ElifError::validation("Could not parse version from crates.io response"))
+}
+
+/// Check if new_version is newer than current_version
+fn is_newer_version(new_version: &str, current_version: &str) -> Result<bool, ElifError> {
+    // Simple version comparison (assumes semantic versioning)
+    let new_parts: Vec<u32> = new_version.split('.')
+        .map(|s| s.parse().unwrap_or(0))
+        .collect();
+    let current_parts: Vec<u32> = current_version.split('.')
+        .map(|s| s.parse().unwrap_or(0))
+        .collect();
+    
+    // Compare major.minor.patch
+    for i in 0..3 {
+        let new_part = new_parts.get(i).unwrap_or(&0);
+        let current_part = current_parts.get(i).unwrap_or(&0);
+        
+        if new_part > current_part {
+            return Ok(true);
+        } else if new_part < current_part {
+            return Ok(false);
+        }
+    }
+    
+    Ok(false) // Versions are equal
 }
