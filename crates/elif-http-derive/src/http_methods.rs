@@ -225,7 +225,7 @@ fn generate_injected_method(
 
                             param_extractions.push(quote! {
                             let #param_ident = request.#extraction_method(#param_name)
-                                .map_err(|e| HttpError::bad_request(format!("Invalid parameter '{}': {:?}", #param_name, e)))?;
+                                .map_err(|e| ::elif_http::HttpError::bad_request(format!("Invalid parameter '{}': {:?}", #param_name, e)))?;
                         });
                             call_args.push(quote! { #param_ident });
                             modified_inputs.push(input.clone());
@@ -300,6 +300,23 @@ fn generate_injected_method(
         call_args.push(quote! { request });
     }
 
+    // Validate that body parameter is not used with ElifRequest parameter
+    if let Some((body_param_name, _)) = &body_param {
+        if has_existing_request_param {
+            return syn::Error::new_spanned(
+                &input_fn.sig,
+                format!(
+                    "Conflicting parameter usage: #[body({})] cannot be used with ElifRequest parameter. \
+                    The body extraction wrapper handles the request automatically. \
+                    Hint: Remove the ElifRequest parameter from the function signature when using #[body].",
+                    body_param_name
+                )
+            )
+            .to_compile_error()
+            .into();
+        }
+    }
+
     // Add body parameter extraction if present
     if let Some((body_param_name, body_param_type)) = &body_param {
         let body_param_ident = quote::format_ident!("{}", body_param_name);
@@ -309,19 +326,19 @@ fn generate_injected_method(
             BodyParamType::Custom(_) => {
                 quote! {
                     let #body_param_ident = request.json()
-                        .map_err(|e| HttpError::bad_request(format!("Invalid JSON body: {:?}", e)))?;
+                        .map_err(|e| ::elif_http::HttpError::bad_request(format!("Invalid JSON body: {:?}", e)))?;
                 }
             }
             BodyParamType::Form => {
                 quote! {
                     let #body_param_ident = request.form()
-                        .map_err(|e| HttpError::bad_request(format!("Invalid form data: {:?}", e)))?;
+                        .map_err(|e| ::elif_http::HttpError::bad_request(format!("Invalid form data: {:?}", e)))?;
                 }
             }
             BodyParamType::Bytes => {
                 quote! {
                     let #body_param_ident = request.body_bytes()
-                        .ok_or_else(|| HttpError::bad_request("No request body".to_string()))?
+                        .ok_or_else(|| ::elif_http::HttpError::bad_request("No request body".to_string()))?
                         .clone();
                 }
             }
@@ -387,7 +404,7 @@ fn generate_injected_method(
             quote! {
                 match #method_call {
                     Ok(result) => Ok(ElifResponse::ok().json(&result)?),
-                    Err(e) => Err(HttpError::internal_server_error(format!("Handler error: {:?}", e)).into()),
+                    Err(e) => Err(::elif_http::HttpError::internal_server_error(format!("Handler error: {:?}", e)).into()),
                 }
             }
         }

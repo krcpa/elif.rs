@@ -177,8 +177,8 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
                 // Auto-generated IocControllable implementation for dependency injection
                 impl ::elif_http::controller::factory::IocControllable for #self_ty {
                     fn from_ioc_container(
-                        container: &::elif_core::container::IocContainer,
-                        _scope: Option<&::elif_core::container::ScopeId>,
+                        container: &::elif_core::container::ioc_container::IocContainer,
+                        _scope: Option<&::elif_core::container::scope::ScopeId>,
                     ) -> Result<Self, String> {
                         // Auto-resolve dependencies from container
                         // This provides automatic dependency injection for common patterns
@@ -190,7 +190,7 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
                     /// Auto-generated dependency resolution method
                     /// This attempts to auto-resolve dependencies using Default implementations
                     /// Controllers can override this for custom dependency injection logic
-                    fn from_container_auto(_container: &::elif_core::container::IocContainer) -> Result<Self, String> {
+                    fn from_container_auto(_container: &::elif_core::container::ioc_container::IocContainer) -> Result<Self, String> {
                         // Attempt to create the controller using Default implementations of dependencies
                         // This works for services that implement Default trait
                         match Self::try_new_with_defaults() {
