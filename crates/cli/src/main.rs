@@ -12,6 +12,7 @@ use std::process::Command;
 #[derive(Parser)]
 #[command(name = "elif")]
 #[command(about = "LLM-friendly Rust web framework CLI")]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
