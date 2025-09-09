@@ -18,7 +18,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Create a new elif application (Laravel-style: convention over configuration)
+    /// Create a new elif application (convention over configuration)
     New {
         /// Application name
         name: String,
@@ -784,7 +784,7 @@ async fn main() -> Result<(), ElifError> {
     let cli = Cli::parse();
 
     match cli.command {
-        // ========== Laravel-style New Command: Convention Over Configuration ==========
+        // ========== New Command: Convention Over Configuration ==========
         Commands::New { name } => {
             // Zero configuration - just create a great API project with zero-boilerplate bootstrap
             create_new_app(&name).await?;
@@ -1152,7 +1152,7 @@ async fn main() -> Result<(), ElifError> {
 }
 
 /// Create a new elif application with convention over configuration
-/// Just like `laravel new app` - zero choices, great defaults
+/// Zero choices, great defaults - just works
 async fn create_new_app(name: &str) -> Result<(), ElifError> {
     println!("🚀 Creating new elif.rs application '{}'...", name);
     
