@@ -150,10 +150,11 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         
         for item in &input_impl.items {
             if let syn::ImplItem::Fn(method) = item {
-                if method.sig.ident == "new" && method.sig.inputs.len() > 1 {
+                if method.sig.ident == "new" && !method.sig.inputs.is_empty() {
                     needs_dependency_injection = true;
                     // Extract parameter types and names from constructor
-                    for (i, input) in method.sig.inputs.iter().skip(1).enumerate() { // Skip 'self' parameter
+                    // Note: new() is a static method, so no 'self' parameter to skip
+                    for (i, input) in method.sig.inputs.iter().enumerate() {
                         if let syn::FnArg::Typed(pat_type) = input {
                             if let syn::Type::Path(type_path) = &*pat_type.ty {
                                 if let Some(segment) = type_path.path.segments.last() {
