@@ -25,6 +25,16 @@ impl HttpError {
     }
 }
 
+// Define ElifError as an alias for HttpError to match the framework
+pub type ElifError = HttpError;
+
+// Add conversion from the framework's HttpError to our local HttpError
+impl From<elif_http::HttpError> for HttpError {
+    fn from(_: elif_http::HttpError) -> Self {
+        HttpError
+    }
+}
+
 impl ElifRequest {
     pub fn json<T>(&self) -> Result<T, HttpError> 
     where

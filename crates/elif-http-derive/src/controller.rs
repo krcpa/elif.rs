@@ -245,10 +245,10 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let registration_code = if needs_dependency_injection {
             quote! {
-                // For IoC controllers, provide helpful compile-time guidance
+                // For IoC controllers, skip auto-registration to avoid conflicts with manual registration
+                // They should be registered manually via router.controller() or IoC container
                 const _: () = {
-                    // This is a marker to indicate this controller needs IoC container registration
-                    // To register: router.controller_from_container::<ControllerType>()
+                    // Marker: This controller has dependencies and needs manual registration
                 };
             }
         } else {

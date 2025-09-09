@@ -12,6 +12,9 @@ pub struct ElifResponse;
 
 pub type HttpResult<T> = Result<T, String>;
 
+// Define ElifError as an alias to match the framework
+pub type ElifError = String;
+
 pub struct HttpError;
 
 impl HttpError {
@@ -43,14 +46,14 @@ pub struct DetailedController;
 impl DetailedController {
     #[get("/{id}")]
     #[param(id: u32)]
-    pub async fn show(&self, id: u32, _req: ElifRequest) -> HttpResult<ElifResponse> {
+    pub async fn show(&self, id: u32) -> HttpResult<ElifResponse> {
         println!("ID: {}", id);
         Ok(ElifResponse)
     }
 
     #[post("")]
     #[body(data: TestDto)]
-    pub async fn create(&self, data: TestDto, _req: ElifRequest) -> HttpResult<ElifResponse> {
+    pub async fn create(&self, data: TestDto) -> HttpResult<ElifResponse> {
         println!("Data: {}", data.name);
         Ok(ElifResponse)
     }
@@ -58,7 +61,7 @@ impl DetailedController {
     #[put("/{id}")]
     #[param(id: u32)]
     #[body(data: TestDto)]
-    pub async fn update(&self, id: u32, data: TestDto, _req: ElifRequest) -> HttpResult<ElifResponse> {
+    pub async fn update(&self, id: u32, data: TestDto) -> HttpResult<ElifResponse> {
         println!("ID: {}, Data: {}", id, data.name);
         Ok(ElifResponse)
     }

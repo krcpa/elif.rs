@@ -111,7 +111,7 @@ pub fn main(_args: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Bootstrap arguments for the bootstrap macro
 struct BootstrapArgs {
-    app_module: Type,
+    app_module: Option<Type>,
     address: Option<String>,
     config: Option<Expr>,
     middleware: Option<Vec<Expr>>,
@@ -119,20 +119,56 @@ struct BootstrapArgs {
 
 impl Parse for BootstrapArgs {
     fn parse(input: ParseStream) -> Result<Self> {
-        // First argument is required: the app module type
-        let app_module: Type = input.parse()?;
-        
+        let mut app_module: Option<Type> = None;
         let mut address: Option<String> = None;
         let mut config: Option<Expr> = None;
         let mut middleware: Option<Vec<Expr>> = None;
+
+        // If input is empty, use auto-discovery mode
+        if input.is_empty() {
+            return Ok(BootstrapArgs {
+                app_module: None,
+                address,
+                config,
+                middleware,
+            });
+        }
+
+        // Try to parse first argument as app module type (for backward compatibility)
+        let lookahead = input.lookahead1();
+        if lookahead.peek(syn::Ident) {
+            // Check if first token is a named parameter or a type
+            let fork = input.fork();
+            let _ident: syn::Ident = fork.parse().unwrap();
+            if fork.peek(Token![=]) {
+                // This is a named parameter, not a type - use auto-discovery
+                app_module = None;
+                // Don't consume the token here, let the main parsing loop handle it
+            } else {
+                // This looks like a type - parse it for backward compatibility
+                app_module = Some(input.parse()?);
+            }
+        } else if lookahead.peek(syn::Token![::]) || lookahead.peek(syn::Token![<]) {
+            // This is definitely a type
+            app_module = Some(input.parse()?);
+        } else if lookahead.peek(LitStr) {
+            // Legacy support: first argument is address string
+            let lit: LitStr = input.parse()?;
+            address = Some(lit.value());
+        }
         
         // Parse optional named arguments
+        let mut first_param = true;
         while !input.is_empty() {
-            let _comma: Token![,] = input.parse()?;
-            
-            if input.is_empty() {
-                break;
+            // Only expect comma if this is not the first parameter or if we parsed a type
+            if !first_param || app_module.is_some() {
+                let _comma: Token![,] = input.parse()?;
+                
+                if input.is_empty() {
+                    break;
+                }
             }
+            first_param = false;
             
             let lookahead = input.lookahead1();
             if lookahead.peek(syn::Ident) {
@@ -162,10 +198,11 @@ impl Parse for BootstrapArgs {
                                 "Unknown bootstrap parameter '{}'. Valid parameters are: addr, config, middleware\n\
                                 \n\
                                 💡 Usage examples:\n\
-                                • #[elif::bootstrap(AppModule)]\n\
-                                • #[elif::bootstrap(AppModule, addr = \"127.0.0.1:3000\")]\n\
-                                • #[elif::bootstrap(AppModule, config = my_config())]\n\
-                                • #[elif::bootstrap(AppModule, middleware = [cors(), auth()])]",
+                                • #[elif::bootstrap] (auto-discovery)\n\
+                                • #[elif::bootstrap(addr = \"127.0.0.1:3000\")]\n\
+                                • #[elif::bootstrap(config = my_config())]\n\
+                                • #[elif::bootstrap(middleware = [cors(), auth()])]\n\
+                                • #[elif::bootstrap(AppModule)] (backward compatibility)",
                                 ident_name
                             )
                         ));
@@ -192,18 +229,19 @@ impl Parse for BootstrapArgs {
 /// Enhanced bootstrap macro for zero-boilerplate application startup
 /// 
 /// This macro provides Laravel-style "convention over configuration" by automatically
-/// generating all the server setup code based on your app module.
+/// generating all the server setup code using auto-discovery of modules and controllers.
 /// 
 /// # Examples
 /// 
-/// ## Basic Bootstrap
+/// ## Zero-Boilerplate Bootstrap (NEW!)
 /// ```rust
 /// use elif::prelude::*;
 /// 
-/// #[elif::bootstrap(AppModule)]
+/// #[elif::bootstrap]
 /// async fn main() -> Result<(), HttpError> {
 ///     // Automatically generated:
 ///     // - Module discovery from compile-time registry
+///     // - Controller auto-registration from static registry
 ///     // - DI container configuration
 ///     // - Router setup with all controllers
 ///     // - Server startup on 127.0.0.1:3000
@@ -212,30 +250,35 @@ impl Parse for BootstrapArgs {
 /// 
 /// ## With Custom Address
 /// ```rust
-/// #[elif::bootstrap(AppModule, addr = "0.0.0.0:8080")]
+/// #[elif::bootstrap(addr = "0.0.0.0:8080")]
 /// async fn main() -> Result<(), HttpError> {}
 /// ```
 /// 
 /// ## With Custom Configuration
 /// ```rust
-/// #[elif::bootstrap(AppModule, config = HttpConfig::with_timeout(30))]
+/// #[elif::bootstrap(config = HttpConfig::with_timeout(30))]
 /// async fn main() -> Result<(), HttpError> {}
 /// ```
 /// 
 /// ## With Middleware
 /// ```rust
-/// #[elif::bootstrap(AppModule, middleware = [cors(), auth(), logging()])]
+/// #[elif::bootstrap(middleware = [cors(), auth(), logging()])]
 /// async fn main() -> Result<(), HttpError> {}
 /// ```
 /// 
 /// ## Full Configuration
 /// ```rust
 /// #[elif::bootstrap(
-///     AppModule, 
 ///     addr = "0.0.0.0:8080",
 ///     config = HttpConfig::production(),
 ///     middleware = [cors(), auth()]
 /// )]
+/// async fn main() -> Result<(), HttpError> {}
+/// ```
+/// 
+/// ## Backward Compatibility with AppModule
+/// ```rust
+/// #[elif::bootstrap(AppModule)]
 /// async fn main() -> Result<(), HttpError> {}
 /// ```
 #[proc_macro_attribute]
@@ -284,7 +327,6 @@ pub fn bootstrap(args: TokenStream, input: TokenStream) -> TokenStream {
     }
     
     // Generate bootstrap code
-    let app_module = &bootstrap_args.app_module;
     let address = bootstrap_args.address.as_deref().unwrap_or("127.0.0.1:3000");
     let config_setup = if let Some(config) = &bootstrap_args.config {
         quote! { .with_config(#config) }
@@ -295,6 +337,25 @@ pub fn bootstrap(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! { .with_middleware(vec![#(Box::new(#middleware)),*]) }
     } else {
         quote! {}
+    };
+    
+    // Generate different bootstrap code based on whether app_module is provided
+    let bootstrap_code = if let Some(app_module) = &bootstrap_args.app_module {
+        // Backward compatibility: use AppModule::bootstrap()
+        quote! {
+            let bootstrapper = #app_module::bootstrap()
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                #config_setup
+                #middleware_setup;
+        }
+    } else {
+        // New auto-discovery mode: use AppBootstrapper directly
+        quote! {
+            let bootstrapper = elif_http::bootstrap::AppBootstrapper::new()
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                #config_setup
+                #middleware_setup;
+        }
     };
     
     let expanded = quote! {
@@ -310,11 +371,8 @@ pub fn bootstrap(args: TokenStream, input: TokenStream) -> TokenStream {
             
             // Define the original async function inline for any custom setup
             async fn #fn_name(#fn_inputs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-                // Generate bootstrap code
-                let bootstrapper = #app_module::bootstrap()
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
-                    #config_setup
-                    #middleware_setup;
+                // Generate bootstrap code (auto-discovery or backward compatibility)
+                #bootstrap_code
                 
                 // Start the server
                 bootstrapper

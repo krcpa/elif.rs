@@ -1,11 +1,26 @@
 error: Unknown bootstrap parameter 'invalid_param'. Valid parameters are: addr, config, middleware
 
-💡 Usage examples:
-• #[elif::bootstrap(AppModule)]
-• #[elif::bootstrap(AppModule, addr = "127.0.0.1:3000")]
-• #[elif::bootstrap(AppModule, config = my_config())]
-• #[elif::bootstrap(AppModule, middleware = [cors(), auth()])]
- --> tests/ui/bootstrap_invalid_param.rs:3:25
+       💡 Usage examples:
+       • #[elif::bootstrap] (auto-discovery)
+       • #[elif::bootstrap(addr = "127.0.0.1:3000")]
+       • #[elif::bootstrap(config = my_config())]
+       • #[elif::bootstrap(middleware = [cors(), auth()])]
+       • #[elif::bootstrap(AppModule)] (backward compatibility)
+ --> tests/ui/bootstrap_invalid_param.rs:3:30
   |
 3 | #[elif::bootstrap(AppModule, invalid_param = "test")]
-  |                         ^^^^^^^^^^^^^
+  |                              ^^^^^^^^^^^^^
+
+warning: unused import: `elif::prelude::*`
+ --> tests/ui/bootstrap_invalid_param.rs:1:5
+  |
+1 | use elif::prelude::*;
+  |     ^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/ui/bootstrap_invalid_param.rs:6:2
+  |
+6 | }
+  |  ^ consider adding a `main` function to `$DIR/tests/ui/bootstrap_invalid_param.rs`

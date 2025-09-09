@@ -4,6 +4,7 @@ use elif_http::{ElifRequest, ElifResponse, HttpResult};
 use elif_http_derive::{controller, get};
 
 // Test controller just for metadata extraction
+#[derive(Default)]
 pub struct TypedController;
 
 impl TypedController {

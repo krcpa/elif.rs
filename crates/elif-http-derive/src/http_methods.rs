@@ -404,7 +404,7 @@ fn generate_injected_method(
             quote! {
                 match #method_call {
                     Ok(result) => Ok(ElifResponse::ok().json(&result)?),
-                    Err(e) => Err(::elif_http::HttpError::internal_server_error(format!("Handler error: {:?}", e)).into()),
+                    Err(e) => Err(::elif_http::HttpError::internal(format!("Handler error: {:?}", e)).into()),
                 }
             }
         }

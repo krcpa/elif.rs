@@ -1,8 +1,22 @@
 error: Bootstrap macro can only be applied to async functions
 
-💡 Change your function to:
-async fn main() -> Result<(), HttpError> {}
- --> tests/ui/bootstrap_non_async.rs:3:1
+       💡 Change your function to:
+       async fn main() -> Result<(), HttpError> {}
+ --> tests/ui/bootstrap_non_async.rs:4:1
   |
-3 | fn main() -> Result<(), HttpError> {
+4 | fn main() -> Result<(), HttpError> {
   | ^^
+
+warning: unused import: `elif::prelude::*`
+ --> tests/ui/bootstrap_non_async.rs:1:5
+  |
+1 | use elif::prelude::*;
+  |     ^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/ui/bootstrap_non_async.rs:6:2
+  |
+6 | }
+  |  ^ consider adding a `main` function to `$DIR/tests/ui/bootstrap_non_async.rs`

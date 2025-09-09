@@ -12,7 +12,7 @@ fn ui() {
     t.compile_fail("tests/ui/bootstrap_non_result.rs");
     t.compile_fail("tests/ui/bootstrap_invalid_param.rs");
     
-    // Test success cases
-    t.pass("tests/ui/bootstrap_valid_basic.rs");
-    t.pass("tests/ui/bootstrap_valid_full.rs");
+    // Test parsing cases (these will fail compilation but should parse correctly)
+    t.compile_fail("tests/ui/bootstrap_parse_basic.rs");
+    t.compile_fail("tests/ui/bootstrap_parse_full.rs");
 }

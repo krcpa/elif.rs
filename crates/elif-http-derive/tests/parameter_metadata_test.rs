@@ -4,6 +4,7 @@ use elif_http::{ElifRequest, ElifResponse, HttpResult};
 use elif_http_derive::{controller, get, post};
 
 // Test controller with various parameter scenarios
+#[derive(Default)]
 pub struct TestController;
 
 impl TestController {

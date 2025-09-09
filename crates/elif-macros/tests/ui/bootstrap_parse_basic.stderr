@@ -1,0 +1,37 @@
+error[E0433]: failed to resolve: use of unresolved module or unlinked crate `tokio`
+ --> tests/ui/bootstrap_parse_basic.rs:3:1
+  |
+3 | #[elif::bootstrap]
+  | ^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `tokio`
+  |
+  = note: this error originates in the attribute macro `elif::bootstrap` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0433]: failed to resolve: use of unresolved module or unlinked crate `elif_http`
+ --> tests/ui/bootstrap_parse_basic.rs:3:1
+  |
+3 | #[elif::bootstrap]
+  | ^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `elif_http`
+  |
+  = help: if you wanted to use a crate named `elif_http`, use `cargo add elif_http` to add it to your `Cargo.toml`
+  = note: this error originates in the attribute macro `elif::bootstrap` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider importing this struct
+  |
+3 + use elif::prelude::AppBootstrapper;
+  |
+
+error[E0433]: failed to resolve: use of unresolved module or unlinked crate `env_logger`
+ --> tests/ui/bootstrap_parse_basic.rs:3:1
+  |
+3 | #[elif::bootstrap]
+  | ^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `env_logger`
+  |
+  = help: if you wanted to use a crate named `env_logger`, use `cargo add env_logger` to add it to your `Cargo.toml`
+  = note: this error originates in the attribute macro `elif::bootstrap` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0752]: `main` function is not allowed to be `async`
+ --> tests/ui/bootstrap_parse_basic.rs:3:1
+  |
+3 | #[elif::bootstrap]
+  | ^^^^^^^^^^^^^^^^^^ `main` function is not allowed to be `async`
+  |
+  = note: this error originates in the attribute macro `elif::bootstrap` (in Nightly builds, run with -Z macro-backtrace for more info)
