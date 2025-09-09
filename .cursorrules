@@ -1,0 +1,172 @@
+# Cursor Rules for elif.rs Framework
+
+## Project Overview
+elif.rs is "The Laravel of Rust" - a web framework designed for exceptional developer experience and AI-native development. It emphasizes convention over configuration, zero boilerplate, and intuitive APIs.
+
+## Core Principles
+
+### 1. Framework Philosophy
+- **Convention Over Configuration**: Sensible defaults, minimal setup
+- **Zero Boilerplate**: Simple, obvious APIs like `router()`, `response()`
+- **AI-Friendly**: LLMs should easily understand and generate code
+- **Pure Framework Types**: Never expose Axum, Hyper, etc. to end users
+- **Spec-First**: Generate code from specifications
+
+### 2. Code Style & Patterns
+- Use descriptive function/variable names that explain intent
+- Prefer `Result<T, HttpError>` for HTTP operations
+- Use `#[derive(Default)]` for controllers to support auto-registration
+- Implement comprehensive error messages with helpful hints
+- Include usage examples in macro documentation
+
+### 3. Bootstrap System (NEWLY ENHANCED!)
+The bootstrap system now supports zero-boilerplate startup:
+
+**Zero-Boilerplate (NEW!):**
+```rust
+use elif::prelude::*;
+
+#[elif::bootstrap]
+async fn main() -> Result<(), HttpError> {
+    // Fully automatic:
+    // - Module discovery from compile-time registry
+    // - Controller auto-registration from static registry
+    // - IoC container configuration
+    // - Router setup with all controllers
+    // - Server startup on 127.0.0.1:3000
+    Ok(())
+}
+```
+
+**With Parameters:**
+```rust
+#[elif::bootstrap(addr = "0.0.0.0:8080")]
+async fn main() -> Result<(), HttpError> {}
+```
+
+**Backward Compatible:**
+```rust
+#[elif::bootstrap(AppModule)]
+async fn main() -> Result<(), HttpError> {}
+```
+
+## Architecture Guidelines
+
+### 1. Crate Structure
+- `elif-core`: DI container, modules, configuration
+- `elif-http`: HTTP server, routing, controllers, middleware
+- `elif-orm`: Database operations, models, query builder
+- `elif-macros`: Procedural macros (bootstrap, main)
+- `elif-http-derive`: Controller and routing derive macros
+- `elif`: Umbrella crate with unified API
+
+### 2. Controller System
+Controllers use auto-registration with the `#[controller]` derive:
+```rust
+#[derive(Default)] // Required for auto-registration
+#[controller(path = "/api/users")]
+pub struct UserController;
+
+impl UserController {
+    #[get("/{id}")]
+    pub async fn show(&self, id: u32) -> HttpResult<ElifResponse> {
+        // Implementation
+    }
+}
+```
+
+### 3. Module System
+Modules are defined with the `#[module]` attribute:
+```rust
+#[module(
+    controllers: [UserController],
+    providers: [UserService],
+    is_app
+)]
+pub struct AppModule;
+```
+
+## Development Guidelines
+
+### 1. When Adding New Features
+- Update relevant examples in `examples/` directory
+- Add comprehensive tests (unit + integration)
+- Update documentation with usage examples
+- Consider backward compatibility
+- Use trybuild for macro testing
+
+### 2. Error Handling
+- Use `HttpError` for HTTP-related errors
+- Provide helpful error messages with hints
+- Include "💡" emoji for suggestions in error messages
+- Convert between error types properly (e.g., `ElifError` ↔ `HttpError`)
+
+### 3. Testing Patterns
+- Use `#[derive(Default)]` for test controllers
+- Mock types should match framework patterns
+- UI tests for macros should use trybuild
+- Include both positive and negative test cases
+
+### 4. Macro Development
+- Generate clean, readable code
+- Support both new and legacy syntax for backward compatibility
+- Include comprehensive parameter validation
+- Use `quote!` for code generation
+- Test with trybuild UI tests
+
+## Common Patterns
+
+### 1. HTTP Responses
+```rust
+// Simple response
+Ok(ElifResponse::ok().json(&data)?)
+
+// With status
+Ok(ElifResponse::created().json(&user)?)
+
+// Error handling
+Err(HttpError::not_found("User not found"))
+```
+
+### 2. Middleware
+```rust
+impl Middleware for MyMiddleware {
+    fn handle(&self, req: ElifRequest, next: Next) -> Pin<Box<dyn Future<Output = HttpResult<ElifResponse>> + Send>> {
+        // Implementation
+    }
+}
+```
+
+### 3. Dependency Injection
+```rust
+#[injectable]
+pub struct UserService {
+    repo: Arc<UserRepository>,
+    cache: Option<Arc<CacheService>>,
+}
+```
+
+## File Organization
+- Keep related functionality together
+- Use descriptive module names
+- Separate concerns (HTTP, ORM, Core)
+- Examples should be runnable and educational
+
+## Documentation Standards
+- Include usage examples in all public APIs
+- Use doc comments with examples
+- Explain the "why" not just the "what"
+- Reference related concepts and patterns
+
+## Recent Major Changes
+- **Bootstrap Macro Enhancement**: Added zero-boilerplate `#[elif::bootstrap]` support
+- **Controller Auto-Registration**: Integration with static controller registry
+- **Error Type Fixes**: Proper conversion between framework error types
+- **Version Bumps**: elif-macros 0.2.0, elif 0.8.4, elif-http-derive 0.2.6
+
+## When Working on Issues
+1. Check existing patterns in the codebase
+2. Maintain backward compatibility unless breaking change is justified
+3. Add comprehensive tests
+4. Update documentation and examples
+5. Consider AI agent usability in API design
