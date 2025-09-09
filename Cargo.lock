@@ -1681,7 +1681,7 @@ dependencies = [
 
 [[package]]
 name = "elif-http-derive"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "async-trait",
  "ctor",
@@ -1689,6 +1689,7 @@ dependencies = [
  "elif-http 0.8.2",
  "proc-macro2",
  "quote",
+ "serde",
  "syn 2.0.106",
  "trybuild",
 ]

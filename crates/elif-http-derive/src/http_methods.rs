@@ -69,11 +69,15 @@ pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStrea
         && has_self
         && has_param_annotations
         && has_injectable_params(&fn_params, &path_params);
-    let needs_validation = !path_params.is_empty() && has_self && has_param_annotations;
+    let needs_validation = has_self && (
+        (!path_params.is_empty() && has_param_annotations) || 
+        has_body_attr || 
+        has_request_attr
+    );
     let needs_injection =
         has_path_param_injection || (has_self && has_request_attr) || (has_self && has_body_attr);
 
-    // Perform validation if we have path parameters and param annotations, even if injection is not needed
+    // Perform validation if we have path parameters, body attributes, or request attributes
     if needs_validation {
         let body_param = extract_body_param_from_attrs(&input_fn.attrs);
 
@@ -304,20 +308,21 @@ fn generate_injected_method(
         let body_extraction = match body_param_type {
             BodyParamType::Custom(_) => {
                 quote! {
-                    let #body_param_ident = request.json().await
+                    let #body_param_ident = request.json()
                         .map_err(|e| HttpError::bad_request(format!("Invalid JSON body: {:?}", e)))?;
                 }
             }
             BodyParamType::Form => {
                 quote! {
-                    let #body_param_ident = request.form().await
+                    let #body_param_ident = request.form()
                         .map_err(|e| HttpError::bad_request(format!("Invalid form data: {:?}", e)))?;
                 }
             }
             BodyParamType::Bytes => {
                 quote! {
-                    let #body_param_ident = request.bytes().await
-                        .map_err(|e| HttpError::bad_request(format!("Failed to read body bytes: {:?}", e)))?;
+                    let #body_param_ident = request.body_bytes()
+                        .ok_or_else(|| HttpError::bad_request("No request body".to_string()))?
+                        .clone();
                 }
             }
         };
@@ -526,17 +531,15 @@ fn validate_method_consistency(
                     Pat::Ident(PatIdent { ident, .. }) => {
                         let param_name = ident.to_string();
 
-                        // Handle underscore-prefixed identifiers as intentionally unused
-                        if param_name.starts_with('_') {
-                            // These are explicitly marked as unused, treat like wildcards
-                            // Don't add to fn_params to avoid validation issues
+                        // Check for ElifRequest type regardless of underscore prefix
+                        if param_type_str.contains("ElifRequest") {
+                            has_request_param = true;
+                        } else if param_name.starts_with('_') {
+                            // These are explicitly marked as unused, don't add to fn_params
+                            // but still check for type conflicts above
                         } else {
                             // Regular parameter processing
-                            if param_type_str.contains("ElifRequest") {
-                                has_request_param = true;
-                            } else {
-                                fn_params.insert(param_name, param_type_str);
-                            }
+                            fn_params.insert(param_name, param_type_str);
                         }
                     }
 
@@ -634,6 +637,16 @@ fn validate_method_consistency(
                 "Body parameter '{}' specified in #[body] but missing from function signature. \
                 Hint: Add '{}: SomeType' to the function parameters.",
                 body_param_name, body_param_name
+            ));
+        }
+        
+        // Validation 5a: Body parameter cannot coexist with ElifRequest parameter
+        if has_request_param {
+            return Err(format!(
+                "Conflicting parameter usage: #[body({})] cannot be used with ElifRequest parameter. \
+                The body extraction wrapper handles the request automatically. \
+                Hint: Remove the ElifRequest parameter from the function signature when using #[body].",
+                body_param_name
             ));
         }
     }
