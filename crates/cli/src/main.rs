@@ -5,6 +5,8 @@ mod utils;
 
 use clap::{Parser, Subcommand};
 use elif_core::ElifError;
+use std::fs;
+use std::path::Path;
 
 #[derive(Parser)]
 #[command(name = "elif")]
@@ -16,28 +18,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Create a new elif application (Laravel-style: interactive wizard)
+    /// Create a new elif application (Laravel-style: convention over configuration)
     New {
-        /// Application name (optional - will prompt if not provided)
-        name: Option<String>,
-        
-        /// Skip interactive mode and use defaults
-        #[arg(long)]
-        non_interactive: bool,
-        
-        /// Project type (api, web, microservice, cli, minimal)
-        #[arg(long)]
-        project_type: Option<String>,
-        
-        /// Target directory (optional)
-        #[arg(long)]
-        path: Option<String>,
-        
-        /// Template type (api, web, minimal)  
-        #[arg(long)]
-        template: Option<String>,
-        
-        // Module system is always enabled
+        /// Application name
+        name: String,
     },
 
     /// Create a new elif application with module system templates
@@ -800,25 +784,10 @@ async fn main() -> Result<(), ElifError> {
     let cli = Cli::parse();
 
     match cli.command {
-        // ========== Interactive Laravel-style New Command ==========
-        Commands::New {
-            name,
-            non_interactive,
-            project_type: _,
-            path,
-            template,
-            // modules always enabled
-        } => {
-            if non_interactive {
-                // Use provided arguments or defaults for non-interactive mode
-                let app_name = name.unwrap_or_else(|| "my-app".to_string());
-                let app_template = template.unwrap_or_else(|| "api".to_string());
-                
-                commands::create::app(&app_name, path.as_deref(), &app_template).await?;
-            } else {
-                // Run interactive wizard
-                commands::new::run_simple_wizard().await?;
-            }
+        // ========== Laravel-style New Command: Convention Over Configuration ==========
+        Commands::New { name } => {
+            // Zero configuration - just create a great API project with zero-boilerplate bootstrap
+            create_new_app(&name).await?;
         }
 
         // ========== Original Elif.rs Command Structure ==========
@@ -1179,5 +1148,107 @@ async fn main() -> Result<(), ElifError> {
         },
     }
 
+    Ok(())
+}
+
+/// Create a new elif application with convention over configuration
+/// Just like `laravel new app` - zero choices, great defaults
+async fn create_new_app(name: &str) -> Result<(), ElifError> {
+    println!("🚀 Creating new elif.rs application '{}'...", name);
+    
+    // Create project directory
+    let project_path = Path::new(name);
+    if project_path.exists() {
+        return Err(ElifError::Validation {
+            message: format!("Directory '{}' already exists", name),
+        });
+    }
+    
+    fs::create_dir_all(project_path.join("src"))?;
+    fs::create_dir_all(project_path.join("src/controllers"))?;
+    
+    // Create Cargo.toml with sensible defaults
+    let cargo_toml = format!(r#"[package]
+name = "{}"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+elif = {{ git = "https://github.com/krcpa/elif.rs" }}
+serde = {{ version = "1.0", features = ["derive"] }}
+tokio = {{ version = "1.0", features = ["full"] }}
+
+[dev-dependencies]
+"#, name);
+    
+    fs::write(project_path.join("Cargo.toml"), cargo_toml)?;
+    
+    // Create main.rs with zero-boilerplate bootstrap
+    let main_rs = format!(r#"use elif::prelude::*;
+
+#[elif::bootstrap]
+async fn main() -> Result<(), HttpError> {{
+    println!("🚀 Starting {} server...", "{}");
+    println!("📊 Health check: http://127.0.0.1:3000/health");
+    
+    // Zero-boilerplate startup! ✨
+    // - Controllers auto-discovered and registered
+    // - IoC container auto-configured  
+    // - Router setup automatically
+    // - Server starts on 127.0.0.1:3000
+    Ok(())
+}}
+"#, name, name);
+    
+    fs::write(project_path.join("src/main.rs"), main_rs)?;
+    
+    // Create a sample controller
+    let controller_rs = format!(r#"use elif::prelude::*;
+
+#[derive(Default)]
+#[controller(path = "/api")]
+pub struct ApiController;
+
+impl ApiController {{
+    #[get("/health")]
+    pub async fn health(&self) -> HttpResult<ElifResponse> {{
+        Ok(ElifResponse::ok().json(&json!({{
+            "status": "ok",
+            "service": "{}",
+            "version": "1.0"
+        }}))?)
+    }}
+    
+    #[get("/hello")]
+    pub async fn hello(&self) -> HttpResult<ElifResponse> {{
+        Ok(ElifResponse::ok().json(&json!({{
+            "message": "Hello from {}!",
+            "framework": "elif.rs"
+        }}))?)
+    }}
+}}
+"#, name, name);
+    
+    fs::write(project_path.join("src/controllers/mod.rs"), "pub mod api;\npub use api::ApiController;")?;
+    fs::write(project_path.join("src/controllers/api.rs"), controller_rs)?;
+    
+    // Create .gitignore
+    let gitignore = r#"/target/
+Cargo.lock
+.env
+.DS_Store
+"#;
+    fs::write(project_path.join(".gitignore"), gitignore)?;
+    
+    println!("✅ Created {} successfully!", name);
+    println!();
+    println!("Next steps:");
+    println!("   cd {}", name);
+    println!("   cargo run");
+    println!();
+    println!("Your API will be available at:");
+    println!("   http://127.0.0.1:3000/api/health");
+    println!("   http://127.0.0.1:3000/api/hello");
+    
     Ok(())
 }

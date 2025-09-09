@@ -1,11 +1,15 @@
+// Commented out for simplification - using create_new_app instead
+/*
 use elif_core::ElifError;
-use super::simple_interactive::ProjectConfig;
 use crate::generators::TemplateEngine;
 use git2::Repository;
 use std::collections::HashMap;
 use std::path::Path;
 use tokio::fs;
+*/
 
+// Commented out for simplification - using create_new_app instead
+/*
 pub async fn generate_project_from_template(config: &ProjectConfig) -> Result<(), ElifError> {
     let app_path = match &config.directory {
         Some(dir) => format!("{}/{}", dir, config.name),
@@ -390,3 +394,4 @@ async fn generate_users_module_files(
     
     generate_module_files(app_dir, template_engine, config).await
 }
+*/

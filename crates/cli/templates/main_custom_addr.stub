@@ -1,0 +1,11 @@
+use elif::prelude::*;
+
+#[elif::bootstrap(addr = "{{ bind_address | default(value="127.0.0.1:3000") }}")]
+async fn main() -> Result<(), HttpError> {
+    println!("🚀 Starting {{ project_name }} server on {{ bind_address | default(value="127.0.0.1:3000") }}...");
+    println!("📊 Health check: http://{{ bind_address | default(value="127.0.0.1:3000") }}/health");
+    {% if openapi_enabled %}println!("📚 API docs: http://{{ bind_address | default(value="127.0.0.1:3000") }}/docs");{% endif %}
+    
+    // Zero-boilerplate startup with custom address! ✨
+    Ok(())
+}

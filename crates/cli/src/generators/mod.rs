@@ -28,6 +28,8 @@ impl TemplateEngine {
                 "main_api.stub", 
                 "main_minimal.stub",
                 "main_bootstrap.stub", // Laravel-style bootstrap template
+                "main_zero_boilerplate.stub", // Zero-boilerplate bootstrap template
+                "main_custom_addr.stub", // Custom address bootstrap template
                 "main_modular.stub", // New modular structure template
                 "app_module.stub",
                 "app_module_bootstrap.stub", // Bootstrap-ready module template
@@ -99,6 +101,10 @@ impl TemplateEngine {
             // Add bootstrap templates
             tera.add_raw_template("main_bootstrap.stub", include_str!("../../templates/main_bootstrap.stub"))
                 .map_err(|e| ElifError::Validation { message: format!("Failed to register main_bootstrap template: {}", e) })?;
+            tera.add_raw_template("main_zero_boilerplate.stub", include_str!("../../templates/main_zero_boilerplate.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register main_zero_boilerplate template: {}", e) })?;
+            tera.add_raw_template("main_custom_addr.stub", include_str!("../../templates/main_custom_addr.stub"))
+                .map_err(|e| ElifError::Validation { message: format!("Failed to register main_custom_addr template: {}", e) })?;
             tera.add_raw_template("app_module_bootstrap.stub", include_str!("../../templates/app_module_bootstrap.stub"))
                 .map_err(|e| ElifError::Validation { message: format!("Failed to register app_module_bootstrap template: {}", e) })?;
             // Add modular template
