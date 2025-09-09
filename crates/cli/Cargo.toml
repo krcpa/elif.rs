@@ -1,8 +1,8 @@
 [package]
 name = "elifrs"
-version = "0.10.6"
+version = "0.11.0"
 edition = "2021"
-description = "LLM-friendly Rust web framework CLI with migration system - AI agent-optimized development tools"
+description = "elif.rs CLI - Convention over configuration web framework tooling with zero-boilerplate project generation"
 license = "MIT"
 authors = ["krcpa <krcpa@users.noreply.github.com>"]
 repository = "https://github.com/krcpa/elif.rs"
