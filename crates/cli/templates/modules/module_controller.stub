@@ -1,7 +1,7 @@
-use elif_http::{ElifRequest, ElifResponse, HttpResult, ElifController, ControllerRoute, HttpMethod, ParamType};
-use elif_http::controller::RouteParam;
-use elif_http_derive::{controller, get, post, put, delete, param, body};
-use async_trait::async_trait;
+use elif_http::{ElifRequest, ElifResponse, HttpResult};
+use elif_http::controller::{ElifController, ControllerRoute, RouteParam};
+use elif_http::routing::{HttpMethod, ParamType};
+use elif_http_derive::{controller, get, post, put, delete};
 use super::{{ feature_name }}_service::{{ feature_name_pascal }}Service;
 use super::dto::{Create{{ feature_name_pascal }}Dto, Update{{ feature_name_pascal }}Dto};
 
@@ -23,30 +23,30 @@ impl {{ feature_name_pascal }}Controller {
     }
     
     #[get("/{id}")]
-    #[param(id: uint)]
-    pub async fn show(&self, id: u32, req: ElifRequest) -> HttpResult<ElifResponse> {
+    #[param(id: u32)]
+    pub async fn show(&self, id: u32, _req: ElifRequest) -> HttpResult<ElifResponse> {
         let item = self.service.find_by_id(id).await?;
         Ok(ElifResponse::ok().json(&item)?)
     }
     
     #[post("")]
     #[body(data: Create{{ feature_name_pascal }}Dto)]
-    pub async fn create(&self, data: Create{{ feature_name_pascal }}Dto, req: ElifRequest) -> HttpResult<ElifResponse> {
+    pub async fn create(&self, data: Create{{ feature_name_pascal }}Dto) -> HttpResult<ElifResponse> {
         let item = self.service.create(data).await?;
         Ok(ElifResponse::created().json(&item)?)
     }
     
     #[put("/{id}")]
-    #[param(id: uint)]
+    #[param(id: u32)]
     #[body(data: Update{{ feature_name_pascal }}Dto)]
-    pub async fn update(&self, id: u32, data: Update{{ feature_name_pascal }}Dto, req: ElifRequest) -> HttpResult<ElifResponse> {
+    pub async fn update(&self, id: u32, data: Update{{ feature_name_pascal }}Dto) -> HttpResult<ElifResponse> {
         let item = self.service.update(id, data).await?;
         Ok(ElifResponse::ok().json(&item)?)
     }
     
     #[delete("/{id}")]
-    #[param(id: uint)]
-    pub async fn delete(&self, id: u32, req: ElifRequest) -> HttpResult<ElifResponse> {
+    #[param(id: u32)]
+    pub async fn delete(&self, id: u32, _req: ElifRequest) -> HttpResult<ElifResponse> {
         self.service.delete(id).await?;
         Ok(ElifResponse::no_content())
     }
