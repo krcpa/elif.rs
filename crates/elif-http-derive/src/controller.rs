@@ -123,7 +123,7 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 
                     // Generate handler for async dispatch with Arc<Self>
                     method_handlers.push(quote! {
-                        #handler_name_lit => (*self).#method_name(request).await
+                        #handler_name_lit => self.#method_name(request).await
                     });
                 }
             }
