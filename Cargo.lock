@@ -1440,7 +1440,7 @@ dependencies = [
 
 [[package]]
 name = "elif"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "async-trait",
  "elif-auth",
@@ -1681,7 +1681,7 @@ dependencies = [
 
 [[package]]
 name = "elif-http-derive"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "async-trait",
  "ctor",
@@ -1706,7 +1706,7 @@ dependencies = [
 
 [[package]]
 name = "elif-macros"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "elif",
  "env_logger",
