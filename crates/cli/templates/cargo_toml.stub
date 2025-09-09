@@ -30,7 +30,7 @@ jsonwebtoken = "9.0"{% endif %}{% endif %}
 {% elif feature == "WebSockets" %}tokio-tungstenite = "0.20"
 {% elif feature == "Email Service" %}elif-email = "0.1.0"
 {% elif feature == "Queue System" %}elif-queue = "0.1.0"
-{% elif feature == "OpenAPI Documentation" %}elif-openapi = "0.2.0"
+{% elif feature == "OpenAPI Documentation" %}elif-openapi = "0.2.1"
 {% elif feature == "Testing Framework" %}elif-testing = "0.1.0"
 {% endif %}{% endfor %}{% endif %}
 

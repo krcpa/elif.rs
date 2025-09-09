@@ -1,6 +1,6 @@
 [package]
 name = "elif-openapi"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "OpenAPI 3.0 specification generation for elif.rs framework"
 license = "MIT"
@@ -11,7 +11,7 @@ categories = ["web-programming", "development-tools"]
 [dependencies]
 # Core elif dependencies
 elif-core = { version = "0.7.1", path = "../core" }
-elif-http = { version = "0.8.1", path = "../elif-http" }
+elif-http = { version = "0.8.5", path = "../elif-http" }
 elif-orm = { version = "0.7.1", path = "../orm" }
 
 # Serialization and JSON processing
