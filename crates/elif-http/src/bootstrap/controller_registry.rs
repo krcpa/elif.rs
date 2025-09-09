@@ -163,10 +163,53 @@ pub fn create_controller(name: &str) -> Result<Box<dyn ElifController>, Bootstra
     CONTROLLER_TYPE_REGISTRY.create_controller(name)
 }
 
+/// Create a controller instance using Default trait
+///
+/// This function requires controllers to implement Default for auto-registration.
+/// Controllers with dependencies should implement IocControllable instead.
+pub fn create_controller_instance<T>() -> Box<dyn ElifController>
+where
+    T: ElifController + Default + 'static,
+{
+    Box::new(T::default()) as Box<dyn ElifController>
+}
+
+/// Create an IoC controller instance using IocControllable trait
+///
+/// This function attempts to create a controller with dependencies using
+/// a minimal IoC container or Default implementations.
+pub fn create_ioc_controller_instance<T>() -> Box<dyn ElifController>
+where
+    T: ElifController + crate::controller::factory::IocControllable + 'static,
+{
+    // Create a minimal IoC container for dependency resolution
+    let container = elif_core::container::IocContainer::new();
+    
+    // Try to create the controller using the IocControllable trait
+    match T::from_ioc_container(&container, None) {
+        Ok(controller) => Box::new(controller) as Box<dyn ElifController>,
+        Err(e) => {
+            // Log the error and provide a helpful panic message
+            tracing::error!("Failed to create IoC controller: {}", e);
+            panic!(
+                "Auto-registration failed for controller {}. Error: {}\n\
+                Consider:\n\
+                1. Implementing Default for all dependencies\n\
+                2. Using router.controller_from_container::<T>() with proper IoC setup\n\
+                3. Registering dependencies in IoC container before controller registration",
+                std::any::type_name::<T>(),
+                e
+            );
+        }
+    }
+}
+
 /// Helper macro for auto-registering controllers
 ///
 /// This macro is used by the #[controller] derive macro to automatically
 /// register controller types at static initialization time using ctor.
+/// It handles both simple controllers (with parameterless new()) and 
+/// IoC-enabled controllers (implementing IocControllable).
 #[macro_export]
 macro_rules! __controller_auto_register {
     ($name:expr, $type:ty) => {
@@ -177,9 +220,32 @@ macro_rules! __controller_auto_register {
             $crate::bootstrap::controller_registry::register_controller_type(
                 $name,
                 || {
-                    // Create the controller instance
-                    // This will cause a compile-time error if new() doesn't exist
-                    Box::new(<$type>::new()) as Box<dyn $crate::controller::ElifController>
+                    // Try to create the controller instance
+                    // This requires the controller to implement Default
+                    $crate::bootstrap::controller_registry::create_controller_instance::<$type>()
+                }
+            );
+        }
+    };
+}
+
+/// Helper macro for auto-registering IoC controllers
+///
+/// This macro is used for controllers that have dependencies but can be created
+/// using Default implementations of those dependencies.
+#[macro_export]
+macro_rules! __controller_auto_register_ioc {
+    ($name:expr, $type:ty) => {
+        // Use ctor to run registration at static initialization time
+        // This ensures controllers are registered before main() runs
+        #[::ctor::ctor]
+        fn __register_controller() {
+            $crate::bootstrap::controller_registry::register_controller_type(
+                $name,
+                || {
+                    // Try to create the controller instance using IoC container pattern
+                    // This will use the IocControllable trait implementation
+                    $crate::bootstrap::controller_registry::create_ioc_controller_instance::<$type>()
                 }
             );
         }

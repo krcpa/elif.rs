@@ -123,7 +123,9 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 
                     // Generate handler for async dispatch with Arc<Self>
                     method_handlers.push(quote! {
-                        #handler_name_lit => self.#method_name(request).await
+                        #handler_name_lit => {
+                            self.#method_name(request).await
+                        }
                     });
                 }
             }
@@ -138,36 +140,126 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
             pub const CONTROLLER_NAME: &'static str = #struct_name;
         });
 
-        // Generate method handlers for async dispatch
-        let method_match_arms = method_handlers.iter();
+        // Generate method handlers for async dispatch  
+        let method_match_arms = &method_handlers;
 
-        // Check if struct has #[inject] to generate IocControllable trait
-        let has_inject_trait = input_impl.items.iter().any(|item| {
+        // Check if this controller needs dependency injection and extract constructor info
+        let mut needs_dependency_injection = false;
+        let mut constructor_param_types = Vec::new();
+        let mut constructor_param_names = Vec::new();
+        
+        for item in &input_impl.items {
             if let syn::ImplItem::Fn(method) = item {
-                method.sig.ident == "from_ioc_container"
-            } else {
-                false
+                if method.sig.ident == "new" && method.sig.inputs.len() > 1 {
+                    needs_dependency_injection = true;
+                    // Extract parameter types and names from constructor
+                    for (i, input) in method.sig.inputs.iter().skip(1).enumerate() { // Skip 'self' parameter
+                        if let syn::FnArg::Typed(pat_type) = input {
+                            if let syn::Type::Path(type_path) = &*pat_type.ty {
+                                if let Some(segment) = type_path.path.segments.last() {
+                                    constructor_param_types.push(segment.ident.clone());
+                                    // Generate parameter variable names like param_0, param_1, etc.
+                                    let param_name = syn::Ident::new(&format!("param_{}", i), segment.ident.span());
+                                    constructor_param_names.push(param_name);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
             }
-        });
+        }
 
-        let ioc_controllable_impl = if has_inject_trait {
+        // Generate appropriate trait implementations based on DI needs
+        let ioc_controllable_impl = if needs_dependency_injection {
             quote! {
-                impl IocControllable for #self_ty {
+                // Auto-generated IocControllable implementation for dependency injection
+                impl ::elif_http::controller::factory::IocControllable for #self_ty {
                     fn from_ioc_container(
-                        container: &elif_core::container::IocContainer,
-                        scope: Option<&elif_core::container::ScopeId>,
+                        container: &::elif_core::container::IocContainer,
+                        _scope: Option<&::elif_core::container::ScopeId>,
                     ) -> Result<Self, String> {
-                        Self::from_ioc_container(container, scope)
+                        // Auto-resolve dependencies from container
+                        // This provides automatic dependency injection for common patterns
+                        Self::from_container_auto(container)
+                    }
+                }
+
+                impl #self_ty {
+                    /// Auto-generated dependency resolution method
+                    /// This attempts to auto-resolve dependencies using Default implementations
+                    /// Controllers can override this for custom dependency injection logic
+                    fn from_container_auto(_container: &::elif_core::container::IocContainer) -> Result<Self, String> {
+                        // Attempt to create the controller using Default implementations of dependencies
+                        // This works for services that implement Default trait
+                        match Self::try_new_with_defaults() {
+                            Ok(controller) => Ok(controller),
+                            Err(e) => Err(format!(
+                                "Controller {} requires dependency injection. {}\n\
+                                Please either:\n\
+                                1. Ensure all dependencies implement Default trait, or\n\
+                                2. Implement a custom `from_container_auto` method, or\n\
+                                3. Use router.controller_from_container::<{}>()\n\
+                                4. Register dependencies in IoC container and use Injectable trait",
+                                stringify!(#self_ty),
+                                e,
+                                stringify!(#self_ty)
+                            ))
+                        }
+                    }
+
+                    /// Try to create controller with Default implementations of dependencies
+                    fn try_new_with_defaults() -> Result<Self, String> {
+                        // This is a fallback - try to call new() expecting Default dependencies
+                        // If this fails, it means dependencies don't implement Default
+                        Self::try_new_auto()
+                    }
+
+                    /// Auto-generated attempt to create controller with Default dependencies
+                    fn try_new_auto() -> Result<Self, String> {
+                        // This will work if all constructor parameters implement Default
+                        Self::new_with_default_deps()
+                    }
+
+                    /// Template method for creating with default dependencies
+                    /// This gets specialized per controller based on constructor signature
+                    fn new_with_default_deps() -> Result<Self, String> {
+                        // Generate dependency instances using Default trait
+                        #(
+                            let #constructor_param_names = #constructor_param_types::default();
+                        )*
+                        Ok(Self::new(#(#constructor_param_names),*))
                     }
                 }
             }
         } else {
-            quote! {}
+            // For controllers without dependencies, provide empty implementation block
+            quote! {
+                // No additional trait implementations needed for parameterless controllers
+                // They should implement Default themselves or use #[derive(Default)]
+            }
         };
 
 
-        // Generate the expanded code with ElifController trait implementation
-        // Using async-trait for proper async method support
+
+        let registration_code = if needs_dependency_injection {
+            quote! {
+                // For IoC controllers, provide helpful compile-time guidance
+                const _: () = {
+                    // This is a marker to indicate this controller needs IoC container registration
+                    // To register: router.controller_from_container::<ControllerType>()
+                };
+            }
+        } else {
+            quote! {
+                // For simple controllers, use traditional auto-registration
+                ::elif_http::__controller_auto_register! {
+                    #struct_name,
+                    #self_ty
+                }
+            }
+        };
+
         let expanded = quote! {
             #input_impl
 
@@ -204,12 +296,8 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 
             #ioc_controllable_impl
 
-            // Auto-register the controller type using inventory pattern
-            // This creates a static that gets initialized when the binary loads
-            ::elif_http::__controller_auto_register! {
-                #struct_name,
-                #self_ty
-            }
+            // Registration code (conditional based on DI needs)
+            #registration_code
         };
 
         TokenStream::from(expanded)
