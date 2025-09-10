@@ -647,13 +647,13 @@ fn generate_registry_registration_code(
     struct_name: &Ident,
     module_args: &ModuleArgs,
 ) -> Result<proc_macro2::TokenStream> {
-    // Extract controller names as strings
+    // Extract controller names as strings for logging
     let controller_names: Vec<String> = module_args.controllers
         .iter()
         .map(|controller| controller.to_token_stream().to_string())
         .collect();
 
-    // Extract provider names as strings
+    // Extract provider names as strings for logging
     let provider_names: Vec<String> = module_args.providers
         .iter()
         .map(|provider| match &provider.service_type {
@@ -668,19 +668,19 @@ fn generate_registry_registration_code(
         })
         .collect();
 
-    // Extract import names as strings
+    // Extract import names as strings for logging
     let import_names: Vec<String> = module_args.imports
         .iter()
         .map(|import| import.to_token_stream().to_string())
         .collect();
 
-    // Extract export names as strings  
+    // Extract export names as strings for logging
     let export_names: Vec<String> = module_args.exports
         .iter()
         .map(|export| export.to_token_stream().to_string())
         .collect();
 
-    let struct_name_str = struct_name.to_string();
+
 
     Ok(quote! {
         // Generate registration code that runs when module is first referenced
@@ -690,16 +690,13 @@ fn generate_registry_registration_code(
                 static REGISTER_MODULE: std::sync::Once = std::sync::Once::new();
                 
                 REGISTER_MODULE.call_once(|| {
-                    let metadata = CompileTimeModuleMetadata::new(#struct_name_str.to_string())
+                    let metadata = CompileTimeModuleMetadata::new(stringify!(#struct_name).to_string())
                         .with_controllers(vec![#(#controller_names.to_string()),*])
                         .with_providers(vec![#(#provider_names.to_string()),*])
                         .with_imports(vec![#(#import_names.to_string()),*])
                         .with_exports(vec![#(#export_names.to_string()),*]);
                     
-                    println!("🔍 Registering module: {}", #struct_name_str);
-                    println!("   Controllers: {:?}", vec![#(#controller_names.to_string()),*]);
-                    println!("   Providers: {:?}", vec![#(#provider_names.to_string()),*]);
-                    println!("   Imports: {:?}", vec![#(#import_names.to_string()),*]);
+                    // Debug logging removed to fix type inference issues
                         
                     register_module_globally(metadata);
                 });
@@ -939,7 +936,6 @@ fn generate_composition_overrides(overrides: &[ProviderDef]) -> Result<proc_macr
 
 /// Generate AppBootstrap implementation for app modules
 fn generate_app_bootstrap_impl(struct_name: &Ident, module_args: &ModuleArgs) -> Result<proc_macro2::TokenStream> {
-    let struct_name_str = struct_name.to_string();
     // Generate references to ensure imported modules are included in the binary
     let import_references: Vec<_> = module_args.imports
         .iter()
@@ -955,7 +951,7 @@ fn generate_app_bootstrap_impl(struct_name: &Ident, module_args: &ModuleArgs) ->
     Ok(quote! {
         impl elif_http::AppBootstrap for #struct_name {
             fn bootstrap() -> elif_http::BootstrapResult<elif_http::AppBootstrapper> {
-                println!("🚀 AppModule::bootstrap() called for {}", #struct_name_str);
+                println!("🚀 AppModule::bootstrap() called for {}", stringify!(#struct_name));
                 
                 // Ensure all imported modules are registered first
                 #(#import_references)*
@@ -963,7 +959,7 @@ fn generate_app_bootstrap_impl(struct_name: &Ident, module_args: &ModuleArgs) ->
                 // Ensure this module is registered last
                 Self::ensure_registered();
                 
-                println!("📋 Module registration completed for {}", #struct_name_str);
+                println!("📋 Module registration completed for {}", stringify!(#struct_name));
                 
                 elif_http::AppBootstrapper::new()
             }
