@@ -1,4 +1,4 @@
-use elif_http::prelude::*;
+use elif::prelude::*;
 use elif_core::ServiceContainer;
 use crate::models::{{ name | snake_case }}::{{ name | pascal_case }};
 {% if validation %}

@@ -1228,7 +1228,7 @@ env_logger = "0.10"
     // Create main.rs with modular structure
     let main_rs = format!(r#"use elif_http::{{HttpError, AppBootstrap}};
 use elif_macros::bootstrap;
-use elif_http_derive::module;
+use elif::prelude::*;
 
 // Import modules
 mod modules;
@@ -1265,7 +1265,7 @@ async fn main() -> Result<(), HttpError> {{
     fs::write(project_path.join("src/modules/mod.rs"), modules_mod)?;
     
     // Create app module files
-    let app_module_rs = format!(r#"use elif_http_derive::module;
+    let app_module_rs = format!(r#"use elif::prelude::*;
 use crate::controllers::HealthController;
 
 #[module(
@@ -1279,7 +1279,7 @@ pub struct AppModule;
     fs::write(project_path.join("src/modules/app/app_module.rs"), app_module_rs)?;
     
     // Create users module files
-    let users_module_rs = format!(r#"use elif_http_derive::module;
+    let users_module_rs = format!(r#"use elif::prelude::*;
 use super::users_controller::UsersController;
 use super::users_service::UsersService;
 
@@ -1290,8 +1290,7 @@ use super::users_service::UsersService;
 pub struct UsersModule;
 "#);
     
-    let users_controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse, ElifRequest}};
-use elif_http_derive::{{controller, get, post, put, delete, param, body}};
+    let users_controller_rs = format!(r#"use elif::prelude::*;
 use serde_json::json;
 use super::users_service::UsersService;
 use super::dto::{{CreateUserDto, UpdateUserDto}};
@@ -1431,7 +1430,7 @@ pub struct UpdateUserDto {
     
     // Create health controller in controllers directory
     let health_controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse, ElifRequest}};
-use elif_http_derive::{{controller, get}};
+use elif::prelude::*;
 use serde_json::json;
 
 #[derive(Default)]

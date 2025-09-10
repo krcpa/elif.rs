@@ -687,7 +687,7 @@ async fn generate_module_system_files(app_dir: &Path, config: &ProjectConfig) ->
     };
 
     let app_module = format!(r#"use elif_core::container::module;
-use elif_http_derive::module;
+use elif::prelude::*;
 
 #[module(
     controllers = {},

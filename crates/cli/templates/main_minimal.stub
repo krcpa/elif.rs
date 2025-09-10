@@ -1,4 +1,4 @@
-use elif_http::{Server, HttpConfig, ElifRouter};
+use elif::prelude::*;
 use elif_core::container::IocContainer;
 
 // Add controllers and services
@@ -27,8 +27,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn health_check(_req: elif_http::ElifRequest) -> elif_http::HttpResult<elif_http::ElifResponse> {
+async fn health_check(_req: ElifRequest) -> HttpResult<ElifResponse> {
     use crate::services::AppService;
     let app_service = AppService::new();
-    elif_http::ElifResponse::ok().json(&app_service.get_health())
+    ElifResponse::ok().json(&app_service.get_health())
 }

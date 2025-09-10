@@ -404,7 +404,7 @@ fn generate_module_system(path: &Path) -> Result<(), ElifError> {
     
     // Create app_module.rs
     let app_module = r#"use elif_core::container::module;
-use elif_http_derive::module;
+use elif::prelude::*;
 
 #[module(
     controllers = [],

@@ -394,7 +394,7 @@ fn generate_module_content(
         .join(", ");
 
     let content = format!(
-        r#"use elif_http_derive::module;
+        r#"use elif::prelude::*;
 
 #[module(
     controllers = [{}],

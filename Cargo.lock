@@ -1964,7 +1964,7 @@ dependencies = [
 
 [[package]]
 name = "elifrs"
-version = "0.12.4"
+version = "0.12.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1973,6 +1973,7 @@ dependencies = [
  "console",
  "crossbeam-channel",
  "csv",
+ "elif",
  "elif-codegen",
  "elif-core 0.7.1",
  "elif-introspect",

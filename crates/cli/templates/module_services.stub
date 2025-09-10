@@ -1,9 +1,9 @@
-use elif_http_derive::module;
+use elif::prelude::*;
 
 #[module(
-    controllers = [],
-    providers = [],
-    imports = [],
-    exports = []
+    controllers: [],
+    providers: [],
+    imports: [],
+    exports: []
 )]
 pub struct AppModule;
