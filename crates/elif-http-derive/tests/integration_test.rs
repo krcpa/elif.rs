@@ -4,7 +4,8 @@
 
 use elif_http_derive::{controller, get, post};
 
-// Test that the controller macro works with string literal arguments
+// Test that the controller macro works with string literal arguments  
+#[derive(Default)]
 #[controller("/api/test")]
 pub struct TestController;
 

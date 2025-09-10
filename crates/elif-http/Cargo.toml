@@ -1,6 +1,6 @@
 [package]
 name = "elif-http"
-version = "0.8.5"
+version = "0.8.6"
 edition = "2021"
 description = "HTTP server core for the elif.rs LLM-friendly web framework"
 license = "MIT"
@@ -15,7 +15,7 @@ categories = ["web-programming", "network-programming"]
 # Framework dependencies
 elif-core = { version = "0.7.1", path = "../core" }
 elif-auth = { version = "0.4.0", path = "../elif-auth", optional = true }
-elif-http-derive = { version = "0.2.5", path = "../elif-http-derive", optional = true }
+elif-http-derive = { version = "0.2.7", path = "../elif-http-derive", optional = true }
 
 # HTTP server
 axum = { workspace = true, features = ["ws"] }

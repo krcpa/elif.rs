@@ -1206,12 +1206,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# elif.rs framework components
-elif-core = "0.7.1"
+# elif.rs framework components (all from git for consistency)
+elif-core = {{ git = "https://github.com/krcpa/elif.rs" }}
 elif-http = {{ git = "https://github.com/krcpa/elif.rs" }}
-elif-http-derive = "0.2.6"
-elif-macros = "0.2.4"
-elif-orm = "0.7.1"
+elif-http-derive = {{ git = "https://github.com/krcpa/elif.rs" }}
+elif-macros = {{ git = "https://github.com/krcpa/elif.rs" }}
+elif-orm = {{ git = "https://github.com/krcpa/elif.rs" }}
 
 # Common dependencies
 serde = {{ version = "1.0", features = ["derive"] }}

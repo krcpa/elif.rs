@@ -215,17 +215,19 @@ macro_rules! __controller_auto_register {
     ($name:expr, $type:ty) => {
         // Use ctor to run registration at static initialization time
         // This ensures controllers are registered before main() runs
-        #[::ctor::ctor]
-        fn __register_controller() {
-            $crate::bootstrap::controller_registry::register_controller_type(
-                $name,
-                || {
-                    // Try to create the controller instance
-                    // This requires the controller to implement Default
-                    $crate::bootstrap::controller_registry::create_controller_instance::<$type>()
-                }
-            );
-        }
+        const _: () = {
+            #[::ctor::ctor]
+            fn __register_controller() {
+                $crate::bootstrap::controller_registry::register_controller_type(
+                    $name,
+                    || {
+                        // Try to create the controller instance
+                        // This requires the controller to implement Default
+                        $crate::bootstrap::controller_registry::create_controller_instance::<$type>()
+                    }
+                );
+            }
+        };
     };
 }
 
@@ -238,17 +240,19 @@ macro_rules! __controller_auto_register_ioc {
     ($name:expr, $type:ty) => {
         // Use ctor to run registration at static initialization time
         // This ensures controllers are registered before main() runs
-        #[::ctor::ctor]
-        fn __register_controller() {
-            $crate::bootstrap::controller_registry::register_controller_type(
-                $name,
-                || {
-                    // Try to create the controller instance using IoC container pattern
-                    // This will use the IocControllable trait implementation
-                    $crate::bootstrap::controller_registry::create_ioc_controller_instance::<$type>()
-                }
-            );
-        }
+        const _: () = {
+            #[::ctor::ctor]
+            fn __register_controller() {
+                $crate::bootstrap::controller_registry::register_controller_type(
+                    $name,
+                    || {
+                        // Try to create the controller instance using IoC container pattern
+                        // This will use the IocControllable trait implementation
+                        $crate::bootstrap::controller_registry::create_ioc_controller_instance::<$type>()
+                    }
+                );
+            }
+        };
     };
 }
 

@@ -303,9 +303,34 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 
         TokenStream::from(expanded)
     } else if let Ok(input_struct) = syn::parse::<ItemStruct>(input) {
-        // Legacy support: If applied to struct, just add constants
+        // Handle struct-based controllers - now with auto-registration support
         let struct_name = &input_struct.ident;
         let struct_name_str = struct_name.to_string();
+
+        // Check if struct has fields (dependencies) vs. unit struct
+        let has_dependencies = !input_struct.fields.is_empty();
+        
+        // Generate appropriate registration code based on dependencies
+        let registration_code = if has_dependencies {
+            // For structs with dependencies, skip auto-registration 
+            // They need manual registration with proper dependency injection
+            quote! {
+                // For structs with dependencies, manual registration is required
+                // Use router.controller::<T>() or container-based registration
+                const _: () = {
+                    // Marker: This controller has dependencies and needs manual registration
+                };
+            }
+        } else {
+            // For unit structs (no dependencies), generate auto-registration
+            quote! {
+                // Auto-registration for unit struct controllers
+                ::elif_http::__controller_auto_register! {
+                    #struct_name_str,
+                    #struct_name
+                }
+            }
+        };
 
         let expanded = quote! {
             #input_struct
@@ -314,6 +339,39 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub const BASE_PATH: &'static str = #base_path;
                 pub const CONTROLLER_NAME: &'static str = #struct_name_str;
             }
+
+            // Generate basic ElifController implementation for struct-only controllers
+            #[::async_trait::async_trait]
+            impl ::elif_http::controller::ElifController for #struct_name {
+                fn name(&self) -> &str {
+                    #struct_name_str
+                }
+
+                fn base_path(&self) -> &str {
+                    #base_path
+                }
+
+                fn routes(&self) -> Vec<::elif_http::controller::ControllerRoute> {
+                    // For struct-only controllers, routes are empty
+                    // Routes should be defined in a separate impl block with #[controller]
+                    vec![]
+                }
+
+                async fn handle_request(
+                    self: std::sync::Arc<Self>,
+                    method_name: String,
+                    _request: ::elif_http::request::ElifRequest,
+                ) -> ::elif_http::errors::HttpResult<::elif_http::response::ElifResponse> {
+                    // For struct-only controllers, no handlers are available
+                    // This should not be reached if routes() returns empty vec
+                    Err(::elif_http::errors::HttpError::not_found(
+                        &format!("Handler '{}' not found on controller '{}'", method_name, #struct_name_str)
+                    ))
+                }
+            }
+
+            // Registration code (conditional based on dependencies)
+            #registration_code
         };
 
         TokenStream::from(expanded)

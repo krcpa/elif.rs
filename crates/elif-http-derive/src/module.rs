@@ -434,7 +434,7 @@ fn process_module_attribute(
     
     // Generate AppBootstrap implementation if this is an app module
     let app_bootstrap_impl = if module_args.is_app_module {
-        generate_app_bootstrap_impl(struct_name)?
+        generate_app_bootstrap_impl(struct_name, &module_args)?
     } else {
         quote! {}
     };
@@ -685,7 +685,7 @@ fn generate_registry_registration_code(
     Ok(quote! {
         // Generate registration code that runs when module is first referenced
         impl #struct_name {
-            fn ensure_registered() {
+            pub fn ensure_registered() {
                 use elif_core::modules::{CompileTimeModuleMetadata, register_module_globally};
                 static REGISTER_MODULE: std::sync::Once = std::sync::Once::new();
                 
@@ -695,13 +695,22 @@ fn generate_registry_registration_code(
                         .with_providers(vec![#(#provider_names.to_string()),*])
                         .with_imports(vec![#(#import_names.to_string()),*])
                         .with_exports(vec![#(#export_names.to_string()),*]);
+                    
+                    println!("🔍 Registering module: {}", #struct_name_str);
+                    println!("   Controllers: {:?}", vec![#(#controller_names.to_string()),*]);
+                    println!("   Providers: {:?}", vec![#(#provider_names.to_string()),*]);
+                    println!("   Imports: {:?}", vec![#(#import_names.to_string()),*]);
                         
                     register_module_globally(metadata);
                 });
             }
         }
         
-        // Registration will be triggered when AppBootstrap::bootstrap() is called
+        // Force registration by generating a constructor function with ctor
+        #[::ctor::ctor]
+        fn __register_module() {
+            #struct_name::ensure_registered();
+        }
     })
 }
 
@@ -929,14 +938,42 @@ fn generate_composition_overrides(overrides: &[ProviderDef]) -> Result<proc_macr
 }
 
 /// Generate AppBootstrap implementation for app modules
-fn generate_app_bootstrap_impl(struct_name: &Ident) -> Result<proc_macro2::TokenStream> {
+fn generate_app_bootstrap_impl(struct_name: &Ident, module_args: &ModuleArgs) -> Result<proc_macro2::TokenStream> {
+    let struct_name_str = struct_name.to_string();
+    // Generate references to ensure imported modules are included in the binary
+    let import_references: Vec<_> = module_args.imports
+        .iter()
+        .map(|import| {
+            quote! { 
+                // Ensure the module type is referenced so it gets included in the binary
+                let _ = std::marker::PhantomData::<#import>;
+                #import::ensure_registered(); 
+            }
+        })
+        .collect();
+
     Ok(quote! {
         impl elif_http::AppBootstrap for #struct_name {
             fn bootstrap() -> elif_http::BootstrapResult<elif_http::AppBootstrapper> {
-                // Ensure this module and all referenced modules are registered
+                println!("🚀 AppModule::bootstrap() called for {}", #struct_name_str);
+                
+                // Ensure all imported modules are registered first
+                #(#import_references)*
+                
+                // Ensure this module is registered last
                 Self::ensure_registered();
                 
+                println!("📋 Module registration completed for {}", #struct_name_str);
+                
                 elif_http::AppBootstrapper::new()
+            }
+        }
+        
+        impl #struct_name {
+            fn force_module_inclusion() {
+                // This method forces the module to be included in the binary
+                // by creating a reference that the compiler cannot optimize away
+                Self::ensure_registered();
             }
         }
     })
