@@ -380,7 +380,7 @@ pub fn bootstrap(args: TokenStream, input: TokenStream) -> TokenStream {
                 
                 // Start the server
                 bootstrapper
-                    .listen(#address.parse().expect("Invalid socket address"))
+                    .listen(#address)
                     .await
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
                 

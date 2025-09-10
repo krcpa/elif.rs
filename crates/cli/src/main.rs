@@ -1192,7 +1192,7 @@ edition = "2021"
 elif-core = "0.7.1"
 elif-http = {{ git = "https://github.com/krcpa/elif.rs" }}
 elif-http-derive = "0.2.6"
-elif-macros = "0.2.2"
+elif-macros = "0.2.3"
 elif-orm = "0.7.1"
 
 # Common dependencies
@@ -1200,6 +1200,7 @@ serde = {{ version = "1.0", features = ["derive"] }}
 serde_json = "1.0"
 tokio = {{ version = "1.0", features = ["full"] }}
 async-trait = "0.1"
+env_logger = "0.10"
 
 [dev-dependencies]
 "#, name);
