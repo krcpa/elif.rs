@@ -1,6 +1,6 @@
 [package]
 name = "elif-macros"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 description = "Procedural macros for elif.rs framework"
 license = "MIT"

@@ -1192,7 +1192,7 @@ edition = "2021"
 elif-core = "0.7.1"
 elif-http = {{ git = "https://github.com/krcpa/elif.rs" }}
 elif-http-derive = "0.2.6"
-elif-macros = "0.2.3"
+elif-macros = "0.2.4"
 elif-orm = "0.7.1"
 
 # Common dependencies
