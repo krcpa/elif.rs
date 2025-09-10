@@ -1290,7 +1290,7 @@ use super::users_service::UsersService;
 pub struct UsersModule;
 "#);
     
-    let users_controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse}};
+    let users_controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse, ElifRequest}};
 use elif_http_derive::{{controller, get, post, put, delete, param, body}};
 use serde_json::json;
 use super::users_service::UsersService;
@@ -1430,7 +1430,7 @@ pub struct UpdateUserDto {
     fs::write(project_path.join("src/modules/users/dto/update_user_dto.rs"), update_user_dto)?;
     
     // Create health controller in controllers directory
-    let health_controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse}};
+    let health_controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse, ElifRequest}};
 use elif_http_derive::{{controller, get}};
 use serde_json::json;
 
