@@ -1190,7 +1190,6 @@ edition = "2021"
 [dependencies]
 # elif.rs framework components
 elif-core = "0.7.1"
-elif-core-derive = {{ git = "https://github.com/krcpa/elif.rs" }}
 elif-http = {{ git = "https://github.com/krcpa/elif.rs" }}
 elif-http-derive = "0.2.6"
 elif-macros = "0.2.4"
@@ -1211,7 +1210,7 @@ env_logger = "0.10"
     // Create main.rs with zero-boilerplate bootstrap
     let main_rs = format!(r#"use elif_http::{{HttpError, HttpResult, AppBootstrap}};
 use elif_macros::bootstrap;
-use elif_core_derive::module;
+use elif_http_derive::module;
 
 // Import our controllers
 mod controllers;
