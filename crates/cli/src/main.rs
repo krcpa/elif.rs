@@ -1190,7 +1190,7 @@ edition = "2021"
 [dependencies]
 # elif.rs framework components
 elif-core = "0.7.1"
-elif-core-derive = "0.2.1"
+elif-core-derive = {{ git = "https://github.com/krcpa/elif.rs" }}
 elif-http = {{ git = "https://github.com/krcpa/elif.rs" }}
 elif-http-derive = "0.2.6"
 elif-macros = "0.2.4"
