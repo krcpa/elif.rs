@@ -1,6 +1,6 @@
 [package]
 name = "elif"
-version = "0.8.4"
+version = "0.8.5"
 edition = "2021"
 description = "Modern Rust web framework designed for exceptional developer experience"
 license = "MIT"
@@ -14,11 +14,12 @@ categories = ["web-programming::http-server"]
 [dependencies]
 # Re-export sub-packages (umbrella package depends on all others)
 elif-core = { version = "0.7.1", path = "../core" }
-elif-http = { version = "0.8.2", path = "../elif-http" }
+elif-http = { version = "0.8.7", path = "../elif-http" }
 elif-orm = { version = "0.7.1", path = "../orm" }
 elif-auth = { version = "0.4.1", path = "../elif-auth" }
 elif-cache = { version = "0.3.0", path = "../elif-cache" }
 elif-macros = { version = "0.2.0", path = "../elif-macros" }
+elif-http-derive = { version = "0.2.8", path = "../elif-http-derive" }
 
 # These are no longer needed since macros are in separate crate
 # proc-macro2 = "1.0"

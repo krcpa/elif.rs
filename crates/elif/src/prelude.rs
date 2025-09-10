@@ -38,6 +38,7 @@ pub use async_trait::async_trait;
 // Macros
 pub use crate::main;
 pub use elif_macros::bootstrap;
+pub use crate::{controller, module};
 
 // Bootstrap traits and types
 pub use elif_http::AppBootstrap;
