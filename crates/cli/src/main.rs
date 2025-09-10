@@ -1188,9 +1188,18 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-elif = "0.8.4"
+# elif.rs framework components
+elif-core = "0.7.1"
+elif-http = {{ git = "https://github.com/krcpa/elif.rs" }}
+elif-http-derive = "0.2.6"
+elif-macros = "0.2.2"
+elif-orm = "0.7.1"
+
+# Common dependencies
 serde = {{ version = "1.0", features = ["derive"] }}
+serde_json = "1.0"
 tokio = {{ version = "1.0", features = ["full"] }}
+async-trait = "0.1"
 
 [dev-dependencies]
 "#, name);
@@ -1198,9 +1207,10 @@ tokio = {{ version = "1.0", features = ["full"] }}
     fs::write(project_path.join("Cargo.toml"), cargo_toml)?;
     
     // Create main.rs with zero-boilerplate bootstrap
-    let main_rs = format!(r#"use elif::prelude::*;
+    let main_rs = format!(r#"use elif_http::{{HttpError, HttpResult}};
+use elif_macros::bootstrap;
 
-#[elif::bootstrap]
+#[bootstrap]
 async fn main() -> Result<(), HttpError> {{
     println!("🚀 Starting {} server...", "{}");
     println!("📊 Health check: http://127.0.0.1:3000/health");
@@ -1217,7 +1227,9 @@ async fn main() -> Result<(), HttpError> {{
     fs::write(project_path.join("src/main.rs"), main_rs)?;
     
     // Create a sample controller
-    let controller_rs = format!(r#"use elif::prelude::*;
+    let controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse}};
+use elif_http_derive::{{controller, get}};
+use serde_json::json;
 
 #[derive(Default)]
 #[controller(path = "/api")]

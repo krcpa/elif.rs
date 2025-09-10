@@ -349,11 +349,11 @@ pub fn bootstrap(args: TokenStream, input: TokenStream) -> TokenStream {
                 #middleware_setup;
         }
     } else {
-        // New auto-discovery mode: use AppBootstrapper through elif prelude
+        // New auto-discovery mode: use AppBootstrapper directly
         quote! {
             let bootstrapper = {
-                // Import AppBootstrapper in local scope to avoid import issues
-                use elif::prelude::AppBootstrapper;
+                // Import AppBootstrapper from elif-http
+                use elif_http::bootstrap::AppBootstrapper;
                 AppBootstrapper::new()
             }
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
