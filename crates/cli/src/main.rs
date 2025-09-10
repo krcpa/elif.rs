@@ -1314,7 +1314,8 @@ impl UsersController {{
     }}
 
     #[post("/")]
-    pub async fn create(&self, #[body] _dto: CreateUserDto) -> HttpResult<ElifResponse> {{
+    #[body(dto: CreateUserDto)]
+    pub async fn create(&self, dto: CreateUserDto) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.create(dto)
         Ok(ElifResponse::created().json(&json!({{
             "message": "User creation endpoint - implement with your database",
@@ -1323,7 +1324,8 @@ impl UsersController {{
     }}
 
     #[get("/{{id}}")]
-    pub async fn show(&self, #[param] id: u32) -> HttpResult<ElifResponse> {{
+    #[param(id: u32)]
+    pub async fn show(&self, id: u32) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.find_by_id(id)
         Ok(ElifResponse::ok().json(&json!({{
             "user": {{ "id": id, "name": "Sample User" }},
@@ -1332,7 +1334,9 @@ impl UsersController {{
     }}
 
     #[put("/{{id}}")]
-    pub async fn update(&self, #[param] id: u32, #[body] _dto: UpdateUserDto) -> HttpResult<ElifResponse> {{
+    #[param(id: u32)]
+    #[body(dto: UpdateUserDto)]
+    pub async fn update(&self, id: u32, dto: UpdateUserDto) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.update(id, dto)
         Ok(ElifResponse::ok().json(&json!({{
             "user": {{ "id": id, "name": "Updated User" }},
@@ -1341,7 +1345,8 @@ impl UsersController {{
     }}
 
     #[delete("/{{id}}")]
-    pub async fn destroy(&self, #[param] id: u32) -> HttpResult<ElifResponse> {{
+    #[param(id: u32)]
+    pub async fn destroy(&self, id: u32) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.delete(id)
         Ok(ElifResponse::ok().json(&json!({{
             "message": "User deleted successfully",
