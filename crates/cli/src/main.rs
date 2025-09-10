@@ -1271,7 +1271,7 @@ Cargo.lock
     println!();
     println!("Next steps:");
     println!("   cd {}", name);
-    println!("   cargo run");
+    println!("   elifrs dev");
     println!();
     println!("Your API will be available at:");
     println!("   http://127.0.0.1:3000/api/health");
