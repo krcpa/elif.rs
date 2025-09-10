@@ -1210,15 +1210,28 @@ env_logger = "0.10"
     // Create main.rs with zero-boilerplate bootstrap
     let main_rs = format!(r#"use elif_http::{{HttpError, HttpResult}};
 use elif_macros::bootstrap;
+use elif_core::module;
 
-#[bootstrap]
+// Import our controllers
+mod controllers;
+use controllers::ApiController;
+
+// Define the application module
+#[module(
+    controllers: [ApiController],
+    is_app
+)]
+pub struct AppModule;
+
+#[bootstrap(AppModule)]
 async fn main() -> Result<(), HttpError> {{
     println!("🚀 Starting {} server...", "{}");
     println!("📊 Health check: http://127.0.0.1:3000/health");
     
     // Zero-boilerplate startup! ✨
-    // - Controllers auto-discovered and registered
-    // - IoC container auto-configured  
+    // - Modules auto-discovered from compile-time registry
+    // - Controllers auto-registered from module definitions
+    // - IoC container auto-configured
     // - Router setup automatically
     // - Server starts on 127.0.0.1:3000
     Ok(())
