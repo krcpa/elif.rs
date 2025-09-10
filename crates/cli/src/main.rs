@@ -1190,6 +1190,7 @@ edition = "2021"
 [dependencies]
 # elif.rs framework components
 elif-core = "0.7.1"
+elif-core-derive = "0.2.1"
 elif-http = {{ git = "https://github.com/krcpa/elif.rs" }}
 elif-http-derive = "0.2.6"
 elif-macros = "0.2.4"
@@ -1208,9 +1209,9 @@ env_logger = "0.10"
     fs::write(project_path.join("Cargo.toml"), cargo_toml)?;
     
     // Create main.rs with zero-boilerplate bootstrap
-    let main_rs = format!(r#"use elif_http::{{HttpError, HttpResult}};
+    let main_rs = format!(r#"use elif_http::{{HttpError, HttpResult, AppBootstrap}};
 use elif_macros::bootstrap;
-use elif_core::module;
+use elif_core_derive::module;
 
 // Import our controllers
 mod controllers;
@@ -1246,7 +1247,7 @@ use elif_http_derive::{{controller, get}};
 use serde_json::json;
 
 #[derive(Default)]
-#[controller(path = "/api")]
+#[controller("/api")]
 pub struct ApiController;
 
 impl ApiController {{
