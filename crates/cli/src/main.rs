@@ -1178,7 +1178,25 @@ async fn create_new_app(name: &str) -> Result<(), ElifError> {
         });
     }
     
+    // Create production-ready directory structure
+    println!("📁 Creating directory structure...");
+    
+    // Core directories
     fs::create_dir_all(project_path.join("src"))?;
+    fs::create_dir_all(project_path.join("tests"))?;
+    fs::create_dir_all(project_path.join("docs"))?;
+    fs::create_dir_all(project_path.join("migrations"))?;
+    
+    // NestJS-style modular structure
+    fs::create_dir_all(project_path.join("src/modules"))?;
+    fs::create_dir_all(project_path.join("src/modules/app"))?;
+    fs::create_dir_all(project_path.join("src/modules/users"))?;
+    fs::create_dir_all(project_path.join("src/modules/users/dto"))?;
+    
+    // Traditional structure for services, middleware, etc.
+    fs::create_dir_all(project_path.join("src/services"))?;
+    fs::create_dir_all(project_path.join("src/middleware"))?;
+    fs::create_dir_all(project_path.join("src/models"))?;
     fs::create_dir_all(project_path.join("src/controllers"))?;
     
     // Create Cargo.toml with sensible defaults
@@ -1207,78 +1225,456 @@ env_logger = "0.10"
     
     fs::write(project_path.join("Cargo.toml"), cargo_toml)?;
     
-    // Create main.rs with zero-boilerplate bootstrap
+    // Create main.rs with modular structure
     let main_rs = format!(r#"use elif_http::{{HttpError, HttpResult, AppBootstrap}};
 use elif_macros::bootstrap;
 use elif_http_derive::module;
 
-// Import our controllers
-mod controllers;
-use controllers::ApiController;
+// Import modules
+mod modules;
+use modules::app::AppModule;
+use modules::users::UsersModule;
 
-// Define the application module
+// Define the root application module
 #[module(
-    controllers: [ApiController],
+    imports: [UsersModule],
     is_app
 )]
-pub struct AppModule;
+pub struct RootModule;
 
-#[bootstrap(AppModule)]
+impl AppBootstrap for RootModule {{
+    type Error = HttpError;
+}}
+
+#[bootstrap(RootModule)]
 async fn main() -> Result<(), HttpError> {{
     println!("🚀 Starting {} server...", "{}");
-    println!("📊 Health check: http://127.0.0.1:3000/health");
+    println!("📊 Health check: http://127.0.0.1:3000/api/health");
+    println!("👥 Users API: http://127.0.0.1:3000/api/users");
     
-    // Zero-boilerplate startup! ✨
-    // - Modules auto-discovered from compile-time registry
-    // - Controllers auto-registered from module definitions
-    // - IoC container auto-configured
-    // - Router setup automatically
-    // - Server starts on 127.0.0.1:3000
+    // Modular architecture! 🏗️
+    // - NestJS-style module organization
+    // - Clean separation of concerns
+    // - Scalable project structure
+    // - Production-ready setup
     Ok(())
 }}
 "#, name, name);
     
     fs::write(project_path.join("src/main.rs"), main_rs)?;
     
-    // Create a sample controller
-    let controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse}};
+    // Create modules/mod.rs
+    let modules_mod = "pub mod app;\npub mod users;";
+    fs::write(project_path.join("src/modules/mod.rs"), modules_mod)?;
+    
+    // Create app module files
+    let app_module_rs = format!(r#"use elif_http_derive::module;
+use super::super::controllers::HealthController;
+
+#[module(
+    controllers: [HealthController]
+)]
+pub struct AppModule;
+"#);
+    
+    let app_mod_rs = "pub mod app_module;\npub use app_module::AppModule;";
+    fs::write(project_path.join("src/modules/app/mod.rs"), app_mod_rs)?;
+    fs::write(project_path.join("src/modules/app/app_module.rs"), app_module_rs)?;
+    
+    // Create users module files
+    let users_module_rs = format!(r#"use elif_http_derive::module;
+use super::users_controller::UsersController;
+use super::users_service::UsersService;
+
+#[module(
+    controllers: [UsersController],
+    providers: [UsersService]
+)]
+pub struct UsersModule;
+"#);
+    
+    let users_controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse}};
+use elif_http_derive::{{controller, get, post, put, delete}};
+use serde_json::json;
+use super::users_service::UsersService;
+use super::dto::{{CreateUserDto, UpdateUserDto}};
+
+#[derive(Default)]
+#[controller("/api/users")]
+pub struct UsersController {{
+    users_service: Option<UsersService>,
+}}
+
+impl UsersController {{
+    #[get("/")]
+    pub async fn index(&self) -> HttpResult<ElifResponse> {{
+        // TODO: Implement with users_service.find_all()
+        Ok(ElifResponse::ok().json(&json!({{
+            "users": [],
+            "total": 0,
+            "message": "Users list endpoint - implement with your database"
+        }}))?)
+    }}
+
+    #[post("/")]
+    pub async fn create(&self, #[body] _dto: CreateUserDto) -> HttpResult<ElifResponse> {{
+        // TODO: Implement with users_service.create(dto)
+        Ok(ElifResponse::created().json(&json!({{
+            "message": "User creation endpoint - implement with your database",
+            "user": {{ "id": 1, "name": "New User" }}
+        }}))?)
+    }}
+
+    #[get("/{{id}}")]
+    pub async fn show(&self, #[param] id: u32) -> HttpResult<ElifResponse> {{
+        // TODO: Implement with users_service.find_by_id(id)
+        Ok(ElifResponse::ok().json(&json!({{
+            "user": {{ "id": id, "name": "Sample User" }},
+            "message": "User detail endpoint - implement with your database"
+        }}))?)
+    }}
+
+    #[put("/{{id}}")]
+    pub async fn update(&self, #[param] id: u32, #[body] _dto: UpdateUserDto) -> HttpResult<ElifResponse> {{
+        // TODO: Implement with users_service.update(id, dto)
+        Ok(ElifResponse::ok().json(&json!({{
+            "user": {{ "id": id, "name": "Updated User" }},
+            "message": "User update endpoint - implement with your database"
+        }}))?)
+    }}
+
+    #[delete("/{{id}}")]
+    pub async fn destroy(&self, #[param] id: u32) -> HttpResult<ElifResponse> {{
+        // TODO: Implement with users_service.delete(id)
+        Ok(ElifResponse::ok().json(&json!({{
+            "message": "User deleted successfully",
+            "deleted_id": id
+        }}))?)
+    }}
+}}
+"#);
+    
+    let users_service_rs = format!(r#"use elif_core::{{Injectable, injectable}};
+use super::dto::{{CreateUserDto, UpdateUserDto}};
+
+#[injectable]
+pub struct UsersService;
+
+impl UsersService {{
+    pub async fn find_all(&self) -> Result<Vec<User>, String> {{
+        // TODO: Implement database query
+        Ok(vec![])
+    }}
+
+    pub async fn find_by_id(&self, id: u32) -> Result<Option<User>, String> {{
+        // TODO: Implement database query
+        Ok(Some(User {{ id, name: "Sample User".to_string() }}))
+    }}
+
+    pub async fn create(&self, _dto: CreateUserDto) -> Result<User, String> {{
+        // TODO: Implement database insertion
+        Ok(User {{ id: 1, name: "New User".to_string() }})
+    }}
+
+    pub async fn update(&self, id: u32, _dto: UpdateUserDto) -> Result<User, String> {{
+        // TODO: Implement database update
+        Ok(User {{ id, name: "Updated User".to_string() }})
+    }}
+
+    pub async fn delete(&self, id: u32) -> Result<(), String> {{
+        // TODO: Implement database deletion
+        println!("Deleted user with id: {{}}", id);
+        Ok(())
+    }}
+}}
+
+// TODO: Replace with your actual User model
+#[derive(Debug, Clone)]
+pub struct User {{
+    pub id: u32,
+    pub name: String,
+}}
+"#);
+    
+    // Create DTOs
+    let create_user_dto = r#"use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateUserDto {
+    pub name: String,
+    pub email: String,
+}
+"#;
+    
+    let update_user_dto = r#"use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpdateUserDto {
+    pub name: Option<String>,
+    pub email: Option<String>,
+}
+"#;
+    
+    let dto_mod = "pub mod create_user_dto;\npub mod update_user_dto;\n\npub use create_user_dto::CreateUserDto;\npub use update_user_dto::UpdateUserDto;";
+    
+    // Write users module files
+    let users_mod_rs = "pub mod users_module;\npub mod users_controller;\npub mod users_service;\npub mod dto;\n\npub use users_module::UsersModule;";
+    fs::write(project_path.join("src/modules/users/mod.rs"), users_mod_rs)?;
+    fs::write(project_path.join("src/modules/users/users_module.rs"), users_module_rs)?;
+    fs::write(project_path.join("src/modules/users/users_controller.rs"), users_controller_rs)?;
+    fs::write(project_path.join("src/modules/users/users_service.rs"), users_service_rs)?;
+    fs::write(project_path.join("src/modules/users/dto/mod.rs"), dto_mod)?;
+    fs::write(project_path.join("src/modules/users/dto/create_user_dto.rs"), create_user_dto)?;
+    fs::write(project_path.join("src/modules/users/dto/update_user_dto.rs"), update_user_dto)?;
+    
+    // Create health controller in controllers directory
+    let health_controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse}};
 use elif_http_derive::{{controller, get}};
 use serde_json::json;
 
 #[derive(Default)]
 #[controller("/api")]
-pub struct ApiController;
+pub struct HealthController;
 
-impl ApiController {{
+impl HealthController {{
     #[get("/health")]
     pub async fn health(&self) -> HttpResult<ElifResponse> {{
         Ok(ElifResponse::ok().json(&json!({{
             "status": "ok",
             "service": "{}",
-            "version": "1.0"
-        }}))?)
-    }}
-    
-    #[get("/hello")]
-    pub async fn hello(&self) -> HttpResult<ElifResponse> {{
-        Ok(ElifResponse::ok().json(&json!({{
-            "message": "Hello from {}!",
+            "version": "1.0",
             "framework": "elif.rs"
         }}))?)
     }}
 }}
-"#, name, name);
+"#, name);
     
-    fs::write(project_path.join("src/controllers/mod.rs"), "pub mod api;\npub use api::ApiController;")?;
-    fs::write(project_path.join("src/controllers/api.rs"), controller_rs)?;
+    fs::write(project_path.join("src/controllers/mod.rs"), "pub mod health_controller;\npub use health_controller::HealthController;")?;
+    fs::write(project_path.join("src/controllers/health_controller.rs"), health_controller_rs)?;
     
-    // Create .gitignore
-    let gitignore = r#"/target/
+    // Create production-ready .env file
+    let env_file = format!(r#"# Application Environment
+APP_NAME={}
+APP_ENV=development
+APP_KEY=generate_with_elifrs_auth_generate_key
+
+# Server Configuration
+HOST=127.0.0.1
+PORT=3000
+
+# Database Configuration (uncomment and configure as needed)
+# DATABASE_URL=postgresql://user:password@localhost/{}
+# DATABASE_URL=mysql://user:password@localhost/{}
+# DATABASE_URL=sqlite:./{}.db
+
+# Logging
+RUST_LOG=info
+RUST_BACKTRACE=1
+
+# Authentication (if using auth features)
+# JWT_SECRET=your-secret-key-here
+# SESSION_SECRET=your-session-secret-here
+"#, name, name, name, name);
+    fs::write(project_path.join(".env"), env_file)?;
+    
+    // Create comprehensive .gitignore
+    let gitignore = r#"# Rust
+/target/
 Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
 .env
+.env.local
+.env.production
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Development
+/tmp/
+/temp/
+.cache/
+
+# Documentation
+/docs/build/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Node.js (if using frontend tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 "#;
     fs::write(project_path.join(".gitignore"), gitignore)?;
+
+    // Create README.md
+    let readme = format!(r#"# {}
+
+A modern web application built with [elif.rs](https://github.com/krcpa/elif.rs) - The Laravel of Rust.
+
+## 🚀 Quick Start
+
+```bash
+# Development server with hot reload
+elifrs dev
+
+# Build for production
+cargo build --release
+
+# Run tests
+cargo test
+```
+
+## 📁 Project Structure
+
+```
+{}/ 
+├── src/
+│   ├── modules/           # Feature modules (NestJS-style)
+│   │   ├── app/          # Application core module
+│   │   └── users/        # Users feature module
+│   │       ├── dto/      # Data Transfer Objects
+│   │       ├── users_controller.rs
+│   │       ├── users_service.rs
+│   │       └── users_module.rs
+│   ├── controllers/      # Shared controllers
+│   ├── services/         # Shared services
+│   ├── middleware/       # Custom middleware
+│   ├── models/          # Data models
+│   └── main.rs          # Application entry point
+├── tests/               # Integration tests
+├── migrations/          # Database migrations
+├── docs/               # Documentation
+└── .env                # Environment configuration
+```
+
+## 🏗️ Architecture
+
+This project follows a **modular architecture** inspired by NestJS:
+
+- **Modules**: Self-contained feature units with controllers, services, and DTOs
+- **Controllers**: Handle HTTP requests and responses
+- **Services**: Business logic and data access
+- **DTOs**: Data validation and serialization
+- **Dependency Injection**: Automatic service resolution
+
+## 📚 API Endpoints
+
+### Health Check
+- `GET /api/health` - Application health status
+
+### Users API
+- `GET /api/users` - List all users
+- `POST /api/users` - Create a new user
+- `GET /api/users/{{id}}` - Get user by ID
+- `PUT /api/users/{{id}}` - Update user
+- `DELETE /api/users/{{id}}` - Delete user
+
+## 🔧 Configuration
+
+Environment variables in `.env`:
+
+```env
+APP_NAME={}
+APP_ENV=development
+HOST=127.0.0.1
+PORT=3000
+```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+cargo test
+
+# Run with coverage
+cargo test --verbose
+```
+
+## 📖 Documentation
+
+- [elif.rs Documentation](https://github.com/krcpa/elif.rs)
+- [API Documentation](./docs/) (generate with `elifrs docs`)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.
+"#, name, name, name);
+    
+    fs::write(project_path.join("README.md"), readme)?;
+    
+    // Create basic test file
+    let test_file = format!(r#"use {}::*;
+
+#[cfg(test)]
+mod tests {{
+    use super::*;
+
+    #[test]
+    fn test_basic() {{
+        // Add your tests here
+        assert_eq!(2 + 2, 4);
+    }}
+}}
+"#, name.replace("-", "_"));
+    
+    fs::write(project_path.join("tests/integration_test.rs"), test_file)?;
+    
+    // Create docs/README.md
+    let docs_readme = format!(r#"# {} Documentation
+
+## Overview
+
+This directory contains documentation for the {} application.
+
+## Structure
+
+- `api/` - API documentation
+- `architecture/` - System architecture docs
+- `deployment/` - Deployment guides
+
+## Generating Documentation
+
+```bash
+# Generate API documentation
+elifrs docs
+
+# Generate code documentation
+cargo doc --open
+```
+"#, name, name);
+    
+    fs::create_dir_all(project_path.join("docs"))?;
+    fs::write(project_path.join("docs/README.md"), docs_readme)?;
 
     // Initialize git repository
     println!("🔧 Initializing git repository...");
@@ -1313,9 +1709,13 @@ Cargo.lock
     println!("   cd {}", name);
     println!("   elifrs dev");
     println!();
-    println!("Your API will be available at:");
-    println!("   http://127.0.0.1:3000/api/health");
-    println!("   http://127.0.0.1:3000/api/hello");
+    println!("🌐 Your API will be available at:");
+    println!("   📊 Health: http://127.0.0.1:3000/api/health");
+    println!("   👥 Users:  http://127.0.0.1:3000/api/users");
+    println!();
+    println!("📖 Documentation:");
+    println!("   📋 README: {}/README.md", name);
+    println!("   📚 Docs:   {}/docs/", name);
     
     Ok(())
 }
