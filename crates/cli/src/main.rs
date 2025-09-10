@@ -1279,7 +1279,34 @@ Cargo.lock
 .DS_Store
 "#;
     fs::write(project_path.join(".gitignore"), gitignore)?;
-    
+
+    // Initialize git repository
+    println!("🔧 Initializing git repository...");
+    std::process::Command::new("git")
+        .args(&["init"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| ElifError::Validation {
+            message: format!("Failed to initialize git repository: {}", e),
+        })?;
+
+    // Add initial commit
+    std::process::Command::new("git")
+        .args(&["add", "."])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| ElifError::Validation {
+            message: format!("Failed to add files to git: {}", e),
+        })?;
+
+    std::process::Command::new("git")
+        .args(&["commit", "-m", "Initial commit from elifrs CLI"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| ElifError::Validation {
+            message: format!("Failed to create initial commit: {}", e),
+        })?;
+
     println!("✅ Created {} successfully!", name);
     println!();
     println!("Next steps:");
