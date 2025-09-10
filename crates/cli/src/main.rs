@@ -1226,13 +1226,14 @@ env_logger = "0.10"
     fs::write(project_path.join("Cargo.toml"), cargo_toml)?;
     
     // Create main.rs with modular structure
-    let main_rs = format!(r#"use elif_http::{{HttpError, HttpResult, AppBootstrap}};
+    let main_rs = format!(r#"use elif_http::{{HttpError, AppBootstrap}};
 use elif_macros::bootstrap;
 use elif_http_derive::module;
 
 // Import modules
 mod modules;
-use modules::app::AppModule;
+mod controllers;
+
 use modules::users::UsersModule;
 
 // Define the root application module
@@ -1240,13 +1241,9 @@ use modules::users::UsersModule;
     imports: [UsersModule],
     is_app
 )]
-pub struct RootModule;
+pub struct AppModule;
 
-impl AppBootstrap for RootModule {{
-    type Error = HttpError;
-}}
-
-#[bootstrap(RootModule)]
+#[bootstrap(AppModule)]
 async fn main() -> Result<(), HttpError> {{
     println!("🚀 Starting {} server...", "{}");
     println!("📊 Health check: http://127.0.0.1:3000/api/health");
@@ -1269,7 +1266,7 @@ async fn main() -> Result<(), HttpError> {{
     
     // Create app module files
     let app_module_rs = format!(r#"use elif_http_derive::module;
-use super::super::controllers::HealthController;
+use crate::controllers::HealthController;
 
 #[module(
     controllers: [HealthController]
@@ -1294,7 +1291,7 @@ pub struct UsersModule;
 "#);
     
     let users_controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse}};
-use elif_http_derive::{{controller, get, post, put, delete}};
+use elif_http_derive::{{controller, get, post, put, delete, param, body}};
 use serde_json::json;
 use super::users_service::UsersService;
 use super::dto::{{CreateUserDto, UpdateUserDto}};
@@ -1354,10 +1351,10 @@ impl UsersController {{
 }}
 "#);
     
-    let users_service_rs = format!(r#"use elif_core::{{Injectable, injectable}};
+    let users_service_rs = format!(r#"use elif_core::container::Injectable;
 use super::dto::{{CreateUserDto, UpdateUserDto}};
 
-#[injectable]
+#[derive(Default)]
 pub struct UsersService;
 
 impl UsersService {{
