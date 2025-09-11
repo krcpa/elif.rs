@@ -1206,12 +1206,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# elif.rs framework components (all from git for consistency)
-elif-core = {{ git = "https://github.com/krcpa/elif.rs" }}
-elif-http = {{ git = "https://github.com/krcpa/elif.rs" }}
-elif-http-derive = {{ git = "https://github.com/krcpa/elif.rs" }}
-elif-macros = {{ git = "https://github.com/krcpa/elif.rs" }}
-elif-orm = {{ git = "https://github.com/krcpa/elif.rs" }}
+# elif.rs framework components (using local paths for development)
+elif = {{ path = "../crates/elif" }}
+elif-core = {{ path = "../crates/core" }}
+elif-http = {{ path = "../crates/elif-http" }}
+elif-http-derive = {{ path = "../crates/elif-http-derive" }}
+elif-macros = {{ path = "../crates/elif-macros" }}
+elif-orm = {{ path = "../crates/orm" }}
 
 # Common dependencies
 serde = {{ version = "1.0", features = ["derive"] }}
@@ -1219,6 +1220,7 @@ serde_json = "1.0"
 tokio = {{ version = "1.0", features = ["full"] }}
 async-trait = "0.1"
 env_logger = "0.10"
+ctor = "0.2"
 
 [dev-dependencies]
 "#, name);
@@ -1303,9 +1305,9 @@ pub struct UsersController {{
 
 impl UsersController {{
     #[get("/")]
-    pub async fn index(&self) -> HttpResult<Response> {{
+    pub async fn index(&self) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.find_all()
-        Ok(Response::ok().json(&json!({{
+        Ok(ElifResponse::ok().json(&json!({{
             "users": [],
             "total": 0,
             "message": "Users list endpoint - implement with your database"
@@ -1314,9 +1316,9 @@ impl UsersController {{
 
     #[post("/")]
     #[body(dto: CreateUserDto)]
-    pub async fn create(&self, dto: CreateUserDto) -> HttpResult<Response> {{
+    pub async fn create(&self, dto: CreateUserDto) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.create(dto)
-        Ok(Response::created().json(&json!({{
+        Ok(ElifResponse::created().json(&json!({{
             "message": "User creation endpoint - implement with your database",
             "user": {{ "id": 1, "name": "New User" }}
         }}))?)
@@ -1324,9 +1326,9 @@ impl UsersController {{
 
     #[get("/{{id}}")]
     #[param(id: u32)]
-    pub async fn show(&self, id: u32) -> HttpResult<Response> {{
+    pub async fn show(&self, id: u32) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.find_by_id(id)
-        Ok(Response::ok().json(&json!({{
+        Ok(ElifResponse::ok().json(&json!({{
             "user": {{ "id": id, "name": "Sample User" }},
             "message": "User detail endpoint - implement with your database"
         }}))?)
@@ -1335,9 +1337,9 @@ impl UsersController {{
     #[put("/{{id}}")]
     #[param(id: u32)]
     #[body(dto: UpdateUserDto)]
-    pub async fn update(&self, id: u32, dto: UpdateUserDto) -> HttpResult<Response> {{
+    pub async fn update(&self, id: u32, dto: UpdateUserDto) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.update(id, dto)
-        Ok(Response::ok().json(&json!({{
+        Ok(ElifResponse::ok().json(&json!({{
             "user": {{ "id": id, "name": "Updated User" }},
             "message": "User update endpoint - implement with your database"
         }}))?)
@@ -1345,9 +1347,9 @@ impl UsersController {{
 
     #[delete("/{{id}}")]
     #[param(id: u32)]
-    pub async fn destroy(&self, id: u32) -> HttpResult<Response> {{
+    pub async fn destroy(&self, id: u32) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.delete(id)
-        Ok(Response::ok().json(&json!({{
+        Ok(ElifResponse::ok().json(&json!({{
             "message": "User deleted successfully",
             "deleted_id": id
         }}))?)
@@ -1438,8 +1440,8 @@ pub struct HealthController;
 
 impl HealthController {{
     #[get("/health")]
-    pub async fn health(&self) -> HttpResult<Response> {{
-        Ok(Response::ok().json(&json!({{
+    pub async fn health(&self) -> HttpResult<ElifResponse> {{
+        Ok(ElifResponse::ok().json(&json!({{
             "status": "ok",
             "service": "{}",
             "version": "1.0",

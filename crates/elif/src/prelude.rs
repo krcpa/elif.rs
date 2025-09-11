@@ -10,6 +10,8 @@
 pub use crate::{HttpError, HttpResult};
 pub use crate::{Router, Server};
 pub use elif_http::{ElifRequest as Request, ElifResponse as Response};
+// Also export original types for macro compatibility
+pub use elif_http::{ElifRequest, ElifResponse};
 
 // Common traits - using correct exports
 pub use elif_http::GenericHandler as Handler;
@@ -40,6 +42,7 @@ pub use async_trait::async_trait;
 pub use crate::main;
 pub use elif_macros::bootstrap;
 pub use crate::{controller, module};
+pub use elif_http_derive::{get, post, put, delete, patch, head, options, param, body};
 
 // Bootstrap traits and types
 pub use elif_http::AppBootstrap;

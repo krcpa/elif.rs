@@ -21,6 +21,10 @@ members = [
     "crates/elif-email",
     "crates/elif-macros",
 ]
+exclude = [
+    "test-app",
+    "test-env",
+]
 resolver = "2"
 
 [workspace.dependencies]
