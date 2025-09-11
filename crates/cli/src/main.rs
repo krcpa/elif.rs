@@ -1389,8 +1389,8 @@ impl UsersService {{
         if id > 0 && id <= 10 {{
             Ok(Some(User {{ 
                 id, 
-                name: format!("User {{}}", id), 
-                email: format!("user{{}}@example.com", id) 
+                name: format!("User {}", id), 
+                email: format!("user{}@example.com", id) 
             }}))
         }} else {{
             Ok(None)
