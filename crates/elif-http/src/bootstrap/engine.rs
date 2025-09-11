@@ -90,9 +90,6 @@ impl AppBootstrapper {
         tracing::info!("Bootstrap: Discovered {} modules", modules.len());
         tracing::info!("Bootstrap: Load order resolved: {:?}", load_order);
         
-        // NEW: Force import of all modules containing controllers
-        Self::ensure_controller_modules_imported(&modules)?;
-        
         Ok(AppBootstrapper {
             modules,
             module_runtime,
@@ -115,56 +112,6 @@ impl AppBootstrapper {
             dependencies: metadata.imports.clone(), // In this context, imports are dependencies
             is_optional: false,
         }
-    }
-    
-    /// Ensure all modules containing controllers are imported to trigger their ctor functions
-    ///
-    /// This method forces the import of all modules that contain controllers by calling
-    /// their ensure_registered() methods. This ensures that the ctor functions that
-    /// register controllers are executed before the bootstrap process continues.
-    fn ensure_controller_modules_imported(modules: &[CompileTimeModuleMetadata]) -> BootstrapResult<()> {
-        for module in modules {
-            if !module.controllers.is_empty() {
-                tracing::debug!("Bootstrap: Ensuring module '{}' with controllers {:?} is imported", 
-                    module.name, module.controllers);
-                
-                // Force import the module by calling its ensure_registered method
-                // This will trigger the ctor functions for all controllers in this module
-                Self::force_import_controller_module(&module.name)?;
-            }
-        }
-        Ok(())
-    }
-    
-    /// Force import a specific module by calling its ensure_registered method
-    ///
-    /// This method uses dynamic dispatch to call the ensure_registered method
-    /// on the module, which will trigger the ctor functions for all controllers
-    /// defined in that module.
-    fn force_import_controller_module(module_name: &str) -> BootstrapResult<()> {
-        // For now, we'll use a simple approach: call ensure_registered on known modules
-        // In a more sophisticated implementation, we could use dynamic dispatch
-        // or a registry of module import functions
-        
-        match module_name {
-            "AppModule" => {
-                // AppModule is already imported in main.rs, so we don't need to do anything
-                tracing::debug!("Bootstrap: AppModule already imported");
-            }
-            "UsersModule" => {
-                // Force import UsersModule by calling its ensure_registered method
-                // This will trigger the ctor functions for UsersController
-                tracing::debug!("Bootstrap: Force importing UsersModule");
-                // Note: This is a placeholder - in a real implementation, we would
-                // call the actual ensure_registered method for UsersModule
-                // For now, we'll rely on the fact that UsersModule is imported in main.rs
-            }
-            _ => {
-                tracing::warn!("Bootstrap: Unknown module '{}' - cannot force import", module_name);
-            }
-        }
-        
-        Ok(())
     }
     
     /// Configure the HTTP server with custom configuration
