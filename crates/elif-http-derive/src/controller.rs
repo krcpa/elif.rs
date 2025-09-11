@@ -397,3 +397,4 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         .into()
     }
 }
+
