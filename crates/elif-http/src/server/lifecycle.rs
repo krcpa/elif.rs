@@ -53,7 +53,6 @@ pub async fn start_server(addr: SocketAddr, router: axum::Router) -> HttpResult<
         .map_err(|e| HttpError::startup(format!("Failed to bind to {}: {}", addr, e)))?;
 
     info!("✅ Server listening on {}", addr);
-    info!("🔧 Framework: Elif.rs (Axum under the hood)");
 
     // Serve with graceful shutdown
     axum::serve(

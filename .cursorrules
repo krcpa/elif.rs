@@ -164,9 +164,72 @@ pub struct UserService {
 - **Error Type Fixes**: Proper conversion between framework error types
 - **Version Bumps**: elif-macros 0.2.0, elif 0.8.4, elif-http-derive 0.2.6
 
-## When Working on Issues
-1. Check existing patterns in the codebase
-2. Maintain backward compatibility unless breaking change is justified
-3. Add comprehensive tests
-4. Update documentation and examples
-5. Consider AI agent usability in API design
+## GitHub Issue & PR Workflow
+
+### When Working on Issues
+1. **Always start with GitHub issues** - Use `gh issue view <number>` to understand the problem
+2. **Create proper branches** - Use descriptive names like `fix/controller-submodule-registration`
+3. **Track progress with TodoWrite** - Use the todo_write tool to manage task progress:
+   ```
+   - investigate-issue: "Verify the problem exists" 
+   - trace-root-cause: "Find exact cause in codebase"
+   - design-solution: "Plan implementation approach"
+   - test-fix: "Verify solution works correctly"
+   - create-pr: "Submit for review with proper documentation"
+   ```
+
+### Quality Standards
+1. **Check existing patterns** in the codebase
+2. **Maintain backward compatibility** unless breaking change is justified
+3. **Add comprehensive tests** - unit, integration, and UI tests where applicable
+4. **Update documentation and examples** - Keep docs current with changes
+5. **Consider AI agent usability** in API design
+6. **Use proper commit messages** - Include issue references and detailed descriptions
+7. **Create detailed PRs** - Include problem, root cause, solution, and testing sections
+
+### PR Template Structure
+```markdown
+## Problem Solved
+Brief description of the issue being fixed
+
+## Root Cause
+Technical explanation of what was causing the problem
+
+## Solution  
+Implementation approach and key changes made
+
+## Testing
+- ✅ Test case 1
+- ✅ Test case 2
+- ✅ Integration verification
+
+## Files Changed
+- `path/to/file.rs` - Description of changes
+
+Closes #<issue-number>
+```
+
+### Issue Discovery Protocol
+When discovering new issues during development:
+1. **Create new GitHub issue** with proper labels and description
+2. **Reference in current work** - Link related issues in PR descriptions
+3. **Prioritize appropriately** - Critical bugs get immediate attention
+4. **Document thoroughly** - Include reproduction steps and impact assessment
+
+### Example Workflow (Real Case: Issue #428)
+```bash
+# 1. Investigate issue
+gh issue view 428
+git checkout -b fix/controller-submodule-registration
+
+# 2. Use TodoWrite to track progress
+# 3. Investigate with cargo expand and debugging
+# 4. Discover root cause (controller field interference)
+# 5. Implement fix (simplify controller struct)
+# 6. Test thoroughly (verify both controllers register)
+# 7. Create comprehensive PR with detailed explanation
+
+git commit -m "Fix controller registration issue for submodules
+Closes #428"
+gh pr create --title "Fix controller registration issue for submodules"
+```
