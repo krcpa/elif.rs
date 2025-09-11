@@ -1298,11 +1298,11 @@ use super::users_service::UsersService;
 use super::dto::{{CreateUserDto, UpdateUserDto}};
 
 #[derive(Default)]
-#[controller("/api/users")]
 pub struct UsersController {{
     users_service: Option<UsersService>,
 }}
 
+#[controller("/api/users")]
 impl UsersController {{
     #[get("/")]
     pub async fn index(&self) -> HttpResult<ElifResponse> {{
@@ -1435,9 +1435,9 @@ pub struct UpdateUserDto {
 use serde_json::json;
 
 #[derive(Default)]
-#[controller("/api")]
 pub struct HealthController;
 
+#[controller("/api")]
 impl HealthController {{
     #[get("/health")]
     pub async fn health(&self) -> HttpResult<ElifResponse> {{
