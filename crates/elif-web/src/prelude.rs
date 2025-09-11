@@ -30,9 +30,8 @@ pub use crate::{
     ModuleRegistry, ProviderRegistry, ServiceProvider, ServiceRegistry, ServiceScope,
 };
 
-// Utility functions - check if these exist or create aliases
-// pub use elif_http::response::{response};
-// pub use elif_http::request::{request};
+// Utility functions
+pub use elif_http::response::response;
 
 // JSON helper
 pub use serde_json::json;
