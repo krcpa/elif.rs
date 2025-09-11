@@ -65,7 +65,7 @@ pub async fn run_interactive_wizard() -> Result<ProjectConfig, ElifError> {
     println!("{}", style("").bold());
     println!("{}", style("╔═══════════════════════════════════════════════════════════════╗").dim());
     println!("{}", style("║                                                               ║").dim());
-    println!("{}", style("║  🦀 Welcome to elif.rs - The Laravel of Rust! 🦀             ║").cyan().bold());
+    println!("{}", style("║  🦀 Welcome to elif.rs - Rust Made Simple! 🦀             ║").cyan().bold());
     println!("{}", style("║                                                               ║").dim());
     println!("{}", style("║  Let's create your new web application with zero boilerplate ║").dim());
     println!("{}", style("║  and maximum productivity. Just answer a few questions...    ║").dim());

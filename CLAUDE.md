@@ -1,12 +1,12 @@
 # CLAUDE.md — elif.rs
 
 ## What is elif?
-**The Laravel of Rust** - A web framework designed for both AI agents and developers. Simple, intuitive, productive.
+**Rust Made Simple** - A web framework designed for both AI agents and developers. Simple, intuitive, productive.
 
 Just like Laravel revolutionized PHP development with elegant syntax and convention over configuration, elif.rs brings that same philosophy to Rust. Write less code, ship faster, maintain easily.
 
 ## Core Philosophy
-**The Laravel of Rust** - Convention over configuration, zero boilerplate, maximum productivity
+**Rust Made Simple** - Convention over configuration, zero boilerplate, maximum productivity
 
 - **Convention Over Configuration**: Sensible defaults, minimal setup required
 - **Zero Boilerplate**: If you want a router → `router()`, response → `response()`, just easy stuff

@@ -706,7 +706,7 @@ impl Doctor {
         format!(
             r#"# {}
 
-A web application built with [elif.rs](https://github.com/krcpa/elif.rs) - The Laravel of Rust.
+A web application built with [elif.rs](https://github.com/krcpa/elif.rs) - Rust Made Simple.
 
 ## Quick Start
 

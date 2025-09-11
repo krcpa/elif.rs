@@ -1584,7 +1584,7 @@ yarn-error.log*
     // Create README.md
     let readme = format!(r#"# {}
 
-A modern web application built with [elif.rs](https://github.com/krcpa/elif.rs) - The Laravel of Rust.
+A modern web application built with [elif.rs](https://github.com/krcpa/elif.rs) - Rust Made Simple.
 
 ## 🚀 Quick Start
 

@@ -18,7 +18,7 @@ pub struct ProjectConfig {
 
 pub async fn run_simple_wizard() -> Result<(), ElifError> {
     println!();
-    println!("{}", style("🦀 Welcome to elif.rs - The Laravel of Rust!").cyan().bold());
+    println!("{}", style("🦀 Welcome to elif.rs - Rust Made Simple!").cyan().bold());
     println!("{}", style("Let's create your new web application...").dim());
     println!();
 

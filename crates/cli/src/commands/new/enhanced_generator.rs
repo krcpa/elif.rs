@@ -224,7 +224,7 @@ async fn generate_enhanced_cargo_toml(app_dir: &Path, config: &ProjectConfig) ->
 name = "{}"
 version = "0.1.0"
 edition = "2021"
-description = "A {} built with elif.rs - The Laravel of Rust"
+description = "A {} built with elif.rs - Rust Made Simple"
 authors = ["Your Name <your.email@example.com>"]
 
 [dependencies]
@@ -336,7 +336,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{{formatted_setup}
 
 async fn hello(_req: Request) -> HttpResult<Response> {{
     Ok(Response::json(&serde_json::json!({{
-        "message": "Hello from {} - The Laravel of Rust! 🦀",
+        "message": "Hello from {} - Rust Made Simple! 🦀",
         "framework": "elif.rs",
         "version": "0.8.0",
         "project": "{}"
@@ -432,7 +432,7 @@ async fn home(_req: Request) -> HttpResult<Response> {{
         <div class=\"header\">
             <div class=\"emoji\">🦀</div>
             <h1>Welcome to {}</h1>
-            <p>Built with elif.rs - The Laravel of Rust</p>
+            <p>Built with elif.rs - Rust Made Simple</p>
         </div>
         
         <div class=\"features\">
@@ -535,7 +535,7 @@ fn main() {{
         }}
         Commands::Version => {{
             println!("{} v0.1.0", "{}");
-            println!("Built with elif.rs - The Laravel of Rust! 🦀");
+            println!("Built with elif.rs - Rust Made Simple! 🦀");
         }}
     }}
 }}"#,
@@ -546,7 +546,7 @@ fn main() {{
 
 fn generate_minimal_main() -> String {
     r#"fn main() {
-    println!("Hello from elif.rs - The Laravel of Rust! 🦀");
+    println!("Hello from elif.rs - Rust Made Simple! 🦀");
 }"#.to_string()
 }
 
@@ -899,6 +899,6 @@ fn show_completion_message(config: &ProjectConfig, app_path: &str) {
     println!();
     println!("🦀 {} {}", 
         console::style("Happy coding with elif.rs -").dim(),
-        console::style("The Laravel of Rust!").cyan().bold()
+        console::style("Rust Made Simple!").cyan().bold()
     );
 }

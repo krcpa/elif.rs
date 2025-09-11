@@ -61,7 +61,7 @@ pub async fn run(detailed: bool, modules: bool) -> Result<(), ElifError> {
 
 async fn display_framework_info() -> Result<(), ElifError> {
     println!("   🦀 Version: 0.9.0");
-    println!("   📖 Philosophy: The Laravel of Rust - LLM-friendly web framework");
+    println!("   📖 Philosophy: Rust Made Simple - LLM-friendly web framework");
     println!("   🏠 Homepage: https://github.com/krcpa/elif.rs");
     println!("   📚 Documentation: https://docs.rs/elifrs");
     

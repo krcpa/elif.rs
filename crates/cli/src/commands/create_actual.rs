@@ -45,7 +45,7 @@ pub async fn app(name: &str, path: Option<&str>, template: &str, modules: bool) 
         println!("   elifrs add module AppModule --controllers=AppController");
     }
     println!("   elifrs dev");
-    println!("\n🎯 Happy coding with elif.rs - The Laravel of Rust! 🦀");
+    println!("\n🎯 Happy coding with elif.rs - Rust Made Simple! 🦀");
     
     Ok(())
 }
@@ -275,7 +275,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn hello(_req: Request) -> HttpResult<Response> {
     Ok(Response::json(&serde_json::json!({
-        "message": "Hello from elif.rs - The Laravel of Rust! 🦀",
+        "message": "Hello from elif.rs - Rust Made Simple! 🦀",
         "framework": "elif.rs",
         "version": "0.8.0"
     }))?)
@@ -332,7 +332,7 @@ async fn home(_req: Request) -> HttpResult<Response> {
     <div class="header">
         <div class="emoji">🦀</div>
         <h1>Welcome to elif.rs</h1>
-        <p>The Laravel of Rust - Simple, Elegant, Productive</p>
+        <p>Rust Made Simple - Simple, Elegant, Productive</p>
     </div>
     
     <h2>🚀 Getting Started</h2>
