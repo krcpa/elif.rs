@@ -293,6 +293,20 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     }
                 }
+
+                async fn handle_request_dyn(
+                    &self,
+                    method_name: String,
+                    request: ElifRequest,
+                ) -> HttpResult<ElifResponse> {
+                    match method_name.as_str() {
+                        #(#method_match_arms,)*
+                        _ => {
+                            Ok(ElifResponse::not_found()
+                                .text(&format!("Handler '{}' not found", method_name)))
+                        }
+                    }
+                }
             }
 
             #ioc_controllable_impl
