@@ -1412,8 +1412,8 @@ impl UsersService {{
         // Example: Update existing user
         Ok(User {{ 
             id,
-            name: dto.name.unwrap_or_else(|| format!("Updated User {{}}", id)),
-            email: dto.email.unwrap_or_else(|| format!("updated{{}}@example.com", id))
+            name: dto.name.unwrap_or_else(|| format!("Updated User {}", id)),
+            email: dto.email.unwrap_or_else(|| format!("updated{}@example.com", id))
         }})
     }}
 
