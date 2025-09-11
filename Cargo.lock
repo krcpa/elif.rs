@@ -1663,7 +1663,7 @@ dependencies = [
 
 [[package]]
 name = "elif-http-derive"
-version = "0.2.10"
+version = "0.2.11"
 dependencies = [
  "async-trait",
  "ctor",
@@ -1945,7 +1945,7 @@ dependencies = [
 
 [[package]]
 name = "elif-web"
-version = "0.8.6"
+version = "0.8.7"
 dependencies = [
  "async-trait",
  "elif-auth",
@@ -1964,7 +1964,7 @@ dependencies = [
 
 [[package]]
 name = "elifrs"
-version = "0.12.9"
+version = "0.12.10"
 dependencies = [
  "anyhow",
  "async-trait",
