@@ -8,6 +8,9 @@ use std::{
 use tokio::process::{Child, Command};
 use tokio::time::sleep;
 
+/// Rust compiler flags to ignore warnings during development
+const CARGO_IGNORE_WARNINGS_FLAG: &str = "-A warnings";
+
 /// Enhanced development server with hot-reload functionality
 pub async fn run(
     watch: Vec<PathBuf>,
@@ -74,7 +77,7 @@ async fn run_preflight_checks() -> Result<(), ElifError> {
     println!("🔍 Validating project compilation...");
     let output = Command::new("cargo")
         .args(["check", "--quiet"])
-        .env("RUSTFLAGS", "-A warnings")
+        .env("RUSTFLAGS", CARGO_IGNORE_WARNINGS_FLAG)
         .output()
         .await
         .map_err(|e| ElifError::system_error(format!("Failed to run cargo check: {}", e)))?;
@@ -306,7 +309,7 @@ impl DevelopmentServer {
         println!("🔨 Building project...");
         let build_result = Command::new("cargo")
             .args(["build", "--quiet"])
-            .env("RUSTFLAGS", "-A warnings")
+            .env("RUSTFLAGS", CARGO_IGNORE_WARNINGS_FLAG)
             .status()
             .await
             .map_err(|e| ElifError::system_error(format!("Failed to run cargo build: {}", e)))?;
@@ -323,7 +326,7 @@ impl DevelopmentServer {
         cmd.env("ELIF_ENV", &self.env);
         cmd.env("ELIF_HOST", &self.host);
         cmd.env("ELIF_PORT", self.port.to_string());
-        cmd.env("RUSTFLAGS", "-A warnings");
+        cmd.env("RUSTFLAGS", CARGO_IGNORE_WARNINGS_FLAG);
 
         if self.profile {
             cmd.env("ELIF_PROFILE", "true");

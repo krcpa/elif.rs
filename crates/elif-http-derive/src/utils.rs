@@ -1,9 +1,8 @@
 //! Utility functions shared across macro implementations
 
 use crate::params::{BodyParamType, BodySpec};
-use quote::quote;
 use std::collections::HashMap;
-use syn::{Attribute, FnArg, Meta, Pat, PatIdent, Signature};
+use syn::{Attribute, Meta};
 
 /// Extract HTTP method and path from method attributes
 pub fn extract_http_method_info(attrs: &[Attribute]) -> Option<(proc_macro2::Ident, String)> {
@@ -174,22 +173,6 @@ pub fn extract_path_parameters(path: &str) -> Vec<String> {
     params
 }
 
-/// Extract function parameter names and types from a function signature
-pub fn extract_function_parameters(sig: &Signature) -> Vec<(String, String)> {
-    let mut params = Vec::new();
-
-    for input in &sig.inputs {
-        if let FnArg::Typed(pat_type) = input {
-            if let Pat::Ident(PatIdent { ident, .. }) = pat_type.pat.as_ref() {
-                let param_name = ident.to_string();
-                let param_type = quote! { #pat_type.ty }.to_string();
-                params.push((param_name, param_type));
-            }
-        }
-    }
-
-    params
-}
 
 /// Extract middleware names from method attributes
 pub fn extract_middleware_from_attrs(attrs: &[Attribute]) -> Vec<String> {
