@@ -1347,22 +1347,29 @@ impl UsersController {{
         let user = self.users_service.update(id, dto).await
             .map_err(|e| HttpError::bad_request(format!("Failed to update user: {{}}", e)))?;
         
-        response().json(json!({{
-            "message": "User updated successfully",
-            "user": user
-        }})).send()
+        match user {{
+            Some(user) => response().json(json!({{
+                "message": "User updated successfully",
+                "user": user
+            }})).send(),
+            None => Err(HttpError::not_found(format!("User with id {{}} not found", id)))
+        }}
     }}
 
     #[delete("/{{id}}")]
     #[param(id: u32)]
     pub async fn destroy(&self, id: u32, _req: ElifRequest) -> HttpResult<ElifResponse> {{
-        self.users_service.delete(id).await
+        let was_deleted = self.users_service.delete(id).await
             .map_err(|e| HttpError::bad_request(format!("Failed to delete user: {{}}", e)))?;
         
-        response().json(json!({{
-            "message": "User deleted successfully",
-            "deleted_id": id
-        }})).send()
+        if was_deleted {{
+            response().json(json!({{
+                "message": "User deleted successfully",
+                "deleted_id": id
+            }})).send()
+        }} else {{
+            Err(HttpError::not_found(format!("User with id {{}} not found", id)))
+        }}
     }}
 }}
 "#);
@@ -1407,20 +1414,29 @@ impl UsersService {{
         }})
     }}
 
-    pub async fn update(&self, id: u32, dto: UpdateUserDto) -> Result<User, String> {{
+    pub async fn update(&self, id: u32, dto: UpdateUserDto) -> Result<Option<User>, String> {{
         // TODO: Implement database update
-        // Example: Update existing user
-        Ok(User {{ 
-            id,
-            name: dto.name.unwrap_or_else(|| format!("Updated User {}", id)),
-            email: dto.email.unwrap_or_else(|| format!("updated{}@example.com", id))
-        }})
+        // Example: Update existing user if found
+        if id > 0 && id <= 10 {{
+            Ok(Some(User {{ 
+                id,
+                name: dto.name.unwrap_or_else(|| format!("Updated User {{}}", id)),
+                email: dto.email.unwrap_or_else(|| format!("updated{{}}@example.com", id))
+            }}))
+        }} else {{
+            Ok(None)
+        }}
     }}
 
-    pub async fn delete(&self, id: u32) -> Result<(), String> {{
+    pub async fn delete(&self, id: u32) -> Result<bool, String> {{
         // TODO: Implement database deletion
-        println!("Deleted user with id: {{}}", id);
-        Ok(())
+        // Example: Return true if user existed and was deleted, false if not found
+        if id > 0 && id <= 10 {{
+            println!("Deleted user with id: {{}}", id);
+            Ok(true)
+        }} else {{
+            Ok(false)
+        }}
     }}
 }}
 
