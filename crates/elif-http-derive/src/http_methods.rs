@@ -8,7 +8,7 @@ use syn::{parse_macro_input, ItemFn};
 
 use crate::params::BodyParamType;
 use crate::utils::{
-    extract_body_param_from_attrs, extract_function_parameters, extract_param_types_from_attrs,
+    extract_body_param_from_attrs, extract_param_types_from_attrs,
     extract_path_parameters, extract_request_param_name, has_body_attribute, has_request_attribute,
     validate_route_path,
 };
@@ -49,7 +49,6 @@ pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStrea
 
     // Extract path parameters from the route and function signature
     let path_params = extract_path_parameters(&route_path);
-    let fn_params = extract_function_parameters(&input_fn.sig);
     let param_types = extract_param_types_from_attrs(&input_fn.attrs);
 
     // Check if this method needs parameter injection
@@ -65,17 +64,11 @@ pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStrea
     let has_param_annotations = !param_types.is_empty();
     let has_request_attr = has_request_attribute(&input_fn.attrs);
     let has_body_attr = has_body_attribute(&input_fn.attrs);
-    let has_path_param_injection = !path_params.is_empty()
-        && has_self
-        && has_param_annotations
-        && has_injectable_params(&fn_params, &path_params);
     let needs_validation = has_self && (
         (!path_params.is_empty() && has_param_annotations) || 
         has_body_attr || 
         has_request_attr
     );
-    let needs_injection =
-        has_path_param_injection || (has_self && has_request_attr) || (has_self && has_body_attr);
 
     // Perform validation if we have path parameters, body attributes, or request attributes
     if needs_validation {
@@ -95,36 +88,18 @@ pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStrea
         }
     }
 
-    if needs_injection {
-        // Extract body parameter information
-        let body_param = extract_body_param_from_attrs(&input_fn.attrs);
+    // All HTTP method attributed methods need wrapper methods for controller dispatch
+    // Extract body parameter information
+    let body_param = extract_body_param_from_attrs(&input_fn.attrs);
 
-        // Generate wrapper method with parameter injection
-        generate_injected_method(
-            &input_fn,
-            &path_params,
-            &param_types,
-            has_request_attr,
-            body_param,
-        )
-    } else {
-        // Generate parameter validation comments
-        let param_docs = if !path_params.is_empty() {
-            let param_list = path_params.join(", ");
-            format!("Route parameters: {}", param_list)
-        } else {
-            "No route parameters".to_string()
-        };
-
-        // Return the function with enhanced documentation
-        let expanded = quote! {
-            #[doc = #param_docs]
-            #[allow(dead_code)]
-            #input_fn
-        };
-
-        TokenStream::from(expanded)
-    }
+    // Generate wrapper method (with or without parameter injection)
+    generate_injected_method(
+        &input_fn,
+        &path_params,
+        &param_types,
+        has_request_attr,
+        body_param,
+    )
 }
 
 /// GET method routing macro
@@ -162,17 +137,6 @@ pub fn options_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     http_method_macro_impl("OPTIONS", args, input)
 }
 
-/// Check if the function signature has parameters that match route parameters
-/// and can be injected (excluding 'req' parameter which is special)
-fn has_injectable_params(fn_params: &[(String, String)], path_params: &[String]) -> bool {
-    // Check if any function parameters match path parameters (excluding ElifRequest)
-    for (param_name, param_type) in fn_params {
-        if path_params.contains(param_name) && !param_type.contains("ElifRequest") {
-            return true;
-        }
-    }
-    false
-}
 
 /// Generate a wrapper method that injects path parameters, body parameters, and/or request into the original method
 fn generate_injected_method(

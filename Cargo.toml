@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "crates/elif",    # Main umbrella package
+    "crates/elif-web",    # Main umbrella package
     "crates/core",
     "crates/orm",
     "crates/codegen",
