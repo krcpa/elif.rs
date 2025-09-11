@@ -1624,7 +1624,7 @@ dependencies = [
 
 [[package]]
 name = "elif-http"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "argon2",
  "async-trait",
@@ -1663,12 +1663,12 @@ dependencies = [
 
 [[package]]
 name = "elif-http-derive"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "async-trait",
  "ctor",
  "elif-core 0.7.1",
- "elif-http 0.8.7",
+ "elif-http 0.8.8",
  "proc-macro2",
  "quote",
  "serde",
@@ -1708,7 +1708,7 @@ dependencies = [
  "axum",
  "chrono",
  "elif-core 0.7.1",
- "elif-http 0.8.7",
+ "elif-http 0.8.8",
  "elif-openapi-derive",
  "elif-orm 0.7.1",
  "inventory",
@@ -1824,7 +1824,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "elif-core 0.7.1",
- "elif-http 0.8.7",
+ "elif-http 0.8.8",
  "html-escape",
  "http 1.3.1",
  "log",
@@ -1881,7 +1881,7 @@ dependencies = [
  "axum",
  "chrono",
  "elif-core 0.7.1",
- "elif-http 0.8.7",
+ "elif-http 0.8.8",
  "elif-orm 0.7.1",
  "hyper 1.7.0",
  "rand 0.8.5",
@@ -1945,13 +1945,13 @@ dependencies = [
 
 [[package]]
 name = "elif-web"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "async-trait",
  "elif-auth",
  "elif-cache",
  "elif-core 0.7.1",
- "elif-http 0.8.7",
+ "elif-http 0.8.8",
  "elif-http-derive",
  "elif-macros",
  "elif-orm 0.7.1",
@@ -1964,7 +1964,7 @@ dependencies = [
 
 [[package]]
 name = "elifrs"
-version = "0.12.6"
+version = "0.12.7"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -1,6 +1,6 @@
 [package]
 name = "elif-http-derive"
-version = "0.2.8"
+version = "0.2.9"
 edition = "2021"
 description = "Derive macros for elif-http declarative routing and controller system"
 license = "MIT"
