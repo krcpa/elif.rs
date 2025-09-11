@@ -14,37 +14,37 @@ impl {{ feature_name_pascal }}Controller {
     }
 
     #[get("")]
-    pub async fn index(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {
+    pub async fn index(&self, _req: Request) -> HttpResult<Response> {
         let items = self.service.find_all().await;
-        Ok(ElifResponse::ok().json(&items)?)
+        Ok(Response::ok().json(&items)?)
     }
     
     #[get("/{id}")]
     #[param(id: u32)]
-    pub async fn show(&self, id: u32, _req: ElifRequest) -> HttpResult<ElifResponse> {
+    pub async fn show(&self, id: u32, _req: Request) -> HttpResult<Response> {
         let item = self.service.find_by_id(id).await?;
-        Ok(ElifResponse::ok().json(&item)?)
+        Ok(Response::ok().json(&item)?)
     }
     
     #[post("")]
     #[body(data: Create{{ feature_name_pascal }}Dto)]
-    pub async fn create(&self, data: Create{{ feature_name_pascal }}Dto) -> HttpResult<ElifResponse> {
+    pub async fn create(&self, data: Create{{ feature_name_pascal }}Dto) -> HttpResult<Response> {
         let item = self.service.create(data).await?;
-        Ok(ElifResponse::created().json(&item)?)
+        Ok(Response::created().json(&item)?)
     }
     
     #[put("/{id}")]
     #[param(id: u32)]
     #[body(data: Update{{ feature_name_pascal }}Dto)]
-    pub async fn update(&self, id: u32, data: Update{{ feature_name_pascal }}Dto) -> HttpResult<ElifResponse> {
+    pub async fn update(&self, id: u32, data: Update{{ feature_name_pascal }}Dto) -> HttpResult<Response> {
         let item = self.service.update(id, data).await?;
-        Ok(ElifResponse::ok().json(&item)?)
+        Ok(Response::ok().json(&item)?)
     }
     
     #[delete("/{id}")]
     #[param(id: u32)]
-    pub async fn delete(&self, id: u32, _req: ElifRequest) -> HttpResult<ElifResponse> {
+    pub async fn delete(&self, id: u32, _req: Request) -> HttpResult<Response> {
         self.service.delete(id).await?;
-        Ok(ElifResponse::no_content())
+        Ok(Response::no_content())
     }
 }

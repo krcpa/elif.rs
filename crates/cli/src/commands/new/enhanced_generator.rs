@@ -270,7 +270,7 @@ async fn generate_enhanced_main_file(app_dir: &Path, config: &ProjectConfig) -> 
 
 fn generate_api_main(config: &ProjectConfig) -> String {
     let mut imports = vec![
-        "use elif_http::{Server, Router, get, ElifRequest, ElifResponse, HttpResult};".to_string(),
+        "use elif::prelude::*;".to_string(),
     ];
     
     let mut setup_code = vec![];
@@ -334,8 +334,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{{formatted_setup}
     Ok(())
 }}
 
-async fn hello(_req: ElifRequest) -> HttpResult<ElifResponse> {{
-    Ok(ElifResponse::json(&serde_json::json!({{
+async fn hello(_req: Request) -> HttpResult<Response> {{
+    Ok(Response::json(&serde_json::json!({{
         "message": "Hello from {} - The Laravel of Rust! 🦀",
         "framework": "elif.rs",
         "version": "0.8.0",
@@ -343,8 +343,8 @@ async fn hello(_req: ElifRequest) -> HttpResult<ElifResponse> {{
     }}))?)
 }}
 
-async fn health_check(_req: ElifRequest) -> HttpResult<ElifResponse> {{
-    Ok(ElifResponse::json(&serde_json::json!({{
+async fn health_check(_req: Request) -> HttpResult<Response> {{
+    Ok(Response::json(&serde_json::json!({{
         "status": "healthy",
         "timestamp": chrono::Utc::now(),
         "service": "{}"
@@ -359,16 +359,16 @@ async fn health_check(_req: ElifRequest) -> HttpResult<ElifResponse> {{
         if config.auth_config.provider != "none" {
             r#"
 
-async fn auth_login(_req: ElifRequest) -> HttpResult<ElifResponse> {
+async fn auth_login(_req: Request) -> HttpResult<Response> {
     // TODO: Implement authentication login
-    Ok(ElifResponse::json(&serde_json::json!({
+    Ok(Response::json(&serde_json::json!({
         "message": "Login endpoint - implement authentication logic here"
     }))?)
 }
 
-async fn auth_register(_req: ElifRequest) -> HttpResult<ElifResponse> {
+async fn auth_register(_req: Request) -> HttpResult<Response> {
     // TODO: Implement user registration
-    Ok(ElifResponse::json(&serde_json::json!({
+    Ok(Response::json(&serde_json::json!({
         "message": "Register endpoint - implement registration logic here"
     }))?)
 }"#
@@ -386,7 +386,7 @@ fn generate_web_main(config: &ProjectConfig) -> String {
     };
 
     let main_template = format!(
-        "use elif_http::{{Server, Router, get, ElifRequest, ElifResponse, HttpResult}};
+        "use elif::prelude::*;
 {}
 
 #[tokio::main]
@@ -406,7 +406,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     Ok(())
 }}
 
-async fn home(_req: ElifRequest) -> HttpResult<ElifResponse> {{
+async fn home(_req: Request) -> HttpResult<Response> {{
     let html = r#\"<!DOCTYPE html>
 <html lang=\"en\">
 <head>
@@ -461,10 +461,10 @@ async fn home(_req: ElifRequest) -> HttpResult<ElifResponse> {{
 </body>
 </html>\"#;
     
-    Ok(ElifResponse::ok().html(html)?)
+    Ok(Response::ok().html(html)?)
 }}
 
-async fn about(_req: ElifRequest) -> HttpResult<ElifResponse> {{
+async fn about(_req: Request) -> HttpResult<Response> {{
     let html = r#\"<!DOCTYPE html>
 <html lang=\"en\">
 <head>
@@ -489,7 +489,7 @@ async fn about(_req: ElifRequest) -> HttpResult<ElifResponse> {{
 </body>
 </html>\"#;
     
-    Ok(ElifResponse::ok().html(html)?)
+    Ok(Response::ok().html(html)?)
 }}",
         imports,
         config.name,

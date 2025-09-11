@@ -1,7 +1,5 @@
 use elif::prelude::*;
 use elif_http::middleware::v2::{Middleware, Next, NextFuture};
-use elif_http::request::ElifRequest;
-use elif_http::response::ElifResponse;
 
 /// {{DESCRIPTION}}
 #[derive(Debug)]
@@ -21,7 +19,7 @@ impl {{STRUCT_NAME}} {
 }
 
 impl Middleware for {{STRUCT_NAME}} {
-    fn handle(&self, request: ElifRequest, next: Next) -> NextFuture<'static> {
+    fn handle(&self, request: Request, next: Next) -> NextFuture<'static> {
         // Before request processing
         // Add your pre-processing logic here
         
@@ -49,8 +47,7 @@ impl Middleware for {{STRUCT_NAME}} {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use elif_http::request::{ElifMethod, ElifRequest};
-    use elif_http::response::ElifResponse;
+    use elif::prelude::*;
     use elif_http::middleware::v2::MiddlewarePipelineV2;
 
     #[tokio::test]
@@ -58,7 +55,7 @@ mod tests {
         let middleware = {{STRUCT_NAME}}::new();
         let pipeline = MiddlewarePipelineV2::new().add(middleware);
 
-        let request = ElifRequest::new(
+        let request = Request::new(
             ElifMethod::GET,
             "/test".parse().unwrap(),
             elif_http::response::headers::ElifHeaderMap::new(),
@@ -66,7 +63,7 @@ mod tests {
 
         let response = pipeline.execute(request, |_req| {
             Box::pin(async move {
-                ElifResponse::ok().text("Test response")
+                Response::ok().text("Test response")
             })
         }).await;
 

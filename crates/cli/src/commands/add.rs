@@ -434,55 +434,55 @@ async fn generate_controller_file(name: &str, _module_name: &str) -> Result<(), 
     }
 
     let controller_content = format!(
-        r#"use elif_http::{{controller, get, post, put, delete, ElifRequest, ElifResponse, HttpResult}};
+        r#"use elif::prelude::*;
 
 #[controller("/api/{}")]
 pub struct {name};
 
 impl {name} {{
     #[get("")]
-    pub async fn index(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {{
+    pub async fn index(&self, _req: Request) -> HttpResult<Response> {{
         // List all resources
-        Ok(ElifResponse::json(&serde_json::json!({{
+        Ok(Response::json(&serde_json::json!({{
             "data": [],
             "message": "List endpoint for {name}"
         }}))?)
     }}
     
     #[get("/{{id}}")]
-    pub async fn show(&self, req: ElifRequest) -> HttpResult<ElifResponse> {{
+    pub async fn show(&self, req: Request) -> HttpResult<Response> {{
         let id = req.path_param("id")?;
         // Show specific resource
-        Ok(ElifResponse::json(&serde_json::json!({{
+        Ok(Response::json(&serde_json::json!({{
             "data": {{"id": id}},
             "message": "Show endpoint for {name}"
         }}))?)
     }}
     
     #[post("")]
-    pub async fn create(&self, req: ElifRequest) -> HttpResult<ElifResponse> {{
+    pub async fn create(&self, req: Request) -> HttpResult<Response> {{
         // Create new resource
-        Ok(ElifResponse::created().json(&serde_json::json!({{
+        Ok(Response::created().json(&serde_json::json!({{
             "data": {{"id": 1}},
             "message": "Created successfully"
         }}))?)
     }}
     
     #[put("/{{id}}")]
-    pub async fn update(&self, req: ElifRequest) -> HttpResult<ElifResponse> {{
+    pub async fn update(&self, req: Request) -> HttpResult<Response> {{
         let id = req.path_param("id")?;
         // Update resource
-        Ok(ElifResponse::json(&serde_json::json!({{
+        Ok(Response::json(&serde_json::json!({{
             "data": {{"id": id}},
             "message": "Updated successfully"
         }}))?)
     }}
     
     #[delete("/{{id}}")]
-    pub async fn destroy(&self, req: ElifRequest) -> HttpResult<ElifResponse> {{
+    pub async fn destroy(&self, req: Request) -> HttpResult<Response> {{
         let id = req.path_param("id")?;
         // Delete resource
-        Ok(ElifResponse::ok().json(&serde_json::json!({{
+        Ok(Response::ok().json(&serde_json::json!({{
             "message": "Deleted successfully"
         }}))?)
     }}
@@ -596,7 +596,7 @@ async fn generate_middleware_file(name: &str, debug: bool) -> Result<(), ElifErr
     };
 
     let middleware_content = format!(
-        r#"use elif_http::{{ElifRequest, ElifResponse, HttpResult}};
+        r#"use elif::prelude::*;
 use std::future::Future;
 use std::pin::Pin;
 {}
@@ -610,12 +610,12 @@ impl {} {{
     
     pub async fn handle<F, Fut>(
         &self,
-        req: ElifRequest,
+        req: Request,
         next: F,
-    ) -> HttpResult<ElifResponse>
+    ) -> HttpResult<Response>
     where
-        F: FnOnce(ElifRequest) -> Fut,
-        Fut: Future<Output = HttpResult<ElifResponse>>,
+        F: FnOnce(Request) -> Fut,
+        Fut: Future<Output = HttpResult<Response>>,
     {{
         // Middleware logic here
         {}

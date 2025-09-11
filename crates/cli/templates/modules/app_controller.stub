@@ -13,17 +13,17 @@ impl AppController {
     }
 
     #[get("")]
-    pub async fn index(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {
+    pub async fn index(&self, _req: Request) -> HttpResult<Response> {
         let message = self.service.get_welcome_message().await;
-        Ok(ElifResponse::ok().json(&serde_json::json!({
+        Ok(Response::ok().json(&serde_json::json!({
             "message": message,
             "status": "ok"
         }))?)
     }
 
     #[get("/health")]
-    pub async fn health(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {
+    pub async fn health(&self, _req: Request) -> HttpResult<Response> {
         let health_info = self.service.get_health_status().await;
-        Ok(ElifResponse::ok().json(&health_info)?)
+        Ok(Response::ok().json(&health_info)?)
     }
 }

@@ -27,8 +27,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn health_check(_req: ElifRequest) -> HttpResult<ElifResponse> {
+async fn health_check(_req: Request) -> HttpResult<Response> {
     use crate::services::AppService;
     let app_service = AppService::new();
-    ElifResponse::ok().json(&app_service.get_health())
+    Response::ok().json(&app_service.get_health())
 }

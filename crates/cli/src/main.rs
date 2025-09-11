@@ -1303,9 +1303,9 @@ pub struct UsersController {{
 
 impl UsersController {{
     #[get("/")]
-    pub async fn index(&self) -> HttpResult<ElifResponse> {{
+    pub async fn index(&self) -> HttpResult<Response> {{
         // TODO: Implement with users_service.find_all()
-        Ok(ElifResponse::ok().json(&json!({{
+        Ok(Response::ok().json(&json!({{
             "users": [],
             "total": 0,
             "message": "Users list endpoint - implement with your database"
@@ -1314,9 +1314,9 @@ impl UsersController {{
 
     #[post("/")]
     #[body(dto: CreateUserDto)]
-    pub async fn create(&self, dto: CreateUserDto) -> HttpResult<ElifResponse> {{
+    pub async fn create(&self, dto: CreateUserDto) -> HttpResult<Response> {{
         // TODO: Implement with users_service.create(dto)
-        Ok(ElifResponse::created().json(&json!({{
+        Ok(Response::created().json(&json!({{
             "message": "User creation endpoint - implement with your database",
             "user": {{ "id": 1, "name": "New User" }}
         }}))?)
@@ -1324,9 +1324,9 @@ impl UsersController {{
 
     #[get("/{{id}}")]
     #[param(id: u32)]
-    pub async fn show(&self, id: u32) -> HttpResult<ElifResponse> {{
+    pub async fn show(&self, id: u32) -> HttpResult<Response> {{
         // TODO: Implement with users_service.find_by_id(id)
-        Ok(ElifResponse::ok().json(&json!({{
+        Ok(Response::ok().json(&json!({{
             "user": {{ "id": id, "name": "Sample User" }},
             "message": "User detail endpoint - implement with your database"
         }}))?)
@@ -1335,9 +1335,9 @@ impl UsersController {{
     #[put("/{{id}}")]
     #[param(id: u32)]
     #[body(dto: UpdateUserDto)]
-    pub async fn update(&self, id: u32, dto: UpdateUserDto) -> HttpResult<ElifResponse> {{
+    pub async fn update(&self, id: u32, dto: UpdateUserDto) -> HttpResult<Response> {{
         // TODO: Implement with users_service.update(id, dto)
-        Ok(ElifResponse::ok().json(&json!({{
+        Ok(Response::ok().json(&json!({{
             "user": {{ "id": id, "name": "Updated User" }},
             "message": "User update endpoint - implement with your database"
         }}))?)
@@ -1345,9 +1345,9 @@ impl UsersController {{
 
     #[delete("/{{id}}")]
     #[param(id: u32)]
-    pub async fn destroy(&self, id: u32) -> HttpResult<ElifResponse> {{
+    pub async fn destroy(&self, id: u32) -> HttpResult<Response> {{
         // TODO: Implement with users_service.delete(id)
-        Ok(ElifResponse::ok().json(&json!({{
+        Ok(Response::ok().json(&json!({{
             "message": "User deleted successfully",
             "deleted_id": id
         }}))?)
@@ -1429,8 +1429,7 @@ pub struct UpdateUserDto {
     fs::write(project_path.join("src/modules/users/dto/update_user_dto.rs"), update_user_dto)?;
     
     // Create health controller in controllers directory
-    let health_controller_rs = format!(r#"use elif_http::{{HttpError, HttpResult, ElifResponse, ElifRequest}};
-use elif::prelude::*;
+    let health_controller_rs = format!(r#"use elif::prelude::*;
 use serde_json::json;
 
 #[derive(Default)]
@@ -1439,8 +1438,8 @@ pub struct HealthController;
 
 impl HealthController {{
     #[get("/health")]
-    pub async fn health(&self) -> HttpResult<ElifResponse> {{
-        Ok(ElifResponse::ok().json(&json!({{
+    pub async fn health(&self) -> HttpResult<Response> {{
+        Ok(Response::ok().json(&json!({{
             "status": "ok",
             "service": "{}",
             "version": "1.0",
