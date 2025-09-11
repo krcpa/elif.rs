@@ -8,7 +8,8 @@
 
 // Essential HTTP types
 pub use crate::{HttpError, HttpResult};
-pub use crate::{Request, Response, Router, Server};
+pub use crate::{Router, Server};
+pub use elif_http::{ElifRequest as Request, ElifResponse as Response};
 
 // Common traits - using correct exports
 pub use elif_http::GenericHandler as Handler;
@@ -38,6 +39,7 @@ pub use async_trait::async_trait;
 // Macros
 pub use crate::main;
 pub use elif_macros::bootstrap;
+pub use crate::{controller, module};
 
 // Bootstrap traits and types
 pub use elif_http::AppBootstrap;

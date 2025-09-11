@@ -1,8 +1,10 @@
-use elif_http::Module;
+use elif::prelude::*;
 use crate::controllers::AppController;
 use crate::services::AppService;
 
-#[derive(Module)]
-#[controllers(AppController)]
-#[providers(AppService)]
+#[module(
+    controllers: [AppController],
+    providers: [AppService],
+    is_app
+)]
 pub struct AppModule;

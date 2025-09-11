@@ -1,6 +1,6 @@
 [package]
 name = "elifrs"
-version = "0.12.4"
+version = "0.12.5"
 edition = "2021"
 description = "elif.rs CLI - Convention over configuration web framework tooling with zero-boilerplate project generation"
 license = "MIT"
@@ -17,6 +17,7 @@ name = "elifrs"
 path = "src/main.rs"
 
 [dependencies]
+elif = { version = "0.8.5", path = "../elif" }
 elif-core = { version = "0.7.1", path = "../core" }
 elif-codegen = { version = "0.4.0", path = "../codegen" }
 elif-introspect = { version = "0.3.0", path = "../introspect" }

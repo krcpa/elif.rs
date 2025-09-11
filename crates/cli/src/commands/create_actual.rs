@@ -228,7 +228,7 @@ askama = "0.12"
 
 fn generate_main_file(path: &Path, template: &str, modules: bool) -> Result<(), ElifError> {
     let main_content = match template {
-        "api" if modules => r#"use elif_http::{Server, Router, ElifRequest, ElifResponse, HttpResult};
+        "api" if modules => r#"use elif::prelude::*;
 use elif_core::container::Container;
 
 mod modules;
@@ -256,7 +256,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 "#,
-        "api" => r#"use elif_http::{Server, Router, get, ElifRequest, ElifResponse, HttpResult};
+        "api" => r#"use elif::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -273,22 +273,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn hello(_req: ElifRequest) -> HttpResult<ElifResponse> {
-    Ok(ElifResponse::json(&serde_json::json!({
+async fn hello(_req: Request) -> HttpResult<Response> {
+    Ok(Response::json(&serde_json::json!({
         "message": "Hello from elif.rs - The Laravel of Rust! 🦀",
         "framework": "elif.rs",
         "version": "0.8.0"
     }))?)
 }
 
-async fn health_check(_req: ElifRequest) -> HttpResult<ElifResponse> {
-    Ok(ElifResponse::json(&serde_json::json!({
+async fn health_check(_req: Request) -> HttpResult<Response> {
+    Ok(Response::json(&serde_json::json!({
         "status": "healthy",
         "timestamp": chrono::Utc::now()
     }))?)
 }
 "#,
-        "web" if modules => r#"use elif_http::{Server, Router, get, ElifRequest, ElifResponse, HttpResult};
+        "web" if modules => r#"use elif::prelude::*;
 use elif_core::container::Container;
 
 mod modules;
@@ -317,7 +317,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn home(_req: ElifRequest) -> HttpResult<ElifResponse> {
+async fn home(_req: Request) -> HttpResult<Response> {
     let html = r#"<!DOCTYPE html>
 <html>
 <head>
@@ -349,10 +349,10 @@ async fn home(_req: ElifRequest) -> HttpResult<ElifResponse> {
 </body>
 </html>"#;
     
-    Ok(ElifResponse::ok().html(html)?)
+    Ok(Response::ok().html(html)?)
 }
 "#,
-        "minimal" => r#"use elif_http::{Server, Router, get, ElifRequest, ElifResponse, HttpResult};
+        "minimal" => r#"use elif::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -367,11 +367,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn hello(_req: ElifRequest) -> HttpResult<ElifResponse> {
-    Ok(ElifResponse::ok().text("Hello from elif.rs!")?)
+async fn hello(_req: Request) -> HttpResult<Response> {
+    Ok(Response::ok().text("Hello from elif.rs!")?)
 }
 "#,
-        _ => r#"use elif_http::{Server, Router, get, ElifRequest, ElifResponse, HttpResult};
+        _ => r#"use elif::prelude::*;
 
 #[tokio::main] 
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -386,8 +386,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn hello(_req: ElifRequest) -> HttpResult<ElifResponse> {
-    Ok(ElifResponse::ok().text("Hello from elif.rs!")?)
+async fn hello(_req: Request) -> HttpResult<Response> {
+    Ok(Response::ok().text("Hello from elif.rs!")?)
 }
 "#
     };
@@ -404,7 +404,7 @@ fn generate_module_system(path: &Path) -> Result<(), ElifError> {
     
     // Create app_module.rs
     let app_module = r#"use elif_core::container::module;
-use elif_http_derive::module;
+use elif::prelude::*;
 
 #[module(
     controllers = [],

@@ -1,5 +1,4 @@
-use elif_http::{Server, ElifRequest, ElifResponse, HttpResult};
-use elif_http::routing::{Router, get, post};
+use elif::prelude::*;
 use elif_core::config::HttpConfig;
 {% if modules_enabled %}use elif_core::container::{Container, IocContainer};
 use modules::app_module::AppModule;
@@ -42,8 +41,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn hello(_req: ElifRequest) -> HttpResult<ElifResponse> {
-    ElifResponse::ok().json(&serde_json::json!({
+async fn hello(_req: Request) -> HttpResult<Response> {
+    Response::ok().json(&serde_json::json!({
         "message": "Hello from {{ project_name }} - Built with elif.rs! 🦀",
         "framework": "elif.rs",
         "version": "0.8.0",
@@ -51,24 +50,24 @@ async fn hello(_req: ElifRequest) -> HttpResult<ElifResponse> {
     }))
 }
 
-async fn health_check(_req: ElifRequest) -> HttpResult<ElifResponse> {
-    ElifResponse::ok().json(&serde_json::json!({
+async fn health_check(_req: Request) -> HttpResult<Response> {
+    Response::ok().json(&serde_json::json!({
         "status": "healthy",
         "timestamp": chrono::Utc::now(),
         "service": "{{ project_name }}"
     }))
 }
 {% if auth_enabled %}
-async fn auth_login(_req: ElifRequest) -> HttpResult<ElifResponse> {
+async fn auth_login(_req: Request) -> HttpResult<Response> {
     // TODO: Implement authentication login
-    ElifResponse::ok().json(&serde_json::json!({
+    Response::ok().json(&serde_json::json!({
         "message": "Login endpoint - implement authentication logic here"
     }))
 }
 
-async fn auth_register(_req: ElifRequest) -> HttpResult<ElifResponse> {
+async fn auth_register(_req: Request) -> HttpResult<Response> {
     // TODO: Implement user registration
-    ElifResponse::ok().json(&serde_json::json!({
+    Response::ok().json(&serde_json::json!({
         "message": "Register endpoint - implement registration logic here"
     }))
 }{% endif %}

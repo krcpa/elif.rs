@@ -34,6 +34,9 @@ pub mod prelude;
 pub use elif_macros as macros;
 pub use elif_macros::{bootstrap, main};
 
+// Re-export derive macros
+pub use elif_http_derive::{controller, module};
+
 /// Current version of elif.rs
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
