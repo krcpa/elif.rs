@@ -1206,13 +1206,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# elif.rs framework components (using local paths for development)
-elif = {{ path = "../crates/elif" }}
-elif-core = {{ path = "../crates/core" }}
-elif-http = {{ path = "../crates/elif-http" }}
-elif-http-derive = {{ path = "../crates/elif-http-derive" }}
-elif-macros = {{ path = "../crates/elif-macros" }}
-elif-orm = {{ path = "../crates/orm" }}
+# elif.rs framework components
+elif-web = "0.8.6"
+elif-core = "0.7.1"
+elif-http = "0.8.8"
+elif-http-derive = "0.2.9"
+elif-macros = "0.2.0"
+elif-orm = "0.7.1"
 
 # Common dependencies
 serde = {{ version = "1.0", features = ["derive"] }}

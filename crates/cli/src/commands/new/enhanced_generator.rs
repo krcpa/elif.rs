@@ -155,25 +155,25 @@ async fn generate_enhanced_cargo_toml(app_dir: &Path, config: &ProjectConfig) ->
     
     // Add elif dependencies based on project type
     if config.project_type != "cli" {
-        dependencies.push(r#"elif-http = { version = "0.8.0", features = ["derive"] }"#.to_string());
+        dependencies.push(r#"elif-http = { version = "0.8.8", features = ["derive"] }"#.to_string());
     }
     
     if config.modules_enabled {
-        dependencies.push(r#"elif-core = "0.6.0""#.to_string());
+        dependencies.push(r#"elif-core = "0.7.1""#.to_string());
     }
     
     // Add database dependencies
     match config.database_config.provider.as_str() {
         "postgresql" => {
-            dependencies.push(r#"elif-orm = "0.7.0""#.to_string());
+            dependencies.push(r#"elif-orm = "0.7.1""#.to_string());
             dependencies.push(r#"sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono"] }"#.to_string());
         }
         "mysql" => {
-            dependencies.push(r#"elif-orm = "0.7.0""#.to_string());
+            dependencies.push(r#"elif-orm = "0.7.1""#.to_string());
             dependencies.push(r#"sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "mysql", "uuid", "chrono"] }"#.to_string());
         }
         "sqlite" => {
-            dependencies.push(r#"elif-orm = "0.7.0""#.to_string());
+            dependencies.push(r#"elif-orm = "0.7.1""#.to_string());
             dependencies.push(r#"sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "uuid", "chrono"] }"#.to_string());
         }
         _ => {}

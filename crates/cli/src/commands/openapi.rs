@@ -295,7 +295,7 @@ version = "1.0.0"
 edition = "2021"
 
 [dependencies]
-elif-core = "0.6.0""#
+elif-core = "0.7.1""#
             ).unwrap();
 
             // Create a basic controller

@@ -198,9 +198,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-elif-http = {{ version = "0.8.0", features = ["derive"] }}
-elif-core = "0.6.0"
-elif-orm = "0.7.0"
+elif-http = {{ version = "0.8.8", features = ["derive"] }}
+elif-core = "0.7.1"
+elif-orm = "0.7.1"
 tokio = {{ version = "1.0", features = ["full"] }}
 serde = {{ version = "1.0", features = ["derive"] }}
 serde_json = "1.0"
