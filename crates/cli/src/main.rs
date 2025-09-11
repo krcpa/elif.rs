@@ -1210,7 +1210,7 @@ edition = "2021"
 elif-web = "0.8.6"
 elif-core = "0.7.1"
 elif-http = "0.8.8"
-elif-http-derive = "0.2.9"
+elif-http-derive = "0.2.10"
 elif-macros = "0.2.0"
 elif-orm = "0.7.1"
 
