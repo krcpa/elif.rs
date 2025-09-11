@@ -17,7 +17,7 @@ name = "elifrs"
 path = "src/main.rs"
 
 [dependencies]
-elif = { version = "0.8.5", path = "../elif" }
+elif-web = { version = "0.8.5", path = "../elif" }
 elif-core = { version = "0.7.1", path = "../core" }
 elif-codegen = { version = "0.4.0", path = "../codegen" }
 elif-introspect = { version = "0.3.0", path = "../introspect" }

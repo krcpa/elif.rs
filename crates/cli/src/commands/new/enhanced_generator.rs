@@ -270,7 +270,7 @@ async fn generate_enhanced_main_file(app_dir: &Path, config: &ProjectConfig) -> 
 
 fn generate_api_main(config: &ProjectConfig) -> String {
     let mut imports = vec![
-        "use elif::prelude::*;".to_string(),
+        "use elif_web::prelude::*;".to_string(),
     ];
     
     let mut setup_code = vec![];
@@ -386,7 +386,7 @@ fn generate_web_main(config: &ProjectConfig) -> String {
     };
 
     let main_template = format!(
-        "use elif::prelude::*;
+        "use elif_web::prelude::*;
 {}
 
 #[tokio::main]
@@ -687,7 +687,7 @@ async fn generate_module_system_files(app_dir: &Path, config: &ProjectConfig) ->
     };
 
     let app_module = format!(r#"use elif_core::container::module;
-use elif::prelude::*;
+use elif_web::prelude::*;
 
 #[module(
     controllers = {},

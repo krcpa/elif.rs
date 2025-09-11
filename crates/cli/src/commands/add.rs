@@ -394,7 +394,7 @@ fn generate_module_content(
         .join(", ");
 
     let content = format!(
-        r#"use elif::prelude::*;
+        r#"use elif_web::prelude::*;
 
 #[module(
     controllers = [{}],
@@ -434,7 +434,7 @@ async fn generate_controller_file(name: &str, _module_name: &str) -> Result<(), 
     }
 
     let controller_content = format!(
-        r#"use elif::prelude::*;
+        r#"use elif_web::prelude::*;
 
 #[controller("/api/{}")]
 pub struct {name};
@@ -596,7 +596,7 @@ async fn generate_middleware_file(name: &str, debug: bool) -> Result<(), ElifErr
     };
 
     let middleware_content = format!(
-        r#"use elif::prelude::*;
+        r#"use elif_web::prelude::*;
 use std::future::Future;
 use std::pin::Pin;
 {}

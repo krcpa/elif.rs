@@ -1439,25 +1439,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "elif"
-version = "0.8.5"
-dependencies = [
- "async-trait",
- "elif-auth",
- "elif-cache",
- "elif-core 0.7.1",
- "elif-http 0.8.7",
- "elif-http-derive",
- "elif-macros",
- "elif-orm 0.7.1",
- "env_logger",
- "serde",
- "serde_json",
- "tokio",
- "tokio-test",
-]
-
-[[package]]
 name = "elif-auth"
 version = "0.4.1"
 dependencies = [
@@ -1709,7 +1690,7 @@ dependencies = [
 name = "elif-macros"
 version = "0.2.4"
 dependencies = [
- "elif",
+ "elif-web",
  "env_logger",
  "proc-macro2",
  "quote",
@@ -1963,8 +1944,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "elif-web"
+version = "0.8.5"
+dependencies = [
+ "async-trait",
+ "elif-auth",
+ "elif-cache",
+ "elif-core 0.7.1",
+ "elif-http 0.8.7",
+ "elif-http-derive",
+ "elif-macros",
+ "elif-orm 0.7.1",
+ "env_logger",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-test",
+]
+
+[[package]]
 name = "elifrs"
-version = "0.12.5"
+version = "0.12.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1973,12 +1973,12 @@ dependencies = [
  "console",
  "crossbeam-channel",
  "csv",
- "elif",
  "elif-codegen",
  "elif-core 0.7.1",
  "elif-introspect",
  "elif-openapi",
  "elif-orm 0.7.1",
+ "elif-web",
  "git2",
  "hex",
  "indicatif",

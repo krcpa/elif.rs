@@ -1230,7 +1230,7 @@ ctor = "0.2"
     // Create main.rs with modular structure
     let main_rs = format!(r#"use elif_http::{{HttpError, AppBootstrap}};
 use elif_macros::bootstrap;
-use elif::prelude::*;
+use elif_web::prelude::*;
 
 // Import modules
 mod modules;
@@ -1267,7 +1267,7 @@ async fn main() -> Result<(), HttpError> {{
     fs::write(project_path.join("src/modules/mod.rs"), modules_mod)?;
     
     // Create app module files
-    let app_module_rs = format!(r#"use elif::prelude::*;
+    let app_module_rs = format!(r#"use elif_web::prelude::*;
 use crate::controllers::HealthController;
 
 #[module(
@@ -1281,7 +1281,7 @@ pub struct AppModule;
     fs::write(project_path.join("src/modules/app/app_module.rs"), app_module_rs)?;
     
     // Create users module files
-    let users_module_rs = format!(r#"use elif::prelude::*;
+    let users_module_rs = format!(r#"use elif_web::prelude::*;
 use super::users_controller::UsersController;
 use super::users_service::UsersService;
 
@@ -1292,7 +1292,7 @@ use super::users_service::UsersService;
 pub struct UsersModule;
 "#);
     
-    let users_controller_rs = format!(r#"use elif::prelude::*;
+    let users_controller_rs = format!(r#"use elif_web::prelude::*;
 use serde_json::json;
 use super::users_service::UsersService;
 use super::dto::{{CreateUserDto, UpdateUserDto}};
@@ -1431,7 +1431,7 @@ pub struct UpdateUserDto {
     fs::write(project_path.join("src/modules/users/dto/update_user_dto.rs"), update_user_dto)?;
     
     // Create health controller in controllers directory
-    let health_controller_rs = format!(r#"use elif::prelude::*;
+    let health_controller_rs = format!(r#"use elif_web::prelude::*;
 use serde_json::json;
 
 #[derive(Default)]

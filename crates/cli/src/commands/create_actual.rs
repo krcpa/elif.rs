@@ -228,7 +228,7 @@ askama = "0.12"
 
 fn generate_main_file(path: &Path, template: &str, modules: bool) -> Result<(), ElifError> {
     let main_content = match template {
-        "api" if modules => r#"use elif::prelude::*;
+        "api" if modules => r#"use elif_web::prelude::*;
 use elif_core::container::Container;
 
 mod modules;
@@ -256,7 +256,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 "#,
-        "api" => r#"use elif::prelude::*;
+        "api" => r#"use elif_web::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -288,7 +288,7 @@ async fn health_check(_req: Request) -> HttpResult<Response> {
     }))?)
 }
 "#,
-        "web" if modules => r#"use elif::prelude::*;
+        "web" if modules => r#"use elif_web::prelude::*;
 use elif_core::container::Container;
 
 mod modules;
@@ -352,7 +352,7 @@ async fn home(_req: Request) -> HttpResult<Response> {
     Ok(Response::ok().html(html)?)
 }
 "#,
-        "minimal" => r#"use elif::prelude::*;
+        "minimal" => r#"use elif_web::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -371,7 +371,7 @@ async fn hello(_req: Request) -> HttpResult<Response> {
     Ok(Response::ok().text("Hello from elif.rs!")?)
 }
 "#,
-        _ => r#"use elif::prelude::*;
+        _ => r#"use elif_web::prelude::*;
 
 #[tokio::main] 
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -404,7 +404,7 @@ fn generate_module_system(path: &Path) -> Result<(), ElifError> {
     
     // Create app_module.rs
     let app_module = r#"use elif_core::container::module;
-use elif::prelude::*;
+use elif_web::prelude::*;
 
 #[module(
     controllers = [],

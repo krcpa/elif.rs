@@ -1,5 +1,5 @@
 [package]
-name = "elif"
+name = "elif-web"
 version = "0.8.5"
 edition = "2021"
 description = "Modern Rust web framework designed for exceptional developer experience"
