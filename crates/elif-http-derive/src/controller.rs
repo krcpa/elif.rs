@@ -143,6 +143,17 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         // Generate method handlers for async dispatch  
         let method_match_arms = &method_handlers;
 
+        // Extract shared dispatch logic to avoid duplication between handle_request and handle_request_dyn
+        let dispatch_logic = quote! {
+            match method_name.as_str() {
+                #(#method_match_arms,)*
+                _ => {
+                    Ok(ElifResponse::not_found()
+                        .text(&format!("Handler '{}' not found", method_name)))
+                }
+            }
+        };
+
         // Check if this controller needs dependency injection and extract constructor info
         let mut needs_dependency_injection = false;
         let mut constructor_param_types = Vec::new();
@@ -285,13 +296,7 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
                     method_name: String,
                     request: ElifRequest,
                 ) -> HttpResult<ElifResponse> {
-                    match method_name.as_str() {
-                        #(#method_match_arms,)*
-                        _ => {
-                            Ok(ElifResponse::not_found()
-                                .text(&format!("Handler '{}' not found", method_name)))
-                        }
-                    }
+                    #dispatch_logic
                 }
 
                 async fn handle_request_dyn(
@@ -299,13 +304,7 @@ pub fn controller_impl(args: TokenStream, input: TokenStream) -> TokenStream {
                     method_name: String,
                     request: ElifRequest,
                 ) -> HttpResult<ElifResponse> {
-                    match method_name.as_str() {
-                        #(#method_match_arms,)*
-                        _ => {
-                            Ok(ElifResponse::not_found()
-                                .text(&format!("Handler '{}' not found", method_name)))
-                        }
-                    }
+                    #dispatch_logic
                 }
             }
 
