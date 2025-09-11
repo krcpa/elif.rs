@@ -57,12 +57,85 @@ cargo build && cargo test
 gh issue view <number> --repo krcpa/elif.rs
 ```
 
-## Working on Tasks
-1. **Always use GitHub issues** - Never work without an issue number
-2. **Small, focused commits** - One feature/fix per commit
-3. **Use TodoWrite tool** - Track progress within Claude
-4. **Test before commit** - `cargo test && cargo clippy`
-5. **Close with summary** - `gh issue close <number> --comment "..."`
+## GitHub Issue & PR Workflow
+
+### 1. Issue Investigation & Branch Creation
+```bash
+# Check issue with gh CLI
+gh issue view <number>
+
+# Create feature branch
+git checkout -b fix/issue-description-<number>
+# or: git checkout -b feature/issue-description-<number>
+```
+
+### 2. Development Process
+1. **Use TodoWrite tool** - Track progress within conversation:
+   ```
+   - investigate-issue: "Verify the problem by reproducing it"
+   - trace-root-cause: "Find the exact cause in codebase" 
+   - design-solution: "Plan and implement the fix"
+   - test-fix: "Verify the solution works"
+   - create-pr: "Submit for review"
+   ```
+
+2. **Follow cursor rules** - Check `.cursorrules` for framework patterns
+3. **Test thoroughly** - `cargo test && cargo clippy` 
+4. **Document findings** - Include investigation details in PR
+
+### 3. Creating Pull Requests
+```bash
+# Commit with issue reference
+git add . && git commit -m "Fix controller registration issue
+
+- Detailed description of changes
+- Explanation of root cause
+- Testing performed
+
+Closes #<number>"
+
+# Push and create PR
+git push origin <branch-name>
+gh pr create --title "Fix: Brief description" \
+  --body "## Problem Solved
+  
+  Detailed explanation...
+  
+  ## Root Cause
+  
+  Technical details...
+  
+  ## Solution
+  
+  Implementation approach...
+  
+  ## Testing
+  
+  - ✅ Test case 1
+  - ✅ Test case 2
+  
+  Closes #<number>" \
+  --base main
+```
+
+### 4. Quality Standards
+- **Never work without an issue** - Create one if needed
+- **Small, focused commits** - One logical change per commit  
+- **Comprehensive PR descriptions** - Include problem, cause, solution, testing
+- **Link issues properly** - Use "Closes #<number>" in commit and PR
+- **Test before submission** - All tests must pass
+
+### 5. Issue Discovery Workflow
+When discovering new issues during development:
+```bash
+# Create new issue for discovered problem
+gh issue create --title "Route Registration Issue: Controllers register with 0 routes" \
+  --body "Detailed description..." \
+  --label "bug,phase-2"
+
+# Reference in current PR
+# "Related: #<new-issue-number> (discovered during development)"
+```
 
 ## Testing Strategy
 - **Unit tests**: Basic functionality validation
