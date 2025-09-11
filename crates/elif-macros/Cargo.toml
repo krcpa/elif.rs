@@ -31,6 +31,6 @@ runtime = ["tokio", "env_logger"]
 [dev-dependencies]
 tokio-test = "0.4"
 trybuild = "1.0"
-elif-web = { path = "../elif" }
+elif-web = { path = "../elif-web" }
 quote = "1.0"
 syn = { version = "2.0", features = ["full"] }

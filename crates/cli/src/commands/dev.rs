@@ -70,10 +70,11 @@ async fn run_preflight_checks() -> Result<(), ElifError> {
         return Err(ElifError::configuration("No src/ directory found"));
     }
 
-    // Try to compile the project
+    // Try to compile the project (allow warnings)
     println!("🔍 Validating project compilation...");
     let output = Command::new("cargo")
         .args(["check", "--quiet"])
+        .env("RUSTFLAGS", "-A warnings")
         .output()
         .await
         .map_err(|e| ElifError::system_error(format!("Failed to run cargo check: {}", e)))?;
@@ -301,10 +302,11 @@ impl DevelopmentServer {
             let _ = child.wait().await;
         }
 
-        // Build the project first
+        // Build the project first (allow warnings)
         println!("🔨 Building project...");
         let build_result = Command::new("cargo")
             .args(["build", "--quiet"])
+            .env("RUSTFLAGS", "-A warnings")
             .status()
             .await
             .map_err(|e| ElifError::system_error(format!("Failed to run cargo build: {}", e)))?;
@@ -321,6 +323,7 @@ impl DevelopmentServer {
         cmd.env("ELIF_ENV", &self.env);
         cmd.env("ELIF_HOST", &self.host);
         cmd.env("ELIF_PORT", self.port.to_string());
+        cmd.env("RUSTFLAGS", "-A warnings");
 
         if self.profile {
             cmd.env("ELIF_PROFILE", "true");

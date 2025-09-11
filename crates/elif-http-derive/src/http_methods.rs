@@ -74,7 +74,7 @@ pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStrea
         has_body_attr || 
         has_request_attr
     );
-    let needs_injection =
+    let _needs_injection =
         has_path_param_injection || (has_self && has_request_attr) || (has_self && has_body_attr);
 
     // Perform validation if we have path parameters, body attributes, or request attributes
@@ -95,36 +95,18 @@ pub fn http_method_macro_impl(method: &str, args: TokenStream, input: TokenStrea
         }
     }
 
-    if needs_injection {
-        // Extract body parameter information
-        let body_param = extract_body_param_from_attrs(&input_fn.attrs);
+    // All HTTP method attributed methods need wrapper methods for controller dispatch
+    // Extract body parameter information
+    let body_param = extract_body_param_from_attrs(&input_fn.attrs);
 
-        // Generate wrapper method with parameter injection
-        generate_injected_method(
-            &input_fn,
-            &path_params,
-            &param_types,
-            has_request_attr,
-            body_param,
-        )
-    } else {
-        // Generate parameter validation comments
-        let param_docs = if !path_params.is_empty() {
-            let param_list = path_params.join(", ");
-            format!("Route parameters: {}", param_list)
-        } else {
-            "No route parameters".to_string()
-        };
-
-        // Return the function with enhanced documentation
-        let expanded = quote! {
-            #[doc = #param_docs]
-            #[allow(dead_code)]
-            #input_fn
-        };
-
-        TokenStream::from(expanded)
-    }
+    // Generate wrapper method (with or without parameter injection)
+    generate_injected_method(
+        &input_fn,
+        &path_params,
+        &param_types,
+        has_request_attr,
+        body_param,
+    )
 }
 
 /// GET method routing macro
