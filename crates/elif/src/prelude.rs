@@ -16,6 +16,11 @@ pub use elif_http::{ElifRequest, ElifResponse};
 // Common traits - using correct exports
 pub use elif_http::GenericHandler as Handler;
 pub use elif_http::{IntoElifResponse, Middleware};
+
+// Controller types needed for macros
+pub use elif_http::controller::{ElifController, ControllerRoute, RouteParam};
+pub use elif_http::routing::HttpMethod;
+pub use elif_http::routing::params::ParamType;
 pub use elif_orm::Model;
 
 // Core types
