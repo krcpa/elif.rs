@@ -1293,72 +1293,69 @@ pub struct UsersModule;
 "#);
     
     let users_controller_rs = format!(r#"use elif_web::prelude::*;
+use elif_http::response::response;
 use serde_json::json;
-use super::users_service::UsersService;
 use super::dto::{{CreateUserDto, UpdateUserDto}};
 
 #[derive(Default)]
-pub struct UsersController {{
-    users_service: Option<UsersService>,
-}}
+pub struct UsersController {{}}
 
 #[controller("/api/users")]
 impl UsersController {{
     #[get("/")]
-    pub async fn index(&self) -> HttpResult<ElifResponse> {{
+    pub async fn index(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.find_all()
-        Ok(ElifResponse::ok().json(&json!({{
+        response().json(json!({{
             "users": [],
             "total": 0,
             "message": "Users list endpoint - implement with your database"
-        }}))?)
+        }})).send()
     }}
 
     #[post("/")]
     #[body(dto: CreateUserDto)]
-    pub async fn create(&self, dto: CreateUserDto) -> HttpResult<ElifResponse> {{
+    pub async fn create(&self, _dto: CreateUserDto) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.create(dto)
-        Ok(ElifResponse::created().json(&json!({{
+        response().json(json!({{
             "message": "User creation endpoint - implement with your database",
             "user": {{ "id": 1, "name": "New User" }}
-        }}))?)
+        }})).created().send()
     }}
 
     #[get("/{{id}}")]
     #[param(id: u32)]
-    pub async fn show(&self, id: u32) -> HttpResult<ElifResponse> {{
+    pub async fn show(&self, id: u32, _req: ElifRequest) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.find_by_id(id)
-        Ok(ElifResponse::ok().json(&json!({{
+        response().json(json!({{
             "user": {{ "id": id, "name": "Sample User" }},
             "message": "User detail endpoint - implement with your database"
-        }}))?)
+        }})).send()
     }}
 
     #[put("/{{id}}")]
     #[param(id: u32)]
     #[body(dto: UpdateUserDto)]
-    pub async fn update(&self, id: u32, dto: UpdateUserDto) -> HttpResult<ElifResponse> {{
+    pub async fn update(&self, id: u32, _dto: UpdateUserDto) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.update(id, dto)
-        Ok(ElifResponse::ok().json(&json!({{
+        response().json(json!({{
             "user": {{ "id": id, "name": "Updated User" }},
             "message": "User update endpoint - implement with your database"
-        }}))?)
+        }})).send()
     }}
 
     #[delete("/{{id}}")]
     #[param(id: u32)]
-    pub async fn destroy(&self, id: u32) -> HttpResult<ElifResponse> {{
+    pub async fn destroy(&self, id: u32, _req: ElifRequest) -> HttpResult<ElifResponse> {{
         // TODO: Implement with users_service.delete(id)
-        Ok(ElifResponse::ok().json(&json!({{
+        response().json(json!({{
             "message": "User deleted successfully",
             "deleted_id": id
-        }}))?)
+        }})).send()
     }}
 }}
 "#);
     
-    let users_service_rs = format!(r#"use elif_core::container::Injectable;
-use super::dto::{{CreateUserDto, UpdateUserDto}};
+    let users_service_rs = format!(r#"use super::dto::{{CreateUserDto, UpdateUserDto}};
 
 #[derive(Default)]
 pub struct UsersService;
@@ -1432,6 +1429,7 @@ pub struct UpdateUserDto {
     
     // Create health controller in controllers directory
     let health_controller_rs = format!(r#"use elif_web::prelude::*;
+use elif_http::response::response;
 use serde_json::json;
 
 #[derive(Default)]
@@ -1440,13 +1438,13 @@ pub struct HealthController;
 #[controller("/api")]
 impl HealthController {{
     #[get("/health")]
-    pub async fn health(&self) -> HttpResult<ElifResponse> {{
-        Ok(ElifResponse::ok().json(&json!({{
+    pub async fn health(&self, _req: ElifRequest) -> HttpResult<ElifResponse> {{
+        response().json(json!({{
             "status": "ok",
             "service": "{}",
             "version": "1.0",
             "framework": "elif.rs"
-        }}))?)
+        }})).send()
     }}
 }}
 "#, name);
